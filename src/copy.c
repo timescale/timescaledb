@@ -40,6 +40,7 @@
 #include "chunk_dispatch.h"
 #include "subspace_store.h"
 #include "compat.h"
+#include "cross_module_fn.h"
 
 #if PG12_GE
 #include <optimizer/optimizer.h>
@@ -54,22 +55,6 @@
  * with minor modifications.
  *
  */
-
-typedef struct CopyChunkState CopyChunkState;
-
-typedef bool (*CopyFromFunc)(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
-							 bool *nulls);
-
-typedef struct CopyChunkState
-{
-	Relation rel;
-	EState *estate;
-	ChunkDispatch *dispatch;
-	CopyFromFunc next_copy_from;
-	CopyState cstate;
-	TableScanDesc scandesc;
-	Node *where_clause;
-} CopyChunkState;
 
 static CopyChunkState *
 copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyState cstate,
@@ -676,6 +661,11 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 #if PG12_GE
 	if (stmt->whereClause)
 	{
+		if (hypertable_is_distributed(ht))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("COPY WHERE clauses are not supported on distributed hypertables")));
+
 		where_clause = transformExpr(pstate, stmt->whereClause, EXPR_KIND_COPY_WHERE);
 
 		where_clause = coerce_to_boolean(pstate, where_clause, "WHERE");
@@ -690,7 +680,12 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
 	ccstate->where_clause = where_clause;
-	*processed = copyfrom(ccstate, pstate->p_rtable, ht);
+
+	if (hypertable_is_distributed(ht))
+		ts_cm_functions->distributed_copy(stmt, processed, ccstate, attnums);
+	else
+		*processed = copyfrom(ccstate, pstate->p_rtable, ht);
+
 	EndCopyFrom(cstate);
 	free_parsestate(pstate);
 	table_close(rel, NoLock);
