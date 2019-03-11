@@ -24,10 +24,22 @@
 #define CONFIG_SCHEMA_NAME "_timescaledb_config"
 #define RENDEZVOUS_BGW_LOADER_API_VERSION "timescaledb.bgw_loader_api_version"
 
-static const char *const timescaledb_schema_names[] = {
-	CATALOG_SCHEMA_NAME, INTERNAL_SCHEMA_NAME, CACHE_SCHEMA_NAME, CONFIG_SCHEMA_NAME
+enum
+{
+	CATALOG_SCHEMA_NUM = 0,
+	INTERNAL_SCHEMA_NUM,
+	CACHE_SCHEMA_NUM,
+	CONFIG_SCHEMA_NUM,
+	NUM_TIMESCALEDB_SCHEMAS
 };
 
-#define NUM_TIMESCALEDB_SCHEMAS (sizeof(timescaledb_schema_names) / sizeof(char *))
+static const char *const timescaledb_schema_names[NUM_TIMESCALEDB_SCHEMAS] = {
+	/* if we use the indexes for all the array values clang-format thinks this is an objective-C
+	   file */
+	[CATALOG_SCHEMA_NUM] = CATALOG_SCHEMA_NAME,
+	INTERNAL_SCHEMA_NAME,
+	CACHE_SCHEMA_NAME,
+	CONFIG_SCHEMA_NAME,
+};
 
 #endif /* TIMESCALEDB_EXTENSION_CONSTANTS_H */

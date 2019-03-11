@@ -328,3 +328,20 @@ SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;
+
+-- we cannot change the schemas of catalog tables in our intenal schemas
+-- NOTE pg9.6 requires function args for ALTER FUNCTION
+--      there is a codepath that's only checked without that
+\set ON_ERROR_STOP 0
+ALTER TABLE _timescaledb_catalog.hypertable SET SCHEMA public;
+ALTER TABLE _timescaledb_config.bgw_job_id_seq SET SCHEMA public;
+-- TODO this should be disallowed eventually
+-- ALTER TABLE _timescaledb_internal.bgw_job_stat SET SCHEMA public;
+ALTER FUNCTION _timescaledb_internal.insert_blocker() SET SCHEMA public;
+
+-- non existent objects are handled gracefully
+ALTER TABLE not_a_real_table SET SCHEMA public;
+ALTER TABLE _timescaledb_catalog.not_a_real_table SET SCHEMA public;
+ALTER FUNCTION not_a_real_function() SET SCHEMA public;
+ALTER FUNCTION _timescaledb_internal.not_a_real_function() SET SCHEMA public;
+\set ON_ERROR_STOP 1

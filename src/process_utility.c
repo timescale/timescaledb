@@ -183,6 +183,75 @@ relation_not_only(RangeVar *rv)
 				 errmsg("ONLY option not supported on hypertable operations")));
 }
 
+/* returns the number of the internal schema matching 'name', or -1 if there is none */
+static int
+timescale_internal_schema(const char *name)
+{
+	int i;
+	for (i = 0; i < NUM_TIMESCALEDB_SCHEMAS; i++)
+	{
+		if (strncmp(name, timescaledb_schema_names[i], NAMEDATALEN) == 0)
+			return i;
+	}
+	return -1;
+}
+
+static const char *
+alterobjectschema_get_current_schema(AlterObjectSchemaStmt *alterstmt)
+{
+	/* based on ExecAlterObjectSchemaStmt */
+	switch (alterstmt->objectType)
+	{
+		case OBJECT_FOREIGN_TABLE:
+		case OBJECT_SEQUENCE:
+		case OBJECT_TABLE:
+		case OBJECT_VIEW:
+		case OBJECT_MATVIEW:
+			return alterstmt->relation->schemaname;
+		case OBJECT_FUNCTION:
+		{
+			const char *namespace_str = NULL;
+			Relation relation;
+			Relation catalog;
+			Datum namespace;
+			int oidCacheId;
+			HeapTuple tup;
+			AttrNumber Anum_namespace;
+			bool namespace_is_null;
+			ObjectAddress address = get_object_address(alterstmt->objectType,
+													   alterstmt->object,
+#if PG96
+													   alterstmt->objarg,
+#endif
+													   &relation,
+													   AccessExclusiveLock,
+													   false);
+			Assert(relation == NULL);
+			catalog = heap_open(address.classId, RowExclusiveLock);
+
+			/* from AlterObjectNamespace_internal */
+			oidCacheId = get_object_catcache_oid(address.classId);
+			tup = SearchSysCacheCopy1(oidCacheId, ObjectIdGetDatum(address.objectId));
+			if (!HeapTupleIsValid(tup)) /* function does not exist */
+				return NULL;
+
+			Anum_namespace = get_object_attnum_namespace(address.classId);
+			namespace =
+				heap_getattr(tup, Anum_namespace, RelationGetDescr(catalog), &namespace_is_null);
+			if (namespace_is_null)
+				goto close_catalog;
+
+			namespace_str = get_namespace_name(DatumGetObjectId(namespace));
+
+		close_catalog:
+			heap_close(catalog, RowExclusiveLock);
+			return namespace_str;
+		}
+		default:
+			return NULL;
+	}
+}
+
 /* Change the schema of a hypertable or a chunk */
 static void
 process_alterobjectschema(Node *parsetree)
@@ -191,6 +260,17 @@ process_alterobjectschema(Node *parsetree)
 	Oid relid;
 	Cache *hcache;
 	Hypertable *ht;
+	const char *current_schema = alterobjectschema_get_current_schema(alterstmt);
+	int schema_num = current_schema != NULL ? timescale_internal_schema(current_schema) : -1;
+
+	if (schema_num >= 0 &&
+		(schema_num != INTERNAL_SCHEMA_NUM || alterstmt->objectType == OBJECT_FUNCTION))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot change the schema of TimescaleDB objects"),
+				 errhint("The objects in reserved TimescaleDB schemas must"
+						 "remain in their original schema, changing their"
+						 "schemas will break functionality.")));
 
 	if (alterstmt->objectType != OBJECT_TABLE || NULL == alterstmt->relation)
 		return;
@@ -893,19 +973,10 @@ process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 static void
 process_rename_schema(RenameStmt *stmt)
 {
-	int i = 0;
-
-	/* Block any renames of our internal schemas */
-	for (i = 0; i < NUM_TIMESCALEDB_SCHEMAS; i++)
-	{
-		if (strncmp(stmt->subname, timescaledb_schema_names[i], NAMEDATALEN) == 0)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-					 errmsg("cannot rename schemas used by the TimescaleDB extension")));
-			return;
-		}
-	}
+	if (timescale_internal_schema(stmt->subname) >= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot rename schemas used by the TimescaleDB extension")));
 
 	ts_chunks_rename_schema_name(stmt->subname, stmt->newname);
 	ts_dimensions_rename_schema_name(stmt->subname, stmt->newname);
