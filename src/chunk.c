@@ -55,6 +55,7 @@
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
+TS_FUNCTION_INFO_V1(ts_chunk_for_tuple);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -1531,6 +1532,54 @@ ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 	schema = get_namespace_name(get_rel_namespace(relid));
 	table = get_rel_name(relid);
 	return chunk_get_by_name(schema, table, num_constraints, fail_if_not_found);
+}
+
+TSDLLEXPORT Datum
+ts_chunk_for_tuple(PG_FUNCTION_ARGS)
+{
+	int32 hypertable_id = PG_GETARG_INT32(0);
+	Oid arg_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	HeapTupleHeader row;
+	Oid rowType;
+	int32 rowTypmod;
+	TupleDesc rowdesc;
+	HeapTupleData row_data;
+	Point *point;
+	Chunk *chunk;
+	Cache *hcache;
+	Hypertable *ht;
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_by_id(hcache, hypertable_id);
+
+	if (ht == NULL)
+		elog(ERROR, "hypertable %d does not exist", hypertable_id);
+
+	if (arg_type != get_rel_type_id(ht->main_table_relid))
+		elog(ERROR,
+			 "input must be of the row type of the hypertable '%s'",
+			 get_rel_name(ht->main_table_relid));
+
+	row = PG_GETARG_HEAPTUPLEHEADER(1);
+	rowType = HeapTupleHeaderGetTypeId(row);
+	rowTypmod = HeapTupleHeaderGetTypMod(row);
+	rowdesc = lookup_rowtype_tupdesc(rowType, rowTypmod);
+
+	row_data.t_len = HeapTupleHeaderGetDatumLength(row);
+	ItemPointerSetInvalid(&(row_data.t_self));
+	row_data.t_tableOid = InvalidOid;
+	row_data.t_data = row;
+
+	point = ts_hyperspace_calculate_point(ht->space, &row_data, rowdesc);
+	chunk = ts_chunk_find(ht->space, point);
+
+	if (chunk == NULL)
+		elog(ERROR, "could not find chunk for tuple");
+
+	ts_cache_release(hcache);
+	ReleaseTupleDesc(rowdesc);
+
+	PG_RETURN_INT32(chunk->fd.id);
 }
 
 Chunk *
