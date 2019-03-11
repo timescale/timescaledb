@@ -35,7 +35,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
         chunk_target_size BIGINT
 ) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_calculate_chunk_interval' LANGUAGE C;
 
--- Function for explicit chunk exclusion. Supply a record and an array 
+-- Function for explicit chunk exclusion. Supply a record and an array
 -- of chunk ids as input.
 -- Intended to be used in WHERE clause.
 -- An example: SELECT * FROM hypertable WHERE _timescaledb_internal.chunks_in(hypertable, ARRAY[1,2]);
@@ -45,3 +45,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
 -- so that the PostgreSQL optimizer does not try to evaluate/reduce it in the planner phase
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
+
+-- returns the chunk id for the chunk that would contain a given tuple, or NULL if no such chunk
+-- currently exists in the hypertable. tuple must be of the hypertable's row type.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_for_tuple(hypertable_id INTEGER, tuple ANYELEMENT) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_chunk_for_tuple' LANGUAGE C VOLATILE STRICT;

@@ -361,3 +361,32 @@ BEGIN;
     SELECT drop_chunks((now()-interval '1 day')::date, 'drop_chunk_test_date');
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
 ROLLBACK;
+
+CREATE TABLE chunk_for_tuple_test(time bigint, temp float8, device_id int);
+SELECT hypertable_id FROM create_hypertable('chunk_for_tuple_test', 'time', chunk_time_interval => 10) \gset
+
+INSERT INTO chunk_for_tuple_test VALUES (0, 1.1, 0), (0, 1.3, 11), (12, 2.0, 0), (12, 0.1, 11);
+
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+
+DROP TABLE chunk_for_tuple_test;
+
+CREATE TABLE chunk_for_tuple_test(time bigint, temp float8, device_id int);
+SELECT hypertable_id FROM  create_hypertable('chunk_for_tuple_test',
+    'time', chunk_time_interval => 10,
+    partitioning_column => 'device_id',
+    number_partitions => 3) \gset
+
+INSERT INTO chunk_for_tuple_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
+
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, _timescaledb_internal._hyper_8_28_chunk.*::chunk_for_tuple_test) FROM _timescaledb_internal._hyper_8_28_chunk;
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, (33, 50.0, 3)::chunk_for_tuple_test);
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, 1) FROM chunk_for_tuple_test;
+SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, _timescaledb_internal._hyper_8_28_chunk.*) FROM _timescaledb_internal._hyper_8_28_chunk;
+SELECT _timescaledb_internal.chunk_for_tuple(-1, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+SELECT _timescaledb_internal.chunk_for_tuple(-1, _timescaledb_internal._hyper_8_28_chunk.*) FROM _timescaledb_internal._hyper_8_28_chunk;
+\set ON_ERROR_STOP 1
