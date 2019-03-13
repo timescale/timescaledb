@@ -105,7 +105,7 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di)                                                                  \
-	(OidIsValid((di)->table_relid) && (di)->colname != NULL &&                                     \
+	(di != NULL && OidIsValid((di)->table_relid) && (di)->colname != NULL &&                       \
 	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
 
 /* add_dimension record attribute numbers */

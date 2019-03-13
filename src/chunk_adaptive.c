@@ -17,6 +17,7 @@
 #include <utils/typcache.h>
 #include <funcapi.h>
 #include <math.h>
+#include <parser/parse_func.h>
 
 #include "hypertable_cache.h"
 #include "errors.h"
@@ -25,6 +26,8 @@
 #include "chunk.h"
 #include "hypercube.h"
 #include "utils.h"
+
+#define DEFAULT_CHUNK_SIZING_FN_NAME "calculate_chunk_interval"
 
 /* This can be set to a positive number (and non-zero) value from tests to
  * simulate memory cache size. This makes it possible to run tests
@@ -796,4 +799,29 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+static Oid
+get_default_chunk_sizing_fn_oid()
+{
+	Oid chunkfnargtypes[] = { INT4OID, INT8OID, INT8OID };
+	List *funcname =
+		list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(DEFAULT_CHUNK_SIZING_FN_NAME));
+	int nargs = sizeof(chunkfnargtypes) / sizeof(chunkfnargtypes[0]);
+	Oid chunkfnoid = LookupFuncName(funcname, nargs, chunkfnargtypes, false);
+	return chunkfnoid;
+}
+
+ChunkSizingInfo *
+ts_chunk_sizing_info_get_default_disabled(Oid table_relid)
+{
+	ChunkSizingInfo *chunk_sizing_info = palloc(sizeof(*chunk_sizing_info));
+	*chunk_sizing_info = (ChunkSizingInfo){
+		.table_relid = table_relid,
+		.target_size = NULL,
+		.func = get_default_chunk_sizing_fn_oid(),
+		.colname = NULL,
+		.check_for_index = false,
+	};
+	return chunk_sizing_info;
 }

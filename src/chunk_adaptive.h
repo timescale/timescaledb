@@ -25,4 +25,6 @@ typedef struct ChunkSizingInfo
 
 extern void ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info);
 
+extern ChunkSizingInfo *ts_chunk_sizing_info_get_default_disabled(Oid table_relid);
+
 #endif /* TIMESCALEDB_CHUNK_ADAPTIVE_H */
