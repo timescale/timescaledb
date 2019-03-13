@@ -13,6 +13,10 @@ accidentally triggering the load of a previous DB version.**
 * PR #1038 Infer time_bucket_gapfill arguments from WHERE clause
 * PR #1067 Add treat_null_as_missing option to locf
 
+## 1.2.2 (2019-03-14)
+
+This release contains bugfixes.
+
 **Bugfixes**
 * PR #1097 Adjust ordered append plan cost
 * PR #1079 Stop background worker on ALTER DATABASE SET TABLESPACE and CREATE DATABASE WITH TEMPLATE
