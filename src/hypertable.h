@@ -14,6 +14,7 @@
 #include "export.h"
 #include "tablespace.h"
 #include "scanner.h"
+#include "chunk_adaptive.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
@@ -46,6 +47,19 @@ extern int ts_number_of_hypertables(void);
 
 extern Oid ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
+
+typedef enum HypertableCreateFlags
+{
+	HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES = 1 << 0,
+	HYPERTABLE_CREATE_IF_NOT_EXISTS = 1 << 1,
+	HYPERTABLE_CREATE_MIGRATE_DATA = 1 << 2,
+} HypertableCreateFlags;
+
+extern TSDLLEXPORT bool
+ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *time_dim_info,
+							   DimensionInfo *space_dim_info, Name associated_schema_name,
+							   Name associated_table_prefix, ChunkSizingInfo *chunk_sizing_info);
+
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);

@@ -29,6 +29,7 @@
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_type.h>
 #include "compat.h"
 #if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_inherits_fn.h>
@@ -603,18 +604,12 @@ hypertable_insert_relation(Relation rel, Name schema_name, Name table_name,
 		NameGetDatum(associated_schema_name);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(num_dimensions);
 
-	if (NULL != chunk_sizing_func_schema && NULL != chunk_sizing_func_name)
-	{
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
-			NameGetDatum(chunk_sizing_func_schema);
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
-			NameGetDatum(chunk_sizing_func_name);
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = true;
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = true;
-	}
+	if (NULL == chunk_sizing_func_schema || NULL == chunk_sizing_func_name)
+		elog(ERROR, "chunk_sizing_function cannot be NULL");
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
+		NameGetDatum(chunk_sizing_func_schema);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
+		NameGetDatum(chunk_sizing_func_name);
 
 	if (chunk_target_size < 0)
 		chunk_target_size = 0;
@@ -1290,7 +1285,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	Oid table_relid = PG_GETARG_OID(0);
 	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
 	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
-	bool create_default_indexes = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
+	bool create_default_indexes =
+		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
 	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
 	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
 	DimensionInfo time_dim_info = {
@@ -1316,13 +1312,16 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	};
 	Cache *hcache;
 	Hypertable *ht;
-	Oid associated_schema_oid;
-	Oid user_oid = GetUserId();
-	Oid tspc_oid = get_rel_tablespace(table_relid);
-	bool table_has_data;
-	NameData schema_name, table_name, default_associated_schema_name;
-	Relation rel;
 	Datum retval;
+	bool created;
+	uint32 flags = 0;
+
+	if (if_not_exists)
+		flags |= HYPERTABLE_CREATE_IF_NOT_EXISTS;
+	if (!create_default_indexes)
+		flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
+	if (migrate_data)
+		flags |= HYPERTABLE_CREATE_MIGRATE_DATA;
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1334,6 +1333,44 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_column_name: cannot be NULL")));
 
+	created = ts_hypertable_create_from_info(table_relid,
+											 flags,
+											 &time_dim_info,
+											 &space_dim_info,
+											 associated_schema_name,
+											 associated_table_prefix,
+											 &chunk_sizing_info);
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+	retval = create_hypertable_datum(fcinfo, ht, created);
+	ts_cache_release(hcache);
+
+	PG_RETURN_DATUM(retval);
+}
+
+/* Creates a new hypertable.
+ *
+ * Flags are one of HypertableCreateFlags.
+ * All parameters after tim_dim_info can be NUL
+ * returns 'true' if new hypertable was created, false if 'if_not_exists' and the hypertable already
+ * exists.
+ */
+bool
+ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *time_dim_info,
+							   DimensionInfo *space_dim_info, Name associated_schema_name,
+							   Name associated_table_prefix, ChunkSizingInfo *chunk_sizing_info)
+{
+	Cache *hcache;
+	Hypertable *ht;
+	Oid associated_schema_oid;
+	Oid user_oid = GetUserId();
+	Oid tspc_oid = get_rel_tablespace(table_relid);
+	bool table_has_data;
+	NameData schema_name, table_name, default_associated_schema_name;
+	Relation rel;
+	bool if_not_exists = (flags & HYPERTABLE_CREATE_IF_NOT_EXISTS) != 0;
+
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && ts_is_hypertable(table_relid))
 	{
@@ -1342,12 +1379,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is already a hypertable, skipping",
 						get_rel_name(table_relid))));
 
-		hcache = ts_hypertable_cache_pin();
-		ht = ts_hypertable_cache_get_entry(hcache, table_relid);
-		retval = create_hypertable_datum(fcinfo, ht, false);
-		ts_cache_release(hcache);
-
-		PG_RETURN_DATUM(retval);
+		return false;
 	}
 
 	/*
@@ -1377,13 +1409,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
-
-			hcache = ts_hypertable_cache_pin();
-			ht = ts_hypertable_cache_get_entry(hcache, table_relid);
-			retval = create_hypertable_datum(fcinfo, ht, false);
-			ts_cache_release(hcache);
-
-			PG_RETURN_DATUM(retval);
+			return false;
 		}
 
 		ereport(ERROR,
@@ -1418,7 +1444,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	table_has_data = relation_has_tuples(rel);
 
-	if (!migrate_data && table_has_data)
+	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
@@ -1479,27 +1505,36 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support transition tables in triggers")));
 
-	/* Validate and set chunk sizing information */
-	if (OidIsValid(chunk_sizing_info.func))
-	{
-		ts_chunk_adaptive_sizing_info_validate(&chunk_sizing_info);
+	if (NULL == chunk_sizing_info)
+		chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
 
-		if (chunk_sizing_info.target_size_bytes > 0)
+	/* Validate and set chunk sizing information */
+	if (OidIsValid(chunk_sizing_info->func))
+	{
+		ts_chunk_adaptive_sizing_info_validate(chunk_sizing_info);
+
+		if (chunk_sizing_info->target_size_bytes > 0)
 		{
 			ereport(NOTICE,
 					(errcode(ERRCODE_WARNING),
 					 errmsg("adaptive chunking is a BETA feature and is not recommended for "
 							"production deployments")));
 
-			time_dim_info.adaptive_chunking = true;
+			time_dim_info->adaptive_chunking = true;
 		}
+	}
+	else
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid chunk_sizing function: cannot be NULL")));
 	}
 
 	/* Validate that the dimensions are OK */
-	ts_dimension_info_validate(&time_dim_info);
+	ts_dimension_info_validate(time_dim_info);
 
-	if (DIMENSION_INFO_IS_SET(&space_dim_info))
-		ts_dimension_info_validate(&space_dim_info);
+	if (DIMENSION_INFO_IS_SET(space_dim_info))
+		ts_dimension_info_validate(space_dim_info);
 
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -1509,22 +1544,22 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 					  &table_name,
 					  associated_schema_name,
 					  associated_table_prefix,
-					  &chunk_sizing_info.func_schema,
-					  &chunk_sizing_info.func_name,
-					  chunk_sizing_info.target_size_bytes,
-					  DIMENSION_INFO_IS_SET(&space_dim_info) ? 2 : 1);
+					  &chunk_sizing_info->func_schema,
+					  &chunk_sizing_info->func_name,
+					  chunk_sizing_info->target_size_bytes,
+					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1);
 
 	/* Get the a Hypertable object via the cache */
 	hcache = ts_hypertable_cache_pin();
-	time_dim_info.ht = space_dim_info.ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+	time_dim_info->ht = space_dim_info->ht = ts_hypertable_cache_get_entry(hcache, table_relid);
 
-	Assert(time_dim_info.ht != NULL);
+	Assert(time_dim_info->ht != NULL);
 
 	/* Add validated dimensions */
-	ts_dimension_add_from_info(&time_dim_info);
+	ts_dimension_add_from_info(time_dim_info);
 
-	if (DIMENSION_INFO_IS_SET(&space_dim_info))
-		ts_dimension_add_from_info(&space_dim_info);
+	if (DIMENSION_INFO_IS_SET(space_dim_info))
+		ts_dimension_add_from_info(space_dim_info);
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	ts_cache_release(hcache);
@@ -1564,13 +1599,12 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	insert_blocker_trigger_add(table_relid);
 
-	if (create_default_indexes)
+	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
 		ts_indexing_create_default_indexes(ht);
 
-	retval = create_hypertable_datum(fcinfo, ht, true);
 	ts_cache_release(hcache);
 
-	PG_RETURN_DATUM(retval);
+	return true;
 }
 
 /* Used as a tuple found function */
