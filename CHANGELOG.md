@@ -4,14 +4,9 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.3.0 (unreleased)
+## 1.2.2 (2019-03-14)
 
-**Minor Features**
-* PR #1062 Make constraint aware append parallel safe
-* PR #1005 Enable creating indexes with one transaction per chunk
-* PR #1007 Remove parent oid from find_children_oids result
-* PR #1038 Infer time_bucket_gapfill arguments from WHERE clause
-* PR #1067 Add treat_null_as_missing option to locf
+This release contains bugfixes.
 
 **Bugfixes**
 * PR #1097 Adjust ordered append plan cost
