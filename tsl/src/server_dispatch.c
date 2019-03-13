@@ -491,15 +491,14 @@ prepare_server_insert_stmt(ServerDispatchState *sds, PGconn *conn, int num_tuple
 static AsyncRequest *
 send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 {
-	int64 stored_tuples = NUM_STORED_TUPLES(ss);
 	TupleTableSlot *slot;
 	AsyncRequest *req;
 	const char *sql_stmt;
 	int i = 0;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
-	Assert(stored_tuples <= TUPSTORE_FLUSH_THRESHOLD);
-	Assert(stored_tuples > 0);
+	Assert(NUM_STORED_TUPLES(ss) <= TUPSTORE_FLUSH_THRESHOLD);
+	Assert(NUM_STORED_TUPLES(ss) > 0);
 
 	slot = sds->cstate.ss.ss_ScanTupleSlot;
 
@@ -526,7 +525,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 		}
 	}
 
-	Assert(ss->num_tuples_sent == stored_tuples);
+	Assert(ss->num_tuples_sent == NUM_STORED_TUPLES(ss));
 
 	/* Send tuples */
 	switch (sds->state)
@@ -952,15 +951,13 @@ static TupleTableSlot *
 server_dispatch_exec(CustomScanState *node)
 {
 	ServerDispatchState *sds = (ServerDispatchState *) node;
-	EState *estate = node->ss.ps.state;
-	ResultRelInfo *rri = estate->es_result_relation_info;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	MemoryContext oldcontext;
 	TupleTableSlot *slot = NULL;
 	bool done = false;
 
 	/* Initially, the result relation should always match the hypertable.  */
-	Assert(rri->ri_RelationDesc->rd_id == sds->rel->rd_id);
+	Assert(node->ss.ps.state->es_result_relation_info->ri_RelationDesc->rd_id == sds->rel->rd_id);
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
@@ -992,9 +989,8 @@ server_dispatch_exec(CustomScanState *node)
 	/* Tuple routing in the ChunkDispatchState subnode sets the result
 	 * relation to a chunk when routing, but the read handler should have
 	 * ensured the result relation is reset. */
-	rri = estate->es_result_relation_info;
-	Assert(rri->ri_RelationDesc->rd_id == sds->rel->rd_id);
-	Assert(rri->ri_usesFdwDirectModify);
+	Assert(node->ss.ps.state->es_result_relation_info->ri_RelationDesc->rd_id == sds->rel->rd_id);
+	Assert(node->ss.ps.state->es_result_relation_info->ri_usesFdwDirectModify);
 	MemoryContextSwitchTo(oldcontext);
 
 	return slot;
