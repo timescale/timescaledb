@@ -17,6 +17,10 @@
 #include "fdw/utils.h"
 #include "stmt_params.h"
 
+#define MAX_PG_STMT_PARAMS                                                                         \
+	USHRT_MAX /* PostgreSQL limitation of max parameters in the statement                          \
+			   */
+
 typedef struct StmtParams
 {
 	FmgrInfo *conv_funcs;
@@ -98,6 +102,8 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 
 	Assert(num_tuples > 0);
 	params->num_params = ctid ? list_length(target_attr_nums) + 1 : list_length(target_attr_nums);
+	if (params->num_params * num_tuples > MAX_PG_STMT_PARAMS)
+		elog(ERROR, "too many parameters in prepared statement. Max is %d", MAX_PG_STMT_PARAMS);
 	params->conv_funcs = palloc(sizeof(FmgrInfo) * params->num_params);
 	params->formats = palloc(sizeof(int) * params->num_params * num_tuples);
 	params->lengths = palloc(sizeof(int) * params->num_params * num_tuples);
@@ -163,6 +169,7 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 	ListCell *lc;
 	int nest_level;
 	bool all_binary;
+	int param_idx = 0;
 
 	Assert(params->num_params > 0);
 	idx = params->converted_tuples * params->num_params;
@@ -175,10 +182,11 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 	{
 		bytea *output_bytes;
 		Assert(params->ctid);
-		output_bytes = SendFunctionCall(&params->conv_funcs[idx], PointerGetDatum(tupleid));
+		output_bytes = SendFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
 		params->values[idx] = VARDATA(output_bytes);
 		params->lengths[idx] = (int) VARSIZE(output_bytes) - VARHDRSZ;
 		idx++;
+		param_idx++;
 	}
 	else if (params->ctid)
 		elog(ERROR, "was configured to use ctid, but tupleid is NULL");
@@ -199,17 +207,18 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 			params->values[idx] = NULL;
 		else if (params->formats[idx] == 0)
 			/* text */
-			params->values[idx] = OutputFunctionCall(&params->conv_funcs[idx], value);
+			params->values[idx] = OutputFunctionCall(&params->conv_funcs[param_idx], value);
 		else if (params->formats[idx] == 1)
 		{
 			/* binary */
-			bytea *output_bytes = SendFunctionCall(&params->conv_funcs[idx], value);
+			bytea *output_bytes = SendFunctionCall(&params->conv_funcs[param_idx], value);
 			params->values[idx] = VARDATA(output_bytes);
 			params->lengths[idx] = VARSIZE(output_bytes) - VARHDRSZ;
 		}
 		else
 			elog(ERROR, "unexpected parameter format: %d", params->formats[idx]);
 		idx++;
+		param_idx++;
 	}
 
 	params->converted_tuples++;

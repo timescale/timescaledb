@@ -72,9 +72,11 @@ typedef struct AsyncRequestSet
    which can support multiple statements because it uses the simple protocol. But this is
    an optimization for another time.
 */
-AsyncRequest *
-async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_params,
-									  const char *const *param_values, int elevel)
+static AsyncRequest *
+async_request_send_with_params_formats_elevel(PGconn *conn, const char *sql, int n_params,
+											  const char *const *param_values,
+											  const int *param_lengths, const int *param_formats,
+											  int elevel)
 {
 	AsyncRequest *req = palloc(sizeof(AsyncRequest));
 
@@ -103,8 +105,8 @@ async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_param
 							   n_params,
 							   /* param types - see note above */ NULL,
 							   param_values,
-							   /* param lengths - ignored for text format */ NULL,
-							   /* param formats - all text */ NULL,
+							   param_lengths,
+							   param_formats,
 							   /* result format - text */ 0))
 	{
 		/*
@@ -116,6 +118,32 @@ async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_param
 	}
 
 	return req;
+}
+
+AsyncRequest *
+async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_params,
+									  const char *const *param_values, int elevel)
+{
+	return async_request_send_with_params_formats_elevel(conn,
+														 sql,
+														 n_params,
+														 param_values,
+														 NULL,
+														 NULL,
+														 elevel);
+}
+
+AsyncRequest *
+async_request_send_with_stmt_params_elevel(PGconn *conn, const char *sql_statement,
+										   StmtParams *params, int elevel)
+{
+	return async_request_send_with_params_formats_elevel(conn,
+														 sql_statement,
+														 stmt_params_total_values(params),
+														 stmt_params_values(params),
+														 stmt_params_lengths(params),
+														 stmt_params_formats(params),
+														 elevel);
 }
 
 AsyncRequest *
