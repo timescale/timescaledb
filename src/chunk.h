@@ -132,8 +132,9 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_foun
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
+extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
+							bool missing_ok);
 extern bool ts_chunk_exists_relid(Oid relid);
-
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern TSDLLEXPORT void ts_chunk_drop_fks(Chunk *const chunk);

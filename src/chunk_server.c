@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <foreign/foreign.h>
+#include <utils/builtins.h>
 
 #include "chunk_server.h"
 #include "scanner.h"
@@ -111,57 +112,120 @@ chunk_server_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
-List *
-ts_chunk_server_scan(int32 chunk_id, MemoryContext mctx)
+static int
+ts_chunk_server_scan_by_chunk_id_and_server_internal(int32 chunk_id, const char *servername,
+													 tuple_found_func tuple_found, void *data,
+													 LOCKMODE lockmode, MemoryContext mctx)
 {
-	ScanKeyData scankey[1];
-	List *chunk_servers = NIL;
+	ScanKeyData scankey[2];
+	int nkeys = 0;
 
-	ScanKeyInit(&scankey[0],
+	ScanKeyInit(&scankey[nkeys++],
 				Anum_chunk_server_chunk_id_server_name_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk_id));
 
-	chunk_server_scan_limit_internal(scankey,
-									 1,
-									 CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
-									 chunk_server_tuple_found,
-									 &chunk_servers,
-									 0,
-									 AccessShareLock,
-									 mctx);
+	if (NULL != servername)
+		ScanKeyInit(&scankey[nkeys++],
+					Anum_chunk_server_chunk_id_server_name_idx_server_name,
+					BTEqualStrategyNumber,
+					F_NAMEEQ,
+					DirectFunctionCall1(namein, CStringGetDatum(servername)));
 
+	return chunk_server_scan_limit_internal(scankey,
+											nkeys,
+											CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
+											tuple_found,
+											data,
+											0,
+											lockmode,
+											mctx);
+}
+
+static int
+ts_chunk_server_scan_by_server_internal(const char *servername, tuple_found_func tuple_found,
+										void *data, LOCKMODE lockmode, MemoryContext mctx)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_server_server_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(servername)));
+
+	return chunk_server_scan_limit_internal(scankey,
+											1,
+											INVALID_INDEXID,
+											tuple_found,
+											data,
+											0,
+											lockmode,
+											mctx);
+}
+
+List *
+ts_chunk_server_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
+{
+	List *chunk_servers = NIL;
+
+	ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
+														 NULL,
+														 chunk_server_tuple_found,
+														 &chunk_servers,
+														 AccessShareLock,
+														 mctx);
 	return chunk_servers;
 }
 
 ChunkServer *
-ts_chunk_server_scan_by_server(int32 chunk_id, Name server_name, MemoryContext mctx)
+ts_chunk_server_scan_by_chunk_id_and_servername(int32 chunk_id, const char *servername,
+												MemoryContext mctx)
+
 {
-	ScanKeyData scankey[2];
 	List *chunk_servers = NIL;
 
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_server_chunk_id_server_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_id));
-
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_server_chunk_id_server_name_idx_server_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				NameGetDatum(server_name));
-
-	chunk_server_scan_limit_internal(scankey,
-									 2,
-									 CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
-									 chunk_server_tuple_found,
-									 &chunk_servers,
-									 0,
-									 AccessShareLock,
-									 mctx);
-
+	ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
+														 servername,
+														 chunk_server_tuple_found,
+														 &chunk_servers,
+														 AccessShareLock,
+														 mctx);
 	Assert(list_length(chunk_servers) == 1);
+
 	return linitial(chunk_servers);
+}
+
+static ScanTupleResult
+chunk_server_tuple_delete(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return SCAN_CONTINUE;
+}
+
+int
+ts_chunk_server_delete_by_chunk_id(int32 chunk_id)
+{
+	return ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
+																NULL,
+																chunk_server_tuple_delete,
+																NULL,
+																RowExclusiveLock,
+																CurrentMemoryContext);
+}
+
+int
+ts_chunk_server_delete_by_servername(const char *servername)
+{
+	return ts_chunk_server_scan_by_server_internal(servername,
+												   chunk_server_tuple_delete,
+												   NULL,
+												   RowExclusiveLock,
+												   CurrentMemoryContext);
 }
