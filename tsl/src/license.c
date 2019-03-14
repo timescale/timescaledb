@@ -158,7 +158,7 @@ validate_license_info(const LicenseInfo *license)
 {
 	if (license->enterprise_features_enabled)
 	{
-		if (!(strcmp(license->kind, "trial") || strcmp(license->kind, "commercial")))
+		if (strcmp(license->kind, "trial") != 0 && strcmp(license->kind, "commercial") != 0)
 			return false;
 	}
 

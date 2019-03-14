@@ -543,7 +543,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	if (!ts_guc_optimize_non_hypertables && !involves_hypertable(root, input_rel))
 		return;
 
-	if (UPPERREL_GROUP_AGG == stage)
+	if (UPPERREL_GROUP_AGG == stage && output_rel != NULL)
 	{
 		ts_plan_add_hashagg(root, input_rel, output_rel);
 		if (parse->hasAggs)
