@@ -146,27 +146,24 @@ typedef enum DispatchState
 typedef struct ServerDispatchState
 {
 	CustomScanState cstate;
-	DispatchState prevstate;	/* Previous state in state machine */
-	DispatchState state;		/* Current state in state machine */
-	Relation rel;				/* The (local) relation we're inserting into */
-	Oid userid;					/* User performing INSERT */
-	bool set_processed;			/* Indicates whether to set the number or processed tuples */
-	DeparsedInsertStmt stmt;	/* Partially deparsed insert statement */
-	const char *sql_stmt;		/* Fully deparsed insert statement */
-	AttInMetadata *attinmeta;   /* Metadata to convert incoming data to tuples */
-	List *target_attrs;			/* The attributes to send to remote servers */
-	List *responses;			/* List of responses to process in RETURNING state */
-	HTAB *serverstates;			/* Hashtable of per-server state (tuple stores) */
-	MemoryContext mcxt;			/* Memory context for per-server state */
-	MemoryContext temp_mcxt;	/* context for per-tuple temporary data */
-	FmgrInfo *outfuncs;			/* Output functions to convert tuples to wire
-								 * representation */
-	const char **values;		/* Array to store a batch of values to send */
-	int num_params;				/* Number of parameters in insert statement */
-	int64 num_tuples;			/* Total number of tuples flushed each round */
-	int64 next_tuple;			/* Next tuple to return to the parent node when in
-								 * RETURNING state */
-	int replication_factor;		/* > 1 if we replicate tuples across servers */
+	DispatchState prevstate;  /* Previous state in state machine */
+	DispatchState state;	  /* Current state in state machine */
+	Relation rel;			  /* The (local) relation we're inserting into */
+	Oid userid;				  /* User performing INSERT */
+	bool set_processed;		  /* Indicates whether to set the number or processed tuples */
+	DeparsedInsertStmt stmt;  /* Partially deparsed insert statement */
+	const char *sql_stmt;	 /* Fully deparsed insert statement */
+	AttInMetadata *attinmeta; /* Metadata to convert incoming data to tuples */
+	List *target_attrs;		  /* The attributes to send to remote servers */
+	List *responses;		  /* List of responses to process in RETURNING state */
+	HTAB *serverstates;		  /* Hashtable of per-server state (tuple stores) */
+	MemoryContext mcxt;		  /* Memory context for per-server state */
+	MemoryContext temp_mcxt;  /* context for per-tuple temporary data */
+	int64 num_tuples;		  /* Total number of tuples flushed each round */
+	int64 next_tuple;		  /* Next tuple to return to the parent node when in
+							   * RETURNING state */
+	int replication_factor;   /* > 1 if we replicate tuples across servers */
+	StmtParams *stmt_params;  /* Parameters to send with statement. Format can be binary or text */
 	TupleTableSlot *batch_slot; /* Slot used for sending tuples to data
 								 * nodes. Note that this needs to be a
 								 * MinimalTuple slot, so we cannot use the
@@ -300,7 +297,6 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rel->rd_id, CACHE_FLAG_NONE);
 	PlanState *ps;
-	ListCell *lc;
 	MemoryContext mcxt =
 		AllocSetContextCreate(estate->es_query_cxt, "ServerState", ALLOCSET_SMALL_SIZES);
 	HASHCTL hctl = {
@@ -317,7 +313,6 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = list_make1(ps);
 	sds->state = SD_READ;
 	sds->rel = rel;
-	sds->num_params = 0;
 	sds->replication_factor = ht->fd.replication_factor;
 	sds->sql_stmt = strVal(list_nth(cscan->custom_private, CustomScanPrivateSql));
 	sds->target_attrs = list_nth(cscan->custom_private, CustomScanPrivateTargetAttrs);
@@ -336,30 +331,12 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	deparsed_insert_stmt_from_list(&sds->stmt,
 								   list_nth(cscan->custom_private,
 											CustomScanPrivateDeparsedInsertStmt));
-
 	/* Setup output functions to generate string values for each target attribute */
-	sds->outfuncs = palloc(sizeof(FmgrInfo) * list_length(sds->target_attrs));
-
-	foreach (lc, sds->target_attrs)
-	{
-		int attnum = lfirst_int(lc);
-		Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attnum));
-		Oid typefnoid;
-		bool isvarlena;
-
-		Assert(!attr->attisdropped);
-
-		getTypeOutputInfo(attr->atttypid, &typefnoid, &isvarlena);
-		fmgr_info(typefnoid, &sds->outfuncs[sds->num_params++]);
-	}
+	sds->stmt_params =
+		stmt_params_create(sds->target_attrs, false, tupdesc, TUPSTORE_FLUSH_THRESHOLD);
 
 	if (HAS_RETURNING(sds))
 		sds->attinmeta = TupleDescGetAttInMetadata(tupdesc);
-
-	/* Array to keep values that we send to a server. Since we use batching,
-	 * we can pre-allocate this at the fixed batch size so that we don't have
-	 * to reallocate it for every batch. */
-	sds->values = palloc(sizeof(char *) * sds->num_params * TUPSTORE_FLUSH_THRESHOLD);
 
 	/* The tuplestores that hold batches of tuples only allow MinimalTuples so
 	 * we need a dedicated slot for getting tuples from the stores since the
@@ -367,40 +344,6 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	sds->batch_slot = MakeSingleTupleTableSlotCompat(tupdesc, &TTSOpsMinimalTuple);
 
 	ts_cache_release(hcache);
-}
-
-/*
- * Convert a tuple to values to be sent using a prepared statement.
- */
-static int
-convert_prep_statement_params(ServerDispatchState *sds, TupleTableSlot *slot, const char **values)
-{
-	MemoryContext old = MemoryContextSwitchTo(sds->temp_mcxt);
-	int nestlevel;
-	int pindex = 0;
-	ListCell *lc;
-
-	nestlevel = set_transmission_modes();
-
-	foreach (lc, sds->target_attrs)
-	{
-		int attnum = lfirst_int(lc);
-		Datum value;
-		bool isnull;
-
-		value = slot_getattr(slot, attnum, &isnull);
-		if (isnull)
-			values[pindex] = NULL;
-		else
-			values[pindex] = OutputFunctionCall(&sds->outfuncs[pindex], value);
-		pindex++;
-	}
-
-	reset_transmission_modes(nestlevel);
-
-	MemoryContextSwitchTo(old);
-
-	return pindex;
 }
 
 /*
@@ -474,15 +417,11 @@ server_dispatch_set_state(ServerDispatchState *sds, DispatchState new_state)
 }
 
 static PreparedStmt *
-prepare_server_insert_stmt(ServerDispatchState *sds, PGconn *conn, int num_tuples)
+prepare_server_insert_stmt(ServerDispatchState *sds, PGconn *conn, int total_params)
 {
 	AsyncRequest *req;
-	int64 total_params = sds->num_params * num_tuples;
 
-	if (total_params > INT_MAX)
-		elog(ERROR, "too many parameters in prepared statement");
-
-	req = async_request_send_prepare(conn, sds->sql_stmt, (int) total_params);
+	req = async_request_send_prepare(conn, sds->sql_stmt, total_params);
 	Assert(req != NULL);
 
 	return async_request_wait_prepared_statement(req);
@@ -507,7 +446,6 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	TupleTableSlot *slot = sds->batch_slot;
 	AsyncRequest *req;
 	const char *sql_stmt;
-	int i = 0;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
 	Assert(NUM_STORED_TUPLES(ss) <= TUPSTORE_FLUSH_THRESHOLD);
@@ -519,7 +457,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 		tuplestore_gettupleslot(ss->primary_tupstore, true /* forward */, false /* copy */, slot))
 	{
 		/* get following parameters from slot */
-		i += convert_prep_statement_params(sds, slot, sds->values + i);
+		stmt_params_convert_values(sds->stmt_params, slot, NULL);
 		ss->num_tuples_sent++;
 	}
 
@@ -531,12 +469,13 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 									   slot))
 		{
 			/* get following parameters from slot */
-			i += convert_prep_statement_params(sds, slot, sds->values + i);
+			stmt_params_convert_values(sds->stmt_params, slot, NULL);
 			ss->num_tuples_sent++;
 		}
 	}
 
 	Assert(ss->num_tuples_sent == NUM_STORED_TUPLES(ss));
+	Assert(ss->num_tuples_sent == stmt_params_converted_tuples(sds->stmt_params));
 
 	/* Send tuples */
 	switch (sds->state)
@@ -544,19 +483,19 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 		case SD_FLUSH:
 			/* Lazy initialize the prepared statement */
 			if (NULL == ss->pstmt)
-				ss->pstmt = prepare_server_insert_stmt(sds, ss->conn, TUPSTORE_FLUSH_THRESHOLD);
+				ss->pstmt = prepare_server_insert_stmt(sds,
+													   ss->conn,
+													   stmt_params_total_values(sds->stmt_params));
 
 			Assert(ss->num_tuples_sent == TUPSTORE_FLUSH_THRESHOLD);
-			req = async_request_send_prepared_stmt(ss->pstmt, sds->values);
+			req = async_request_send_prepared_stmt_with_params(ss->pstmt, sds->stmt_params);
 			break;
 		case SD_LAST_FLUSH:
-			sql_stmt = deparsed_insert_stmt_get_sql(&sds->stmt, ss->num_tuples_sent);
+			sql_stmt = deparsed_insert_stmt_get_sql(&sds->stmt,
+													stmt_params_converted_tuples(sds->stmt_params));
 			Assert(sql_stmt != NULL);
 			Assert(ss->num_tuples_sent < TUPSTORE_FLUSH_THRESHOLD);
-			req = async_request_send_with_params(ss->conn,
-												 sql_stmt,
-												 ss->num_tuples_sent * sds->num_params,
-												 sds->values);
+			req = async_request_send_with_stmt_params(ss->conn, sql_stmt, sds->stmt_params);
 			break;
 		default:
 			elog(ERROR, "unexpected server dispatch state %s", state_names[sds->state]);
@@ -580,8 +519,9 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	/* No tuples are returned from the replica store so safe to clear */
 	server_state_clear_replica_store(ss);
 
-	/* Clear the memory context on which we created the sent values */
-	MemoryContextReset(sds->temp_mcxt);
+	/* Since we're done with current batch, reset params so they are safe to use in the next
+	 * batch/server */
+	stmt_params_reset(sds->stmt_params);
 
 	return req;
 }
