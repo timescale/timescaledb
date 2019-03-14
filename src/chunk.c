@@ -196,7 +196,8 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		ts_hypercube_slice_sort(chunk_stub->cube);
 
 	if (chunk_stub->relkind == RELKIND_FOREIGN_TABLE)
-		chunk_stub->servers = ts_chunk_server_scan(chunk_stub->fd.id, CurrentMemoryContext);
+		chunk_stub->servers =
+			ts_chunk_server_scan_by_chunk_id(chunk_stub->fd.id, CurrentMemoryContext);
 
 	return chunk_stub;
 }
@@ -1817,7 +1818,7 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, int16 num_constra
 			}
 
 			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-				chunk->servers = ts_chunk_server_scan(chunk->fd.id, mctx);
+				chunk->servers = ts_chunk_server_scan_by_chunk_id(chunk->fd.id, mctx);
 
 			break;
 		default:
@@ -2016,6 +2017,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 
 	ts_chunk_constraint_delete_by_chunk_id(form->id, ccs);
 	ts_chunk_index_delete_by_chunk_id(form->id, true);
+	ts_chunk_server_delete_by_chunk_id(form->id);
 
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (i = 0; i < ccs->num_constraints; i++)
@@ -2065,6 +2067,45 @@ ts_chunk_delete_by_name(const char *schema, const char *table)
 							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
+}
+
+bool
+ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id)
+{
+	ScanKeyData scankey[2];
+	FormData_chunk form;
+	int num_found;
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_schema_name_idx_schema_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(schema)));
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_schema_name_idx_table_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(table)));
+
+	num_found = chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX,
+									scankey,
+									2,
+									chunk_form_tuple_found,
+									&form,
+									0,
+									ForwardScanDirection,
+									RowExclusiveLock,
+									CurrentMemoryContext);
+
+	Assert(num_found == 1 || num_found == 0);
+
+	if (num_found != 1)
+		return false;
+
+	if (NULL != chunk_id)
+		*chunk_id = form.id;
+
+	return true;
 }
 
 int

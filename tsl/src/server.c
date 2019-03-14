@@ -14,6 +14,7 @@
 #include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
+#include <commands/event_trigger.h>
 #include <utils/builtins.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
@@ -513,14 +514,31 @@ server_delete(PG_FUNCTION_ARGS)
 			.behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
 			.missing_ok = if_exists,
 		};
+		ObjectAddress address;
+		ObjectAddress secondaryObject = InvalidObjectAddress;
+		Node *parsetree = (Node *) &stmt;
 
-		RemoveObjects(&stmt);
+		/* Make sure event triggers are invoked so that all dropped objects
+		 * are collected during a cascading drop. This ensures all dependent
+		 * objects get cleaned up. */
+		EventTriggerBeginCompleteQuery();
 
-		/*
-		 * Delete all hypertable -> server mappings that reference this
-		 * foreign server
-		 */
-		ts_hypertable_server_delete_by_servername(servername);
+		PG_TRY();
+		{
+			EventTriggerDDLCommandStart(parsetree);
+			RemoveObjects(&stmt);
+			EventTriggerCollectSimpleCommand(address, secondaryObject, parsetree);
+			EventTriggerSQLDrop(parsetree);
+			EventTriggerDDLCommandEnd(parsetree);
+		}
+		PG_CATCH();
+		{
+			EventTriggerEndCompleteQuery();
+			PG_RE_THROW();
+		}
+		PG_END_TRY();
+
+		EventTriggerEndCompleteQuery();
 		deleted = true;
 	}
 

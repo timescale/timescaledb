@@ -55,7 +55,8 @@ extern void ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, in
 										Oid hypertable_oid, int32 hypertable_id);
 extern void ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid);
 extern int ts_chunk_constraint_delete_by_hypertable_constraint_name(
-	int32 chunk_id, char *hypertable_constraint_name, bool delete_metadata, bool drop_constraint);
+	int32 chunk_id, const char *hypertable_constraint_name, bool delete_metadata,
+	bool drop_constraint);
 extern int ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs);
 extern int ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id);
 extern int ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id,

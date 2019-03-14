@@ -710,7 +710,7 @@ chunk_constraint_drop_constraint(TupleInfo *ti)
 
 int
 ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-														 char *hypertable_constraint_name,
+														 const char *hypertable_constraint_name,
 														 bool delete_metadata, bool drop_constraint)
 {
 	ScanIterator iterator =

@@ -13,6 +13,8 @@
 #include <catalog/pg_class.h>
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_foreign_server.h>
+#include <catalog/pg_user_mapping.h>
 
 #include "event_trigger.h"
 
@@ -103,42 +105,53 @@ extract_addrnames(ArrayType *arr)
 }
 
 static EventTriggerDropTableConstraint *
-make_event_trigger_drop_table_constraint(char *constraint_name, char *schema, char *table)
+make_event_trigger_drop_table_constraint(const char *constraint_name, const char *schema,
+										 const char *table)
 {
 	EventTriggerDropTableConstraint *obj = palloc(sizeof(EventTriggerDropTableConstraint));
 
 	*obj =
-		(EventTriggerDropTableConstraint){ .obj = { .type = EVENT_TRIGGER_DROP_TABLE_CONSTRAINT },
-										   .constraint_name = constraint_name,
-										   .schema = schema,
-										   .table = table };
+		(EventTriggerDropTableConstraint){
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_TABLE_CONSTRAINT,
+		},
+		.constraint_name = constraint_name,
+		.schema = schema,
+		.table = table,
+	};
 
 	return obj;
 }
 
-static EventTriggerDropIndex *
-make_event_trigger_drop_index(char *index_name, char *schema)
+static EventTriggerDropRelation *
+make_event_trigger_drop_index(const char *index_name, const char *schema)
 {
-	EventTriggerDropIndex *obj = palloc(sizeof(EventTriggerDropIndex));
+	EventTriggerDropRelation *obj = palloc(sizeof(EventTriggerDropRelation));
 
-	*obj = (EventTriggerDropIndex){
-		.obj = { .type = EVENT_TRIGGER_DROP_INDEX },
-		.index_name = index_name,
+	*obj = (EventTriggerDropRelation){
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_INDEX,
+		},
+		.name = index_name,
 		.schema = schema,
 	};
+
 	return obj;
 }
 
-static EventTriggerDropTable *
-make_event_trigger_drop_table(char *table_name, char *schema)
+static EventTriggerDropRelation *
+make_event_trigger_drop_table(const char *table_name, const char *schema, char relkind)
 {
-	EventTriggerDropTable *obj = palloc(sizeof(EventTriggerDropTable));
+	EventTriggerDropRelation *obj = palloc(sizeof(EventTriggerDropRelation));
 
-	*obj = (EventTriggerDropTable){
-		.obj = { .type = EVENT_TRIGGER_DROP_TABLE },
-		.table_name = table_name,
+	*obj = (EventTriggerDropRelation){
+		.obj = {
+			.type = (relkind == RELKIND_RELATION) ? EVENT_TRIGGER_DROP_TABLE : EVENT_TRIGGER_DROP_FOREIGN_TABLE,
+		},
+		.name = table_name,
 		.schema = schema,
 	};
+
 	return obj;
 }
 
@@ -156,26 +169,48 @@ make_event_trigger_drop_view(char *view_name, char *schema)
 }
 
 static EventTriggerDropSchema *
-make_event_trigger_drop_schema(char *schema)
+make_event_trigger_drop_schema(const char *schema)
 {
 	EventTriggerDropSchema *obj = palloc(sizeof(EventTriggerDropSchema));
 
 	*obj = (EventTriggerDropSchema){
-		.obj = { .type = EVENT_TRIGGER_DROP_SCHEMA },
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_SCHEMA,
+		},
 		.schema = schema,
 	};
+
 	return obj;
 }
 
 static EventTriggerDropTrigger *
-make_event_trigger_drop_trigger(char *trigger_name, char *schema, char *table)
+make_event_trigger_drop_trigger(const char *trigger_name, const char *schema, const char *table)
 {
 	EventTriggerDropTrigger *obj = palloc(sizeof(EventTriggerDropTrigger));
 
-	*obj = (EventTriggerDropTrigger){ .obj = { .type = EVENT_TRIGGER_DROP_TRIGGER },
-									  .trigger_name = trigger_name,
-									  .schema = schema,
-									  .table = table };
+	*obj = (EventTriggerDropTrigger){
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_TRIGGER,
+		},
+		.trigger_name = trigger_name,
+		.schema = schema,
+		.table = table
+	};
+
+	return obj;
+}
+
+static EventTriggerDropForeignServer *
+make_event_trigger_drop_foreign_server(const char *server_name)
+{
+	EventTriggerDropForeignServer *obj = palloc(sizeof(EventTriggerDropForeignServer));
+
+	*obj = (EventTriggerDropForeignServer){
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_FOREIGN_SERVER,
+		},
+		.servername = server_name,
+	};
 
 	return obj;
 }
@@ -207,6 +242,8 @@ ts_event_trigger_dropped_objects(void)
 		bool nulls[DROPPED_OBJECTS_NATTS];
 		Oid class_id;
 		char *objtype;
+		List *addrnames = NIL;
+		void *eventobj = NULL;
 
 		heap_deform_tuple(tuple, rsinfo.setDesc, values, nulls);
 
@@ -218,34 +255,28 @@ ts_event_trigger_dropped_objects(void)
 				objtype = TextDatumGetCString(values[6]);
 				if (objtype != NULL && strcmp(objtype, "table constraint") == 0)
 				{
-					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+					addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
 
-					objects = lappend(objects,
-									  make_event_trigger_drop_table_constraint(lthird(addrnames),
-																			   linitial(addrnames),
-																			   lsecond(addrnames)));
+					eventobj = make_event_trigger_drop_table_constraint(lthird(addrnames),
+																		linitial(addrnames),
+																		lsecond(addrnames));
 				}
 				break;
 			case RelationRelationId:
 				objtype = TextDatumGetCString(values[6]);
+
 				if (objtype == NULL)
 					break;
+
+				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+
 				if (strcmp(objtype, "index") == 0)
-				{
-					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
-
-					objects = lappend(objects,
-									  make_event_trigger_drop_index(lsecond(addrnames),
-																	linitial(addrnames)));
-				}
+					eventobj =
+						make_event_trigger_drop_index(lsecond(addrnames), linitial(addrnames));
 				else if (strcmp(objtype, "table") == 0)
-				{
-					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
-
-					objects = lappend(objects,
-									  make_event_trigger_drop_table(lsecond(addrnames),
-																	linitial(addrnames)));
-				}
+					eventobj = make_event_trigger_drop_table(lsecond(addrnames),
+															 linitial(addrnames),
+															 RELKIND_RELATION);
 				else if (strcmp(objtype, "view") == 0)
 				{
 					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
@@ -254,28 +285,31 @@ ts_event_trigger_dropped_objects(void)
 									  make_event_trigger_drop_view(lsecond(addrnames),
 																   linitial(addrnames)));
 				}
+				else if (strcmp(objtype, "foreign table") == 0)
+					eventobj = make_event_trigger_drop_table(lsecond(addrnames),
+															 linitial(addrnames),
+															 RELKIND_FOREIGN_TABLE);
 				break;
 			case NamespaceRelationId:
-			{
-				List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
-
-				objects = lappend(objects, make_event_trigger_drop_schema(linitial(addrnames)));
-			}
-			break;
+				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+				eventobj = make_event_trigger_drop_schema(linitial(addrnames));
+				break;
 			case TriggerRelationId:
-			{
-				List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
-
-				objects = lappend(objects,
-								  make_event_trigger_drop_trigger(lthird(addrnames),
-																  linitial(addrnames),
-																  lsecond(addrnames)));
-			}
-			break;
-
+				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+				eventobj = make_event_trigger_drop_trigger(lthird(addrnames),
+														   linitial(addrnames),
+														   lsecond(addrnames));
+				break;
+			case ForeignServerRelationId:
+				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+				eventobj = make_event_trigger_drop_foreign_server(linitial(addrnames));
+				break;
 			default:
 				break;
 		}
+
+		if (NULL != eventobj)
+			objects = lappend(objects, eventobj);
 	}
 
 	FreeExprContext(rsinfo.econtext, false);

@@ -47,6 +47,7 @@
 #include "catalog.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "chunk_server.h"
 #include "compat.h"
 #include "copy.h"
 #include "errors.h"
@@ -765,25 +766,6 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 	ts_cache_release(hcache);
 }
 
-static bool
-process_drop_foreign_server(DropStmt *stmt)
-{
-	ListCell *lc;
-
-	foreach (lc, stmt->objects)
-	{
-		void *object = lfirst(lc);
-#if PG96
-		const char *servername = strVal(linitial((List *) object));
-#else
-		const char *servername = strVal((Value *) object);
-#endif
-		ts_hypertable_server_delete_by_servername(servername);
-	}
-
-	return false;
-}
-
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
  * through process_ddl_sql_drop */
 static void
@@ -918,8 +900,6 @@ process_drop(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_VIEW:
 			block_dropping_continuous_aggregates_without_cascade(args, stmt);
-		case OBJECT_FOREIGN_SERVER:
-			process_drop_foreign_server(stmt);
 			break;
 		default:
 			break;
@@ -2860,7 +2840,7 @@ process_ddl_command_end(CollectedCommand *cmd)
 static void
 process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
-	char *hypertable_constraint_name = arg;
+	const char *hypertable_constraint_name = arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	/* drop both metadata and table; sql_drop won't be called recursively */
@@ -2873,11 +2853,10 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 static void
 process_drop_table_constraint(EventTriggerDropObject *obj)
 {
-	EventTriggerDropTableConstraint *constraint;
+	EventTriggerDropTableConstraint *constraint = (EventTriggerDropTableConstraint *) obj;
 	Hypertable *ht;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE_CONSTRAINT);
-	constraint = (EventTriggerDropTableConstraint *) obj;
 
 	/* do not use relids because underlying table could be gone */
 	ht = ts_hypertable_get_by_name(constraint->schema, constraint->table);
@@ -2889,55 +2868,50 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and drop the corresponding constraint */
-		foreach_chunk(ht, process_drop_constraint_on_chunk, constraint->constraint_name);
+		foreach_chunk(ht, process_drop_constraint_on_chunk, (void *) constraint->constraint_name);
 
 		ts_catalog_restore_user(&sec_ctx);
 	}
 	else
 	{
-		Chunk *chunk = chunk_get_by_name(constraint->schema, constraint->table, 0, false);
+		/* Cannot get the full chunk here because it's table might be dropped */
+		int32 chunk_id;
+		bool found = ts_chunk_get_id(constraint->schema, constraint->table, &chunk_id);
 
-		if (NULL != chunk)
-		{
-			ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id,
+		if (found)
+			ts_chunk_constraint_delete_by_constraint_name(chunk_id,
 														  constraint->constraint_name,
 														  true,
 														  false);
-		}
 	}
 }
 
 static void
 process_drop_index(EventTriggerDropObject *obj)
 {
-	EventTriggerDropIndex *index;
+	EventTriggerDropRelation *index = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_INDEX);
-	index = (EventTriggerDropIndex *) obj;
-
-	ts_chunk_index_delete_by_name(index->schema, index->index_name, true);
+	ts_chunk_index_delete_by_name(index->schema, index->name, true);
 }
 
 static void
 process_drop_table(EventTriggerDropObject *obj)
 {
-	EventTriggerDropTable *table;
+	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
-	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE);
-	table = (EventTriggerDropTable *) obj;
-
-	ts_hypertable_delete_by_name(table->schema, table->table_name);
-	ts_chunk_delete_by_name(table->schema, table->table_name);
+	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
+	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_chunk_delete_by_name(table->schema, table->name);
 }
 
 static void
 process_drop_schema(EventTriggerDropObject *obj)
 {
-	EventTriggerDropSchema *schema;
+	EventTriggerDropSchema *schema = (EventTriggerDropSchema *) obj;
 	int count;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_SCHEMA);
-	schema = (EventTriggerDropSchema *) obj;
 
 	if (strcmp(schema->schema, INTERNAL_SCHEMA_NAME) == 0)
 		ereport(ERROR,
@@ -2963,11 +2937,10 @@ process_drop_schema(EventTriggerDropObject *obj)
 static void
 process_drop_trigger(EventTriggerDropObject *obj)
 {
-	EventTriggerDropTrigger *trigger_event;
+	EventTriggerDropTrigger *trigger_event = (EventTriggerDropTrigger *) obj;
 	Hypertable *ht;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TRIGGER);
-	trigger_event = (EventTriggerDropTrigger *) obj;
 
 	/* do not use relids because underlying table could be gone */
 	ht = ts_hypertable_get_by_name(trigger_event->schema, trigger_event->table);
@@ -2990,6 +2963,16 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
+process_drop_foreign_server(EventTriggerDropObject *obj)
+{
+	EventTriggerDropForeignServer *server = (EventTriggerDropForeignServer *) obj;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_FOREIGN_SERVER);
+	ts_hypertable_server_delete_by_servername(server->servername);
+	ts_chunk_server_delete_by_servername(server->servername);
+}
+
+static void
 process_ddl_sql_drop(EventTriggerDropObject *obj)
 {
 	switch (obj->type)
@@ -3001,6 +2984,7 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			process_drop_index(obj);
 			break;
 		case EVENT_TRIGGER_DROP_TABLE:
+		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 			process_drop_table(obj);
 			break;
 		case EVENT_TRIGGER_DROP_SCHEMA:
@@ -3011,6 +2995,9 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			break;
 		case EVENT_TRIGGER_DROP_VIEW:
 			process_drop_view((EventTriggerDropView *) obj);
+			break;
+		case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
+			process_drop_foreign_server(obj);
 			break;
 	}
 }

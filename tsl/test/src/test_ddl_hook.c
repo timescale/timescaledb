@@ -133,11 +133,12 @@ test_sql_drop(List *dropped_objects)
 				elog(NOTICE, "test_sql_drop: index");
 				break;
 			}
+			case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 			case EVENT_TRIGGER_DROP_TABLE:
 			{
-				EventTriggerDropTable *event = (EventTriggerDropTable *) obj;
+				EventTriggerDropRelation *event = (EventTriggerDropRelation *) obj;
 
-				elog(NOTICE, "test_sql_drop: table: %s.%s", event->schema, event->table_name);
+				elog(NOTICE, "test_sql_drop: table: %s.%s", event->schema, event->name);
 				break;
 			}
 			case EVENT_TRIGGER_DROP_SCHEMA:
@@ -155,6 +156,11 @@ test_sql_drop(List *dropped_objects)
 			case EVENT_TRIGGER_DROP_VIEW:
 			{
 				elog(NOTICE, "test_sql_drop: view");
+				break;
+			}
+			case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
+			{
+				elog(NOTICE, "test_sql_drop: foreign server");
 				break;
 			}
 		}

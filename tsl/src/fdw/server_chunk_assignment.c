@@ -19,9 +19,9 @@ get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, 0, false);
 	ForeignServer *fs = GetForeignServer(server_oid);
-	Name server_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum(fs->servername)));
-	ChunkServer *cs =
-		ts_chunk_server_scan_by_server(chunk->fd.id, server_name, CurrentMemoryContext);
+	ChunkServer *cs = ts_chunk_server_scan_by_chunk_id_and_servername(chunk->fd.id,
+																	  fs->servername,
+																	  CurrentMemoryContext);
 	return cs->fd.server_chunk_id;
 }
 

@@ -79,7 +79,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
 	ChunkSizingInfo *chunk_sizing_info, int32 replication_factor, ArrayType *servers);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
-extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
+extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 
