@@ -53,6 +53,11 @@ typedef struct PreparedStmt PreparedStmt;
 
 #define TS_NO_TIMEOUT DT_NOBEGIN
 
+extern AsyncRequest *async_request_send_with_stmt_params_elevel(PGconn *conn,
+																const char *sql_statement,
+																StmtParams *params, int elevel);
+#define async_request_send_with_stmt_params(conn, sql_statement, params)                           \
+	async_request_send_with_stmt_params_elevel(conn, sql_statement, params, ERROR)
 extern AsyncRequest *async_request_send_with_params_elevel(PGconn *conn, const char *sql_statement,
 														   int n_params,
 														   const char *const *param_values,

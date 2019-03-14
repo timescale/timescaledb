@@ -20,7 +20,6 @@ extern StmtParams *stmt_params_create(List *target_attr_nums, bool ctid, TupleDe
 									  int num_tuples);
 extern void stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot,
 									   ItemPointer tupleid);
-
 extern const int *stmt_params_formats(StmtParams *stmt_params);
 extern const int *stmt_params_lengths(StmtParams *stmt_params);
 extern const char *const *stmt_params_values(StmtParams *stmt_params);
