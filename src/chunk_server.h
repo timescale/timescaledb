@@ -15,10 +15,13 @@ typedef struct ChunkServer
 	Oid foreign_server_oid;
 } ChunkServer;
 
-extern List *ts_chunk_server_scan(int32 chunk_id, MemoryContext mctx);
-extern TSDLLEXPORT ChunkServer *ts_chunk_server_scan_by_server(int32 chunk_id, Name server_name,
-															   MemoryContext mctx);
+extern List *ts_chunk_server_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
+extern TSDLLEXPORT ChunkServer *
+ts_chunk_server_scan_by_chunk_id_and_servername(int32 chunk_id, const char *servername,
+												MemoryContext mctx);
 extern TSDLLEXPORT void ts_chunk_server_insert(ChunkServer *server);
 extern void ts_chunk_server_insert_multi(List *chunk_servers);
+extern int ts_chunk_server_delete_by_chunk_id(int32 chunk_id);
+extern int ts_chunk_server_delete_by_servername(const char *servername);
 
 #endif /* TIMESCALEDB_CHUNK_SERVER_H */

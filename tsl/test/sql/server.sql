@@ -142,7 +142,18 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 -- All servers should be added.
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 
+-- Create one chunk
+INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
+
+-- Chunk mapping created
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
 DROP TABLE disttable;
+
+-- server mappings should be cleaned up
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
 -- Need to distribute table drop
 \c server_1;
 DROP TABLE disttable;
@@ -165,28 +176,57 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
 
 -- Non-existing server
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_3" }');
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, servers => '{ "server_3" }');
 \set ON_ERROR_STOP 1
 
--- Use a subset of servers
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_2", "server_4" }');
+-- Use a subset of servers and a replication factor of two so that
+-- each chunk is associated with more than one server
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, servers => '{ "server_2", "server_4" }');
 
+-- Create some chunks
+INSERT INTO disttable VALUES
+       ('2019-02-02 10:45', 1, 23.4),
+       ('2019-05-23 10:45', 4, 14.9),
+       ('2019-07-23 10:45', 8, 7.6);
+
+SELECT * FROM test.show_subtables('disttable');
+SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
 
--- Deleting a server should remove the hypertable_server mappings for that server
+-- Dropping a chunk should also clean up server mappings
+SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
+
+SELECT * FROM test.show_subtables('disttable');
+SELECT * FROM _timescaledb_catalog.chunk;
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
+-- Deleting a server removes the "foreign" chunk table(s) that
+-- reference that server as "primary" and should also remove the
+-- hypertable_server and chunk_server mappings for that server.  In
+-- the future we might want to fallback to a replica server for those
+-- chunks that have multiple servers so that the chunk is not removed
+-- unnecessarily.
 SELECT * FROM delete_server('server_2', cascade => true);
 
+SELECT * FROM test.show_subtables('disttable');
+SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
 
 -- Should also clean up hypertable_server when using standard DDL commands
 DROP SERVER server_4 CASCADE;
 
+SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
+SELECT * FROM _timescaledb_catalog.chunk;
 
 -- Attach server should now succeed
 SELECT * FROM attach_server('disttable', 'server_1');
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
 
 -- Some attach server error cases
 \set ON_ERROR_STOP 0
@@ -214,6 +254,11 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, se
 
 SELECT * FROM delete_server('server_1', cascade => true);
 SELECT * FROM show_servers();
+
+SELECT * FROM test.show_subtables('disttable');
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
+SELECT * FROM _timescaledb_catalog.chunk;
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);

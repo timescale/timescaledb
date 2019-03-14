@@ -1208,7 +1208,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	chunk->relkind = get_rel_relkind(chunk->table_id);
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-		chunk->servers = ts_chunk_server_scan(chunk->fd.id, ti->mctx);
+		chunk->servers = ts_chunk_server_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 	return SCAN_DONE;
 }
@@ -1516,7 +1516,7 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
 		chunk->table_id = chunk_create_table_after_lock(chunk, ht);
 
 		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-			chunk->servers = ts_chunk_server_scan(chunk->fd.id, ti->mctx);
+			chunk->servers = ts_chunk_server_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
@@ -2451,6 +2451,20 @@ ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok)
 	return get_namespace_oid(NameStr(form.schema_name), missing_ok);
 }
 
+bool
+ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool missing_ok)
+{
+	FormData_chunk form = { 0 };
+
+	if (!chunk_simple_scan_by_name(schema, table, &form, missing_ok))
+		return false;
+
+	if (NULL != chunk_id)
+		*chunk_id = form.id;
+
+	return true;
+}
+
 /*
  * Results of deleting a chunk.
  *
@@ -2527,6 +2541,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	ts_chunk_index_delete_by_chunk_id(form.id, true);
 	ts_compression_chunk_size_delete(form.id);
+	ts_chunk_server_delete_by_chunk_id(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
 	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);

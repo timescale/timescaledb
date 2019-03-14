@@ -974,7 +974,7 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 }
 
 Hypertable *
-ts_hypertable_get_by_name(char *schema, char *name)
+ts_hypertable_get_by_name(const char *schema, const char *name)
 {
 	Hypertable *ht = NULL;
 
