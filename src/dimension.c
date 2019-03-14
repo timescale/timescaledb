@@ -1031,6 +1031,36 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+DimensionInfo *
+ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval, Oid interval_type,
+							  regproc partitioning_func)
+{
+	DimensionInfo *info = palloc(sizeof(*info));
+	*info = (DimensionInfo){
+		.table_relid = table_relid,
+		.colname = column_name,
+		.interval_datum = interval,
+		.interval_type = interval_type,
+		.partitioning_func = partitioning_func,
+	};
+	return info;
+}
+
+DimensionInfo *
+ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_slices,
+								regproc partitioning_func)
+{
+	DimensionInfo *info = palloc(sizeof(*info));
+	*info = (DimensionInfo){
+		.table_relid = table_relid,
+		.colname = column_name,
+		.num_slices = num_slices,
+		.num_slices_is_set = true,
+		.partitioning_func = partitioning_func,
+	};
+	return info;
+}
+
 void
 ts_dimension_info_validate(DimensionInfo *info)
 {

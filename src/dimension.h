@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
+#include <catalog/pg_type.h>
 
 #include "catalog.h"
 #include "export.h"
@@ -140,6 +141,26 @@ extern Datum ts_dimension_transform_value(Dimension *dim, Datum value, Oid const
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
 extern TSDLLEXPORT void ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type,
 													char *caller_name);
+
+extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
+																Datum interval, Oid interval_type,
+																regproc partitioning_func);
+
+static inline DimensionInfo *
+ts_dimension_info_create_open_interval_usec(Oid table_relid, Name column_name, int64 interval_usec,
+											regproc partitioning_func)
+{
+	return ts_dimension_info_create_open(table_relid,
+										 column_name,
+										 Int64GetDatum(interval_usec),
+										 INT8OID,
+										 partitioning_func);
+}
+
+extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_relid, Name column_name,
+																  int32 num_slices,
+																  regproc partitioning_func);
+
 extern void ts_dimension_info_validate(DimensionInfo *info);
 extern void ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);

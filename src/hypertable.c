@@ -1289,20 +1289,19 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
 	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
 	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
-	DimensionInfo time_dim_info = {
-		.table_relid = table_relid,
-		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
-		.interval_datum = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
-		.interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
-		.partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13),
-	};
-	DimensionInfo space_dim_info = {
-		.table_relid = table_relid,
-		.colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2),
-		.num_slices = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
-		.num_slices_is_set = !PG_ARGISNULL(3),
-		.partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9),
-	};
+	DimensionInfo *time_dim_info =
+		ts_dimension_info_create_open(table_relid,
+									  /* column name */
+									  PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
+									  /* interval */
+									  PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
+									  /* interval type */
+									  PG_ARGISNULL(6) ? InvalidOid :
+														get_fn_expr_argtype(fcinfo->flinfo, 6),
+									  /* partitioning func */
+									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
+	DimensionInfo *space_dim_info = NULL;
+
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
 		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
@@ -1315,6 +1314,18 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	Datum retval;
 	bool created;
 	uint32 flags = 0;
+
+	if (!PG_ARGISNULL(3))
+	{
+		space_dim_info =
+			ts_dimension_info_create_closed(table_relid,
+											/* column name */
+											PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2),
+											/* number partitions */
+											PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
+											/* partitioning func */
+											PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9));
+	}
 
 	if (if_not_exists)
 		flags |= HYPERTABLE_CREATE_IF_NOT_EXISTS;
@@ -1335,8 +1346,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	created = ts_hypertable_create_from_info(table_relid,
 											 flags,
-											 &time_dim_info,
-											 &space_dim_info,
+											 time_dim_info,
+											 space_dim_info,
 											 associated_schema_name,
 											 associated_table_prefix,
 											 &chunk_sizing_info);
@@ -1551,7 +1562,7 @@ ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *tim
 
 	/* Get the a Hypertable object via the cache */
 	hcache = ts_hypertable_cache_pin();
-	time_dim_info->ht = space_dim_info->ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+	time_dim_info->ht = ts_hypertable_cache_get_entry(hcache, table_relid);
 
 	Assert(time_dim_info->ht != NULL);
 
@@ -1559,7 +1570,10 @@ ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *tim
 	ts_dimension_add_from_info(time_dim_info);
 
 	if (DIMENSION_INFO_IS_SET(space_dim_info))
+	{
+		space_dim_info->ht = time_dim_info->ht;
 		ts_dimension_add_from_info(space_dim_info);
+	}
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	ts_cache_release(hcache);
