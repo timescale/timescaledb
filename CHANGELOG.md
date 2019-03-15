@@ -7,23 +7,29 @@ accidentally triggering the load of a previous DB version.**
 ## 1.3.0 (unreleased)
 
 **Minor Features**
-* PR #1062 Make constraint aware append parallel safe
-* PR #1005 Enable creating indexes with one transaction per chunk
-* PR #1007 Remove parent oid from find_children_oids result
-* PR #1038 Infer time_bucket_gapfill arguments from WHERE clause
-* PR #1067 Add treat_null_as_missing option to locf
+* #1062 Make constraint aware append parallel safe
+* #1005 Enable creating indexes with one transaction per chunk
+* #1007 Remove parent oid from find_children_oids result
+* #1038 Infer time_bucket_gapfill arguments from WHERE clause
+* #1067 Add treat_null_as_missing option to locf
+
+**Bugfixes**
+* #1115 Fix ordered append optimization for join queries
+
+**Thanks**
+* @spickman for reporting a segfault with ordered append and JOINs
 
 ## 1.2.2 (2019-03-14)
 
 This release contains bugfixes.
 
 **Bugfixes**
-* PR #1097 Adjust ordered append plan cost
-* PR #1079 Stop background worker on ALTER DATABASE SET TABLESPACE and CREATE DATABASE WITH TEMPLATE
-* PR #1088 Fix ON CONFLICT when using prepared statements and functions
-* PR #1089 Fix compatibility with extensions that define planner_hook
-* PR #1057 Fix chunk exclusion constraint type inference
-* PR #1060 Fix sort_transform optimization
+* #1097 Adjust ordered append plan cost
+* #1079 Stop background worker on ALTER DATABASE SET TABLESPACE and CREATE DATABASE WITH TEMPLATE
+* #1088 Fix ON CONFLICT when using prepared statements and functions
+* #1089 Fix compatibility with extensions that define planner_hook
+* #1057 Fix chunk exclusion constraint type inference
+* #1060 Fix sort_transform optimization
 
 **Thanks**
 * @esatterwhite for reporting a bug when using timescaledb with zombodb

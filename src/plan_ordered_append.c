@@ -53,17 +53,21 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	Assert(ht->space->main_table_relid == rte->relid);
 
 	/*
-	 * check the ORDER BY column actually belonging to our hypertable
-	 * Unfortunately resorigtbl is not set for junk columns so we can't
-	 * doublecheck for those this way, but we are only dealing with single
-	 * relations at this level anyway so this should always match
-	 */
-	Assert(tle->resjunk == false || ht->space->main_table_relid != tle->resorigtbl);
-
-	/*
 	 * we only support direct column references for now
 	 */
 	if (!IsA(tle->expr, Var))
+		return false;
+
+	/*
+	 * check Var points to a rel
+	 */
+	if (castNode(Var, tle->expr)->varno >= root->simple_rel_array_size)
+		return false;
+
+	/*
+	 * check the ORDER BY column actually belongs to our hypertable
+	 */
+	if (root->simple_rte_array[castNode(Var, tle->expr)->varno] != rte)
 		return false;
 
 	/* check dimension column is our ORDER BY column */

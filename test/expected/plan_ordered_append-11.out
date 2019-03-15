@@ -15,6 +15,7 @@ SELECT
     ELSE 'EXPLAIN (costs off)'
   END AS "PREFIX"
 \gset
+\set PREFIX_NO_ANALYZE 'EXPLAIN (costs off)'
 \ir include/plan_ordered_append_load.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -28,6 +29,11 @@ BEGIN
     RETURN '2000-01-08T0:00:00+0'::timestamptz;
 END;
 $BODY$;
+CREATE TABLE devices(device_id INT PRIMARY KEY, name TEXT);
+INSERT INTO devices VALUES
+(1,'Device 1'),
+(2,'Device 2'),
+(3,'Device 3');
 -- create a table where we create chunks in order
 CREATE TABLE ordered_append(time timestamptz NOT NULL, device_id INT, value float);
 SELECT create_hypertable('ordered_append','time');
@@ -52,6 +58,39 @@ SELECT create_hypertable('ordered_append_reverse','time');
 INSERT INTO ordered_append_reverse VALUES('2000-01-15',1,1.0);
 INSERT INTO ordered_append_reverse VALUES('2000-01-08',1,2.0);
 INSERT INTO ordered_append_reverse VALUES('2000-01-01',1,3.0);
+-- table where dimension column is last column
+CREATE TABLE IF NOT EXISTS dimension_last(
+    id INT8 NOT NULL,
+    device_id INT NOT NULL,
+    name TEXT NOT NULL,
+    time timestamptz NOT NULL
+);
+SELECT create_hypertable('dimension_last', 'time', chunk_time_interval => interval '1day', if_not_exists => True);
+      create_hypertable      
+-----------------------------
+ (3,public,dimension_last,t)
+(1 row)
+
+-- table with only dimension column
+CREATE TABLE IF NOT EXISTS dimension_only(
+    time timestamptz NOT NULL
+);
+SELECT create_hypertable('dimension_only', 'time', chunk_time_interval => interval '1day', if_not_exists => True);
+      create_hypertable      
+-----------------------------
+ (4,public,dimension_only,t)
+(1 row)
+
+INSERT INTO dimension_last VALUES
+(1,1,'Device 1','2000-01-01'),
+(2,1,'Device 1','2000-01-02'),
+(3,1,'Device 1','2000-01-03'),
+(4,1,'Device 1','2000-01-04');
+INSERT INTO dimension_only VALUES
+('2000-01-01'),
+('2000-01-03'),
+('2000-01-05'),
+('2000-01-07');
 \ir include/plan_ordered_append_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -68,15 +107,23 @@ FROM
   INNER JOIN _timescaledb_catalog.dimension d ON ds.dimension_id = d.id
   INNER JOIN _timescaledb_catalog.hypertable ht ON d.hypertable_id = ht.id
 ORDER BY ht.table_name, range_start;
-       hypertable       |      chunk       |   range_start   
-------------------------+------------------+-----------------
- ordered_append         | _hyper_1_1_chunk | 946512000000000
- ordered_append         | _hyper_1_2_chunk | 947116800000000
- ordered_append         | _hyper_1_3_chunk | 947721600000000
- ordered_append_reverse | _hyper_2_6_chunk | 946512000000000
- ordered_append_reverse | _hyper_2_5_chunk | 947116800000000
- ordered_append_reverse | _hyper_2_4_chunk | 947721600000000
-(6 rows)
+       hypertable       |       chunk       |   range_start   
+------------------------+-------------------+-----------------
+ dimension_last         | _hyper_3_7_chunk  | 946684800000000
+ dimension_last         | _hyper_3_8_chunk  | 946771200000000
+ dimension_last         | _hyper_3_9_chunk  | 946857600000000
+ dimension_last         | _hyper_3_10_chunk | 946944000000000
+ dimension_only         | _hyper_4_11_chunk | 946684800000000
+ dimension_only         | _hyper_4_12_chunk | 946857600000000
+ dimension_only         | _hyper_4_13_chunk | 947030400000000
+ dimension_only         | _hyper_4_14_chunk | 947203200000000
+ ordered_append         | _hyper_1_1_chunk  | 946512000000000
+ ordered_append         | _hyper_1_2_chunk  | 947116800000000
+ ordered_append         | _hyper_1_3_chunk  | 947721600000000
+ ordered_append_reverse | _hyper_2_6_chunk  | 946512000000000
+ ordered_append_reverse | _hyper_2_5_chunk  | 947116800000000
+ ordered_append_reverse | _hyper_2_4_chunk  | 947721600000000
+(14 rows)
 
 -- test ASC for ordered chunks
 :PREFIX SELECT
@@ -540,4 +587,88 @@ SELECT * FROM i;
          ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
          ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
 (5 rows)
+
+-- test with table with only dimension column
+:PREFIX SELECT * FROM dimension_only ORDER BY time DESC LIMIT 1;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Only Scan using _hyper_4_14_chunk_dimension_only_time_idx on _hyper_4_14_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan using _hyper_4_13_chunk_dimension_only_time_idx on _hyper_4_13_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan using _hyper_4_12_chunk_dimension_only_time_idx on _hyper_4_12_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan using _hyper_4_11_chunk_dimension_only_time_idx on _hyper_4_11_chunk (never executed)
+               Heap Fetches: 0
+(10 rows)
+
+-- test LEFT JOIN against hypertable
+:PREFIX_NO_ANALYZE SELECT *
+FROM dimension_last
+LEFT JOIN dimension_only USING (time)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Limit
+   ->  Nested Loop Left Join
+         Join Filter: (_hyper_3_10_chunk."time" = _hyper_4_11_chunk."time")
+         ->  Append
+               ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk
+               ->  Index Scan using _hyper_3_9_chunk_dimension_last_time_idx on _hyper_3_9_chunk
+               ->  Index Scan using _hyper_3_8_chunk_dimension_last_time_idx on _hyper_3_8_chunk
+               ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk
+         ->  Materialize
+               ->  Append
+                     ->  Seq Scan on _hyper_4_11_chunk
+                     ->  Seq Scan on _hyper_4_12_chunk
+                     ->  Seq Scan on _hyper_4_13_chunk
+                     ->  Seq Scan on _hyper_4_14_chunk
+(14 rows)
+
+-- test INNER JOIN against non-hypertable
+:PREFIX_NO_ANALYZE SELECT *
+FROM dimension_last
+INNER JOIN dimension_only USING (time)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Limit
+   ->  Nested Loop
+         Join Filter: (_hyper_3_10_chunk."time" = _hyper_4_11_chunk."time")
+         ->  Append
+               ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk
+               ->  Index Scan using _hyper_3_9_chunk_dimension_last_time_idx on _hyper_3_9_chunk
+               ->  Index Scan using _hyper_3_8_chunk_dimension_last_time_idx on _hyper_3_8_chunk
+               ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk
+         ->  Materialize
+               ->  Append
+                     ->  Seq Scan on _hyper_4_11_chunk
+                     ->  Seq Scan on _hyper_4_12_chunk
+                     ->  Seq Scan on _hyper_4_13_chunk
+                     ->  Seq Scan on _hyper_4_14_chunk
+(14 rows)
+
+-- test join against non-hypertable
+:PREFIX SELECT *
+FROM dimension_last
+INNER JOIN devices USING(device_id)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=2 loops=1)
+   ->  Nested Loop (actual rows=2 loops=1)
+         Join Filter: (_hyper_3_10_chunk.device_id = devices.device_id)
+         ->  Append (actual rows=2 loops=1)
+               ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk (actual rows=1 loops=1)
+               ->  Index Scan using _hyper_3_9_chunk_dimension_last_time_idx on _hyper_3_9_chunk (actual rows=1 loops=1)
+               ->  Index Scan using _hyper_3_8_chunk_dimension_last_time_idx on _hyper_3_8_chunk (never executed)
+               ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk (never executed)
+         ->  Materialize (actual rows=1 loops=2)
+               ->  Seq Scan on devices (actual rows=1 loops=1)
+(10 rows)
 

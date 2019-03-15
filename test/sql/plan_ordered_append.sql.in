@@ -18,6 +18,8 @@ SELECT
   END AS "PREFIX"
 \gset
 
+\set PREFIX_NO_ANALYZE 'EXPLAIN (costs off)'
+
 \ir include/plan_ordered_append_load.sql
 \ir include/plan_ordered_append_query.sql
 
