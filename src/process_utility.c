@@ -56,9 +56,12 @@
 #include "hypertable_cache.h"
 #include "dimension_vector.h"
 #include "indexing.h"
+#include "scan_iterator.h"
 #include "trigger.h"
 #include "utils.h"
 #include "with_clause_parser.h"
+#include "cross_module_fn.h"
+
 #include "cross_module_fn.h"
 
 void _process_utility_init(void);
@@ -2481,6 +2484,59 @@ process_viewstmt(ProcessUtilityArgs *args)
 #endif
 }
 
+static bool
+process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
+{
+	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, parsetree);
+	Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	int32 materialization_id = -1;
+	ScanIterator continuous_aggregate_iter;
+	NameData view_name;
+	NameData view_schema;
+
+	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
+
+	if (!OidIsValid(view_relid))
+		return false;
+
+	namestrcpy(&view_name, get_rel_name(view_relid));
+	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
+
+	continuous_aggregate_iter =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	ts_scan_iterator_scan_key_init(&continuous_aggregate_iter,
+								   Anum_continuous_agg_user_view_name,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   NameGetDatum(&view_name));
+	ts_scan_iterator_scan_key_init(&continuous_aggregate_iter,
+								   Anum_continuous_agg_user_view_schema,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   NameGetDatum(&view_schema));
+
+	ts_scanner_foreach(&continuous_aggregate_iter)
+	{
+		HeapTuple tuple = ts_scan_iterator_tuple(&continuous_aggregate_iter);
+		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
+		Assert(materialization_id == -1);
+		materialization_id = form->mat_hypertable_id;
+	}
+
+	if (materialization_id == -1)
+		return false;
+
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
+	// TODO should check that this was in fact a continuous agg
+	ts_cm_functions->continous_agg_materialize(materialization_id, true);
+
+	StartTransactionCommand();
+	return true;
+}
+
 /*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
@@ -2545,6 +2601,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_ViewStmt:
 			handled = process_viewstmt(args); //->parsetree);
+			break;
+		case T_RefreshMatViewStmt:
+			handled = process_refresh_mat_view_start(args, args->parsetree);
 			break;
 		default:
 			break;

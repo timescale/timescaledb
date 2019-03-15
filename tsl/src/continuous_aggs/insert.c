@@ -257,15 +257,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 
 	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
 	if (entry->lowest_modified_value < liv)
-	{
-		/* pin the max value to the invalidation watermark, we already know
-		 * things greater than this must be materialized.
-		 */
-		if (entry->greatest_modified_value > liv)
-			entry->greatest_modified_value = liv;
-
 		append_invalidation_entry(*entry);
-	}
 };
 
 static void
@@ -385,6 +377,8 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry entry)
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
 	int32 hypertable_id = ts_hypertable_relid_to_id(entry.hypertable_relid);
+
+	Assert(entry.lowest_modified_value <= entry.greatest_modified_value);
 
 	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
 					RowExclusiveLock);
