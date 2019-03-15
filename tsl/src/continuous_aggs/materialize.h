@@ -22,6 +22,7 @@ typedef struct Invalidation
 	int64 greatest_modified_value;
 } Invalidation;
 
+void continous_agg_materialize(int32 materialization_id, bool verbose);
 void continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 											int32 materialization_id, SchemaAndName partial_view,
 											List *invalidations);

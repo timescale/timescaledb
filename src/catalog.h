@@ -779,13 +779,13 @@ typedef struct FormData_bgw_policy_chunk_stats_job_id_chunk_id_idx
 	int32 chunk_id;
 } FormData_bgw_policy_chunk_stats_job_id_chunk_id_idx;
 
-/******************************
+/******************************************
  *
- * continuous query metadata table definitions
+ * continuous_agg table definitions
  *
- ******************************/
+ ******************************************/
 #define CONTINUOUS_AGG_TABLE_NAME "continuous_agg"
-enum Anum_continuous_agg
+typedef enum Anum_continuous_agg
 {
 	Anum_continuous_agg_mat_hypertable_id = 1,
 	Anum_continuous_agg_raw_hypertable_id,
@@ -794,10 +794,36 @@ enum Anum_continuous_agg
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
 	Anum_continuous_agg_bucket_width,
-	_Anum_continuous_agg_max
-};
+	_Anum_continuous_agg_max,
+} Anum_continuous_agg;
 
 #define Natts_continuous_agg (_Anum_continuous_agg_max - 1)
+
+typedef struct FormData_continuous_agg
+{
+	int32 mat_hypertable_id;
+	int32 raw_hypertable_id;
+	NameData user_view_schema;
+	NameData user_view_name;
+	NameData partial_view_schema;
+	NameData partial_view_name;
+	int64 bucket_width;
+} FormData_continuous_agg;
+
+typedef FormData_continuous_agg *Form_continuous_agg;
+
+enum
+{
+	CONTINUOUS_AGG_PKEY = 0,
+	_MAX_CONTINUOUS_AGG_INDEX,
+};
+typedef enum Anum_continuous_agg_pkey
+{
+	Anum_continuous_agg_pkey_mat_hypertable_id = 1,
+	_Anum_continuous_agg_pkey_max,
+} Anum_continuous_agg_pkey;
+
+#define Natts_continuous_agg_pkey (_Anum_continuous_agg_pkey_max - 1)
 
 /****** CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE definitions*/
 #define CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME "continuous_aggs_completed_threshold"
