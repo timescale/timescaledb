@@ -164,4 +164,27 @@ SELECT * FROM i;
 -- this should use time index
 :PREFIX SELECT * FROM ordered_append ORDER BY time DESC LIMIT 1;
 
+-- test with table with only dimension column
+:PREFIX SELECT * FROM dimension_only ORDER BY time DESC LIMIT 1;
+
+-- test LEFT JOIN against hypertable
+:PREFIX_NO_ANALYZE SELECT *
+FROM dimension_last
+LEFT JOIN dimension_only USING (time)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
+
+-- test INNER JOIN against non-hypertable
+:PREFIX_NO_ANALYZE SELECT *
+FROM dimension_last
+INNER JOIN dimension_only USING (time)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
+
+-- test join against non-hypertable
+:PREFIX SELECT *
+FROM dimension_last
+INNER JOIN devices USING(device_id)
+ORDER BY dimension_last.time DESC
+LIMIT 2;
 

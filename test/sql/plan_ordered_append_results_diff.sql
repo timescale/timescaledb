@@ -12,7 +12,6 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
 \gset
 
-
 \o /dev/null
 SET client_min_messages = 'error';
 \ir :TEST_LOAD_NAME
@@ -21,9 +20,9 @@ RESET client_min_messages;
 
 --generate the results into two different files
 SET client_min_messages = 'error';
-\set ECHO none
 --make output contain query results
 \set PREFIX ''
+\set PREFIX_NO_ANALYZE ''
 \o :TEST_RESULTS_OPTIMIZED
 SET timescaledb.ordered_append = 'on';
 \ir :TEST_QUERY_NAME
