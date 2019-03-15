@@ -92,18 +92,7 @@ SELECT drop_chunks();
 SELECT drop_chunks(2);
 SELECT drop_chunks(NULL::interval);
 SELECT drop_chunks(NULL::int);
--- error messages were refactored in postgres between 9.6 and 10 because of
--- which direct comparison of error messages fails.
--- The change in postgres happened here:
--- https://github.com/postgres/postgres/commit/9a34123bc315e55b33038464422ef1cd2b67dab2
-SET client_min_messages TO FATAL;
--- error message is suppressed for the reason above but this test should still make sure
--- this causes an error. Not returning # rows below can be used as an indication that
--- this did cause an error.
--- should error because not a time type
 SELECT drop_chunks('haha', 'drop_chunk_test3');
-SET client_min_messages TO DEFAULT;
-
 SELECT show_chunks('drop_chunk_test3', 'haha');
 
 -- should error because wrong time type
@@ -251,11 +240,7 @@ SELECT show_chunks('drop_chunk_test1');
 
 -- testing drop_chunks when only schema is specified.
 \set ON_ERROR_STOP 0
--- error messages were refactored in postgres between 9.6 and 10 because of
--- which direct comparison of error messages fails.
-SET client_min_messages TO FATAL;
 SELECT drop_chunks(schema_name=>'public');
-SET client_min_messages TO DEFAULT;
 SELECT drop_chunks(null::bigint, schema_name=>'public');
 \set ON_ERROR_STOP 1
 
