@@ -4,8 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION run_continuous_agg_materialization(
-    hypertable_id INTEGER,
-    materialization_id INTEGER,
+    hypertable REGCLASS,
+    materialization_table REGCLASS,
     input_view NAME,
     lowest_modified_value ANYELEMENT,
     greatest_modified_value ANYELEMENT,
@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION run_continuous_agg_materialization(
 SELECT _timescaledb_internal.stop_background_workers();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-CREATE TABLE continuous_agg_test(time BIGINT, data BIGINT);
+CREATE TABLE continuous_agg_test(time BIGINT, data BIGINT, dummy BOOLEAN);
 select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
 
 -- simulated materialization table
@@ -44,7 +44,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 
 -- materialize some of the data into the view
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 9, 12, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 12, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -52,7 +52,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 
 -- materialize out of bounds is a nop
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 16, 19, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 16, 19, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -63,7 +63,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 16);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 12, 17, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 12, 17, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -80,7 +80,7 @@ INSERT INTO materialization VALUES
 SELECT * FROM materialization ORDER BY 1;
 
 -- materializing should delete the invalid data, and leave the correct data
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 10, 15, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 10, 15, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -95,14 +95,14 @@ DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hy
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 22);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 9, 9, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 9, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 -- fill in the remaining
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 10, 12, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 10, 12, 2);
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
@@ -120,31 +120,43 @@ INSERT INTO continuous_agg_test VALUES
     (:big_int_max - 4, 1), (:big_int_max - 3, 5), (:big_int_max - 2, 7), (:big_int_max - 1, 9), (:big_int_max, 11),
     (:big_int_min, 22), (:big_int_min + 1, 23);
 
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', 10, 12, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 10, 12, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 -- test invalidations
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', :big_int_max-6, :big_int_max, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', :big_int_max-6, :big_int_max, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
-SELECT run_continuous_agg_materialization(1, 2, 'test_view', :big_int_min, :big_int_max, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', :big_int_min, :big_int_max, 2);
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 22);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 TRUNCATE materialization;
+
+-- test dropping columns
+ALTER TABLE continuous_agg_test DROP COLUMN dummy;
+
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 13, 2);
+
+SELECT * FROM materialization;
+
+ALTER TABLE continuous_agg_test ADD COLUMN d2 int;
+TRUNCATE materialization;
+
+SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 13, 2);
+
+SELECT * FROM materialization;
+
+TRUNCATE materialization;
+
 -- name and view that needs quotes
 CREATE VIEW "view with spaces"(time_bucket, value) AS
     SELECT time_bucket(2, time), COUNT(data) as value
@@ -153,7 +165,7 @@ CREATE VIEW "view with spaces"(time_bucket, value) AS
 
 CREATE TABLE "table with spaces"(time_bucket BIGINT, value BIGINT);
 select create_hypertable('"table with spaces"'::REGCLASS, 'time_bucket', chunk_time_interval => 100);
-SELECT run_continuous_agg_materialization(1, 3, 'view with spaces', 9, 21, 2);
+SELECT run_continuous_agg_materialization('continuous_agg_test', '"table with spaces"', 'view with spaces', 9, 21, 2);
 SELECT * FROM "view with spaces" ORDER BY 1;
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -162,32 +174,44 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 DROP TABLE materialization;
 
+----------------------------
+----------------------------
+----------------------------
+
 -- test with a time type
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
+
 CREATE TABLE materialization(time_bucket TIMESTAMPTZ, value BIGINT);
 select create_hypertable('materialization', 'time_bucket');
 
-CREATE TABLE continuous_agg_test_t(dummy BOOLEAN, time TIMESTAMPTZ, data int);
+CREATE TABLE continuous_agg_test_t(time TIMESTAMPTZ, data int);
 select create_hypertable('continuous_agg_test_t', 'time');
 
 INSERT INTO continuous_agg_test_t VALUES
-    (false, '2019-02-02', 1),
-    (true, '2019-02-03', 1),
-    (true, '2019-02-04', 1),
-    (false, '2019-02-05', 1);
+    ('2019-02-02 2:00 UTC', 1),
+    ('2019-02-02 3:00 UTC', 1),
+    ('2019-02-02 4:00 UTC', 1),
+    ('2019-02-02 5:00 UTC', 1);
+
+SELECT * FROM continuous_agg_test_t;
+
 
 TRUNCATE materialization;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('Sun Feb 03 16:00:00 2019 PST'::TIMESTAMPTZ));
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 4:00 UTC'::TIMESTAMPTZ));
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
 
 CREATE VIEW test_view_t(time_bucket, value) AS
-    SELECT time_bucket('2 days', time) as time_bucket, COUNT(data) as value
+    SELECT time_bucket('2 hours', time) as time_bucket, COUNT(data) as value
     FROM continuous_agg_test_t
     GROUP BY 1;
 
-SELECT run_continuous_agg_materialization(5, 4, 'test_view_t'::NAME, '2019-02-02'::TIMESTAMPTZ, '2019-02-03'::TIMESTAMPTZ, '2 days'::INTERVAL);
+SELECT run_continuous_agg_materialization('continuous_agg_test_t', 'materialization', 'test_view_t'::NAME, '2019-02-02 2:00 UTC'::TIMESTAMPTZ, '2019-02-02 3:00 UTC'::TIMESTAMPTZ, '2 hours'::INTERVAL);
 
 SELECT time_bucket, value FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -195,35 +219,181 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id = 4;
 
+
+SELECT run_continuous_agg_materialization('continuous_agg_test_t', 'materialization', 'test_view_t'::NAME, '2019-02-02 4:00 UTC'::TIMESTAMPTZ, '2019-02-02 5:00 UTC'::TIMESTAMPTZ, '2 hours'::INTERVAL);
+
+SELECT time_bucket, value FROM materialization ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = 4;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 5;
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 6:00 UTC'::TIMESTAMPTZ));
+TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
+
+SELECT run_continuous_agg_materialization('continuous_agg_test_t', 'materialization', 'test_view_t'::NAME, '2019-02-02 4:00 UTC'::TIMESTAMPTZ, '2019-02-02 5:00 UTC'::TIMESTAMPTZ, '2 hours'::INTERVAL);
+
+SELECT time_bucket, value FROM materialization ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = 4;
+
+----------------------------
+----------------------------
+----------------------------
+
 -- test with a real continuous aggregate
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
+
+SELECT * FROM continuous_agg_test_t;
 
 CREATE VIEW test_t_mat_view
     WITH ( timescaledb.continuous_agg = 'start')
-    AS SELECT time_bucket('2 days', time), COUNT(data) as value
+    AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
         GROUP BY 1;
+--TODO this should be created as part of CREATE VIEW
+SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='continuous_agg_test_t' \gset
+CREATE TRIGGER continuous_agg_insert_trigger
+    AFTER INSERT ON continuous_agg_test_t
+    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
-
-SELECT run_continuous_agg_materialization(5, 6, 'ts_internal_test_t_mat_viewview', '2019-02-02'::TIMESTAMPTZ, '2019-02-03'::TIMESTAMPTZ, '2 days'::INTERVAL, input_view_schema => '_timescaledb_internal');
-
-SELECT * FROM test_t_mat_view;
-
-ALTER TABLE continuous_agg_test_t DROP COLUMN dummy;
-TRUNCATE _timescaledb_internal.ts_internal_test_t_mat_viewtab;
-
-SELECT run_continuous_agg_materialization(5, 6, 'ts_internal_test_t_mat_viewview', '2019-02-02'::TIMESTAMPTZ, '2019-02-03'::TIMESTAMPTZ, '2 days'::INTERVAL, input_view_schema => '_timescaledb_internal');
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 
 SELECT * FROM test_t_mat_view;
+SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
 
-ALTER TABLE continuous_agg_test_t ADD COLUMN d2 int;
-TRUNCATE _timescaledb_internal.ts_internal_test_t_mat_viewtab;
+REFRESH MATERIALIZED VIEW test_t_mat_view;
+SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
+SELECT * FROM test_t_mat_view ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
+SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
-SELECT run_continuous_agg_materialization(5, 6, 'ts_internal_test_t_mat_viewview', '2019-02-02'::TIMESTAMPTZ, '2019-02-03'::TIMESTAMPTZ, '2 days'::INTERVAL, input_view_schema => '_timescaledb_internal');
+REFRESH MATERIALIZED VIEW test_t_mat_view;
+SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
+SELECT * FROM test_t_mat_view ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
+SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
-SELECT * FROM test_t_mat_view;
+-- increase the last timestamp, so we actually materialize
+INSERT INTO continuous_agg_test_t VALUES ('2019-02-02 7:00 UTC', 1);
+SELECT * FROM continuous_agg_test_t ORDER BY 1;
+
+REFRESH MATERIALIZED VIEW test_t_mat_view;
+SELECT * FROM test_t_mat_view ORDER BY 1;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
+SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+
+-- test invalidations
+INSERT INTO continuous_agg_test_t VALUES
+    ('2019-02-02 2:00 UTC', 1),
+    ('2019-02-02 3:00 UTC', 1),
+    ('2019-02-02 4:00 UTC', 1),
+    ('2019-02-02 5:00 UTC', 1);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+REFRESH MATERIALIZED VIEW test_t_mat_view;
+SELECT * FROM test_t_mat_view ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
+SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+
+-- test extremes
+CREATE TABLE continuous_agg_extreme(time BIGINT, data BIGINT);
+SELECT create_hypertable('continuous_agg_extreme', 'time', chunk_time_interval=> 10);
+
+-- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
+--      recognized as a constant
+CREATE VIEW extreme_view
+    WITH ( timescaledb.continuous_agg = 'start')
+    AS SELECT time_bucket('1', time), SUM(data) as value
+        FROM continuous_agg_extreme
+        GROUP BY 1;
+--TODO this should be created as part of CREATE VIEW
+SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='continuous_agg_extreme' \gset
+CREATE TRIGGER continuous_agg_insert_trigger
+    AFTER INSERT ON continuous_agg_extreme
+    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id=:raw_table_id \gset
+
+-- EMPTY table should be a nop
+REFRESH MATERIALIZED VIEW extreme_view;
+SELECT * FROM extreme_view;
+SELECT materialization_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id=:mat_hypertable_id;
+SELECT hypertable_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    WHERE hypertable_id=:raw_table_id;
+
+-- less than a bucket above MIN should be a nop
+INSERT INTO continuous_agg_extreme VALUES
+    (:big_int_min,   1);
+
+REFRESH MATERIALIZED VIEW extreme_view;
+SELECT * FROM extreme_view;
+SELECT materialization_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id=:mat_hypertable_id;
+SELECT hypertable_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    WHERE hypertable_id=:raw_table_id;
+
+-- but we will be able to materialize it once we have enough values
+INSERT INTO continuous_agg_extreme VALUES
+    (:big_int_min+10, 11);
+
+REFRESH MATERIALIZED VIEW extreme_view;
+SELECT * FROM extreme_view;
+SELECT materialization_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id=:mat_hypertable_id;
+SELECT hypertable_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    WHERE hypertable_id=:raw_table_id;
+
+-- we don't materialize the max value, but attempting will materialize the entire
+-- table up to the materialization limit
+INSERT INTO continuous_agg_extreme VALUES
+    (100,                     101),
+    (:big_int_max-2,          201),
+    (:big_int_max-1,          201),
+    (:big_int_max,   :big_int_max);
+
+REFRESH MATERIALIZED VIEW extreme_view;
+SELECT * FROM extreme_view ORDER BY 1;
+SELECT materialization_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id=:mat_hypertable_id;
+SELECT hypertable_id, watermark
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    WHERE hypertable_id=:raw_table_id;

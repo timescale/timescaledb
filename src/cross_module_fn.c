@@ -154,6 +154,13 @@ bgw_policy_job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
+static void
+cagg_materialize_default_fn(int32 materialization_id, bool verbose)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static Datum
 error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
@@ -200,6 +207,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.module_shutdown_hook = NULL,
 	.add_tsl_license_info_telemetry = add_telemetry_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
+	.continous_agg_materialize = cagg_materialize_default_fn,
 	.add_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.add_reorder_policy = error_no_default_fn_pg_enterprise,
 	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,

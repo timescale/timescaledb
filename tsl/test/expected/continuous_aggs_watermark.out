@@ -65,7 +65,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
 (1 row)
 
 -- INSERTs only above the continuous_aggs_invalidation_threshold won't change the continuous_aggs_hypertable_invalidation_log
@@ -79,7 +79,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
 (1 row)
 
 -- INSERTs only below the continuous_aggs_invalidation_threshold will change the continuous_aggs_hypertable_invalidation_log
@@ -93,7 +93,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
 (2 rows)
 
@@ -108,9 +108,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
-             1 |                     1 |                      15
+             1 |                     1 |                      51
 (3 rows)
 
 -- INSERT after dropping a COLUMN
@@ -125,9 +125,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
-             1 |                     1 |                      15
+             1 |                     1 |                      51
              1 |                    -4 |                      -1
 (4 rows)
 
@@ -141,9 +141,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
-             1 |                     1 |                      15
+             1 |                     1 |                      51
              1 |                    -4 |                      -1
 (4 rows)
 
@@ -159,9 +159,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
-             1 |                     1 |                      15
+             1 |                     1 |                      51
              1 |                    -4 |                      -1
              1 |                    -7 |                      -3
 (5 rows)
@@ -176,9 +176,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-             1 |                    10 |                      15
+             1 |                    10 |                      22
              1 |                    10 |                      11
-             1 |                     1 |                      15
+             1 |                     1 |                      51
              1 |                    -4 |                      -1
              1 |                    -7 |                      -3
 (5 rows)
