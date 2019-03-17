@@ -19,25 +19,6 @@ enum ScannerType
 	ScannerTypeIndex,
 };
 
-typedef union ScanDesc
-{
-	IndexScanDesc index_scan;
-	HeapScanDesc heap_scan;
-} ScanDesc;
-
-/*
- * InternalScannerCtx is the context passed to Scanner functions.
- * It holds a pointer to the user-given ScannerCtx as well as
- * internal state used during scanning.
- */
-typedef struct InternalScannerCtx
-{
-	Relation tablerel, indexrel;
-	TupleInfo tinfo;
-	ScanDesc scan;
-	ScannerCtx *sctx;
-} InternalScannerCtx;
-
 /*
  * Scanner can implement both index and heap scans in a single interface.
  */
@@ -149,6 +130,107 @@ static Scanner scanners[] = {
 	}
 };
 
+static inline Scanner *
+scanner_ctx_get_scanner(ScannerCtx *ctx)
+{
+	if (OidIsValid(ctx->index))
+		return &scanners[ScannerTypeIndex];
+	else
+		return &scanners[ScannerTypeHeap];
+}
+
+void
+ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
+{
+	TupleDesc tuple_desc;
+	Scanner *scanner;
+
+	ictx->sctx = ctx;
+	ictx->closed = false;
+
+	scanner = scanner_ctx_get_scanner(ctx);
+
+	scanner->openheap(ictx);
+	scanner->beginscan(ictx);
+
+	tuple_desc = RelationGetDescr(ictx->tablerel);
+
+	ictx->tinfo.scanrel = ictx->tablerel;
+	ictx->tinfo.desc = tuple_desc;
+	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
+
+	/* Call pre-scan handler, if any. */
+	if (ctx->prescan != NULL)
+		ctx->prescan(ctx->data);
+}
+
+static inline bool
+ts_scanner_limit_reached(ScannerCtx *ctx, InternalScannerCtx *ictx)
+{
+	return ctx->limit > 0 && ictx->tinfo.count >= ctx->limit;
+}
+
+void
+ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
+{
+	Scanner *scanner = scanner_ctx_get_scanner(ictx->sctx);
+
+	if (ictx->closed)
+		return;
+
+	/* Call post-scan handler, if any. */
+	if (ictx->sctx->postscan != NULL)
+		ictx->sctx->postscan(ictx->tinfo.count, ictx->sctx->data);
+
+	scanner->endscan(ictx);
+	scanner->closeheap(ictx);
+	ictx->closed = true;
+}
+
+TupleInfo *
+ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
+{
+	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+	bool is_valid = ts_scanner_limit_reached(ctx, ictx) ? false : scanner->getnext(ictx);
+
+	while (is_valid)
+	{
+		if (ctx->filter == NULL || ctx->filter(&ictx->tinfo, ctx->data) == SCAN_INCLUDE)
+		{
+			ictx->tinfo.count++;
+
+			if (ctx->tuplock.enabled)
+			{
+				Buffer buffer;
+				HeapUpdateFailureData hufd;
+
+				ictx->tinfo.lockresult = heap_lock_tuple(ictx->tablerel,
+														 ictx->tinfo.tuple,
+														 GetCurrentCommandId(false),
+														 ctx->tuplock.lockmode,
+														 ctx->tuplock.waitpolicy,
+														 false,
+														 &buffer,
+														 &hufd);
+
+				/*
+				 * A tuple lock pins the underlying buffer, so we need to
+				 * unpin it.
+				 */
+				ReleaseBuffer(buffer);
+			}
+
+			/* stop at a valid tuple */
+			return &ictx->tinfo;
+		}
+		is_valid = ts_scanner_limit_reached(ctx, ictx) ? false : scanner->getnext(ictx);
+	}
+
+	ts_scanner_end_scan(ctx, ictx);
+
+	return NULL;
+}
+
 /*
  * Perform either a heap or index scan depending on the information in the
  * ScannerCtx. ScannerCtx must be setup by caller with the proper information
@@ -159,79 +241,18 @@ static Scanner scanners[] = {
 int
 ts_scanner_scan(ScannerCtx *ctx)
 {
-	TupleDesc tuple_desc;
-	bool is_valid;
-	Scanner *scanner;
+	InternalScannerCtx ictx = { 0 };
+	TupleInfo *tinfo;
 
-	InternalScannerCtx ictx = {
-		.sctx = ctx,
-	};
-
-	if (OidIsValid(ctx->index))
-		scanner = &scanners[ScannerTypeIndex];
-	else
-		scanner = &scanners[ScannerTypeHeap];
-
-	scanner->openheap(&ictx);
-	scanner->beginscan(&ictx);
-
-	tuple_desc = RelationGetDescr(ictx.tablerel);
-
-	ictx.tinfo.scanrel = ictx.tablerel;
-	ictx.tinfo.desc = tuple_desc;
-	ictx.tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
-
-	/* Call pre-scan handler, if any. */
-	if (ctx->prescan != NULL)
-		ctx->prescan(ctx->data);
-
-	is_valid = scanner->getnext(&ictx);
-
-	while (is_valid)
+	for (ts_scanner_start_scan(ctx, &ictx); (tinfo = ts_scanner_next(ctx, &ictx));)
 	{
-		if (ctx->filter == NULL || ctx->filter(&ictx.tinfo, ctx->data) == SCAN_INCLUDE)
+		/* Call tuple_found handler. Abort the scan if the handler wants us to */
+		if (ctx->tuple_found != NULL && ctx->tuple_found(tinfo, ctx->data) == SCAN_DONE)
 		{
-			ictx.tinfo.count++;
-
-			if (ctx->tuplock.enabled)
-			{
-				Buffer buffer;
-				HeapUpdateFailureData hufd;
-
-				ictx.tinfo.lockresult = heap_lock_tuple(ictx.tablerel,
-														ictx.tinfo.tuple,
-														GetCurrentCommandId(false),
-														ctx->tuplock.lockmode,
-														ctx->tuplock.waitpolicy,
-														false,
-														&buffer,
-														&hufd);
-
-				/*
-				 * A tuple lock pins the underlying buffer, so we need to
-				 * unpin it.
-				 */
-				ReleaseBuffer(buffer);
-			}
-
-			/* Abort the scan if the handler wants us to */
-			if (ctx->tuple_found != NULL && ctx->tuple_found(&ictx.tinfo, ctx->data) == SCAN_DONE)
-				break;
-		}
-
-		/* Check if limit is reached */
-		if (ctx->limit > 0 && ictx.tinfo.count >= ctx->limit)
+			ts_scanner_end_scan(ctx, &ictx);
 			break;
-
-		is_valid = scanner->getnext(&ictx);
+		}
 	}
-
-	/* Call post-scan handler, if any. */
-	if (ctx->postscan != NULL)
-		ctx->postscan(ictx.tinfo.count, ctx->data);
-
-	scanner->endscan(&ictx);
-	scanner->closeheap(&ictx);
 
 	return ictx.tinfo.count;
 }

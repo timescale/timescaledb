@@ -18,6 +18,9 @@
 #define TS_EPOCH_DIFF_MICROSECONDS ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY)
 #define TS_INTERNAL_TIMESTAMP_MIN ((int64) USECS_PER_DAY * (DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE))
 
+/* find the length of a statically sized array */
+#define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
+
 extern bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 /*

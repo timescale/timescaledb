@@ -42,6 +42,7 @@ set(SOURCES
   planner_import.c
   process_utility.c
   scanner.c
+  scan_iterator.c
   sort_transform.c
   subspace_store.c
   tablespace.c

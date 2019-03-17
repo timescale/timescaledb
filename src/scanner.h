@@ -11,6 +11,8 @@
 #include <utils/fmgroids.h>
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
+#include <utils.h>
+#include <access/relscan.h>
 
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
@@ -103,5 +105,36 @@ typedef struct ScannerCtx
  * tuples. */
 extern int ts_scanner_scan(ScannerCtx *ctx);
 extern bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type);
+
+/*
+ * Internal types and functions below.
+ *
+ * The below functions asnd types are really only exposed for the scan_iterator.
+ * The type definitions are needed for struct embedding and the functions are needed
+ * for iteration.
+ */
+typedef union ScanDesc
+{
+	IndexScanDesc index_scan;
+	HeapScanDesc heap_scan;
+} ScanDesc;
+/*
+ * InternalScannerCtx is the context passed to Scanner functions.
+ * It holds a pointer to the user-given ScannerCtx as well as
+ * internal state used during scanning. Should not be used outside scanner.c
+ * but is embedded in ScanIterator.
+ */
+typedef struct InternalScannerCtx
+{
+	Relation tablerel, indexrel;
+	TupleInfo tinfo;
+	ScanDesc scan;
+	ScannerCtx *sctx;
+	bool closed;
+} InternalScannerCtx;
+
+void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
 
 #endif /* TIMESCALEDB_SCANNER_H */

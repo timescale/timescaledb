@@ -7,9 +7,7 @@
 #include <c.h>
 
 #include <nodes/parsenodes.h>
-
-/* find the length of a statically sized array */
-#define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
+#include <utils.h>
 
 typedef struct WithClauseDefinition
 {
