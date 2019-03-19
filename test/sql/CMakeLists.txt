@@ -40,7 +40,6 @@ set(TEST_FILES
   pg_dump_unprivileged.sql
   plain.sql
   plan_expand_hypertable_results_diff.sql
-  plan_hashagg_results_x_diff.sql
   plan_ordered_append_results_diff.sql
   reindex.sql
   relocate_extension.sql
@@ -81,7 +80,6 @@ set(POST_TESTS
   alternate_users-10
   alternate_users-11
   plan_expand_hypertable_results_diff
-  plan_hashagg_results_x_diff
   sql_query_results_x_diff
 )
 
@@ -136,7 +134,7 @@ set(TEST_TEMPLATES
   partitioning.sql.in
   plan_expand_hypertable_optimized.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
-  plan_hashagg_optimized.sql.in
+  plan_hashagg.sql.in
   # lateral plans are different across versions, explains run without analyze on 9.6
   plan_ordered_append.sql.in
   )
