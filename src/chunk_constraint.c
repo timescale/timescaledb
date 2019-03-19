@@ -26,7 +26,7 @@
 #endif
 
 #include "export.h"
-#include "scanner.h"
+#include "scan_iterator.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
 #include "dimension_vector.h"
@@ -341,106 +341,54 @@ ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id
 								hypertable_id);
 }
 
-/*
- * Scan filter function for only getting dimension constraints.
- */
-static ScanFilterResult
-chunk_constraint_for_dimension_slice(TupleInfo *ti, void *data)
+static void
+init_scan_by_chunk_id(ScanIterator *iterator, int32 chunk_id)
 {
-	if (heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc))
-		return SCAN_EXCLUDE;
-
-	return SCAN_INCLUDE;
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CHUNK_CONSTRAINT,
+											CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
 }
 
-static ScanTupleResult
-chunk_constraint_tuple_found(TupleInfo *ti, void *data)
+static void
+init_scan_by_dimension_slice_id(ScanIterator *iterator, int32 dimension_slice_id)
 {
-	ChunkConstraints *ccs = data;
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CHUNK_CONSTRAINT,
+											CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX);
 
-	if (NULL != ccs)
-		chunk_constraints_add_from_tuple(ccs, ti);
-
-	return SCAN_CONTINUE;
+	ts_scan_iterator_scan_key_init(
+		iterator,
+		Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(dimension_slice_id));
 }
 
-static int
-chunk_constraint_scan_internal(int indexid, ScanKeyData *scankey, int nkeys,
-							   tuple_found_func tuple_found, tuple_filter_func tuple_filter,
-							   void *data, LOCKMODE lockmode, MemoryContext mctx)
+static void
+init_scan_by_chunk_id_constraint_name(ScanIterator *iterator, int32 chunk_id,
+									  const char *constraint_name)
 {
-	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, CHUNK_CONSTRAINT),
-		.index = catalog_get_index(catalog, CHUNK_CONSTRAINT, indexid),
-		.nkeys = nkeys,
-		.scankey = scankey,
-		.data = data,
-		.tuple_found = tuple_found,
-		.filter = tuple_filter,
-		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
-		.result_mctx = mctx,
-	};
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CHUNK_CONSTRAINT,
+											CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX);
 
-	return ts_scanner_scan(&scanctx);
-}
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
 
-/*
- * Scan for chunk constraints given a chunk ID.
- */
-static int
-chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id, tuple_found_func tuple_found,
-										   tuple_filter_func tuple_filter, void *data,
-										   LOCKMODE lockmode, MemoryContext mctx)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_id));
-
-	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
-										  scankey,
-										  1,
-										  tuple_found,
-										  tuple_filter,
-										  data,
-										  lockmode,
-										  mctx);
-}
-
-static int
-chunk_constraint_scan_by_chunk_id_constraint_name_internal(int32 chunk_id,
-														   const char *constraint_name,
-														   tuple_found_func tuple_found,
-														   tuple_filter_func tuple_filter,
-														   void *data, LOCKMODE lockmode)
-{
-	ScanKeyData scankey[2];
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_id));
-
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(constraint_name)));
-
-	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX,
-										  scankey,
-										  2,
-										  tuple_found,
-										  tuple_filter,
-										  data,
-										  lockmode,
-										  CurrentMemoryContext);
+	ts_scan_iterator_scan_key_init(
+		iterator,
+		Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
+		BTEqualStrategyNumber,
+		F_NAMEEQ,
+		DirectFunctionCall1(namein, CStringGetDatum(constraint_name)));
 }
 
 /*
@@ -452,14 +400,15 @@ ChunkConstraints *
 ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, MemoryContext mctx)
 {
 	ChunkConstraints *constraints = ts_chunk_constraints_alloc(num_constraints_hint, mctx);
-	int num_found;
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
+	int num_found = 0;
 
-	num_found = chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-														   chunk_constraint_tuple_found,
-														   NULL,
-														   constraints,
-														   AccessShareLock,
-														   mctx);
+	init_scan_by_chunk_id(&iterator, chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		num_found++;
+		chunk_constraints_add_from_tuple(constraints, ts_scan_iterator_tuple_info(&iterator));
+	}
 
 	if (num_found != constraints->num_constraints)
 		elog(ERROR, "unexpected number of constraints found for chunk ID %d", chunk_id);
@@ -473,62 +422,6 @@ typedef struct ChunkConstraintScanData
 	DimensionSlice *slice;
 } ChunkConstraintScanData;
 
-static ScanTupleResult
-chunk_constraint_dimension_slice_id_tuple_found(TupleInfo *ti, void *data)
-{
-	ChunkConstraintScanData *ccsd = data;
-	ChunkScanCtx *scanctx = ccsd->scanctx;
-	Hyperspace *hs = scanctx->space;
-	Chunk *chunk;
-	ChunkScanEntry *entry;
-	bool found;
-	int32 chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &found);
-
-	Assert(!heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
-
-	entry = hash_search(scanctx->htab, &chunk_id, HASH_ENTER, &found);
-
-	if (!found)
-	{
-		chunk = ts_chunk_create_stub(chunk_id, hs->num_dimensions);
-		chunk->cube = ts_hypercube_alloc(hs->num_dimensions);
-		entry->chunk = chunk;
-	}
-	else
-		chunk = entry->chunk;
-
-	chunk_constraints_add_from_tuple(chunk->constraints, ti);
-
-	ts_hypercube_add_slice(chunk->cube, ccsd->slice);
-
-	if (scanctx->early_abort && chunk->constraints->num_dimension_constraints == hs->num_dimensions)
-		return SCAN_DONE;
-
-	return SCAN_CONTINUE;
-}
-
-static int
-scan_by_dimension_slice_id(int32 dimension_slice_id, tuple_found_func tuple_found, void *data,
-						   MemoryContext mctx)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(dimension_slice_id));
-
-	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
-										  scankey,
-										  1,
-										  tuple_found,
-										  chunk_constraint_for_dimension_slice,
-										  data,
-										  AccessShareLock,
-										  mctx);
-}
-
 /*
  * Scan for all chunk constraints that match the given slice ID. The chunk
  * constraints are saved in the chunk scan context.
@@ -537,28 +430,51 @@ int
 ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx,
 											MemoryContext mctx)
 {
-	ChunkConstraintScanData data = {
-		.scanctx = ctx,
-		.slice = slice,
-	};
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
+	int count = 0;
 
-	return scan_by_dimension_slice_id(slice->fd.id,
-									  chunk_constraint_dimension_slice_id_tuple_found,
-									  &data,
-									  mctx);
-}
+	init_scan_by_dimension_slice_id(&iterator, slice->fd.id);
+	ts_scanner_foreach(&iterator)
+	{
+		Hyperspace *hs = ctx->space;
+		Chunk *chunk;
+		ChunkScanEntry *entry;
+		bool found;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		int32 chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &found);
 
-static ScanTupleResult
-chunk_constraint_dimension_slice_id_save_chunk_id(TupleInfo *ti, void *data)
-{
-	List **list = data;
-	bool is_null;
-	int32 chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &is_null);
+		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
+								  Anum_chunk_constraint_dimension_slice_id,
+								  ts_scan_iterator_tupledesc(&iterator)))
+			continue;
 
-	Assert(!is_null);
+		count++;
 
-	*list = lappend_int(*list, chunk_id);
-	return SCAN_CONTINUE;
+		Assert(
+			!heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
+
+		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
+
+		if (!found)
+		{
+			chunk = ts_chunk_create_stub(chunk_id, hs->num_dimensions);
+			chunk->cube = ts_hypercube_alloc(hs->num_dimensions);
+			entry->chunk = chunk;
+		}
+		else
+			chunk = entry->chunk;
+
+		chunk_constraints_add_from_tuple(chunk->constraints, ti);
+
+		ts_hypercube_add_slice(chunk->cube, slice);
+
+		if (ctx->early_abort && chunk->constraints->num_dimension_constraints == hs->num_dimensions)
+		{
+			ts_scan_iterator_close(&iterator);
+			break;
+		}
+	}
+	return count;
 }
 
 /*
@@ -569,10 +485,29 @@ int
 ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List **list,
 													MemoryContext mctx)
 {
-	return scan_by_dimension_slice_id(slice->fd.id,
-									  chunk_constraint_dimension_slice_id_save_chunk_id,
-									  list,
-									  mctx);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
+	int count = 0;
+
+	init_scan_by_dimension_slice_id(&iterator, slice->fd.id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool is_null;
+		int32 chunk_id = heap_getattr(ts_scan_iterator_tuple(&iterator),
+									  Anum_chunk_constraint_chunk_id,
+									  ts_scan_iterator_tupledesc(&iterator),
+									  &is_null);
+
+		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
+								  Anum_chunk_constraint_dimension_slice_id,
+								  ts_scan_iterator_tupledesc(&iterator)))
+			continue;
+
+		count++;
+
+		Assert(!is_null);
+		*list = lappend_int(*list, chunk_id);
+	}
+	return count;
 }
 
 /*
@@ -584,7 +519,22 @@ int
 ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs,
 											   MemoryContext mctx)
 {
-	return scan_by_dimension_slice_id(dimension_slice_id, chunk_constraint_tuple_found, ccs, mctx);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
+	int count = 0;
+
+	init_scan_by_dimension_slice_id(&iterator, dimension_slice_id);
+	ts_scanner_foreach(&iterator)
+	{
+		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
+								  Anum_chunk_constraint_dimension_slice_id,
+								  ts_scan_iterator_tupledesc(&iterator)))
+			continue;
+
+		count++;
+		if (ccs != NULL)
+			chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
 }
 
 static bool
@@ -667,36 +617,53 @@ ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid)
 							chunk->fd.hypertable_id);
 }
 
-typedef struct ConstraintInfo
+static bool
+hypertable_constraint_matches_tuple(TupleInfo *ti, const char *hypertable_constraint_name)
 {
-	const char *hypertable_constraint_name;
-	ChunkConstraints *ccs;
-	bool delete_metadata;
-	bool drop_constraint;
-} ConstraintInfo;
+	bool nulls[Natts_chunk_constraint];
+	Datum values[Natts_chunk_constraint];
+	const char *constrname;
 
-typedef struct RenameHypertableConstraintInfo
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
+		return false;
+
+	constrname = NameStr(*DatumGetName(
+		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
+
+	if (strcmp(hypertable_constraint_name, constrname) == 0)
+		return true;
+
+	return false;
+}
+
+static void
+chunk_constraint_delete_metadata(TupleInfo *ti)
 {
-	ConstraintInfo base;
-	const char *newname;
-} RenameHypertableConstraintInfo;
+	bool isnull;
+	Datum constrname =
+		heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name, ti->desc, &isnull);
+	int32 chunk_id =
+		DatumGetInt32(heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &isnull));
+	Chunk *chunk = ts_chunk_get_by_id(chunk_id, 0, true);
+	Oid index_relid = get_constraint_index(
+		get_relation_constraint_oid(chunk->table_id, NameStr(*DatumGetName(constrname)), true));
 
-typedef struct GetNameFromHypertableConstraintInfo
+	/*
+	 * If this is an index constraint, we need to cleanup the index
+	 * metadata. Don't drop the index though, since that will happend when
+	 * the constraint is dropped.
+	 */
+	if (OidIsValid(index_relid))
+		ts_chunk_index_delete(chunk, index_relid, false);
+
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+}
+
+static void
+chunk_constraint_drop_constraint(TupleInfo *ti)
 {
-	ConstraintInfo base;
-
-	Name chunk_constraint_name;
-} GetNameFromHypertableConstraintInfo;
-
-/*
- * Delete a chunk constraint tuple.
- *
- * Optionally, the data argument is a ConstraintInfo.
- */
-static ScanTupleResult
-chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
-{
-	ConstraintInfo *info = data;
 	bool isnull;
 	Datum constrname =
 		heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name, ti->desc, &isnull);
@@ -708,52 +675,9 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 		.objectId =
 			get_relation_constraint_oid(chunk->table_id, NameStr(*DatumGetName(constrname)), true),
 	};
-	Oid index_relid = get_constraint_index(constrobj.objectId);
 
-	/* Collect the deleted constraints */
-	if (NULL != info->ccs)
-		chunk_constraint_tuple_found(ti, info->ccs);
-
-	if (info->delete_metadata)
-	{
-		/*
-		 * If this is an index constraint, we need to cleanup the index
-		 * metadata. Don't drop the index though, since that will happend when
-		 * the constraint is dropped.
-		 */
-		if (OidIsValid(index_relid))
-			ts_chunk_index_delete(chunk, index_relid, false);
-
-		ts_catalog_delete(ti->scanrel, ti->tuple);
-	}
-
-	if (info->drop_constraint && OidIsValid(constrobj.objectId))
+	if (OidIsValid(constrobj.objectId))
 		performDeletion(&constrobj, DROP_RESTRICT, 0);
-
-	return SCAN_CONTINUE;
-}
-
-static ScanFilterResult
-hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
-{
-	ConstraintInfo *info = data;
-	bool nulls[Natts_chunk_constraint];
-	Datum values[Natts_chunk_constraint];
-	const char *constrname;
-
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-
-	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
-		return SCAN_EXCLUDE;
-
-	constrname = NameStr(*DatumGetName(
-		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
-
-	if (NULL != info->hypertable_constraint_name &&
-		strcmp(info->hypertable_constraint_name, constrname) == 0)
-		return SCAN_INCLUDE;
-
-	return SCAN_EXCLUDE;
 }
 
 int
@@ -761,31 +685,47 @@ ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 														 char *hypertable_constraint_name,
 														 bool delete_metadata, bool drop_constraint)
 {
-	ConstraintInfo info = { .hypertable_constraint_name = hypertable_constraint_name,
-							.delete_metadata = delete_metadata,
-							.drop_constraint = drop_constraint };
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
 
-	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-													  chunk_constraint_delete_tuple,
-													  hypertable_constraint_tuple_filter,
-													  &info,
-													  RowExclusiveLock,
-													  CurrentMemoryContext);
+	init_scan_by_chunk_id(&iterator, chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
+												 hypertable_constraint_name))
+			continue;
+
+		count++;
+
+		if (delete_metadata)
+			chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+
+		if (drop_constraint)
+			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
 }
 
 int
 ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name,
 											  bool delete_metadata, bool drop_constraint)
 {
-	ConstraintInfo info = { .delete_metadata = delete_metadata,
-							.drop_constraint = drop_constraint };
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
 
-	return chunk_constraint_scan_by_chunk_id_constraint_name_internal(chunk_id,
-																	  constraint_name,
-																	  chunk_constraint_delete_tuple,
-																	  NULL,
-																	  &info,
-																	  RowExclusiveLock);
+	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, constraint_name);
+	ts_scanner_foreach(&iterator)
+	{
+		count++;
+		if (delete_metadata)
+			chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+
+		if (drop_constraint)
+			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
 }
 
 /*
@@ -794,44 +734,38 @@ ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constr
 int
 ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs)
 {
-	ConstraintInfo info = {
-		.ccs = ccs,
-		.delete_metadata = true,
-		.drop_constraint = true,
-	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
 
-	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-													  chunk_constraint_delete_tuple,
-													  NULL,
-													  &info,
-													  RowExclusiveLock,
-													  CurrentMemoryContext);
+	init_scan_by_chunk_id(&iterator, chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		count++;
+
+		chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
+		chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+		chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
 }
 
 int
 ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 {
-	ConstraintInfo info = {
-		.delete_metadata = true,
-		.drop_constraint = true,
-	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
 
-	ScanKeyData scankey[1];
+	init_scan_by_dimension_slice_id(&iterator, dimension_slice_id);
+	ts_scanner_foreach(&iterator)
+	{
+		count++;
 
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_constraint_dimension_slice_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(dimension_slice_id));
-
-	return chunk_constraint_scan_internal(INVALID_INDEXID,
-										  scankey,
-										  1,
-										  chunk_constraint_delete_tuple,
-										  NULL,
-										  &info,
-										  RowExclusiveLock,
-										  CurrentMemoryContext);
+		chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+		chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
 }
 
 void
@@ -860,11 +794,9 @@ chunk_constraint_rename_on_chunk_table(int32 chunk_id, char *old_name, char *new
 	RenameConstraint(&rename);
 }
 
-static ScanTupleResult
-chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
+static void
+chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname)
 {
-	RenameHypertableConstraintInfo *info = data;
-
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
 	bool repl[Natts_chunk_constraint] = { false };
@@ -878,8 +810,8 @@ chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
 	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
-	namestrcpy(&new_hypertable_constraint_name, info->newname);
-	chunk_constraint_choose_name(&new_chunk_constraint_name, false, 0, info->newname, chunk_id);
+	namestrcpy(&new_hypertable_constraint_name, newname);
+	chunk_constraint_choose_name(&new_chunk_constraint_name, false, 0, newname, chunk_id);
 
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&new_hypertable_constraint_name);
@@ -897,61 +829,54 @@ chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
 	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
 	ts_catalog_update(ti->scanrel, tuple);
 	heap_freetuple(tuple);
-
-	return SCAN_CONTINUE;
 }
 
 int
 ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname,
 												 const char *newname)
 {
-	RenameHypertableConstraintInfo info = {
-		.base = {
-			.hypertable_constraint_name = oldname,
-		},
-		.newname = newname,
-	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
 
-	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-													  chunk_constraint_rename_hypertable_tuple,
-													  hypertable_constraint_tuple_filter,
-													  &info,
-													  RowExclusiveLock,
-													  CurrentMemoryContext);
-}
+	init_scan_by_chunk_id(&iterator, chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), oldname))
+			continue;
 
-static ScanTupleResult
-chunk_constraint_get_name_from_hypertable_tuple(TupleInfo *ti, void *data)
-{
-	GetNameFromHypertableConstraintInfo *info = data;
-
-	bool nulls[Natts_chunk_constraint];
-	Datum values[Natts_chunk_constraint];
-
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-	info->chunk_constraint_name =
-		DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
-
-	return SCAN_DONE;
+		count++;
+		chunk_constraint_rename_hypertable_from_tuple(ts_scan_iterator_tuple_info(&iterator),
+													  newname);
+	}
+	return count;
 }
 
 char *
 ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 														const char *hypertable_constraint_name)
 {
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
-	GetNameFromHypertableConstraintInfo info = {
-		.base = {
-			.hypertable_constraint_name = hypertable_constraint_name,
-		},
-		.chunk_constraint_name = NULL,
-	};
 
-	chunk_constraint_scan_by_chunk_id_internal(chunk->fd.id,
-											   chunk_constraint_get_name_from_hypertable_tuple,
-											   hypertable_constraint_tuple_filter,
-											   &info,
-											   RowExclusiveLock,
-											   CurrentMemoryContext);
-	return NameStr(*info.chunk_constraint_name);
+	init_scan_by_chunk_id(&iterator, chunk->fd.id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool nulls[Natts_chunk_constraint];
+		Datum values[Natts_chunk_constraint];
+
+		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
+												 hypertable_constraint_name))
+			continue;
+
+		heap_deform_tuple(ts_scan_iterator_tuple(&iterator),
+						  ts_scan_iterator_tupledesc(&iterator),
+						  values,
+						  nulls);
+		ts_scan_iterator_close(&iterator);
+		return NameStr(
+			*DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]));
+	}
+	return NULL;
 }
