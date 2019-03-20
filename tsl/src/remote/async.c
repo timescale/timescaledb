@@ -76,7 +76,7 @@ static AsyncRequest *
 async_request_send_with_params_formats_elevel(PGconn *conn, const char *sql, int n_params,
 											  const char *const *param_values,
 											  const int *param_lengths, const int *param_formats,
-											  int elevel)
+											  int elevel, int res_format)
 {
 	AsyncRequest *req = palloc(sizeof(AsyncRequest));
 
@@ -107,7 +107,7 @@ async_request_send_with_params_formats_elevel(PGconn *conn, const char *sql, int
 							   param_values,
 							   param_lengths,
 							   param_formats,
-							   /* result format - text */ 0))
+							   res_format))
 	{
 		/*
 		 * null is fine to pass down as the res, the connection error message
@@ -121,8 +121,9 @@ async_request_send_with_params_formats_elevel(PGconn *conn, const char *sql, int
 }
 
 AsyncRequest *
-async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_params,
-									  const char *const *param_values, int elevel)
+async_request_send_with_params_elevel_res_format(PGconn *conn, const char *sql, int n_params,
+												 const char *const *param_values, int elevel,
+												 int res_format)
 {
 	return async_request_send_with_params_formats_elevel(conn,
 														 sql,
@@ -130,12 +131,14 @@ async_request_send_with_params_elevel(PGconn *conn, const char *sql, int n_param
 														 param_values,
 														 NULL,
 														 NULL,
-														 elevel);
+														 elevel,
+														 res_format);
 }
 
 AsyncRequest *
-async_request_send_with_stmt_params_elevel(PGconn *conn, const char *sql_statement,
-										   StmtParams *params, int elevel)
+async_request_send_with_stmt_params_elevel_res_format(PGconn *conn, const char *sql_statement,
+													  StmtParams *params, int elevel,
+													  int res_format)
 {
 	return async_request_send_with_params_formats_elevel(conn,
 														 sql_statement,
@@ -143,7 +146,8 @@ async_request_send_with_stmt_params_elevel(PGconn *conn, const char *sql_stateme
 														 stmt_params_values(params),
 														 stmt_params_lengths(params),
 														 stmt_params_formats(params),
-														 elevel);
+														 elevel,
+														 res_format);
 }
 
 AsyncRequest *
@@ -192,7 +196,8 @@ async_request_send_prepare(PGconn *conn, const char *sql, int n_params)
 
 static AsyncRequest *
 async_request_send_prepared_stmt_with_formats(PreparedStmt *stmt, const char *const *param_values,
-											  const int *param_lengths, const int *param_formats)
+											  const int *param_lengths, const int *param_formats,
+											  int res_format)
 {
 	AsyncRequest *req = palloc(sizeof(AsyncRequest));
 
@@ -208,7 +213,7 @@ async_request_send_prepared_stmt_with_formats(PreparedStmt *stmt, const char *co
 							 param_values,
 							 param_lengths,
 							 param_formats,
-							 0))
+							 res_format))
 	{
 		/*
 		 * null is fine to pass down as the res, the connection error message
@@ -223,16 +228,17 @@ async_request_send_prepared_stmt_with_formats(PreparedStmt *stmt, const char *co
 extern AsyncRequest *
 async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *paramValues)
 {
-	return async_request_send_prepared_stmt_with_formats(stmt, paramValues, NULL, NULL);
+	return async_request_send_prepared_stmt_with_formats(stmt, paramValues, NULL, NULL, 0);
 }
 
 AsyncRequest *
-async_request_send_prepared_stmt_with_params(PreparedStmt *stmt, StmtParams *params)
+async_request_send_prepared_stmt_with_params(PreparedStmt *stmt, StmtParams *params, int res_format)
 {
 	return async_request_send_prepared_stmt_with_formats(stmt,
 														 stmt_params_values(params),
 														 stmt_params_lengths(params),
-														 stmt_params_formats(params));
+														 stmt_params_formats(params),
+														 res_format);
 }
 
 /* Set user data. Often it is useful to attach data with a request so

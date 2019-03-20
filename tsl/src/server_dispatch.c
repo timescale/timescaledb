@@ -33,6 +33,7 @@
 #include "remote/dist_txn.h"
 #include "remote/async.h"
 #include "server_dispatch.h"
+#include "remote/data_format.h"
 
 #define TUPSTORE_MEMSIZE_KB work_mem
 #define TUPSTORE_FLUSH_THRESHOLD ts_guc_max_insert_batch_size
@@ -147,24 +148,24 @@ typedef enum DispatchState
 typedef struct ServerDispatchState
 {
 	CustomScanState cstate;
-	DispatchState prevstate;  /* Previous state in state machine */
-	DispatchState state;	  /* Current state in state machine */
-	Relation rel;			  /* The (local) relation we're inserting into */
-	Oid userid;				  /* User performing INSERT */
-	bool set_processed;		  /* Indicates whether to set the number or processed tuples */
-	DeparsedInsertStmt stmt;  /* Partially deparsed insert statement */
-	const char *sql_stmt;	 /* Fully deparsed insert statement */
-	AttInMetadata *attinmeta; /* Metadata to convert incoming data to tuples */
-	List *target_attrs;		  /* The attributes to send to remote servers */
-	List *responses;		  /* List of responses to process in RETURNING state */
-	HTAB *serverstates;		  /* Hashtable of per-server state (tuple stores) */
-	MemoryContext mcxt;		  /* Memory context for per-server state */
-	MemoryContext temp_mcxt;  /* context for per-tuple temporary data */
-	int64 num_tuples;		  /* Total number of tuples flushed each round */
-	int64 next_tuple;		  /* Next tuple to return to the parent node when in
-							   * RETURNING state */
-	int replication_factor;   /* > 1 if we replicate tuples across servers */
-	StmtParams *stmt_params;  /* Parameters to send with statement. Format can be binary or text */
+	DispatchState prevstate; /* Previous state in state machine */
+	DispatchState state;	 /* Current state in state machine */
+	Relation rel;			 /* The (local) relation we're inserting into */
+	Oid userid;				 /* User performing INSERT */
+	bool set_processed;		 /* Indicates whether to set the number or processed tuples */
+	DeparsedInsertStmt stmt; /* Partially deparsed insert statement */
+	const char *sql_stmt;	/* Fully deparsed insert statement */
+	AttConvInMetadata *att_conv_metadata; /* Metadata to convert incoming data to tuples */
+	List *target_attrs;					  /* The attributes to send to remote servers */
+	List *responses;					  /* List of responses to process in RETURNING state */
+	HTAB *serverstates;					  /* Hashtable of per-server state (tuple stores) */
+	MemoryContext mcxt;					  /* Memory context for per-server state */
+	MemoryContext temp_mcxt;			  /* context for per-tuple temporary data */
+	int64 num_tuples;					  /* Total number of tuples flushed each round */
+	int64 next_tuple;					  /* Next tuple to return to the parent node when in
+										   * RETURNING state */
+	int replication_factor;				  /* > 1 if we replicate tuples across servers */
+	StmtParams *stmt_params; /* Parameters to send with statement. Format can be binary or text */
 } ServerDispatchState;
 
 /*
@@ -331,7 +332,7 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 		stmt_params_create(sds->target_attrs, false, tupdesc, TUPSTORE_FLUSH_THRESHOLD);
 
 	if (HAS_RETURNING(sds))
-		sds->attinmeta = TupleDescGetAttInMetadata(tupdesc);
+		sds->att_conv_metadata = data_format_create_att_conv_in_metadata(tupdesc);
 
 	ts_cache_release(hcache);
 }
@@ -349,7 +350,7 @@ store_returning_result(ServerDispatchState *sds, int row, TupleTableSlot *slot, 
 		newtup = make_tuple_from_result_row(res,
 											row,
 											sds->rel,
-											sds->attinmeta,
+											sds->att_conv_metadata,
 											sds->stmt.retrieved_attrs,
 											NULL,
 											sds->temp_mcxt);
@@ -434,6 +435,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	TupleTableSlot *slot;
 	AsyncRequest *req;
 	const char *sql_stmt;
+	int response_type = FORMAT_TEXT;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
 	Assert(NUM_STORED_TUPLES(ss) <= TUPSTORE_FLUSH_THRESHOLD);
@@ -467,6 +469,11 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	Assert(ss->num_tuples_sent == NUM_STORED_TUPLES(ss));
 	Assert(ss->num_tuples_sent == stmt_params_converted_tuples(sds->stmt_params));
 
+	if (HAS_RETURNING(sds) && sds->att_conv_metadata->binary)
+		response_type = FORMAT_BINARY;
+	else if (ts_guc_enable_connection_binary_data)
+		response_type = FORMAT_BINARY;
+
 	/* Send tuples */
 	switch (sds->state)
 	{
@@ -476,16 +483,20 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 				ss->pstmt = prepare_server_insert_stmt(sds,
 													   ss->conn,
 													   stmt_params_total_values(sds->stmt_params));
-
 			Assert(ss->num_tuples_sent == TUPSTORE_FLUSH_THRESHOLD);
-			req = async_request_send_prepared_stmt_with_params(ss->pstmt, sds->stmt_params);
+			req = async_request_send_prepared_stmt_with_params(ss->pstmt,
+															   sds->stmt_params,
+															   response_type);
 			break;
 		case SD_LAST_FLUSH:
 			sql_stmt = deparsed_insert_stmt_get_sql(&sds->stmt,
 													stmt_params_converted_tuples(sds->stmt_params));
 			Assert(sql_stmt != NULL);
 			Assert(ss->num_tuples_sent < TUPSTORE_FLUSH_THRESHOLD);
-			req = async_request_send_with_stmt_params(ss->conn, sql_stmt, sds->stmt_params);
+			req = async_request_send_with_stmt_params(ss->conn,
+													  sql_stmt,
+													  sds->stmt_params,
+													  response_type);
 			break;
 		default:
 			elog(ERROR, "unexpected server dispatch state %s", state_names[sds->state]);

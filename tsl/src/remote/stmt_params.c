@@ -15,6 +15,7 @@
 
 #include "guc.h"
 #include "fdw/utils.h"
+#include "data_format.h"
 #include "stmt_params.h"
 
 #define MAX_PG_STMT_PARAMS                                                                         \
@@ -35,44 +36,6 @@ typedef struct StmtParams
 	MemoryContext mctx;	/* where we allocate param values */
 	MemoryContext tmp_ctx; /* used for converting values */
 } StmtParams;
-
-/**
- * Returns either type binary or text output function (text output is secondary)
- **/
-static Oid
-get_type_output_func(Oid type, bool *is_binary, bool force_text)
-{
-	HeapTuple type_tuple;
-	Form_pg_type pg_type;
-	Oid output_func;
-
-	type_tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type));
-	if (!HeapTupleIsValid(type_tuple))
-		elog(ERROR, "cache lookup failed for type %u", type);
-	pg_type = (Form_pg_type) GETSTRUCT(type_tuple);
-
-	if (!pg_type->typisdefined)
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("type %s is only a shell", format_type_be(type))));
-	if (OidIsValid(pg_type->typsend) && !force_text)
-	{
-		output_func = pg_type->typsend;
-		*is_binary = true;
-	}
-	else
-	{
-		output_func = pg_type->typoutput;
-		*is_binary = false;
-	}
-	ReleaseSysCache(type_tuple);
-	if (!OidIsValid(output_func))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_FUNCTION),
-				 errmsg("no binary or text output function available for type %s",
-						format_type_be(type))));
-	return output_func;
-}
 
 /*
  * ctid should be set to true if we're going to send it
@@ -117,7 +80,9 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 
 	if (params->ctid)
 	{
-		typefnoid = get_type_output_func(TIDOID, &isbinary, !ts_guc_enable_connection_binary_data);
+		typefnoid = data_format_get_type_output_func(TIDOID,
+													 &isbinary,
+													 !ts_guc_enable_connection_binary_data);
 		fmgr_info(typefnoid, &params->conv_funcs[idx]);
 		params->formats[idx] = 1;
 		idx++;
@@ -129,8 +94,9 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 		Form_pg_attribute attr = TupleDescAttr(tuple_desc, AttrNumberGetAttrOffset(attr_num));
 		Assert(!attr->attisdropped);
 
-		typefnoid =
-			get_type_output_func(attr->atttypid, &isbinary, !ts_guc_enable_connection_binary_data);
+		typefnoid = data_format_get_type_output_func(attr->atttypid,
+													 &isbinary,
+													 !ts_guc_enable_connection_binary_data);
 		params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
 
 		fmgr_info(typefnoid, &params->conv_funcs[idx++]);

@@ -624,4 +624,8 @@ INSERT INTO disttable_with_ct VALUES
     ('2019-01-01 01:02', 'ts-1-11-20', 2.0, repeat('abc', 1000000)); -- TOAST
 
 -- Test queries on distributed table with custom type
-SELECT time,txn_id, val, substring(info for 20)  FROM disttable_with_ct;
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+
+SET timescaledb.enable_connection_binary_data=false;
+
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;

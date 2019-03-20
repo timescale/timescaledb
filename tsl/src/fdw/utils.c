@@ -20,9 +20,13 @@
 #include <access/sysattr.h>
 #include <access/htup_details.h>
 #include <miscadmin.h>
+#include <catalog/pg_type.h>
+#include <utils/syscache.h>
 
 #include "utils.h"
 #include "compat.h"
+#include "remote/data_format.h"
+#include "guc.h"
 
 /*
  * Identify the attribute where data conversion fails.
@@ -119,9 +123,9 @@ conversion_error_callback(void *arg)
  * temp_context is a working context that can be reset after each tuple.
  */
 HeapTuple
-make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *attinmeta,
-						   List *retrieved_attrs, ForeignScanState *fsstate,
-						   MemoryContext temp_context)
+make_tuple_from_result_row(PGresult *res, int row, Relation rel,
+						   AttConvInMetadata *att_conv_metadata, List *retrieved_attrs,
+						   ForeignScanState *fsstate, MemoryContext temp_context)
 {
 	HeapTuple tuple;
 	TupleDesc tupdesc;
@@ -134,6 +138,8 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 	MemoryContext oldcontext;
 	ListCell *lc;
 	int j;
+	int format;
+	StringInfo buf;
 
 	Assert(row < PQntuples(res));
 
@@ -168,6 +174,7 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 	errcallback.previous = error_context_stack;
 	error_context_stack = &errcallback;
 
+	buf = makeStringInfo();
 	/*
 	 * i indexes columns in the relation, j indexes columns in the PGresult.
 	 */
@@ -177,11 +184,18 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 		int i = lfirst_int(lc);
 		char *valstr;
 
-		/* fetch next column's textual value */
+		resetStringInfo(buf);
+		/* fetch next column's value */
 		if (PQgetisnull(res, row, j))
 			valstr = NULL;
 		else
+		{
 			valstr = PQgetvalue(res, row, j);
+			buf->data = valstr;
+		}
+
+		format = PQfformat(res, j);
+		buf->len = PQgetlength(res, row, j);
 
 		/*
 		 * convert value to internal representation
@@ -194,11 +208,26 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 			/* ordinary column */
 			Assert(i <= tupdesc->natts);
 			nulls[i - 1] = (valstr == NULL);
-			/* Apply the input function even to nulls, to support domains */
-			values[i - 1] = InputFunctionCall(&attinmeta->attinfuncs[i - 1],
-											  valstr,
-											  attinmeta->attioparams[i - 1],
-											  attinmeta->atttypmods[i - 1]);
+			if (format == FORMAT_TEXT)
+			{
+				Assert(!att_conv_metadata->binary);
+				/* Apply the input function even to nulls, to support domains */
+				values[i - 1] = InputFunctionCall(&att_conv_metadata->conv_funcs[i - 1],
+												  valstr,
+												  att_conv_metadata->ioparams[i - 1],
+												  att_conv_metadata->typmods[i - 1]);
+			}
+			else
+			{
+				Assert(att_conv_metadata->binary);
+				if (valstr != NULL)
+					values[i - 1] = ReceiveFunctionCall(&att_conv_metadata->conv_funcs[i - 1],
+														buf,
+														att_conv_metadata->ioparams[i - 1],
+														att_conv_metadata->typmods[i - 1]);
+				else
+					values[i - 1] = PointerGetDatum(NULL);
+			}
 		}
 		else if (i == SelfItemPointerAttributeNumber)
 		{
@@ -206,8 +235,10 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 			if (valstr != NULL)
 			{
 				Datum datum;
-
-				datum = DirectFunctionCall1(tidin, CStringGetDatum(valstr));
+				if (format == FORMAT_TEXT)
+					datum = DirectFunctionCall1(tidin, CStringGetDatum(valstr));
+				else
+					datum = DirectFunctionCall1(tidrecv, PointerGetDatum(buf));
 				ctid = (ItemPointer) DatumGetPointer(datum);
 			}
 		}
@@ -217,13 +248,14 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel, AttInMetadata *
 			if (valstr != NULL)
 			{
 				Datum datum;
-
-				datum = DirectFunctionCall1(oidin, CStringGetDatum(valstr));
+				if (format == FORMAT_TEXT)
+					datum = DirectFunctionCall1(oidin, CStringGetDatum(valstr));
+				else
+					datum = DirectFunctionCall1(oidrecv, PointerGetDatum(buf));
 				oid = DatumGetObjectId(datum);
 			}
 		}
 		errpos.cur_attno = 0;
-
 		j++;
 	}
 

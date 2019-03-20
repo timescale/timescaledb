@@ -7,6 +7,7 @@
 #include <catalog/pg_type.h>
 
 #include "export.h"
+#include "remote/data_format.h"
 #include "remote/stmt_params.h"
 
 TS_FUNCTION_INFO_V1(tsl_test_stmt_params_format);

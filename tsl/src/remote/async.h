@@ -53,20 +53,43 @@ typedef struct PreparedStmt PreparedStmt;
 
 #define TS_NO_TIMEOUT DT_NOBEGIN
 
-extern AsyncRequest *async_request_send_with_stmt_params_elevel(PGconn *conn,
-																const char *sql_statement,
-																StmtParams *params, int elevel);
-#define async_request_send_with_stmt_params(conn, sql_statement, params)                           \
-	async_request_send_with_stmt_params_elevel(conn, sql_statement, params, ERROR)
-extern AsyncRequest *async_request_send_with_params_elevel(PGconn *conn, const char *sql_statement,
-														   int n_params,
-														   const char *const *param_values,
-														   int elevel);
-
+extern AsyncRequest *async_request_send_with_stmt_params_elevel_res_format(
+	PGconn *conn, const char *sql_statement, StmtParams *params, int elevel, int res_format);
+#define async_request_send_with_stmt_params(conn, sql_statement, params, res_format)               \
+	async_request_send_with_stmt_params_elevel_res_format(conn,                                    \
+														  sql_statement,                           \
+														  params,                                  \
+														  ERROR,                                   \
+														  res_format)
+extern AsyncRequest *
+async_request_send_with_params_elevel_res_format(PGconn *conn, const char *sql_statement,
+												 int n_params, const char *const *param_values,
+												 int elevel, int res_format);
 #define async_request_send_with_params(conn, sql_statement, nparams, param_values)                 \
-	async_request_send_with_params_elevel(conn, sql_statement, nparams, param_values, ERROR)
+	async_request_send_with_params_elevel_res_format(conn,                                         \
+													 sql_statement,                                \
+													 nparams,                                      \
+													 param_values,                                 \
+													 ERROR,                                        \
+													 0)
+#define async_request_send_with_params_elevel(conn, sql_statement, nparams, param_values, elevel)  \
+	async_request_send_with_params_elevel_res_format(conn,                                         \
+													 sql_statement,                                \
+													 nparams,                                      \
+													 param_values,                                 \
+													 elevel,                                       \
+													 0)
+#define async_request_send_with_params(conn, sql_statement, nparams, param_values)                 \
+	async_request_send_with_params_elevel_res_format(conn,                                         \
+													 sql_statement,                                \
+													 nparams,                                      \
+													 param_values,                                 \
+													 ERROR,                                        \
+													 0)
+#define async_request_send_binary(conn, sql_statement)                                             \
+	async_request_send_with_params_elevel_res_format(conn, sql_statement, 0, NULL, ERROR, 1)
 #define async_request_send_with_error(conn, sql_statement, elevel)                                 \
-	async_request_send_with_params_elevel(conn, sql_statement, 0, NULL, elevel)
+	async_request_send_with_params_elevel_res_format(conn, sql_statement, 0, NULL, elevel, 0)
 #define async_request_send(conn, sql_statement)                                                    \
 	async_request_send_with_error(conn, sql_statement, ERROR)
 extern AsyncRequest *async_request_send_prepare(PGconn *conn, const char *sql_statement,
@@ -74,7 +97,8 @@ extern AsyncRequest *async_request_send_prepare(PGconn *conn, const char *sql_st
 extern AsyncRequest *async_request_send_prepared_stmt(PreparedStmt *stmt,
 													  const char *const *paramValues);
 extern AsyncRequest *async_request_send_prepared_stmt_with_params(PreparedStmt *stmt,
-																  StmtParams *params);
+																  StmtParams *params,
+																  int res_format);
 extern void async_request_attach_user_data(AsyncRequest *req, void *user_data);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
