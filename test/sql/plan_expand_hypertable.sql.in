@@ -2,6 +2,12 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SET timescaledb.disable_optimizations= 'off';
+\set PREFIX 'EXPLAIN (costs off) '
+\ir include/plan_expand_hypertable_load.sql
+\ir include/plan_expand_hypertable_query.sql
+\ir include/plan_expand_hypertable_chunks_in_query.sql
+
 \set ECHO errors
 \set TEST_BASE_NAME plan_expand_hypertable
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
@@ -11,18 +17,11 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
 \gset
+-- use input redirect here because filenames are absolute and would be different across installations
+SELECT format('\! wc -l <%s; wc -l <%s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "WC_CMD"
+\gset
 
-
-\o /dev/null
-SET client_min_messages = 'error';
-\ir :TEST_LOAD_NAME
-RESET client_min_messages;
-\o
-
---generate the results into two different files
-SET client_min_messages = 'error';
-\set ECHO none
---make output contain query results
+-- run queries with optimization on and off and diff results
 \set PREFIX ''
 \o :TEST_RESULTS_OPTIMIZED
 SET timescaledb.disable_optimizations= 'off';
@@ -32,8 +31,6 @@ SET timescaledb.disable_optimizations= 'off';
 SET timescaledb.disable_optimizations= 'on';
 \ir :TEST_QUERY_NAME
 \o
-RESET client_min_messages;
 
 :DIFF_CMD
-
-SELECT 'Done';
+:WC_CMD
