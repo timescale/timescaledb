@@ -10,6 +10,19 @@
 -- are different across versions we need version specific output
 -- here anyway.
 
+\set TEST_BASE_NAME plan_ordered_append
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
+\gset
+-- use input redirect here because filenames are absolute and would be different across installations
+SELECT format('\! wc -l <%s; wc -l <%s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "WC_CMD"
+\gset
+
+
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -20,6 +33,22 @@ SELECT
 
 \set PREFIX_NO_ANALYZE 'EXPLAIN (costs off)'
 
-\ir include/plan_ordered_append_load.sql
-\ir include/plan_ordered_append_query.sql
+\ir :TEST_LOAD_NAME
+\ir :TEST_QUERY_NAME
 
+--generate the results into two different files
+\set ECHO errors
+--make output contain query results
+\set PREFIX ''
+\set PREFIX_NO_ANALYZE ''
+\o :TEST_RESULTS_OPTIMIZED
+SET timescaledb.ordered_append = 'on';
+\ir :TEST_QUERY_NAME
+\o
+\o :TEST_RESULTS_UNOPTIMIZED
+SET timescaledb.ordered_append = 'off';
+\ir :TEST_QUERY_NAME
+\o
+
+:DIFF_CMD
+:WC_CMD

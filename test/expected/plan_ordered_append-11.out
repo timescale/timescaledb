@@ -8,6 +8,17 @@
 -- them without ANALYZE on PostgreSQL 9.6, but since LATERAL plans
 -- are different across versions we need version specific output
 -- here anyway.
+\set TEST_BASE_NAME plan_ordered_append
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
+\gset
+-- use input redirect here because filenames are absolute and would be different across installations
+SELECT format('\! wc -l <%s; wc -l <%s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "WC_CMD"
+\gset
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -16,7 +27,7 @@ SELECT
   END AS "PREFIX"
 \gset
 \set PREFIX_NO_ANALYZE 'EXPLAIN (costs off)'
-\ir include/plan_ordered_append_load.sql
+\ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
@@ -91,7 +102,7 @@ INSERT INTO dimension_only VALUES
 ('2000-01-03'),
 ('2000-01-05'),
 ('2000-01-07');
-\ir include/plan_ordered_append_query.sql
+\ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
@@ -672,3 +683,7 @@ LIMIT 2;
                ->  Seq Scan on devices (actual rows=1 loops=1)
 (10 rows)
 
+--generate the results into two different files
+\set ECHO errors
+193
+193

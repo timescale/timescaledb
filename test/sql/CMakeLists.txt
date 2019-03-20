@@ -40,7 +40,6 @@ set(TEST_FILES
   pg_dump_unprivileged.sql
   plain.sql
   plan_expand_hypertable_results_diff.sql
-  plan_ordered_append_results_diff.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql
