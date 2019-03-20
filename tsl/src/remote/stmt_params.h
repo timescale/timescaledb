@@ -11,9 +11,6 @@
 #include <nodes/pg_list.h>
 #include <executor/tuptable.h>
 
-#define FORMAT_TEXT 0
-#define FORMAT_BINARY 1
-
 typedef struct StmtParams StmtParams;
 
 extern StmtParams *stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc,

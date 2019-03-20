@@ -64,6 +64,8 @@
 #include "deparse.h"
 #include "option.h"
 #include "server_chunk_assignment.h"
+#include "remote/data_format.h"
+#include "guc.h"
 
 /* Default CPU cost to start up a foreign query. */
 #define DEFAULT_FDW_STARTUP_COST 100.0
@@ -132,10 +134,10 @@ enum FdwModifyPrivateIndex
  */
 typedef struct TsFdwScanState
 {
-	Relation rel;			  /* relcache entry for the foreign table. NULL
-							   * for a foreign join scan. */
-	TupleDesc tupdesc;		  /* tuple descriptor of scan */
-	AttInMetadata *attinmeta; /* attribute datatype conversion metadata */
+	Relation rel;						  /* relcache entry for the foreign table. NULL
+										   * for a foreign join scan. */
+	TupleDesc tupdesc;					  /* tuple descriptor of scan */
+	AttConvInMetadata *att_conv_metadata; /* attribute datatype conversion metadata */
 
 	/* extracted fdw_private data */
 	char *query;		   /* text of SELECT command */
@@ -182,8 +184,9 @@ typedef struct TsFdwServerState
  */
 typedef struct TsFdwModifyState
 {
-	Relation rel;			  /* relcache entry for the foreign table */
-	AttInMetadata *attinmeta; /* attribute datatype conversion metadata */
+	Relation rel;						  /* relcache entry for the foreign table */
+	AttConvInMetadata *att_conv_metadata; /* attribute datatype conversion metadata for converting
+											 result to tuples */
 
 	/* extracted fdw_private data */
 	char *query;		   /* text of INSERT/UPDATE/DELETE command */
@@ -1494,7 +1497,7 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 
 	/* Prepare for input conversion of RETURNING results. */
 	if (fmstate->has_returning)
-		fmstate->attinmeta = TupleDescGetAttInMetadata(tupdesc);
+		fmstate->att_conv_metadata = data_format_create_att_conv_in_metadata(tupdesc);
 
 	if (operation == CMD_UPDATE || operation == CMD_DELETE)
 	{
@@ -1638,7 +1641,7 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 		fsstate->tupdesc = node->ss.ss_ScanTupleSlot->tts_tupleDescriptor;
 	}
 
-	fsstate->attinmeta = TupleDescGetAttInMetadata(fsstate->tupdesc);
+	fsstate->att_conv_metadata = data_format_create_att_conv_in_metadata(fsstate->tupdesc);
 
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.
@@ -1785,7 +1788,10 @@ fetch_more_data(ForeignScanState *node)
 				 fsstate->fetch_size,
 				 fsstate->cursor_number);
 
-		req = async_request_send(conn, sql);
+		if (fsstate->att_conv_metadata->binary)
+			req = async_request_send_binary(conn, sql);
+		else
+			req = async_request_send(conn, sql);
 
 		Assert(NULL != req);
 
@@ -1812,7 +1818,7 @@ fetch_more_data(ForeignScanState *node)
 			fsstate->tuples[i] = make_tuple_from_result_row(res,
 															i,
 															fsstate->rel,
-															fsstate->attinmeta,
+															fsstate->att_conv_metadata,
 															fsstate->retrieved_attrs,
 															node,
 															fsstate->temp_cxt);
@@ -2340,7 +2346,7 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 		newtup = make_tuple_from_result_row(res,
 											0,
 											fmstate->rel,
-											fmstate->attinmeta,
+											fmstate->att_conv_metadata,
 											fmstate->retrieved_attrs,
 											NULL,
 											fmstate->temp_cxt);
@@ -2395,6 +2401,14 @@ prepare_foreign_modify(TsFdwModifyState *fmstate)
 	fmstate->prepared = true;
 }
 
+static int
+response_type(AttConvInMetadata *att_conv_metadata)
+{
+	if (!ts_guc_enable_connection_binary_data)
+		return FORMAT_TEXT;
+	return att_conv_metadata == NULL || att_conv_metadata->binary ? FORMAT_BINARY : FORMAT_TEXT;
+}
+
 static TupleTableSlot *
 exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
@@ -2416,11 +2430,10 @@ exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 	for (i = 0; i < fmstate->num_servers; i++)
 	{
 		TsFdwServerState *fdw_server = &fmstate->servers[i];
-		AsyncRequest *req =
-			async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params);
-
+		AsyncRequest *req = NULL;
+		int type = response_type(fmstate->att_conv_metadata);
+		req = async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params, type);
 		Assert(NULL != req);
-
 		async_request_set_add(reqset, req);
 	}
 
@@ -2508,9 +2521,10 @@ exec_foreign_update_or_delete(EState *estate, ResultRelInfo *rri, TupleTableSlot
 
 	for (i = 0; i < fmstate->num_servers; i++)
 	{
+		AsyncRequest *req = NULL;
 		TsFdwServerState *fdw_server = &fmstate->servers[i];
-		AsyncRequest *req =
-			async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params);
+		int type = response_type(fmstate->att_conv_metadata);
+		req = async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params, type);
 
 		Assert(NULL != req);
 
