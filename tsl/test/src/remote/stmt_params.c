@@ -8,6 +8,7 @@
 
 #include "export.h"
 #include "compat.h"
+#include "remote/data_format.h"
 #include "remote/stmt_params.h"
 #include "test_utils.h"
 
