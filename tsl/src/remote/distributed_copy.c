@@ -207,6 +207,7 @@ finish_copy_commands(List *conns)
 	foreach (lc, conns)
 	{
 		PGconn *connection = lfirst(lc);
+		PGresult *res;
 
 		if (PQputCopyEnd(connection, NULL) == -1)
 			ereport(ERROR,
@@ -215,7 +216,8 @@ finish_copy_commands(List *conns)
 
 		results = lappend(results, PQgetResult(connection));
 		/* Need to get result a second time to move the connection out of copy mode */
-		Assert(PQgetResult(connection) == NULL);
+		res = PQgetResult(connection);
+		Assert(res == NULL);
 	}
 
 	foreach (lc, results)
