@@ -49,7 +49,7 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '
 -- testing time_bucket END
 
 -- testing drop_chunks START
-SELECT "testSchema0".drop_chunks(interval '2 years', 'test_ts');
+SELECT "testSchema0".drop_chunks('2017-03-01'::timestamp, 'test_ts');
 SELECT * FROM test_ts ORDER BY time;
 SELECT "testSchema0".drop_chunks(interval '1 minutes', 'test_tz');
 SELECT * FROM test_tz ORDER BY time;
