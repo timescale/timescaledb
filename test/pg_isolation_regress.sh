@@ -42,9 +42,14 @@ if [[ -z ${TESTS} ]]; then
                 continue
             fi
             t=${t##test: }
-            if ! contains "${IGNORES}" "${t}"; then
-                TESTS="${TESTS} ${t}"
-            fi
+            ## check each individual test in test group to see if it should be ignored
+            ## note that now isolation tests are not grouped together and so the for loop
+            ##   will always run once.
+            for el in ${t[@]}; do
+                if ! contains "${IGNORES}" "${el}"; then
+                    TESTS="${TESTS} ${el}"
+                fi
+            done
         done < ${ISOLATION_TEST_SCHEDULE}
     else
         PG_ISOLATION_REGRESS_OPTS="${PG_ISOLATION_REGRESS_OPTS} --schedule=${ISOLATION_TEST_SCHEDULE}"

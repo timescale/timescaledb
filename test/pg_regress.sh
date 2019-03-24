@@ -20,6 +20,9 @@ contains() {
     return $?
 }
 
+echo "TESTS ${TESTS}"
+echo "IGNORES ${IGNORES}"
+
 if [[ -z ${TESTS} ]]; then
     if [[ -z ${TEST_SCHEDULE} ]]; then
         for t in ${EXE_DIR}/sql/*.sql; do
@@ -39,9 +42,12 @@ if [[ -z ${TESTS} ]]; then
                 continue
             fi
             t=${t##test: }
-            if ! contains "${IGNORES}" "${t}"; then
-                TESTS="${TESTS} ${t}"
-            fi
+            ## check each individual test in test group to see if it should be ignored
+            for el in ${t[@]}; do
+                if ! contains "${IGNORES}" "${el}"; then
+                    TESTS="${TESTS} ${el}"
+                fi
+            done
         done < ${TEST_SCHEDULE}
     else
         PG_REGRESS_OPTS="${PG_REGRESS_OPTS} --schedule=${TEST_SCHEDULE}"
