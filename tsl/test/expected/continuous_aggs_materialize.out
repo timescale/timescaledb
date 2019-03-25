@@ -492,7 +492,7 @@ CREATE VIEW test_t_mat_view
     AS SELECT time_bucket('2 days', time), COUNT(data) as value
         FROM continuous_agg_test_t
         GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_bucket"
+NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT * FROM _timescaledb_catalog.continuous_agg;
  mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  |        partial_view_name        | bucket_width 
 -------------------+-------------------+------------------+-----------------+-----------------------+---------------------------------+--------------

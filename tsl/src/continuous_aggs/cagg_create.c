@@ -34,6 +34,7 @@
 #include <parser/parse_oper.h>
 #include <parser/analyze.h>
 #include <optimizer/tlist.h>
+#include <optimizer/clauses.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/ruleutils.h>
@@ -53,6 +54,7 @@
 #define CHUNKTUPFN "chunk_for_tuple"
 
 #define MATCHUNKCOLNM "chunk_id"
+#define MATPARTCOLNM "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 
@@ -101,6 +103,21 @@
 		}                                                                                          \
 	} while (0);
 
+/* Note that we set rowsecurity to false here */
+#define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
+	do                                                                                             \
+	{                                                                                              \
+		selquery = makeNode(Query);                                                                \
+		selquery->commandType = CMD_SELECT;                                                        \
+		selquery->querySource = srcquery->querySource;                                             \
+		selquery->queryId = srcquery->queryId;                                                     \
+		selquery->canSetTag = srcquery->canSetTag;                                                 \
+		selquery->utilityStmt = copyObject(srcquery->utilityStmt);                                 \
+		selquery->resultRelation = 0;                                                              \
+		selquery->hasAggs = true;                                                                  \
+		selquery->hasRowSecurity = false;                                                          \
+	} while (0);
+
 typedef struct MatTableColumnInfo
 {
 	List *matcollist;		 /* column defns for materialization tbl*/
@@ -115,7 +132,7 @@ typedef struct FinalizeQueryInfo
 	List *final_seltlist;		  /*select target list for finalize query */
 	List *final_seltlist_aliases; /* select target list aliases for finalize query */
 	Node *final_havingqual;		  /*having qual for finalize query */
-	Query *final_selquery;		  /* construct finalize select query here */
+	Query *final_userquery;		  /* user query used to compute the finalize_query */
 } FinalizeQueryInfo;
 
 typedef struct CAggTimebucketInfo
@@ -147,6 +164,8 @@ static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo 
 															 RangeVar *mat_rel,
 															 CAggTimebucketInfo *origquery_tblinfo,
 															 ObjectAddress *mataddress);
+static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
+														  Query *userview_query);
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
@@ -214,7 +233,7 @@ cagg_create_hypertable(Oid mat_tbloid, const char *matpartcolname, int64 mat_tbl
 												  mat_tbltimecol_interval,
 												  INT8OID,
 												  InvalidOid);
-	// TODO fix this after chnage in C interface
+	// TODO fix this after change in C interface
 	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
 	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
@@ -269,7 +288,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	create->constraints = NIL;
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = NULL; // TODO what is the default?
+	create->tablespacename = NULL;
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
@@ -296,6 +315,22 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	return mat_htid;
 }
 
+/* Use the userview query to create the partial query to populate
+ * the materialization columns and remove HAVING clause and ORDER BY
+ */
+static Query *
+mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query)
+{
+	Query *partial_selquery;
+	CAGG_MAKEQUERY(partial_selquery, userview_query);
+	partial_selquery->rtable = copyObject(userview_query->rtable);
+	partial_selquery->jointree = copyObject(userview_query->jointree);
+	partial_selquery->targetList = mattblinfo->partial_seltlist;
+	partial_selquery->groupClause = mattblinfo->partial_grouplist;
+	partial_selquery->havingQual = NULL;
+	partial_selquery->sortClause = NULL;
+	return partial_selquery;
+}
 /* create a  view for the query using the SELECt stmt sqlquery
  * and view name from RangeVar viewrel
  */
@@ -330,11 +365,10 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	create->constraints = NIL;
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = NULL; // TODO what is the default?
+	create->tablespacename = NULL;
 	create->if_not_exists = false;
 
 	/*  Create the view. viewname is in viewrel.
-	 *  TODO : do we need to pass ownerid here?
 	 */
 	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
 	address = DefineRelationCompat(create, RELKIND_VIEW, owner, NULL, NULL);
@@ -343,47 +377,6 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 	return address;
-}
-
-static int64
-convert_timebucket_width(Const *width_arg)
-{
-	int64 retval;
-	switch (width_arg->consttype)
-	{
-		case INTERVALOID:
-		{
-			Interval *width_interval = DatumGetIntervalP(width_arg->constvalue);
-			if (width_interval->month != 0)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("interval defined in terms of month, year, century etc. not "
-								"supported")));
-			}
-			retval = width_interval->time + (width_interval->day * USECS_PER_DAY);
-		}
-		break;
-		case INT2OID:
-		{
-			int16 width = DatumGetInt16(width_arg->constvalue);
-			retval = width;
-		}
-		break;
-		case INT4OID:
-		{
-			int32 width = DatumGetInt32(width_arg->constvalue);
-			retval = width;
-		}
-		case INT8OID:
-		{
-			retval = DatumGetInt64(width_arg->constvalue);
-		}
-		break;
-		default:
-			elog(ERROR, "Unexpected type for time_bucket width calculation");
-	}
-	return retval;
 }
 
 /* return list of Oid for time_bucket */
@@ -464,17 +457,95 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				elog(ERROR,
 					 "time_bucket function for continuous aggregate query should be called "
 					 "on the dimension column of the hypertable ");
-			Assert(IsA(linitial(fe->args), Const));
+			if (!(list_length(fe->args) == 2))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("time_bucket function for continuous aggregate query cannot use "
+								"optional arguments")));
+			}
+			if (!IsA(linitial(fe->args), Const))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("first argument to time_bucket function should be a constant for "
+								"continuous aggregate query")));
+			}
 			width_arg = (Const *) linitial(fe->args);
 			tbinfo->sortref = sgc->tleSortGroupRef;
-			tbinfo->bucket_width = convert_timebucket_width(width_arg);
+			tbinfo->bucket_width =
+				ts_interval_value_to_internal(width_arg->constvalue, width_arg->consttype);
 		}
 	}
 	if (!found)
 	{
 		elog(ERROR,
-			 "time_bucket function misisng from GROUP BY clause for continuous aggregate query");
+			 "time_bucket function missing from GROUP BY clause for continuous aggregate query");
 	}
+}
+
+static bool
+cagg_agg_validate(Node *node, void *context)
+{
+	if (IsA(node, Aggref))
+	{
+		Aggref *agg = (Aggref *) node;
+		HeapTuple aggtuple;
+		Form_pg_aggregate aggform;
+		if (agg->aggorder || agg->aggdistinct || agg->aggfilter)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("aggregates with FILTER / DISTINCT / ORDER BY are not supported for "
+							"continuous "
+							"aggregate query")));
+		}
+		/* Fetch the pg_aggregate row */
+		aggtuple = SearchSysCache1(AGGFNOID, agg->aggfnoid);
+		if (!HeapTupleIsValid(aggtuple))
+			elog(ERROR, "cache lookup failed for aggregate %u", agg->aggfnoid);
+		aggform = (Form_pg_aggregate) GETSTRUCT(aggtuple);
+		if (aggform->aggkind != 'n')
+		{
+			ReleaseSysCache(aggtuple);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("ordered set/hypothetical aggregates are not supported by "
+							"continuous aggregate query")));
+		}
+		if (aggform->aggcombinefn == InvalidOid ||
+			(aggform->aggtranstype == INTERNALOID && aggform->aggdeserialfn == InvalidOid))
+		{
+			ReleaseSysCache(aggtuple);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("aggregates which are not parallelizable are not supported by "
+							"continuous aggregate query")));
+		}
+		ReleaseSysCache(aggtuple);
+
+		return false;
+	}
+	return expression_tree_walker(node, cagg_agg_validate, context);
+}
+
+static bool
+has_row_security(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class classform;
+	bool relrowsecurity;
+	bool relforcerowsecurity;
+
+	/* Fetch relation's relrowsecurity and relforcerowsecurity flags */
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relid %d", relid);
+	classform = (Form_pg_class) GETSTRUCT(tuple);
+	relrowsecurity = classform->relrowsecurity;
+	relforcerowsecurity = classform->relforcerowsecurity;
+	ReleaseSysCache(tuple);
+	return (relrowsecurity || relforcerowsecurity);
 }
 
 static CAggTimebucketInfo
@@ -491,16 +562,19 @@ cagg_validate_query(Query *query)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only SELECT query permitted for continuous aggs")));
+				 errmsg("only SELECT query permitted for continuous aggregate query")));
 	}
-	if (query->hasSubLinks || query->hasWindowFuncs || query->hasRecursive
+	if (query->hasWindowFuncs || query->hasSubLinks || query->hasDistinctOn ||
+		query->hasRecursive || query->hasModifyingCTE || query->hasForUpdate ||
+		query->hasRowSecurity
 #if !PG96
 		|| query->hasTargetSRFs
 #endif
-		|| query->groupingSets)
+		|| query->cteList || query->groupingSets || query->distinctClause || query->setOperations ||
+		query->limitOffset || query->limitCount || query->sortClause)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid SELECT query for continuous aggregate")));
 	}
 	if (!query->groupClause)
@@ -508,23 +582,32 @@ cagg_validate_query(Query *query)
 		/*query can have aggregate without group by , so look
 		 * for groupClause*/
 		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("SELECT query for continuous aggregate should have at least 1 aggregate "
 						"function and a GROUP BY clause with time_bucket")));
 	}
-	/* TODO - handle havingClause and  DISTINCT
-	 */
+	/*validate aggregates allowed */
+	expression_tree_walker((Node *) query->targetList, cagg_agg_validate, NULL);
+	expression_tree_walker((Node *) query->havingQual, cagg_agg_validate, NULL);
+
 	fromList = query->jointree->fromlist;
 	if (list_length(fromList) != 1)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only 1 hypertable is permitted in SELECT query permitted for continuous "
-						"aggs")));
+						"aggregate")));
 	}
 	/* check if we have a hypertable in the FROM clause */
 	rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
 	rte = list_nth(query->rtable, rtref->rtindex - 1);
+	/* FROM only <tablename> sets rte->inh to false */
+	if (rte->relkind != RELKIND_RELATION || rte->tablesample || rte->inh == false)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid SELECT query for continuous aggregate")));
+	}
 	if (rte->relkind == RELKIND_RELATION)
 	{
 		Dimension *part_dimension = NULL;
@@ -545,8 +628,16 @@ cagg_validate_query(Query *query)
 	if (ht == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("can create continuous aggregate only on hypertables")));
+	}
+	/*check row security settings for the table */
+	if (has_row_security(rte->relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg(
+					 "continuous aggregate query cannot be created on table with row security")));
 	}
 	/* we need a GROUP By clause with time_bucket on the partitioning
 	 * column of the hypertable
@@ -748,6 +839,8 @@ mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tli
  * b) create the corresponding expr to populate the column of the materialization table (e..g for a
  * column that is an aggref, we create a partialize_agg expr to populate the column Returns: the Var
  * corresponding to the newly created column of the materialization table
+ * Notes: make sure the materialization table columns do not save
+ * values computed by mutable function.
  */
 static Var *
 mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
@@ -760,6 +853,14 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
 	Var *var;
 	Oid coltype, colcollation;
 	int32 coltypmod;
+	if (contain_mutable_functions(input))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only immutable functions are supported for continuous aggregate query"),
+				 errhint("Many time-based function that are not immutable have immutable "
+						 "alternatives that require specifying the timezone explicitly")));
+	}
 	switch (nodeTag(input))
 	{
 		case T_Aggref:
@@ -784,21 +885,23 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
 				PRINT_MATCOLNAME(colbuf, matcolno);
 				colname = colbuf;
 			}
-			coltype = exprType((Node *) tle->expr);
-			coltypmod = exprTypmod((Node *) tle->expr);
-			colcollation = exprCollation((Node *) tle->expr);
-			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
-			part_te = (TargetEntry *) copyObject(input);
 			/* is this the time_bucket column */
 			if (IsA(tle->expr, FuncExpr))
 			{
 				bool chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
 				if (chk)
 				{
+					colname = MATPARTCOLNM;
+					tle->resname = pstrdup(colname);
 					out->matpartcolno = matcolno - 1;
 					out->matpartcolname = pstrdup(colname);
 				}
 			}
+			coltype = exprType((Node *) tle->expr);
+			coltypmod = exprTypmod((Node *) tle->expr);
+			colcollation = exprCollation((Node *) tle->expr);
+			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
+			part_te = (TargetEntry *) copyObject(input);
 		}
 		break;
 		default:
@@ -1013,7 +1116,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 	Node *newhavingQual;
 	int resno = 1;
 
-	inp->final_selquery = copyObject(orig_query);
+	inp->final_userquery = copyObject(orig_query);
 	inp->final_seltlist = NIL;
 	inp->final_seltlist_aliases = tlist_aliases;
 	inp->final_havingqual = NULL;
@@ -1027,7 +1130,6 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 	 * We have to do 3 things here: 1) create a column for mat table , 2) partialize_expr to
 	 * populate it and 3) modify the target entry to be a finalize_expr that selects from the
 	 * materialization table
-	 * TODO are the tlist entries distinct?
 	 */
 	foreach (lc, orig_query->targetList)
 	{
@@ -1075,7 +1177,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 	}
 	/* all grouping clause elements are in targetlist already.
 	   so let's check the having clause */
-	newhavingQual = replace_targetentry_in_havingqual(inp->final_selquery, inp->final_seltlist);
+	newhavingQual = replace_targetentry_in_havingqual(inp->final_userquery, inp->final_seltlist);
 	/* we might still have aggs in havingqual which don't appear in the targetlist , but don't
 	 * overwrite finalize_agg exprs that we have in the havingQual*/
 	cxt.addcol = false;
@@ -1092,12 +1194,13 @@ static Query *
 finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 							   ObjectAddress *mattbladdress)
 {
+	Query *final_selquery = NULL;
 	ListCell *lc;
 	/* we have only 1 entry in rtable -checked during query validation
 	 * modify this to reflect the materialization table we just
 	 * created.
 	 */
-	RangeTblEntry *rte = list_nth(inp->final_selquery->rtable, 0);
+	RangeTblEntry *rte = list_nth(inp->final_userquery->rtable, 0);
 	FromExpr *fromexpr;
 	Var *result;
 	rte->relid = mattbladdress->objectId;
@@ -1149,17 +1252,22 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("too many column names were specified")));
 	}
-	inp->final_selquery->targetList = inp->final_seltlist;
+
+	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
+	final_selquery->rtable = inp->final_userquery->rtable; /*fixed up above */
 	/* fixup from list. No quals on original table should be
 	 * present here - they should be on the query that populates the mattable (partial_selquery)
 	 */
-	Assert(list_length(inp->final_selquery->jointree->fromlist) == 1);
-	fromexpr = inp->final_selquery->jointree;
+	Assert(list_length(inp->final_userquery->jointree->fromlist) == 1);
+	fromexpr = inp->final_userquery->jointree;
 	fromexpr->quals = NULL;
-
+	final_selquery->jointree = fromexpr;
+	final_selquery->targetList = inp->final_seltlist;
+	final_selquery->groupClause = inp->final_userquery->groupClause;
+	final_selquery->sortClause = inp->final_userquery->sortClause;
 	/* copy the having clause too */
-	inp->final_selquery->havingQual = inp->final_havingqual;
-	return inp->final_selquery;
+	final_selquery->havingQual = inp->final_havingqual;
+	return final_selquery;
 }
 
 /* Modifies the passed in ViewStmt to do the following
@@ -1200,7 +1308,7 @@ static void
 cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 {
 	ObjectAddress userview_address, mataddress, internal_viewaddress;
-	char buf[NAMEDATALEN];
+	char relnamebuf[NAMEDATALEN];
 	MatTableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 
@@ -1226,10 +1334,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, origquery_ht->htid);
 
 	/* Step 1: create the materialization table */
-	mat_rel = copyObject(stmt->view);
-	mat_rel->schemaname = pstrdup(INTERNAL_SCHEMA_NAME);
-	PRINT_MATINTERNAL_NAME(buf, "ts_internal_%stab", stmt->view->relname);
-	mat_rel->relname = buf;
+	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%stab", stmt->view->relname);
+	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	mat_htid = mattablecolumninfo_create_materialization_table(&mattblinfo,
 															   mat_rel,
 															   origquery_ht,
@@ -1242,16 +1348,11 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	userview_address = create_view_for_query(final_selquery, stmt->view);
 
 	/* Step 3: create the internal view with select partialize(..)
-	 *remove HAVING clause and TODO --- ORDER BY
 	 */
-	partial_selquery = copyObject(panquery);
-	partial_selquery->targetList = mattblinfo.partial_seltlist;
-	partial_selquery->groupClause = mattblinfo.partial_grouplist;
-	partial_selquery->havingQual = NULL;
-	part_rel = copyObject(stmt->view);
-	part_rel->schemaname = pstrdup(INTERNAL_SCHEMA_NAME);
-	PRINT_MATINTERNAL_NAME(buf, "ts_internal_%sview", stmt->view->relname);
-	part_rel->relname = buf;
+	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
+
+	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%sview", stmt->view->relname);
+	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 
 	internal_viewaddress = create_view_for_query(partial_selquery, part_rel);
 
@@ -1300,9 +1401,9 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_TABLE),
-				 errmsg("continuous aggs \"%s\" already exists, drop and recreate if needed. "
-						"This will drop the underlying materialization",
-						stmt->view->relname)));
+				 errmsg("continuous aggregate query \"%s\" already exists", stmt->view->relname),
+				 errhint("drop and recreate if needed.  This will drop the underlying "
+						 "materialization")));
 		return true;
 	}
 	timebucket_exprinfo = cagg_validate_query(query);

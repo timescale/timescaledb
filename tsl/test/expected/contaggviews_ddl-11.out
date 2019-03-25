@@ -1,0 +1,39 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP 0
+--DDL commands on continuous aggregates
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature integer  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      timemeasure TIMESTAMPTZ,
+      timeinterval INTERVAL
+);
+select table_name from create_hypertable('conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+-- check that GRANTS work correctly
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create  view mat_m1 WITH ( timescaledb.continuous_agg = 'start')
+AS
+Select sum( temperature ), min(location) 
+from conditions
+group by time_bucket('1week', timec);
+NOTICE:  adding not-null constraint to column "time_partition_col"
+GRANT select on mat_m1 to :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from mat_m1;
+ERROR:  permission denied for view mat_m1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select count(*) from mat_m1;
+ count 
+-------
+     0
+(1 row)
+
+ 

@@ -219,8 +219,8 @@ CREATE TABLE conditions (
       location    TEXT              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
       humidity    DOUBLE PRECISION  NULL,
-      lowp        double precision NULL,
-      highp       double precision null
+      lowp        numeric NULL,
+      highp       numeric null
     );
 
 select table_name from create_hypertable( 'conditions', 'timec');
@@ -267,7 +267,7 @@ select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by  time_bucket('1week', timec)
-having min(location) >= 'NYC' and avg(temperature) > 20
+having min(location) >= 'NYC' and avg(temperature) > 20 and avg(lowp) > 10
 order by time_bucket('1week', timec), min(location);
 
 --TEST6 -- catalog entries and select from internal view
