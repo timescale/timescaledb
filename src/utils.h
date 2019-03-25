@@ -57,7 +57,6 @@ extern int64 ts_interval_from_now_to_internal(Datum time_val, Oid type);
  * This is approximate -- to be used for planning;
  */
 extern int64 ts_date_trunc_interval_period_approx(text *units);
-
 /*
  * Return the interval period in microseconds.
  * This is approximate -- to be used for planning;

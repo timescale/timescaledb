@@ -20,6 +20,7 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   plan_gapfill.sql.in
+  contaggviews_ddl.sql.in
   )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
