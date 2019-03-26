@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     bucket_width  BIGINT NOT NULL,
     job_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE RESTRICT,
     refresh_lag BIGINT NOT NULL,
+    user_view_query TEXT NOT NULL, --is a pg_node_tree but we can't use that with dump/restore
     UNIQUE(user_view_schema, user_view_name),
     UNIQUE(partial_view_schema, partial_view_name)
 );
@@ -92,3 +93,7 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     cascade_to_materializations BOOLEAN = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
+
+ALTER TABLE  _timescaledb_config.bgw_job
+DROP CONSTRAINT valid_job_type,
+ADD CONSTRAINT valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate'));
