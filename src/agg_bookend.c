@@ -11,6 +11,10 @@
 #include <utils/datum.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
+#include "catalog/pg_type.h"
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
+#include <access/htup_details.h>
 
 #include "compat.h"
 
@@ -60,13 +64,36 @@ polydatum_from_arg(int argno, FunctionCallInfo fcinfo)
 	return value;
 }
 
+/* Serialize type as namespace name string + type name string.
+ *  Don't simple send Oid since this state may be needed across pg_dumps.
+ */
+static void
+polydatum_serialize_type(StringInfo buf, Oid type_oid)
+{
+	HeapTuple tup;
+	Form_pg_type type_tuple;
+	char *namespace_name;
+
+	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "cache lookup failed for type %u", type_oid);
+	type_tuple = (Form_pg_type) GETSTRUCT(tup);
+	namespace_name = get_namespace_name(type_tuple->typnamespace);
+
+	/* send qualified type name */
+	pq_sendstring(buf, namespace_name);
+	pq_sendstring(buf, NameStr(type_tuple->typname));
+
+	ReleaseSysCache(tup);
+}
+
 /* serializes the polydatum pd unto buf */
 static void
 polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, FunctionCallInfo fcinfo)
 {
 	bytea *outputbytes;
 
-	pq_sendint(buf, pd->type_oid, sizeof(Oid));
+	polydatum_serialize_type(buf, pd->type_oid);
 
 	if (pd->is_null)
 	{
@@ -89,6 +116,20 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 	pq_sendbytes(buf, VARDATA(outputbytes), VARSIZE(outputbytes) - VARHDRSZ);
 }
 
+static Oid
+polydatum_deserialize_type(StringInfo buf)
+{
+	const char *schema_name = pq_getmsgstring(buf);
+	const char *type_name = pq_getmsgstring(buf);
+	Oid schema_oid = LookupExplicitNamespace(schema_name, false);
+	Oid type_oid =
+		GetSysCacheOid2(TYPENAMENSP, PointerGetDatum(type_name), ObjectIdGetDatum(schema_oid));
+	if (!OidIsValid(type_oid))
+		elog(ERROR, "cache lookup failed for type %s.%s", schema_name, type_name);
+
+	return type_oid;
+}
+
 /*
  * Deserialize the PolyDatum where the binary representation is in buf.
  * If a not-null PolyDatum is passed in, fill in it's fields, otherwise palloc.
@@ -108,7 +149,7 @@ polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state
 		result = palloc(sizeof(PolyDatum));
 	}
 
-	result->type_oid = pq_getmsgint(buf, sizeof(Oid));
+	result->type_oid = polydatum_deserialize_type(buf);
 
 	/* Following is copied/adapted from record_recv in core postgres */
 
