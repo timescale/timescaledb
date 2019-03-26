@@ -114,13 +114,13 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                   QUERY PLAN                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time"))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time")
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_1_1_chunk
@@ -137,13 +137,13 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                   QUERY PLAN                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time"))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time")
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_1_1_chunk
@@ -160,13 +160,13 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                   QUERY PLAN                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time"))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time")
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_1_1_chunk
@@ -185,16 +185,16 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 2
 LIMIT 1;
-                                                                                                         QUERY PLAN                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: (interpolate(avg(value), NULL::record, NULL::record))
          ->  Custom Scan (GapFill)
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time"))
                      ->  HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time")
                            ->  Result
                                  ->  Append
                                        ->  Seq Scan on _hyper_1_1_chunk

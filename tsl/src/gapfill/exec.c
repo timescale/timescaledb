@@ -500,6 +500,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * extract arguments and to align gapfill_start
 	 */
 	FuncExpr *func = linitial(cscan->custom_private);
+	List *args = lfourth(cscan->custom_private);
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
 	Node *entry;
@@ -513,27 +514,26 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	state->scanslot = MakeSingleTupleTableSlot(tupledesc);
 
 	/* bucket_width */
-	if (!is_simple_expr(linitial(func->args)))
+	if (!is_simple_expr(linitial(args)))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple "
 						"expression")));
 
-	arg_value = gapfill_exec_expr(state, linitial(func->args), &isnull);
+	arg_value = gapfill_exec_expr(state, linitial(args), &isnull);
 	if (isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
 
-	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
-														exprType(linitial(func->args)),
-														arg_value);
+	state->gapfill_period =
+		gapfill_period_get_internal(func->funcresulttype, exprType(linitial(args)), arg_value);
 
 	/*
 	 * check if gapfill start was left out so we have to infer from WHERE
 	 * clause
 	 */
-	if (is_const_null(lthird(func->args)))
+	if (is_const_null(lthird(args)))
 	{
 		int64 start = infer_gapfill_boundary(state, GAPFILL_START);
 		Const *expr = make_const_value_for_gapfill_internal(state->gapfill_typid, start);
@@ -546,21 +546,21 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		 * pass gapfill start through time_bucket so it is aligned with bucket
 		 * start
 		 */
-		state->gapfill_start = align_with_time_bucket(state, lthird(func->args));
+		state->gapfill_start = align_with_time_bucket(state, lthird(args));
 	}
 	state->next_timestamp = state->gapfill_start;
 
 	/* gap fill end */
-	if (is_const_null(lfourth(func->args)))
+	if (is_const_null(lfourth(args)))
 		state->gapfill_end = infer_gapfill_boundary(state, GAPFILL_END);
 	else
 	{
-		if (!is_simple_expr(lfourth(func->args)))
+		if (!is_simple_expr(lfourth(args)))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple "
 							"expression")));
-		arg_value = gapfill_exec_expr(state, lfourth(func->args), &isnull);
+		arg_value = gapfill_exec_expr(state, lfourth(args), &isnull);
 
 		/*
 		 * the default value for finish is NULL but this is checked above,
@@ -575,9 +575,6 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}
-
-	/* remove start and end argument from time_bucket call */
-	func->args = list_make2(linitial(func->args), lsecond(func->args));
 
 	gapfill_state_initialize_columns(state);
 
