@@ -114,17 +114,17 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                         QUERY PLAN                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time")
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_1_2_chunk
@@ -141,17 +141,17 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                         QUERY PLAN                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time")
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_1_2_chunk
@@ -168,17 +168,17 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                         QUERY PLAN                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time")
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_1_2_chunk
@@ -197,20 +197,20 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 2
 LIMIT 1;
-                                                                                                               QUERY PLAN                                                                                                                
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: (interpolate(avg(value), NULL::record, NULL::record))
          ->  Custom Scan (GapFill)
                ->  Finalize GroupAggregate
-                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
                      ->  Gather Merge
                            Workers Planned: 2
                            ->  Sort
-                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time"))
                                  ->  Partial HashAggregate
-                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time")
                                        ->  Result
                                              ->  Parallel Append
                                                    ->  Parallel Seq Scan on _hyper_1_2_chunk

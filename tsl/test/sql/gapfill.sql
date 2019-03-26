@@ -1258,3 +1258,83 @@ SELECT
 FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
 GROUP BY 3,4;
 
+-- test prepared statement
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  locf(min(value))
+FROM (VALUES (1,1),(2,2)) v(time,value)
+GROUP BY 1;
+
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+
+DEALLOCATE prep_gapfill;
+
+-- test prepared statement with locf with lookup query
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))
+FROM metrics_int m1
+WHERE time >= 0 AND time < 5
+GROUP BY 1,2,3;
+
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+
+DEALLOCATE prep_gapfill;
+
+-- test prepared statement with interpolate with lookup query
+PREPARE prep_gapfill AS
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  interpolate(
+    min(value),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  )
+FROM metrics_int m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+EXECUTE prep_gapfill;
+
+DEALLOCATE prep_gapfill;
+

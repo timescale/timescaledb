@@ -166,6 +166,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 {
 	GapFillPath *gfpath = (GapFillPath *) path;
 	CustomScan *cscan = makeNode(CustomScan);
+	List *args = list_copy(gfpath->func->args);
 
 	cscan->scan.scanrelid = 0;
 	cscan->scan.plan.targetlist = tlist;
@@ -175,7 +176,10 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	cscan->methods = &gapfill_plan_methods;
 
 	cscan->custom_private =
-		list_make3(gfpath->func, root->parse->groupClause, root->parse->jointree);
+		list_make4(gfpath->func, root->parse->groupClause, root->parse->jointree, args);
+
+	/* remove start and end argument from time_bucket call */
+	gfpath->func->args = list_make2(linitial(gfpath->func->args), lsecond(gfpath->func->args));
 
 	return &cscan->scan.plan;
 }
