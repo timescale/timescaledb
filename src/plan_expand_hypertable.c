@@ -11,6 +11,7 @@
 #include <nodes/plannodes.h>
 #include <optimizer/prep.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/makefuncs.h>
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
@@ -20,8 +21,10 @@
 #include <catalog/pg_inherits_fn.h>
 #endif
 #include <optimizer/pathnode.h>
+#include <optimizer/tlist.h>
 #include <catalog/pg_type.h>
 #include <utils/errcodes.h>
+#include <utils/syscache.h>
 
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
@@ -33,6 +36,7 @@
 #include "extension.h"
 #include "chunk.h"
 #include "extension_constants.h"
+#include "partitioning.h"
 
 typedef struct CollectQualCtx
 {
@@ -312,6 +316,115 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		return get_explicit_chunk_oids(ctx, ht);
 }
 
+#if !(PG96 || PG10)
+
+/*
+ * Create partition expressions for a hypertable.
+ *
+ * Build an array of partition expressions where each element represents valid
+ * expressions on a particular partitioning key.
+ *
+ * The partition expressions are used by, e.g., group_by_has_partkey() to check
+ * whether a GROUP BY clause covers all partitioning dimensions.
+ *
+ * For dimensions with a partitioning function, we can support either
+ * expressions on the plain key (column) or the partitioning function applied
+ * to the key. For instance, the queries
+ *
+ * SELECT time, device, avg(temp)
+ * FROM hypertable
+ * GROUP BY 1, 2;
+ *
+ * and
+ *
+ * SELECT time_func(time), device, avg(temp)
+ * FROM hypertable
+ * GROUP BY 1, 2;
+ *
+ * are both amenable to aggregate push down if "time" is supported by the
+ * partitioning function "time_func" and "device" is also a partitioning
+ * dimension.
+ */
+static List **
+get_hypertable_partexprs(Hypertable *ht, Query *parse, Index varno)
+{
+	int i;
+	List **partexprs;
+
+	Assert(NULL != ht->space);
+
+	partexprs = palloc0(sizeof(List *) * ht->space->num_dimensions);
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		Dimension *dim = &ht->space->dimensions[i];
+		Expr *expr;
+		HeapTuple tuple = SearchSysCacheAttNum(ht->main_table_relid, dim->column_attno);
+		Form_pg_attribute att;
+
+		if (!HeapTupleIsValid(tuple))
+			elog(ERROR, "cache lookup failed for attribute");
+
+		att = (Form_pg_attribute) GETSTRUCT(tuple);
+
+		expr = (Expr *)
+			makeVar(varno, dim->column_attno, att->atttypid, att->atttypmod, att->attcollation, 0);
+
+		ReleaseSysCache(tuple);
+
+		/* The expression on the partitioning key can be the raw key or the
+		 * partitioning function on the key */
+		if (NULL != dim->partitioning)
+			partexprs[i] = list_make2(expr, dim->partitioning->partfunc.func_fmgr.fn_expr);
+		else
+			partexprs[i] = list_make1(expr);
+	}
+
+	return partexprs;
+}
+
+#define PARTITION_STRATEGY_MULTIDIM 'm'
+
+/*
+ * Partition info for hypertables.
+ *
+ * Build a "fake" partition scheme for a hypertable that makes the planner
+ * believe this is a PostgreSQL partitioned table for planning purposes. In
+ * particular, this will make the planner consider partitionwise aggregations
+ * when applicable.
+ *
+ * Partitionwise aggregation can either be FULL or PARTIAL. The former means
+ * that the aggregation can be performed independently on each partition
+ * (chunk) without a finalize step which is needed in PARTIAL. FULL requires
+ * that the GROUP BY clause contains all hypertable partitioning
+ * dimensions. This requirement is enforced by creating a partitioning scheme
+ * that covers multiple attributes, i.e., one per dimension. This works well
+ * since the "shallow" (one-level hierarchy) of a multi-dimensional hypertable
+ * is similar to a one-level partitioned PostgreSQL table where the
+ * partitioning key covers multiple attributes.
+ *
+ * Note that we use a partition scheme with a strategy that does not exist in
+ * PostgreSQL. This makes PostgreSQL raise errors when this partition scheme is
+ * used in places that require a valid partition scheme with a supported
+ * strategy.
+ */
+static void
+build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *hyper_rel,
+								int nparts)
+{
+	PartitionScheme part_scheme = palloc0(sizeof(PartitionSchemeData));
+
+	/* We only set the info needed for planning */
+	part_scheme->partnatts = ht->space->num_dimensions;
+	part_scheme->strategy = PARTITION_STRATEGY_MULTIDIM;
+	hyper_rel->nparts = nparts;
+	hyper_rel->part_scheme = part_scheme;
+	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
+	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
+}
+
+#endif /* !(PG96 || PG10) */
+
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
@@ -358,6 +471,13 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
 	root->simple_rte_array =
 		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
+
+#if !(PG96 || PG10)
+	/* Adding partition info will make PostgreSQL consider the inheritance
+	 * children as part of a partitioned relation. This will enable
+	 * partitionwise aggregation. */
+	build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
+#endif
 
 	foreach (l, inh_oids)
 	{

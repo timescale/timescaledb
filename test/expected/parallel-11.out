@@ -66,8 +66,8 @@ FROM "test"
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
  Gather
    Workers Planned: 1
    Single Copy: true
@@ -75,12 +75,11 @@ LIMIT 5;
          ->  Sort
                Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
                ->  HashAggregate
-                     Group Key: time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts)
-                     ->  Result
-                           ->  Append
-                                 ->  Seq Scan on _hyper_1_1_chunk
-                                 ->  Seq Scan on _hyper_1_2_chunk
-(12 rows)
+                     Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+                     ->  Append
+                           ->  Seq Scan on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk
+(11 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
