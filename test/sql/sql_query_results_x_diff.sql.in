@@ -3,4 +3,4 @@
 -- LICENSE-APACHE for a copy of the license.
 
 --make sure diff only has explain output not result output
-\! diff ${TEST_OUTPUT_DIR}/results/sql_query_results_optimized.out ${TEST_OUTPUT_DIR}/results/sql_query_results_unoptimized.out
+\! diff ${TEST_OUTPUT_DIR}/results/sql_query_results_optimized-@TEST_VERSION_SUFFIX@.out ${TEST_OUTPUT_DIR}/results/sql_query_results_unoptimized-@TEST_VERSION_SUFFIX@.out

@@ -41,11 +41,6 @@ set(TEST_FILES
   relocate_extension.sql
   reloptions.sql
   size_utils.sql
-  sort_optimization.sql
-  sql_query_results_optimized.sql
-  sql_query_results_unoptimized.sql
-  sql_query_results_x_diff.sql
-  sql_query.sql
   tablespace.sql
   timestamp.sql
   triggers.sql
@@ -74,7 +69,9 @@ set(POST_TESTS
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
-  sql_query_results_x_diff
+  sql_query_results_x_diff-9.6
+  sql_query_results_x_diff-10
+  sql_query_results_x_diff-11
 )
 
 # only test custom type if we are in 64-bit architecture
@@ -121,6 +118,11 @@ if(${PG_VERSION_MAJOR} EQUAL "11")
     )
 endif()
 
+if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
+  list(APPEND TEST_FILES
+    partitionwise.sql)
+endif()
+
 set(TEST_TEMPLATES
   #some error messages changed in PG11 from "relation" to "table" so alternate_users has different output
   agg_bookends_optimized.sql.in
@@ -132,6 +134,12 @@ set(TEST_TEMPLATES
   plan_hashagg.sql.in
   # lateral plans are different across versions, explains run without analyze on 9.6
   plan_ordered_append.sql.in
+  # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
+  sort_optimization.sql.in
+  sql_query.sql.in
+  sql_query_results_unoptimized.sql.in
+  sql_query_results_optimized.sql.in
+  sql_query_results_x_diff.sql.in
   )
 
 # Regression tests that vary with PostgreSQL version. Generated test
@@ -149,7 +157,7 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)
   string(SUBSTRING ${TEMPLATE_FILE} 0 ${TEMPLATE_NAME_LEN} TEMPLATE)
   set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
-  configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE} COPYONLY)
+  configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE} @ONLY)
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
@@ -161,8 +169,6 @@ if(NOT TEST_GROUP_SIZE)
 else()
   set(PARALLEL_GROUP_SIZE ${TEST_GROUP_SIZE})
 endif()
-
-message("PGC ${PARALLEL_GROUP_SIZE} ${TEST_GROUP_SIZE}")
 
 # append solo tests to schedule first
 foreach(TEST_FILE ${TEST_FILES})
