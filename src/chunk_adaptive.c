@@ -467,8 +467,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 		if (chunk_get_minmax(chunk->table_id, dim->fd.column_type, attno, minmax))
 		{
-			int64 min = ts_time_value_to_internal(minmax[0], dim->fd.column_type, false);
-			int64 max = ts_time_value_to_internal(minmax[1], dim->fd.column_type, false);
+			int64 min = ts_time_value_to_internal(minmax[0], dim->fd.column_type);
+			int64 max = ts_time_value_to_internal(minmax[1], dim->fd.column_type);
 			double interval_fillfactor, size_fillfactor;
 			int64 extrapolated_chunk_size;
 

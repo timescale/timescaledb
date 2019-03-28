@@ -250,8 +250,8 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	VariableStatData vardata;
 	Oid ltop;
 	Datum max_datum, min_datum;
-	int64 max, min;
-	bool valid;
+	volatile int64 max, min;
+	volatile bool valid;
 
 	examine_variable(root, (Node *) var, 0, &vardata);
 	get_sort_group_operators(var->vartype, true, false, false, &ltop, NULL, NULL, NULL);
@@ -261,10 +261,19 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	if (!valid)
 		return INVALID_ESTIMATE;
 
-	max = ts_time_value_to_internal(max_datum, var->vartype, true);
-	min = ts_time_value_to_internal(min_datum, var->vartype, true);
+	PG_TRY();
+	{
+		max = ts_time_value_to_internal(max_datum, var->vartype);
+		min = ts_time_value_to_internal(min_datum, var->vartype);
+	}
+	PG_CATCH();
+	{
+		valid = false;
+		FlushErrorState();
+	}
+	PG_END_TRY();
 
-	if (max < 0 || min < 0)
+	if (!valid)
 		return INVALID_ESTIMATE;
 
 	return (double) (max - min);

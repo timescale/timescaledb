@@ -2,3 +2,8 @@
 /parallel-10.0.sql
 /partitioning-9.6.sql
 /partitioning-10.sql
+/plan_expand_hypertable_optimized-10.sql
+/plan_expand_hypertable_optimized-11.sql
+/plan_hashagg_optimized-10.sql
+/plan_hashagg_optimized-11.sql
+/plan_hashagg_optimized-9.6.sql

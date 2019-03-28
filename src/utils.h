@@ -13,13 +13,28 @@
 #include <utils/datetime.h>
 #include <access/htup_details.h>
 
+#include "export.h"
+
+#define TS_EPOCH_DIFF_MICROSECONDS ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY)
+#define TS_INTERNAL_TIMESTAMP_MIN ((int64) USECS_PER_DAY * (DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE))
+
 extern bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 /*
  * Convert a column value into the internal time representation.
+ * cannot store a timestamp earlier than MIN_TIMESTAMP, or greater than
+ *    END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS
+ * nor dates that cannot be translated to timestamps
+ * Will throw an error for that, or other conversion issues.
  */
-extern int64 ts_time_value_to_internal(Datum time_val, Oid type, bool failure_ok);
+extern TSDLLEXPORT int64 ts_time_value_to_internal(Datum time_val, Oid type);
+extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
 
+/*
+ * Convert a column from the internal time representation into the specfied type
+ */
+extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
+extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);
 /*
  * Convert the difference of interval and current timestamp to internal representation
  */

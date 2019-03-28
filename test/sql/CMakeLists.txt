@@ -3,6 +3,7 @@ set(TEST_FILES
   agg_bookends_results_diff.sql
   alter.sql
   append.sql
+  c_unit_tests.sql
   chunk_adaptive.sql
   chunk_utils.sql
   chunks.sql

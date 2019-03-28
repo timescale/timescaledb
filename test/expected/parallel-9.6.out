@@ -66,21 +66,22 @@ FROM "test"
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
- Gather
-   Workers Planned: 1
-   Single Copy: true
-   ->  Limit
-         ->  GroupAggregate
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+         ->  Finalize HashAggregate
                Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
-               ->  Sort
-                     Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
-                     ->  Result
-                           ->  Append
-                                 ->  Seq Scan on _hyper_1_1_chunk
-                                 ->  Seq Scan on _hyper_1_2_chunk
-(12 rows)
+               ->  Gather
+                     Workers Planned: 2
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts)
+                           ->  Result
+                                 ->  Append
+                                       ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                       ->  Parallel Seq Scan on _hyper_1_2_chunk
+(13 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
@@ -187,12 +188,13 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 (11 rows)
 
 -- test constraint aware append with parallel aggregation
+SET max_parallel_workers_per_gather = 1;
 :PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
-         Workers Planned: 2
+         Workers Planned: 1
          ->  Partial Aggregate
                ->  Result
                      One-Time Filter: (length(version()) > 0)
@@ -210,6 +212,7 @@ SELECT count(*) FROM "test" WHERE length(version()) > 0;
  1000000
 (1 row)
 
+SET max_parallel_workers_per_gather = 4;
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and
 -- transaction_timestamp() are marked parallel safe
