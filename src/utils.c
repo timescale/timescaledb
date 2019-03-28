@@ -42,19 +42,18 @@ Datum
 ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	int64 epoch_diff_microseconds = (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY;
 	int64 microseconds;
 
 	if (timestamp < MIN_TIMESTAMP)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
-	if (timestamp >= (END_TIMESTAMP - epoch_diff_microseconds))
+	if (timestamp >= (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
 #ifdef HAVE_INT64_TIMESTAMP
-	microseconds = timestamp + epoch_diff_microseconds;
+	microseconds = timestamp + TS_EPOCH_DIFF_MICROSECONDS;
 #else
 	if (1)
 	{
@@ -84,12 +83,12 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	 * of the supported date range (Julian end date), so INT64_MAX is the
 	 * natural upper bound for this function.
 	 */
-	if (microseconds < ((int64) USECS_PER_DAY * (DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE)))
+	if (microseconds < TS_INTERNAL_TIMESTAMP_MIN)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
 #ifdef HAVE_INT64_TIMESTAMP
-	timestamp = microseconds - ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY);
+	timestamp = microseconds - TS_EPOCH_DIFF_MICROSECONDS;
 #else
 	/* Shift the epoch using integer arithmetic to reduce precision errors */
 	timestamp = microseconds / USECS_PER_SEC; /* seconds */
@@ -101,20 +100,20 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
 
+static int64 ts_integer_to_internal(Datum time_val, Oid type_oid);
+
 /* Convert valid timescale time column type to internal representation */
-int64
-ts_time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
+TSDLLEXPORT int64
+ts_time_value_to_internal(Datum time_val, Oid type_oid)
 {
 	Datum res, tz;
 
 	switch (type_oid)
 	{
 		case INT8OID:
-			return DatumGetInt64(time_val);
 		case INT4OID:
-			return (int64) DatumGetInt32(time_val);
 		case INT2OID:
-			return (int64) DatumGetInt16(time_val);
+			return ts_integer_to_internal(time_val, type_oid);
 		case TIMESTAMPOID:
 
 			/*
@@ -136,9 +135,131 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 		default:
 			if (ts_type_is_int8_binary_compatible(type_oid))
 				return DatumGetInt64(time_val);
-			if (!failure_ok)
-				elog(ERROR, "unknown time type OID %d", type_oid);
+
+			elog(ERROR, "unknown time type OID %d", type_oid);
 			return -1;
+	}
+}
+
+TSDLLEXPORT int64
+ts_interval_value_to_internal(Datum time_val, Oid type_oid)
+{
+	switch (type_oid)
+	{
+		case INT8OID:
+		case INT4OID:
+		case INT2OID:
+			return ts_integer_to_internal(time_val, type_oid);
+		case INTERVALOID:
+		{
+			Interval *interval = DatumGetIntervalP(time_val);
+			if (interval->month != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("intervals must be defined in terms of days or smaller")));
+			return interval->time + (interval->day * USECS_PER_DAY);
+		}
+		default:
+			elog(ERROR, "unknown interval type OID %d", type_oid);
+			return -1;
+	}
+}
+
+static int64
+ts_integer_to_internal(Datum time_val, Oid type_oid)
+{
+	switch (type_oid)
+	{
+		case INT8OID:
+			return DatumGetInt64(time_val);
+		case INT4OID:
+			return (int64) DatumGetInt32(time_val);
+		case INT2OID:
+			return (int64) DatumGetInt16(time_val);
+		default:
+			elog(ERROR, "unknown interval type OID %d", type_oid);
+			return -1;
+	}
+}
+
+TS_FUNCTION_INFO_V1(ts_time_to_internal);
+Datum
+ts_time_to_internal(PG_FUNCTION_ARGS)
+{
+	Datum time = PG_GETARG_DATUM(0);
+	Oid time_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	int64 res = ts_time_value_to_internal(time, time_type);
+	PG_RETURN_INT64(res);
+}
+
+static Datum ts_integer_to_internal_value(int64 value, Oid type);
+
+/*
+ * convert int64 to Datum according to type
+ * internally we store all times as int64 in the
+ * same format postgres does
+ */
+TSDLLEXPORT Datum
+ts_internal_to_time_value(int64 value, Oid type)
+{
+	Datum res;
+	switch (type)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			return ts_integer_to_internal_value(value, type);
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
+			 * compatability */
+			res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
+			return TimestampTzGetDatum(res);
+		case DATEOID:
+			res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
+			res = DirectFunctionCall1(timestamp_date, res);
+			return DateADTGetDatum(res);
+		default:
+			if (ts_type_is_int8_binary_compatible(type))
+				return Int64GetDatum(value);
+			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+	}
+}
+
+TSDLLEXPORT Datum
+ts_internal_to_interval_value(int64 value, Oid type)
+{
+	switch (type)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			return ts_integer_to_internal_value(value, type);
+		case INTERVALOID:
+		{
+			Interval *interval = palloc0(sizeof(*interval));
+			interval->day = value / USECS_PER_DAY;
+			interval->time = value % USECS_PER_DAY;
+			return IntervalPGetDatum(interval);
+		}
+		default:
+			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+	}
+}
+
+static Datum
+ts_integer_to_internal_value(int64 value, Oid type)
+{
+	switch (type)
+	{
+		case INT2OID:
+			return Int16GetDatum(value);
+		case INT4OID:
+			return Int32GetDatum(value);
+		case INT8OID:
+			return Int64GetDatum(value);
+		default:
+			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
 	}
 }
 
@@ -160,17 +281,17 @@ ts_interval_from_now_to_internal(Datum interval, Oid type_oid)
 			res = DirectFunctionCall1(timestamptz_timestamp, res);
 			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
 
-			return ts_time_value_to_internal(res, type_oid, false);
+			return ts_time_value_to_internal(res, type_oid);
 		case TIMESTAMPTZOID:
 			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
 
-			return ts_time_value_to_internal(res, type_oid, false);
+			return ts_time_value_to_internal(res, type_oid);
 		case DATEOID:
 			res = DirectFunctionCall1(timestamptz_timestamp, res);
 			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
 			res = DirectFunctionCall1(timestamp_date, res);
 
-			return ts_time_value_to_internal(res, type_oid, false);
+			return ts_time_value_to_internal(res, type_oid);
 		case INT8OID:
 		case INT4OID:
 		case INT2OID:

@@ -1,5 +1,6 @@
 set(SOURCES
   symbol_conflict.c
+  test_time_to_internal.c
   test_with_clause_parser.c
 )
 

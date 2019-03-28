@@ -1083,7 +1083,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 			older_than =
 				ts_interval_from_now_to_internal(older_than_datum, time_dim->fd.column_type);
 		else
-			older_than = ts_time_value_to_internal(older_than_datum, older_than_type, false);
+			older_than = ts_time_value_to_internal(older_than_datum, older_than_type);
 		end_strategy = BTLessStrategyNumber;
 	}
 
@@ -1094,7 +1094,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 			newer_than =
 				ts_interval_from_now_to_internal(newer_than_datum, time_dim->fd.column_type);
 		else
-			newer_than = ts_time_value_to_internal(newer_than_datum, newer_than_type, false);
+			newer_than = ts_time_value_to_internal(newer_than_datum, newer_than_type);
 		start_strategy = BTGreaterEqualStrategyNumber;
 	}
 

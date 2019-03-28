@@ -716,7 +716,7 @@ ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc
 									NameStr(d->fd.column_name)),
 							 errhint("Columns used for time partitioning cannot be NULL")));
 
-				p->coordinates[p->num_coords++] = ts_time_value_to_internal(datum, dimtype, false);
+				p->coordinates[p->num_coords++] = ts_time_value_to_internal(datum, dimtype);
 				break;
 			case DIMENSION_TYPE_CLOSED:
 				p->coordinates[p->num_coords++] = (int64) DatumGetInt32(datum);

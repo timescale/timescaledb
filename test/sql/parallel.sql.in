@@ -60,8 +60,10 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
 
 -- test constraint aware append with parallel aggregation
+SET max_parallel_workers_per_gather = 1;
 :PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
+SET max_parallel_workers_per_gather = 4;
 
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and
