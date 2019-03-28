@@ -53,11 +53,20 @@ typedef enum GapFillFetchState
 	FETCHED_LAST,
 } GapFillFetchState;
 
+/*
+ * NULL_COLUMN: column with no special action from gapfill e.g. min(value)
+ * TIME_COLUMN: column with time_bucket_gapfill call
+ * GROUP_COLUMN: any column appearing in GROUP BY clause
+ * DERIVED_COLUMN: column not appearing in GROUP BY but dependent on GROUP BY column
+ * LOCF_COLUMN: column with locf call
+ * INTERPOLATE_COLUMN: column with interpolate call
+ */
 typedef enum GapFillColumnType
 {
 	NULL_COLUMN,
 	TIME_COLUMN,
 	GROUP_COLUMN,
+	DERIVED_COLUMN,
 	LOCF_COLUMN,
 	INTERPOLATE_COLUMN
 } GapFillColumnType;
