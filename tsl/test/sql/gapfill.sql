@@ -1338,3 +1338,38 @@ EXECUTE prep_gapfill;
 
 DEALLOCATE prep_gapfill;
 
+-- test column references with TIME_COLUMN last
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,4;
+
+-- test expressions on GROUP BY columns
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  length(color),
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,5;
+
+-- test columns derived from GROUP BY columns with cast
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  device_id::text
+FROM (VALUES (1,1),(2,2)) v(time,device_id)
+GROUP BY 1,device_id;
+
+-- test columns derived from GROUP BY columns with expression
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  'Device ' || device_id::text
+FROM (VALUES (1,1),(2,2)) v(time,device_id)
+GROUP BY 1,device_id;
+
+
+

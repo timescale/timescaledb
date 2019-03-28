@@ -14,6 +14,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
+#include <optimizer/clauses.h>
 #include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
@@ -736,6 +737,7 @@ gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 				gapfill_locf_group_change(column.locf);
 				break;
 			case GROUP_COLUMN:
+			case DERIVED_COLUMN:
 				column.group->isnull = isnull;
 				if (!isnull)
 					column.group->value =
@@ -772,6 +774,7 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 				slot->tts_isnull[i] = false;
 				break;
 			case GROUP_COLUMN:
+			case DERIVED_COLUMN:
 				slot->tts_values[i] = column.group->value;
 				slot->tts_isnull[i] = column.group->isnull;
 				break;
@@ -1074,6 +1077,21 @@ gapfill_state_initialize_columns(GapFillState *state)
 			}
 		}
 
+		/*
+		 * any column that does not have an aggregation function and is not
+		 * an explicit GROUP BY column has to be derived from a GROUP BY
+		 * column so we treat those similar to GROUP BY column for gapfill
+		 * purposes.
+		 */
+		if (!contain_agg_clause((Node *) expr) && contain_var_clause((Node *) expr))
+		{
+			state->columns[i] =
+				gapfill_column_state_create(DERIVED_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+			state->multigroup = true;
+			state->groups_initialized = false;
+			continue;
+		}
+
 		/* column with no special action from gap fill node */
 		state->columns[i] =
 			gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
@@ -1093,6 +1111,7 @@ gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 	switch (ctype)
 	{
 		case GROUP_COLUMN:
+		case DERIVED_COLUMN:
 			size = sizeof(GapFillGroupColumnState);
 			break;
 		case LOCF_COLUMN:
