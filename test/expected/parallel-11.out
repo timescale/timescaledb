@@ -20,25 +20,21 @@ NOTICE:  adding not-null constraint to column "i"
 
 --has to be big enough to force at least 2 workers below.
 INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1) AS x;
-SET client_min_messages = 'error';
---avoid warning polluting output
-ANALYZE;
-RESET client_min_messages;
+ANALYZE test;
 SET work_mem TO '50MB';
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
-:PREFIX SELECT first(i, j) FROM "test";
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Gather (actual rows=3 loops=1)
+EXPLAIN (costs off) SELECT first(i, j) FROM "test";
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
          Workers Planned: 2
-         Workers Launched: 2
-         ->  Partial Aggregate (actual rows=1 loops=3)
-               ->  Parallel Append (actual rows=333333 loops=3)
-                     ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=166667 loops=3)
-                     ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
-(8 rows)
+         ->  Partial Aggregate
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(7 rows)
 
 SELECT first(i, j) FROM "test";
  first 
@@ -46,18 +42,17 @@ SELECT first(i, j) FROM "test";
      0
 (1 row)
 
-:PREFIX SELECT last(i, j) FROM "test";
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Gather (actual rows=3 loops=1)
+EXPLAIN (costs off) SELECT last(i, j) FROM "test";
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
          Workers Planned: 2
-         Workers Launched: 2
-         ->  Partial Aggregate (actual rows=1 loops=3)
-               ->  Parallel Append (actual rows=333333 loops=3)
-                     ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=166667 loops=3)
-                     ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
-(8 rows)
+         ->  Partial Aggregate
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(7 rows)
 
 SELECT last(i, j) FROM "test";
   last  
