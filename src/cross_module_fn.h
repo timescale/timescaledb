@@ -10,6 +10,7 @@
 #include <c.h>
 #include <postgres.h>
 #include <fmgr.h>
+#include <commands/event_trigger.h>
 
 #include <utils/timestamp.h>
 #include <utils/jsonb.h>
@@ -18,6 +19,7 @@
 
 #include "export.h"
 #include "bgw/job.h"
+#include "process_utility.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -51,6 +53,9 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_timestamptz_time_bucket;
 	PGFunction alter_job_schedule;
 	PGFunction reorder_chunk;
+	void (*ddl_command_start)(ProcessUtilityArgs *args);
+	void (*ddl_command_end)(EventTriggerData *command);
+	void (*sql_drop)(List *dropped_objects);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

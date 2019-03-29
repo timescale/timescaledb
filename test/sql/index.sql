@@ -191,3 +191,20 @@ INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "val
 EXPLAIN (verbose, costs off)
 SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
 SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
+
+-- Test INDEX DROP error for multiple objects
+CREATE TABLE index_test(time timestamptz, temp float);
+CREATE UNIQUE INDEX index_test_idx ON index_test (time, temp);
+SELECT create_hypertable('index_test', 'time');
+
+CREATE TABLE index_test_2(time timestamptz, temp float);
+CREATE UNIQUE INDEX index_test_2_idx ON index_test_2 (time, temp);
+
+\set ON_ERROR_STOP 0
+DROP INDEX index_test_idx, index_test_2_idx;
+\set ON_ERROR_STOP 1
+
+DROP INDEX index_test_idx;
+DROP INDEX index_test_2_idx;
+DROP TABLE index_test;
+DROP TABLE index_test_2;

@@ -2,6 +2,7 @@ set(TEST_FILES
     edition.sql
     gapfill.sql
     reorder.sql
+    ddl_hook.sql
 )
 
 set(TEST_FILES_DEBUG

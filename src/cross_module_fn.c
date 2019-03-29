@@ -177,6 +177,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_community,
 	.alter_job_schedule = error_no_default_fn_pg_enterprise,
 	.reorder_chunk = error_no_default_fn_pg_community,
+	.ddl_command_start = NULL,
+	.ddl_command_end = NULL,
+	.sql_drop = NULL
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
