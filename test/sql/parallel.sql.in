@@ -18,19 +18,16 @@ SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 --has to be big enough to force at least 2 workers below.
 INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1) AS x;
 
-SET client_min_messages = 'error';
---avoid warning polluting output
-ANALYZE;
-RESET client_min_messages;
+ANALYZE test;
 
 SET work_mem TO '50MB';
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
 
-:PREFIX SELECT first(i, j) FROM "test";
+EXPLAIN (costs off) SELECT first(i, j) FROM "test";
 SELECT first(i, j) FROM "test";
 
-:PREFIX SELECT last(i, j) FROM "test";
+EXPLAIN (costs off) SELECT last(i, j) FROM "test";
 SELECT last(i, j) FROM "test";
 
 -- we dont run this with analyze because the sort memory usage is not stable
