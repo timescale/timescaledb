@@ -370,5 +370,3 @@ ORDER BY MetricMinuteTs DESC;
 \set ECHO none
 psql:include/plan_hashagg_query.sql:60: ERROR:  timestamp units "invalid" not recognized
 psql:include/plan_hashagg_query.sql:60: ERROR:  timestamp units "invalid" not recognized
-99570
-99570
