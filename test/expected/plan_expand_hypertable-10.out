@@ -1230,5 +1230,3 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 :PREFIX SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:38: ERROR:  chunk id can't be NULL
 \set ECHO errors
-507
-507

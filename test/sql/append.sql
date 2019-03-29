@@ -10,9 +10,6 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
 \gset
--- use input redirect here because filenames are absolute and would be different across installations
-SELECT format('\! wc -l <%s; wc -l <%s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "WC_CMD"
-\gset
 
 \set PREFIX 'EXPLAIN (costs OFF)'
 \ir :TEST_LOAD_NAME
@@ -33,4 +30,3 @@ SET timescaledb.disable_optimizations = 'on';
 \o
 
 :DIFF_CMD
-:WC_CMD
