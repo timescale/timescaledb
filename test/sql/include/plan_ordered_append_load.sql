@@ -24,17 +24,15 @@ SELECT create_hypertable('ordered_append','time');
 CREATE index on ordered_append(time DESC,device_id);
 CREATE index on ordered_append(device_id,time DESC);
 
-INSERT INTO ordered_append VALUES('2000-01-01',1,1.0);
-INSERT INTO ordered_append VALUES('2000-01-08',1,2.0);
-INSERT INTO ordered_append VALUES('2000-01-15',1,3.0);
+INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 1, 0.5;
+INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 2, 1.5;
+INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 3, 2.5;
 
 -- create a second table where we create chunks in reverse order
 CREATE TABLE ordered_append_reverse(time timestamptz NOT NULL, device_id INT, value float);
 SELECT create_hypertable('ordered_append_reverse','time');
 
-INSERT INTO ordered_append_reverse VALUES('2000-01-15',1,1.0);
-INSERT INTO ordered_append_reverse VALUES('2000-01-08',1,2.0);
-INSERT INTO ordered_append_reverse VALUES('2000-01-01',1,3.0);
+INSERT INTO ordered_append_reverse SELECT generate_series('2000-01-18'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 0.5;
 
 -- table where dimension column is last column
 CREATE TABLE IF NOT EXISTS dimension_last(
@@ -53,15 +51,17 @@ CREATE TABLE IF NOT EXISTS dimension_only(
 
 SELECT create_hypertable('dimension_only', 'time', chunk_time_interval => interval '1day', if_not_exists => True);
 
-INSERT INTO dimension_last VALUES
-(1,1,'Device 1','2000-01-01'),
-(2,1,'Device 1','2000-01-02'),
-(3,1,'Device 1','2000-01-03'),
-(4,1,'Device 1','2000-01-04');
+INSERT INTO dimension_last SELECT 1,1,'Device 1',generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-04 23:59:00+0'::timestamptz,'1m'::interval);
 
 INSERT INTO dimension_only VALUES
 ('2000-01-01'),
 ('2000-01-03'),
 ('2000-01-05'),
 ('2000-01-07');
+
+ANALYZE devices;
+ANALYZE ordered_append;
+ANALYZE ordered_append_reverse;
+ANALYZE dimension_last;
+ANALYZE dimension_only;
 
