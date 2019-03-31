@@ -17,9 +17,11 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #1115 Fix ordered append optimization for join queries
+* #1132 Adjust ordered append path cost
 
 **Thanks**
 * @spickman for reporting a segfault with ordered append and JOINs
+* @comicfans for reporting a performance regression with ordered append
 
 ## 1.2.2 (2019-03-14)
 

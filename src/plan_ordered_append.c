@@ -102,7 +102,11 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 	ListCell *lc;
 	List *sorted = NIL;
 	AppendPath *append;
-	bool parallel_safe = rel->consider_parallel;
+	double rows = 0.0;
+	Cost total_cost = 0.0;
+
+	if (list_length(merge->subpaths) == 0)
+		return (Path *) merge;
 
 	/*
 	 * double check pathkeys of the MergeAppendPath actually is compatible
@@ -118,9 +122,14 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 		Path *child = lfirst(lc);
 
 		/*
-		 * AppendPath is parallel_safe if all children are parallel safe
+		 * we only include cost of children until the limit is satisfied.
+		 * Cost of children past the limit will not be added to the cost
 		 */
-		parallel_safe = parallel_safe && child->parallel_safe;
+		if (rows < root->limit_tuples)
+		{
+			total_cost += child->total_cost;
+			rows += child->rows;
+		}
 
 		/*
 		 * When an index is not available on all chunks pathkeys of the child
@@ -158,7 +167,9 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 
 	append->path.pathkeys = merge->path.pathkeys;
 	append->path.parallel_aware = false;
-	append->path.parallel_safe = parallel_safe;
+	append->path.parallel_safe = false;
+	append->path.startup_cost = ((Path *) linitial(merge->subpaths))->startup_cost;
+	append->path.total_cost = total_cost;
 
 	return (Path *) append;
 }
