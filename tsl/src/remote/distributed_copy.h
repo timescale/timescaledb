@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_COPY_H
-#define TIMESCALEDB_TSL_REMOTE_COPY_H
+#ifndef TIMESCALEDB_TSL_REMOTE_DISTRIBUTED_COPY_H
+#define TIMESCALEDB_TSL_REMOTE_DISTRIBUTED_COPY_H
 
 #include <postgres.h>
 #include <commands/copy.h>
@@ -15,4 +15,4 @@ typedef struct CopyChunkState CopyChunkState;
 extern void remote_distributed_copy(const CopyStmt *stmt, uint64 *processed,
 									CopyChunkState *ccstate, List *attnums);
 
-#endif /* TIMESCALEDB_TSL_REMOTE_COPY_H */
+#endif /* TIMESCALEDB_TSL_REMOTE_DISTRIBUTED_COPY_H */
