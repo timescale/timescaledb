@@ -125,3 +125,79 @@ set enable_material = 'off';
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
 WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
 
+reset enable_hashjoin;
+reset enable_mergejoin;
+reset enable_material;
+
+-- test constraint_exclusion with date time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz ORDER BY time;
+
+-- test Const OP Var
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::date < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamp < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamptz < time ORDER BY time;
+
+-- test 2 constraints
+-- the queries should all have 2 chunks
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
+
+-- test constraint_exclusion with timestamp time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz ORDER BY time;
+
+-- test Const OP Var
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::date < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamp < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamptz < time ORDER BY time;
+
+-- test 2 constraints
+-- the queries should all have 2 chunks
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
+
+-- test constraint_exclusion with timestamptz time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
+
+-- test Const OP Var
+-- the queries should all have 3 chunks
+:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
+
+-- test 2 constraints
+-- the queries should all have 2 chunks
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
+
+-- test CURRENT_DATE
+-- should be 0 chunks
+:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
+
+-- test CURRENT_TIMESTAMP
+-- should be 0 chunks
+:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+
+-- test now()
+-- should be 0 chunks
+:PREFIX SELECT * FROM metrics_date WHERE time > now() ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time > now() ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time > now() ORDER BY time;
+

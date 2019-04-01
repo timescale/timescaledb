@@ -16,8 +16,6 @@ INSERT INTO hyper SELECT g, g FROM generate_series(0,1000) g;
 --insert a point with INT_MAX_64
 INSERT INTO hyper (time, value) SELECT 9223372036854775807::bigint, 0;
 
-
-
 --time and space
 CREATE TABLE hyper_w_space ("time_broken" bigint NOT NULL, "device_id" text, "value" integer);
 
@@ -60,6 +58,8 @@ SELECT create_hypertable('hyper_timefunc', 'time', 'device_id', 4, chunk_time_in
 
 INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 
-SET client_min_messages = 'error';
-ANALYZE;
-RESET client_min_messages;
+ANALYZE hyper;
+ANALYZE hyper_w_space;
+ANALYZE tag;
+ANALYZE hyper_ts;
+ANALYZE hyper_timefunc;

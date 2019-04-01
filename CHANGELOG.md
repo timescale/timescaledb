@@ -7,6 +7,7 @@ accidentally triggering the load of a previous DB version.**
 ## 1.3.0 (unreleased)
 
 **Minor Features**
+* #1130 Add support for cross datatype chunk exclusion for time types
 * #1112 Add support for window functions to gapfill
 * #1062 Make constraint aware append parallel safe
 * #1005 Enable creating indexes with one transaction per chunk
