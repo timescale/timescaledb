@@ -143,8 +143,8 @@ get_cast_func(Oid source, Oid target)
 	return result;
 }
 
-#define DATATYPE_PAIR(type1, type2)                                                                \
-	((left_type == type1 && right_type == type2) || (left_type == type2 && right_type == type1))
+#define DATATYPE_PAIR(left, right, type1, type2)                                                   \
+	((left == type1 && right == type2) || (left == type2 && right == type1))
 
 /*
  * Cross datatype comparisons between DATE/TIMESTAMP/TIMESTAMPTZ
@@ -175,10 +175,14 @@ transform_restrict_info_clause(Expr *clause)
 		Oid left_type = exprType(linitial(op->args));
 		Oid right_type = exprType(lsecond(op->args));
 
-		if (op->opresulttype != BOOLOID || op->opretset)
+		if (op->opresulttype != BOOLOID || op->opretset == true)
 			return clause;
 
-		if (DATATYPE_PAIR(TIMESTAMPOID, TIMESTAMPTZOID) || DATATYPE_PAIR(TIMESTAMPTZOID, DATEOID))
+		if (!IsA(linitial(op->args), Var) && !IsA(lsecond(op->args), Var))
+			return clause;
+
+		if (DATATYPE_PAIR(left_type, right_type, TIMESTAMPOID, TIMESTAMPTZOID) ||
+			DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
 		{
 			char *opname = get_opname(op->opno);
 			Oid source_type, target_type, opno, cast_oid;
