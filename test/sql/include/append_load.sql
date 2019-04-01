@@ -49,3 +49,18 @@ INSERT INTO join_test VALUES ('2017-01-22T09:18:22', 15.2, 1),
                              ('2017-02-22T09:18:22', 24.5, 2),
                              ('2017-08-22T09:18:22', 23.1, 3);
 
+-- create hypertable with DATE time dimension
+CREATE TABLE metrics_date(time DATE NOT NULL);
+SELECT create_hypertable('metrics_date','time');
+INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+
+-- create hypertable with TIMESTAMP time dimension
+CREATE TABLE metrics_timestamp(time TIMESTAMP NOT NULL);
+SELECT create_hypertable('metrics_timestamp','time');
+INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+
+-- create hypertable with TIMESTAMPTZ time dimension
+CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('metrics_timestamptz','time');
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+
