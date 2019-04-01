@@ -28,7 +28,7 @@ ALTER TABLE hyper_w_space
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 4, chunk_time_interval => 10);
-psql:include/plan_expand_hypertable_load.sql:28: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:26: NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (2,public,hyper_w_space,t)
@@ -43,7 +43,7 @@ ALTER TABLE hyper_ts
 DROP COLUMN time_broken,
 ADD COLUMN time TIMESTAMPTZ;
 SELECT create_hypertable('hyper_ts', 'time', 'device_id', 2, chunk_time_interval => '10 seconds'::interval);
-psql:include/plan_expand_hypertable_load.sql:43: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:41: NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (3,public,hyper_ts,t)
@@ -61,16 +61,18 @@ $BODY$
 $BODY$;
 CREATE TABLE hyper_timefunc ("time" float8 NOT NULL, "device_id" text, "value" integer);
 SELECT create_hypertable('hyper_timefunc', 'time', 'device_id', 4, chunk_time_interval => 10, time_partitioning_func => 'unix_to_timestamp');
-psql:include/plan_expand_hypertable_load.sql:59: WARNING:  unexpected interval: smaller than one second
+psql:include/plan_expand_hypertable_load.sql:57: WARNING:  unexpected interval: smaller than one second
       create_hypertable      
 -----------------------------
  (4,public,hyper_timefunc,t)
 (1 row)
 
 INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
-SET client_min_messages = 'error';
-ANALYZE;
-RESET client_min_messages;
+ANALYZE hyper;
+ANALYZE hyper_w_space;
+ANALYZE tag;
+ANALYZE hyper_ts;
+ANALYZE hyper_timefunc;
 \ir include/plan_expand_hypertable_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and

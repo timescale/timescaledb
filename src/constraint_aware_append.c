@@ -4,18 +4,24 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_cast.h>
+#include <catalog/pg_class.h>
+#include <catalog/pg_namespace.h>
+#include <catalog/pg_operator.h>
+#include <commands/explain.h>
+#include <executor/executor.h>
 #include <nodes/extensible.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/plannodes.h>
-#include <parser/parsetree.h>
-#include <optimizer/plancat.h>
 #include <optimizer/clauses.h>
+#include <optimizer/plancat.h>
 #include <optimizer/prep.h>
-#include <executor/executor.h>
-#include <catalog/pg_class.h>
-#include <utils/memutils.h>
+#include <parser/parsetree.h>
 #include <utils/lsyscache.h>
-#include <commands/explain.h>
+#include <utils/memutils.h>
+#include <utils/syscache.h>
 
 #include "constraint_aware_append.h"
 #include "hypertable.h"
@@ -88,6 +94,138 @@ can_exclude_chunk(PlannerInfo *root, Scan *scan, EState *estate, Index rt_index,
 
 	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
 		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
+}
+
+/*
+ * get_operator
+ *
+ *    finds an operator given an exact specification (name, namespace,
+ *    left and right type IDs).
+ */
+static Oid
+get_operator(const char *name, Oid namespace, Oid left, Oid right)
+{
+	HeapTuple tup;
+	Oid opoid = InvalidOid;
+
+	tup = SearchSysCache4(OPERNAMENSP,
+						  PointerGetDatum(name),
+						  ObjectIdGetDatum(left),
+						  ObjectIdGetDatum(right),
+						  ObjectIdGetDatum(namespace));
+	if (HeapTupleIsValid(tup))
+	{
+		opoid = HeapTupleGetOid(tup);
+		ReleaseSysCache(tup);
+	}
+
+	return opoid;
+}
+
+/*
+ * lookup cast func oid in pg_cast
+ */
+static Oid
+get_cast_func(Oid source, Oid target)
+{
+	Oid result = InvalidOid;
+	HeapTuple casttup;
+
+	casttup = SearchSysCache2(CASTSOURCETARGET, ObjectIdGetDatum(source), ObjectIdGetDatum(target));
+	if (HeapTupleIsValid(casttup))
+	{
+		Form_pg_cast castform = (Form_pg_cast) GETSTRUCT(casttup);
+
+		result = castform->castfunc;
+		ReleaseSysCache(casttup);
+	}
+
+	return result;
+}
+
+#define DATATYPE_PAIR(type1, type2)                                                                \
+	((left_type == type1 && right_type == type2) || (left_type == type2 && right_type == type1))
+
+/*
+ * Cross datatype comparisons between DATE/TIMESTAMP/TIMESTAMPTZ
+ * are not immutable which prevents their usage for chunk exclusion.
+ * Unfortunately estimate_expression_value will not estimate those
+ * expressions which makes them unusable for execution time chunk
+ * exclusion with constraint aware append.
+ * To circumvent this we inject casts and use an operator
+ * with the same datatype on both sides when constifying
+ * restrictinfo. This allows estimate_expression_value
+ * to evaluate those expressions and makes them accessible for
+ * execution time chunk exclusion.
+ *
+ * The following transformations are done:
+ * TIMESTAMP OP TIMESTAMPTZ => TIMESTAMP OP (TIMESTAMPTZ::TIMESTAMP)
+ * TIMESTAMPTZ OP DATE => TIMESTAMPTZ OP (DATE::TIMESTAMPTZ)
+ *
+ * No transformation is required for TIMESTAMP OP DATE because
+ * those operators are marked immutable.
+ */
+static Expr *
+transform_restrict_info_clause(Expr *clause)
+{
+	clause = copyObject(clause);
+	if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
+	{
+		OpExpr *op = castNode(OpExpr, clause);
+		Oid left_type = exprType(linitial(op->args));
+		Oid right_type = exprType(lsecond(op->args));
+
+		if (op->opresulttype != BOOLOID || op->opretset)
+			return clause;
+
+		if (DATATYPE_PAIR(TIMESTAMPOID, TIMESTAMPTZOID) || DATATYPE_PAIR(TIMESTAMPTZOID, DATEOID))
+		{
+			char *opname = get_opname(op->opno);
+			Oid source_type, target_type, opno, cast_oid;
+
+			/*
+			 * if Var is on left side we put cast on right side otherwise
+			 * it will be left
+			 */
+			if (IsA(linitial(op->args), Var))
+			{
+				source_type = right_type;
+				target_type = left_type;
+			}
+			else
+			{
+				source_type = left_type;
+				target_type = right_type;
+			}
+
+			opno = get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
+			cast_oid = get_cast_func(source_type, target_type);
+
+			if (OidIsValid(opno) && OidIsValid(cast_oid))
+			{
+				Expr *left = linitial(op->args);
+				Expr *right = lsecond(op->args);
+
+				if (source_type == left_type)
+					left = (Expr *) makeFuncExpr(cast_oid,
+												 target_type,
+												 list_make1(left),
+												 InvalidOid,
+												 InvalidOid,
+												 0);
+				else
+					right = (Expr *) makeFuncExpr(cast_oid,
+												  target_type,
+												  list_make1(right),
+												  InvalidOid,
+												  InvalidOid,
+												  0);
+
+				clause = make_opclause(opno, BOOLOID, false, left, right, InvalidOid, InvalidOid);
+			}
+		}
+	}
+	return clause;
 }
 
 /*
@@ -439,7 +577,8 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, struct C
 
 				foreach (lc, clauses)
 				{
-					Node *clause = (Node *) copyObject(castNode(RestrictInfo, lfirst(lc))->clause);
+					Node *clause = (Node *) transform_restrict_info_clause(
+						castNode(RestrictInfo, lfirst(lc))->clause);
 					clause = adjust_appendrel_attrs_compat(root, clause, appinfo);
 					chunk_clauses = lappend(chunk_clauses, clause);
 				}
