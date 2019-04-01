@@ -42,6 +42,9 @@ SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass',
 SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
 SELECT * FROM add_server('server_3', database => 'server_3', password => 'pass', if_not_exists => true);
 
+-- Start out testing text copy code
+SET timescaledb.enable_connection_binary_data=false;
+
 -- Use some horrible names to make sure the parsing code works
 CREATE TABLE "+ri(k33_')" (       
     "thyme" bigint NOT NULL,
@@ -109,6 +112,32 @@ red,white,blue,ten,hi
 \.
 
 \set ON_ERROR_STOP 1
+
+-- Now do some testing of the binary frontend/backend path.
+SET timescaledb.enable_connection_binary_data=true;
+
+COPY "+ri(k33_')" FROM STDIN;
+10	11	strawberry	12.3	stuff
+\.
+
+\copy public   	.		"+ri(k33_')" ("pH", 	"))_"   ,	thyme) fROm stdIN deLIMitER '-';
+.001-40-2080
+100.-37-3150
+\.
+
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm 
+StDiN wiTH dElImITeR ','
+;
+150,10,403,\N
+2030,10.0,3.21321,something like lemon
+3330,10.00,2309424231,  _''garbled*(#\\)@#$*)
+\.
+
+COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FORMAT csv, NULL 'empties', FORCE_NOT_NULL ("pH", "thyme"));
+1203210,4.4324424324254352345345,``,0,empties
+42010,3333333333333333333333333333,"",1.00000000000000000000000000000000001,`empties`
+3420,4324,"empties",40,\N
+\.
 
 SELECT * FROM "+ri(k33_')";
 SELECT * FROM _timescaledb_catalog.chunk;

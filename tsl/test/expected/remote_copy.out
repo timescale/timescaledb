@@ -53,6 +53,8 @@ NOTICE:  remote server database "server_3" already exists, skipping
  server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
+-- Start out testing text copy code
+SET timescaledb.enable_connection_binary_data=false;
 -- Use some horrible names to make sure the parsing code works
 CREATE TABLE "+ri(k33_')" (       
     "thyme" bigint NOT NULL,
@@ -81,35 +83,58 @@ COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
 ERROR:  invalid input syntax for integer: "red"
 -- Missing paritioning column
 COPY "+ri(k33_')" (thYme, "))_", "flavor") FROM STDIN;
-ERROR:  unable to use default value for partitioning column pH
+ERROR:  unable to use default value for partitioning column "pH"
 -- Missing required column, these generate a WARNING with a transaction id in them (too flimsy to output)
 SET client_min_messages TO ERROR;
 COPY "+ri(k33_')" (thyme, flavor, "pH") FROM STDIN WITH DELIMITER ',';
-ERROR:  error during copy completion
+ERROR:  error during copy completion: ERROR:  null value in column "))_" violates not-null constraint
+DETAIL:  Failing row contains (5, null, blue, 2.29999999999999982, null).
+CONTEXT:  COPY +ri(k33_'), line 1: "5,blue,2.3"
+
 COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
-ERROR:  error during copy completion
+ERROR:  error during copy completion: ERROR:  null value in column "))_" violates not-null constraint
+DETAIL:  Failing row contains (5, null, blue, 1, blah).
+CONTEXT:  COPY +ri(k33_'), line 1: "5,\N,blue,1,blah"
+
 SET client_min_messages TO INFO;
 -- Invalid data after new chunk creation, data and chunks should be rolled back
 COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
 ERROR:  invalid input syntax for integer: "red"
 \set ON_ERROR_STOP 1
+-- Now do some testing of the binary frontend/backend path.
+SET timescaledb.enable_connection_binary_data=true;
+COPY "+ri(k33_')" FROM STDIN;
+\copy public   	.		"+ri(k33_')" ("pH", 	"))_"   ,	thyme) fROm stdIN deLIMitER '-';
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm 
+StDiN wiTH dElImITeR ','
+;
+COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FORMAT csv, NULL 'empties', FORCE_NOT_NULL ("pH", "thyme"));
 SELECT * FROM "+ri(k33_')";
- thyme  |         ))_          |        flavor         |  pH  | optional 
---------+----------------------+-----------------------+------+----------
-      1 |                   11 | strawberry            |  2.3 | stuff
-    208 |                   40 | mint                  | 0.01 | 
-     15 |                  403 |                       |    1 | 
-    203 |              3.21321 | something like lemon  |    1 | 
-    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
-    342 |                 4324 | "empties"             |    4 | \N
- 120321 |     4.43244243242544 |                       |    0 | 
-   4201 | 3.33333333333333e+27 | ""                    |    1 | 
-    315 |                   37 | mint                  |   10 | 
-(9 rows)
+  thyme  |         ))_          |         flavor         |  pH   | optional 
+---------+----------------------+------------------------+-------+----------
+       1 |                   11 | strawberry             |   2.3 | stuff
+     208 |                   40 | mint                   |  0.01 | 
+      15 |                  403 |                        |     1 | 
+      10 |                   11 | strawberry             |  12.3 | stuff
+     203 |              3.21321 | something like lemon   |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*)  |     1 | 
+     342 |                 4324 | "empties"              |     4 | \N
+  120321 |     4.43244243242544 |                        |     0 | 
+    4201 | 3.33333333333333e+27 | ""                     |     1 | 
+    2080 |                   40 | mint                   | 0.001 | 
+ 1203210 |     4.43244243242544 |                        |     0 | 
+   42010 | 3.33333333333333e+27 | ""                     |     1 | empties
+     315 |                   37 | mint                   |    10 | 
+    3420 |                 4324 | "empties"              |    40 | \N
+    3150 |                   37 | mint                   |   100 | 
+     150 |                  403 |                        |    10 | 
+    2030 |              3.21321 | something like lemon   |    10 | 
+    3330 |           2309424231 |   _''garbled*(#\)@#$*) |    10 | 
+(18 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |      table_name       
-----+---------------+-----------------------+-----------------------
+ id | hypertable_id |      schema_name      |       table_name       
+----+---------------+-----------------------+------------------------
   1 |             1 | _timescaledb_internal | _hyper_1_1_dist_chunk
   2 |             1 | _timescaledb_internal | _hyper_1_2_dist_chunk
   3 |             1 | _timescaledb_internal | _hyper_1_3_dist_chunk
@@ -118,7 +143,15 @@ SELECT * FROM _timescaledb_catalog.chunk;
   6 |             1 | _timescaledb_internal | _hyper_1_6_dist_chunk
   7 |             1 | _timescaledb_internal | _hyper_1_7_dist_chunk
   8 |             1 | _timescaledb_internal | _hyper_1_8_dist_chunk
-(8 rows)
+ 12 |             1 | _timescaledb_internal | _hyper_1_12_dist_chunk
+ 13 |             1 | _timescaledb_internal | _hyper_1_13_dist_chunk
+ 14 |             1 | _timescaledb_internal | _hyper_1_14_dist_chunk
+ 15 |             1 | _timescaledb_internal | _hyper_1_15_dist_chunk
+ 16 |             1 | _timescaledb_internal | _hyper_1_16_dist_chunk
+ 17 |             1 | _timescaledb_internal | _hyper_1_17_dist_chunk
+ 18 |             1 | _timescaledb_internal | _hyper_1_18_dist_chunk
+ 19 |             1 | _timescaledb_internal | _hyper_1_19_dist_chunk
+(16 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
  chunk_id | server_chunk_id | server_name 
@@ -139,7 +172,23 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         7 |               7 | server_2
         8 |               7 | server_1
         8 |               8 | server_2
-(16 rows)
+       12 |               9 | server_1
+       12 |              11 | server_2
+       13 |               5 | server_3
+       13 |              10 | server_1
+       14 |               6 | server_3
+       14 |              11 | server_1
+       15 |               7 | server_3
+       15 |              12 | server_1
+       16 |               8 | server_3
+       16 |              13 | server_1
+       17 |              14 | server_1
+       17 |              12 | server_2
+       18 |              15 | server_1
+       18 |              13 | server_2
+       19 |              14 | server_2
+       19 |               9 | server_3
+(32 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
@@ -150,8 +199,8 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
 (3 rows)
 
 select * from show_chunks('"+ri(k33_'')"');
-                 show_chunks                 
----------------------------------------------
+                 show_chunks                  
+----------------------------------------------
  _timescaledb_internal._hyper_1_1_dist_chunk
  _timescaledb_internal._hyper_1_2_dist_chunk
  _timescaledb_internal._hyper_1_3_dist_chunk
@@ -160,25 +209,41 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_6_dist_chunk
  _timescaledb_internal._hyper_1_7_dist_chunk
  _timescaledb_internal._hyper_1_8_dist_chunk
-(8 rows)
+ _timescaledb_internal._hyper_1_12_dist_chunk
+ _timescaledb_internal._hyper_1_13_dist_chunk
+ _timescaledb_internal._hyper_1_14_dist_chunk
+ _timescaledb_internal._hyper_1_15_dist_chunk
+ _timescaledb_internal._hyper_1_16_dist_chunk
+ _timescaledb_internal._hyper_1_17_dist_chunk
+ _timescaledb_internal._hyper_1_18_dist_chunk
+ _timescaledb_internal._hyper_1_19_dist_chunk
+(16 rows)
 
 \c server_1
 SELECT * FROM "+ri(k33_')";
- thyme  |         ))_          |        flavor         |  pH  | optional 
---------+----------------------+-----------------------+------+----------
-      1 |                   11 | strawberry            |  2.3 | stuff
-    208 |                   40 | mint                  | 0.01 | 
-     15 |                  403 |                       |    1 | 
-    203 |              3.21321 | something like lemon  |    1 | 
-    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
-    342 |                 4324 | "empties"             |    4 | \N
- 120321 |     4.43244243242544 |                       |    0 | 
-   4201 | 3.33333333333333e+27 | ""                    |    1 | 
-(8 rows)
+  thyme  |         ))_          |         flavor         |  pH   | optional 
+---------+----------------------+------------------------+-------+----------
+       1 |                   11 | strawberry             |   2.3 | stuff
+     208 |                   40 | mint                   |  0.01 | 
+      15 |                  403 |                        |     1 | 
+      10 |                   11 | strawberry             |  12.3 | stuff
+     203 |              3.21321 | something like lemon   |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*)  |     1 | 
+     342 |                 4324 | "empties"              |     4 | \N
+  120321 |     4.43244243242544 |                        |     0 | 
+    4201 | 3.33333333333333e+27 | ""                     |     1 | 
+    2080 |                   40 | mint                   | 0.001 | 
+    3150 |                   37 | mint                   |   100 | 
+     150 |                  403 |                        |    10 | 
+    2030 |              3.21321 | something like lemon   |    10 | 
+    3330 |           2309424231 |   _''garbled*(#\)@#$*) |    10 | 
+ 1203210 |     4.43244243242544 |                        |     0 | 
+   42010 | 3.33333333333333e+27 | ""                     |     1 | empties
+(16 rows)
 
 select * from show_chunks('"+ri(k33_'')"');
-                 show_chunks                 
----------------------------------------------
+                 show_chunks                  
+----------------------------------------------
  _timescaledb_internal._hyper_1_1_dist_chunk
  _timescaledb_internal._hyper_1_2_dist_chunk
  _timescaledb_internal._hyper_1_4_dist_chunk
@@ -186,26 +251,38 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_6_dist_chunk
  _timescaledb_internal._hyper_1_7_dist_chunk
  _timescaledb_internal._hyper_1_8_dist_chunk
-(7 rows)
+ _timescaledb_internal._hyper_1_12_dist_chunk
+ _timescaledb_internal._hyper_1_13_dist_chunk
+ _timescaledb_internal._hyper_1_14_dist_chunk
+ _timescaledb_internal._hyper_1_15_dist_chunk
+ _timescaledb_internal._hyper_1_16_dist_chunk
+ _timescaledb_internal._hyper_1_17_dist_chunk
+ _timescaledb_internal._hyper_1_18_dist_chunk
+(14 rows)
 
 \c server_2
 SELECT * FROM "+ri(k33_')";
- thyme  |         ))_          |        flavor         |  pH  | optional 
---------+----------------------+-----------------------+------+----------
-      1 |                   11 | strawberry            |  2.3 | stuff
-    208 |                   40 | mint                  | 0.01 | 
-    315 |                   37 | mint                  |   10 | 
-     15 |                  403 |                       |    1 | 
-    203 |              3.21321 | something like lemon  |    1 | 
-    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
-    342 |                 4324 | "empties"             |    4 | \N
- 120321 |     4.43244243242544 |                       |    0 | 
-   4201 | 3.33333333333333e+27 | ""                    |    1 | 
-(9 rows)
+  thyme  |         ))_          |        flavor         |  pH   | optional 
+---------+----------------------+-----------------------+-------+----------
+       1 |                   11 | strawberry            |   2.3 | stuff
+     208 |                   40 | mint                  |  0.01 | 
+     315 |                   37 | mint                  |    10 | 
+      15 |                  403 |                       |     1 | 
+      10 |                   11 | strawberry            |  12.3 | stuff
+     203 |              3.21321 | something like lemon  |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*) |     1 | 
+     342 |                 4324 | "empties"             |     4 | \N
+  120321 |     4.43244243242544 |                       |     0 | 
+    4201 | 3.33333333333333e+27 | ""                    |     1 | 
+    2080 |                   40 | mint                  | 0.001 | 
+ 1203210 |     4.43244243242544 |                       |     0 | 
+   42010 | 3.33333333333333e+27 | ""                    |     1 | empties
+    3420 |                 4324 | "empties"             |    40 | \N
+(14 rows)
 
 select * from show_chunks('"+ri(k33_'')"');
-                 show_chunks                 
----------------------------------------------
+                 show_chunks                  
+----------------------------------------------
  _timescaledb_internal._hyper_1_1_dist_chunk
  _timescaledb_internal._hyper_1_2_dist_chunk
  _timescaledb_internal._hyper_1_3_dist_chunk
@@ -214,20 +291,34 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_6_dist_chunk
  _timescaledb_internal._hyper_1_7_dist_chunk
  _timescaledb_internal._hyper_1_8_dist_chunk
-(8 rows)
+ _timescaledb_internal._hyper_1_12_dist_chunk
+ _timescaledb_internal._hyper_1_17_dist_chunk
+ _timescaledb_internal._hyper_1_18_dist_chunk
+ _timescaledb_internal._hyper_1_19_dist_chunk
+(12 rows)
 
 \c server_3
 SELECT * FROM "+ri(k33_')";
- thyme | ))_ | flavor | pH | optional 
--------+-----+--------+----+----------
-   315 |  37 | mint   | 10 | 
-(1 row)
+ thyme |    ))_     |         flavor         | pH  | optional 
+-------+------------+------------------------+-----+----------
+   315 |         37 | mint                   |  10 | 
+  3150 |         37 | mint                   | 100 | 
+   150 |        403 |                        |  10 | 
+  2030 |    3.21321 | something like lemon   |  10 | 
+  3330 | 2309424231 |   _''garbled*(#\)@#$*) |  10 | 
+  3420 |       4324 | "empties"              |  40 | \N
+(6 rows)
 
 select * from show_chunks('"+ri(k33_'')"');
-                 show_chunks                 
----------------------------------------------
+                 show_chunks                  
+----------------------------------------------
  _timescaledb_internal._hyper_1_3_dist_chunk
-(1 row)
+ _timescaledb_internal._hyper_1_13_dist_chunk
+ _timescaledb_internal._hyper_1_14_dist_chunk
+ _timescaledb_internal._hyper_1_15_dist_chunk
+ _timescaledb_internal._hyper_1_16_dist_chunk
+ _timescaledb_internal._hyper_1_19_dist_chunk
+(6 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
