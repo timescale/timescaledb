@@ -189,6 +189,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
 		},
 	},
+	[CONTINUOUS_AGG] = {
+		.length = _MAX_CONTINUOUS_AGG_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGG_PKEY] = "continuous_agg_pkey"
+		},
+	},
 	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = {
 		.length = _MAX_CONTINUOUS_AGGS_COMPLETED_THRESHOLD_INDEX,
 		.names = (char *[]) {

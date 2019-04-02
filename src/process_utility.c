@@ -61,6 +61,7 @@
 #include "utils.h"
 #include "with_clause_parser.h"
 #include "cross_module_fn.h"
+#include "continuous_agg.h"
 
 #include "cross_module_fn.h"
 
@@ -770,6 +771,45 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 	return true;
 }
 
+/* Force the use of CASCADE to drop continuous aggregates */
+static void
+block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, DropStmt *stmt)
+{
+	ListCell *lc;
+
+	if (stmt->behavior == DROP_CASCADE)
+		return;
+
+	foreach (lc, stmt->objects)
+	{
+		List *object = lfirst(lc);
+		RangeVar *relation = makeRangeVarFromNameList(object);
+		Oid relid;
+		char *schema;
+		char *name;
+		ContinuousAgg *cagg;
+
+		if (NULL == relation)
+			continue;
+
+		relid = RangeVarGetRelid(relation, NoLock, true);
+		if (!OidIsValid(relid))
+			continue;
+
+		schema = get_namespace_name(get_rel_namespace(relid));
+		name = get_rel_name(relid);
+
+		cagg = ts_continuous_agg_find_by_view_name(schema, name);
+		if (cagg == NULL)
+			continue;
+
+		if (ts_continuous_agg_is_user_view(&cagg->data, schema, name))
+			ereport(ERROR,
+					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+					 errmsg("dropping a continous aggregate requires using CASCADE")));
+	}
+}
+
 static void
 process_drop(ProcessUtilityArgs *args)
 {
@@ -782,6 +822,9 @@ process_drop(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_INDEX:
 			process_drop_hypertable_index(args, stmt);
+			break;
+		case OBJECT_VIEW:
+			block_dropping_continuous_aggregates_without_cascade(args, stmt);
 			break;
 		default:
 			break;
@@ -2770,6 +2813,16 @@ process_drop_trigger(EventTriggerDropObject *obj)
 }
 
 static void
+process_drop_view(EventTriggerDropView *dropped_view)
+{
+	ContinuousAgg *ca;
+
+	ca = ts_continuous_agg_find_by_view_name(dropped_view->schema, dropped_view->view_name);
+	if (ca != NULL)
+		ts_continuous_agg_drop_view_callback(ca, dropped_view->schema, dropped_view->view_name);
+}
+
+static void
 process_ddl_sql_drop(EventTriggerDropObject *obj)
 {
 	switch (obj->type)
@@ -2788,6 +2841,9 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			break;
 		case EVENT_TRIGGER_DROP_TRIGGER:
 			process_drop_trigger(obj);
+			break;
+		case EVENT_TRIGGER_DROP_VIEW:
+			process_drop_view((EventTriggerDropView *) obj);
 			break;
 	}
 }

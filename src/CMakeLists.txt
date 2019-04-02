@@ -4,6 +4,7 @@ set(SOURCES
   cache.c
   cache_invalidate.c
   catalog.c
+  continuous_agg.c
   chunk.c
   chunk_adaptive.c
   chunk_constraint.c

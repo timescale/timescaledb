@@ -136,8 +136,9 @@ typedef struct InternalScannerCtx
 	bool closed;
 } InternalScannerCtx;
 
-void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+
+extern TSDLLEXPORT void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
 
 #endif /* TIMESCALEDB_SCANNER_H */

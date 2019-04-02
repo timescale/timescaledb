@@ -14,6 +14,7 @@ typedef enum EventTriggerDropType
 	EVENT_TRIGGER_DROP_TABLE_CONSTRAINT,
 	EVENT_TRIGGER_DROP_INDEX,
 	EVENT_TRIGGER_DROP_TABLE,
+	EVENT_TRIGGER_DROP_VIEW,
 	EVENT_TRIGGER_DROP_SCHEMA,
 	EVENT_TRIGGER_DROP_TRIGGER
 } EventTriggerDropType;
@@ -44,6 +45,13 @@ typedef struct EventTriggerDropTable
 	char *table_name;
 	char *schema;
 } EventTriggerDropTable;
+
+typedef struct EventTriggerDropView
+{
+	EventTriggerDropObject obj;
+	char *view_name;
+	char *schema;
+} EventTriggerDropView;
 
 typedef struct EventTriggerDropSchema
 {
