@@ -49,11 +49,11 @@ ts_scan_iterator_tupledesc(ScanIterator *iterator)
 	return iterator->tinfo->desc;
 }
 
-void ts_scan_iterator_close(ScanIterator *iterator);
+void TSDLLEXPORT ts_scan_iterator_close(ScanIterator *iterator);
 
-void ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumber,
-									StrategyNumber strategy, RegProcedure procedure,
-									Datum argument);
+void TSDLLEXPORT ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumber,
+												StrategyNumber strategy, RegProcedure procedure,
+												Datum argument);
 
 /* You must use `ts_scan_iterator_close` if terminating this loop early */
 #define ts_scanner_foreach(scan_iterator)                                                          \
