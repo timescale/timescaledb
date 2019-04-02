@@ -1307,7 +1307,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 static void
 cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 {
-	ObjectAddress userview_address, mataddress, internal_viewaddress;
+	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
 	MatTableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
@@ -1345,7 +1345,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	 */
 	final_selquery =
 		finalizequery_get_select_query(&finalqinfo, mattblinfo.matcollist, &mataddress);
-	userview_address = create_view_for_query(final_selquery, stmt->view);
+	create_view_for_query(final_selquery, stmt->view);
 
 	/* Step 3: create the internal view with select partialize(..)
 	 */
@@ -1354,7 +1354,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%sview", stmt->view->relname);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 
-	internal_viewaddress = create_view_for_query(partial_selquery, part_rel);
+	create_view_for_query(partial_selquery, part_rel);
 
 	Assert(mat_rel != NULL);
 	/* Step 4 add catalog table entry for the objects we just created */
@@ -1366,9 +1366,6 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 							 part_rel->schemaname,
 							 part_rel->relname,
 							 origquery_ht->bucket_width);
-	/* record dependency: user view depends on materialization table and internal view */
-	recordDependencyOn(&mataddress, &userview_address, DEPENDENCY_INTERNAL);
-	recordDependencyOn(&internal_viewaddress, &userview_address, DEPENDENCY_INTERNAL);
 	return;
 }
 

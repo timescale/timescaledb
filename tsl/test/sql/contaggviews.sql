@@ -272,7 +272,6 @@ order by time_bucket('1week', timec), min(location);
 
 --TEST6 -- catalog entries and select from internal view
 --check the entry in the catalog tables --
---TODO wrong results
 select partial_view_name from _timescaledb_catalog.continuous_agg where user_view_name like 'mat_m1';
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -333,3 +332,90 @@ SELECT
 \set ECHO errors
 \ir include/cont_agg_equal.sql
 \set ECHO all
+
+--DROP tests
+\set ON_ERROR_STOP 0
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_test'
+\gset
+
+DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
+DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
+DROP VIEW mat_test;
+\set ON_ERROR_STOP 1
+
+--catalog entry still there;
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_test';
+
+--mat table, user_view, and partial view all there
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+select count(*) from pg_class where relname = 'mat_test';
+
+DROP VIEW mat_test CASCADE;
+
+--catalog entry should be gone
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_test';
+
+--mat table, user_view, and partial view all gone
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+select count(*) from pg_class where relname = 'mat_test';
+
+
+--test dropping raw table
+DROP TABLE conditions;
+CREATE TABLE conditions (
+      timec       TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable( 'conditions', 'timec');
+
+--no data in hyper table on purpose so that CASCADE is not required because of chunks
+
+create or replace view mat_drop_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous_agg = 'start')
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec);
+
+\set ON_ERROR_STOP 0
+DROP TABLE conditions;
+\set ON_ERROR_STOP 1
+
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_drop_test'
+\gset
+
+DROP TABLE conditions CASCADE;
+
+--catalog entry should be gone
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_drop_test';
+
+--mat table, user_view, and partial view all gone
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+select count(*) from pg_class where relname = 'mat_drop_test';

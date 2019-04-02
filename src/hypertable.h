@@ -76,6 +76,7 @@ extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
+extern void ts_hypertable_drop(Hypertable *hypertable);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
