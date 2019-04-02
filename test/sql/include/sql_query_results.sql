@@ -84,13 +84,12 @@ SELECT * FROM create_hypertable('"public"."hyper_timefunc"'::regclass, 'time'::n
 INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 
-
-SET client_min_messages = 'error';
---avoid warning polluting output
-ANALYZE;
-RESET client_min_messages;
-
-
+ANALYZE plain_table;
+ANALYZE hyper_timefunc;
+ANALYZE hyper_1;
+ANALYZE hyper_1_tz;
+ANALYZE hyper_1_int;
+ANALYZE hyper_1_date;
 
 --non-aggregates use MergeAppend in both optimized and non-optimized
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
@@ -148,20 +147,15 @@ LIMIT 2;
 --test that still works with an expression index on data_trunc.
 DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
-SET client_min_messages = 'error';
---avoid warning polluting output
-ANALYZE;
-RESET client_min_messages;
+ANALYZE hyper_1;
 
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
 --test that works with both indexes
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
-SET client_min_messages = 'error';
---avoid warning polluting output
-ANALYZE;
-RESET client_min_messages;
+ANALYZE hyper_1;
+
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
