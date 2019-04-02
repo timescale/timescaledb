@@ -142,6 +142,19 @@ make_event_trigger_drop_table(char *table_name, char *schema)
 	return obj;
 }
 
+static EventTriggerDropView *
+make_event_trigger_drop_view(char *view_name, char *schema)
+{
+	EventTriggerDropView *obj = palloc(sizeof(*obj));
+
+	*obj = (EventTriggerDropView){
+		.obj = { .type = EVENT_TRIGGER_DROP_VIEW },
+		.view_name = view_name,
+		.schema = schema,
+	};
+	return obj;
+}
+
 static EventTriggerDropSchema *
 make_event_trigger_drop_schema(char *schema)
 {
@@ -232,6 +245,14 @@ ts_event_trigger_dropped_objects(void)
 					objects = lappend(objects,
 									  make_event_trigger_drop_table(lsecond(addrnames),
 																	linitial(addrnames)));
+				}
+				else if (strcmp(objtype, "view") == 0)
+				{
+					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+
+					objects = lappend(objects,
+									  make_event_trigger_drop_view(lsecond(addrnames),
+																   linitial(addrnames)));
 				}
 				break;
 			case NamespaceRelationId:

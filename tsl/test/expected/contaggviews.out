@@ -105,7 +105,8 @@ order by 1;
 -- drop on table conditions should cascade to materialized mat_v1
 -- Oid used in timescaledb_catalog table from catalog table -- TODO
 drop table conditions cascade;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -263,7 +264,8 @@ order by sum(temperature)+sum(humidity);
 --group by with more than 1 group column
 -- having clause with a mix of columns from select list + others
 drop table conditions cascade;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -345,17 +347,11 @@ order by time_bucket('1week', timec), min(location);
 
 --TEST6 -- catalog entries and select from internal view
 --check the entry in the catalog tables --
---TODO wrong results
 select partial_view_name from _timescaledb_catalog.continuous_agg where user_view_name like 'mat_m1';
    partial_view_name    
 ------------------------
  ts_internal_mat_m1view
- ts_internal_mat_m1view
- ts_internal_mat_m1view
- ts_internal_mat_m1view
- ts_internal_mat_m1view
- ts_internal_mat_m1view
-(6 rows)
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 insert into _timescaledb_internal.ts_internal_mat_m1tab
@@ -419,5 +415,147 @@ psql:include/cont_agg_equal.sql:13: NOTICE:  adding not-null constraint to colum
                            ?column?                            | count 
 ---------------------------------------------------------------+-------
  Number of rows different between view and original (expect 0) |     0
+(1 row)
+
+--DROP tests
+\set ON_ERROR_STOP 0
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_test'
+\gset
+DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
+ERROR:  cannot drop table _timescaledb_internal.ts_internal_mat_testtab because other objects depend on it
+DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
+ERROR:  cannot drop the partial view because it is required by a continuous aggregate
+DROP VIEW mat_test;
+ERROR:  dropping a continous aggregate requires using CASCADE
+\set ON_ERROR_STOP 1
+--catalog entry still there;
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_test';
+ count 
+-------
+     1
+(1 row)
+
+--mat table, user_view, and partial view all there
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from pg_class where relname = 'mat_test';
+ count 
+-------
+     1
+(1 row)
+
+DROP VIEW mat_test CASCADE;
+NOTICE:  drop cascades to 2 other objects
+--catalog entry should be gone
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_test';
+ count 
+-------
+     0
+(1 row)
+
+--mat table, user_view, and partial view all gone
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from pg_class where relname = 'mat_test';
+ count 
+-------
+     0
+(1 row)
+
+--test dropping raw table
+DROP TABLE conditions;
+CREATE TABLE conditions (
+      timec       TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+--no data in hyper table on purpose so that CASCADE is not required because of chunks
+create or replace view mat_drop_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous_agg = 'start')
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec);
+NOTICE:  adding not-null constraint to column "time_partition_col"
+\set ON_ERROR_STOP 0
+DROP TABLE conditions;
+ERROR:  cannot drop table conditions because other objects depend on it
+\set ON_ERROR_STOP 1
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_drop_test'
+\gset
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_drop_testview
+--catalog entry should be gone
+SELECT count(*)
+FROM _timescaledb_catalog.continuous_agg ca
+WHERE user_view_name = 'mat_drop_test';
+ count 
+-------
+     0
+(1 row)
+
+--mat table, user_view, and partial view all gone
+select count(*) from pg_class where relname = :'PART_VIEW_NAME';
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from pg_class where relname = 'mat_drop_test';
+ count 
+-------
+     0
 (1 row)
 

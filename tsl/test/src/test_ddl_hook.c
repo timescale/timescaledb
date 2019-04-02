@@ -152,6 +152,11 @@ test_sql_drop(List *dropped_objects)
 				elog(NOTICE, "test_sql_drop: trigger");
 				break;
 			}
+			case EVENT_TRIGGER_DROP_VIEW:
+			{
+				elog(NOTICE, "test_sql_drop: view");
+				break;
+			}
 		}
 	}
 }

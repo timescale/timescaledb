@@ -57,6 +57,7 @@
 #include "funcapi.h"
 #include "utils.h"
 #include "bgw_policy/policy.h"
+#include "continuous_agg.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -411,6 +412,9 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
 
+	/* Remove any dependent continuous aggs */
+	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);
 	ts_catalog_restore_user(&sec_ctx);
@@ -444,6 +448,20 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  RowExclusiveLock,
 										  false,
 										  CurrentMemoryContext);
+}
+
+void
+ts_hypertable_drop(Hypertable *hypertable)
+{
+	ObjectAddress hypertable_addr = (ObjectAddress){
+		.classId = RelationRelationId,
+		.objectId = hypertable->main_table_relid,
+	};
+
+	/* Drop the postgres table */
+	performDeletion(&hypertable_addr, DROP_CASCADE, 0);
+	/* Clean up catalog */
+	ts_hypertable_delete_by_name(hypertable->fd.schema_name.data, hypertable->fd.table_name.data);
 }
 
 static ScanTupleResult

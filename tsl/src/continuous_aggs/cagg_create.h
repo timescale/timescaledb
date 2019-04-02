@@ -3,8 +3,10 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef CONT_CAGG_H
-#define CONT_CAGG_H
+#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H
+#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H
+#include <postgres.h>
+#include <nodes/parsenodes.h>
 
 bool tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt);
-#endif
+#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H */
