@@ -61,7 +61,7 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 
 -- test constraint aware append with parallel aggregation
 SET max_parallel_workers_per_gather = 1;
-:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+EXPLAIN (costs off) SELECT count(*) FROM "test" WHERE length(version()) > 0;
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
 SET max_parallel_workers_per_gather = 4;
 
