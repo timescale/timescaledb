@@ -23,7 +23,9 @@
 #include <catalog/pg_aggregate.h>
 #include <catalog/toasting.h>
 #include <catalog/pg_collation.h>
+#include <catalog/pg_trigger.h>
 #include <commands/tablecmds.h>
+#include <commands/trigger.h>
 #include <commands/view.h>
 #include <access/xact.h>
 #include <access/reloptions.h>
@@ -49,17 +51,19 @@
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "continuous_aggs/job.h"
+#include "dimension.h"
+#include "continuous_agg.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
 #define TIMEBUCKETFN "time_bucket"
-#define HTCREATEFN "create_hypertable"
 #define CHUNKTUPFN "chunk_for_tuple"
 
 #define MATCHUNKCOLNM "chunk_id"
 #define MATPARTCOLNM "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
+#define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
 
 /*switch to ts user for _timescaledb_internal access */
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
@@ -183,7 +187,8 @@ static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matco
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
-						 char *partial_schema, char *partial_view, int64 bucket_width, int32 job_id)
+						 char *partial_schema, char *partial_view, int64 bucket_width, int32 job_id,
+						 Query *userquery_parse)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -192,6 +197,7 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	Datum values[Natts_continuous_agg];
 	bool nulls[Natts_continuous_agg] = { false };
 	CatalogSecurityContext sec_ctx;
+	char *userview_query = nodeToString(userquery_parse);
 
 	namestrcpy(&user_schnm, user_schema);
 	namestrcpy(&user_viewnm, user_view);
@@ -215,6 +221,8 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] =
 		ts_continuous_agg_job_get_default_refresh_lag(bucket_width);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_query)] =
+		CStringGetTextDatum(userview_query);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -257,6 +265,38 @@ cagg_create_hypertable(Oid mat_tbloid, const char *matpartcolname, int64 mat_tbl
 				 errmsg("continuous agg could not create hypertable for relid")));
 	}
 }
+
+/* add continuous agg invalidation trigger to hypertable
+ * relid - oid of hypertable
+ * trigarg - argument to pass to trigger (the hypertable id from timescaledb catalog as a string)
+ */
+static void
+cagg_add_trigger_hypertable(Oid relid, char *trigarg)
+{
+	ObjectAddress objaddr;
+	char *relname = get_rel_name(relid);
+	Oid schemaid = get_rel_namespace(relid);
+	char *schema = get_namespace_name(schemaid);
+
+	CreateTrigStmt stmt = {
+		.type = T_CreateTrigStmt,
+		.row = true,
+		.timing = TRIGGER_TYPE_AFTER,
+		.trigname = CAGGINVAL_TRIGGER_NAME,
+		.relation = makeRangeVar(schema, relname, -1),
+		.funcname =
+			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
+		.args = list_make1(makeString(trigarg)),
+		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
+	};
+	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
+
+	if (!OidIsValid(objaddr.objectId))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not create continuous aggregate trigger")));
+}
+
 /*
  * Create the materialization hypertable root by faking up a
  * CREATE TABLE parsetree and passing it to DefineRelation.
@@ -1326,6 +1366,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	RangeVar *part_rel = NULL, *mat_rel = NULL;
 	int32 mat_htid;
 	int32 job_id;
+	char trigarg[NAMEDATALEN];
+	int ret;
 
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, panquery->groupClause);
 	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
@@ -1365,7 +1407,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	create_view_for_query(partial_selquery, part_rel);
 
 	Assert(mat_rel != NULL);
-	/* Step 4 register the BGW job */
+	/* Step 4a register the BGW job */
 	job_id = ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width);
 
 	/* Step 4 add catalog table entry for the objects we just created */
@@ -1377,7 +1419,16 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 							 part_rel->schemaname,
 							 part_rel->relname,
 							 origquery_ht->bucket_width,
-							 job_id);
+							 job_id,
+							 panquery);
+
+	/* create trigger on raw hypertable -specified in the user view query*/
+	ret = snprintf(trigarg, NAMEDATALEN, "%d", origquery_ht->htid);
+	if (ret < 0 || ret >= NAMEDATALEN)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("bad argument to continuous aggregate trigger")));
+	cagg_add_trigger_hypertable(origquery_ht->htoid, trigarg);
 
 	return;
 }

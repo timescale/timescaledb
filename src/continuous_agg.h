@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include <catalog.h>
+#define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
 typedef struct ContinuousAgg
 {

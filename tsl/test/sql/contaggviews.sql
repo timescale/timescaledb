@@ -54,11 +54,19 @@ group by time_bucket(1, a) , a ;
 
 select * from mat_m1 order by a ;
 
+--check triggers on user hypertable --
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class  
+where tgrelid = pg_class.oid and pg_class.relname like 'foo'
+order by tgname;
 
-drop view mat_m1 cascade;
-SELECT * FROM _timescaledb_config.bgw_job;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- TEST2 ---
+drop view mat_m1 cascade;
+
+SELECT * FROM _timescaledb_config.bgw_job;
+
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -76,7 +84,7 @@ insert into conditions values ( '2018-11-01 09:00:00-08', 'NYC', 45, 35);
 insert into conditions values ( '2018-11-02 09:00:00-08', 'NYC', 35, 15);
 
 
-create or replace view mat_m2( timec, minl, sumt , sumh)
+create or replace view mat_m1( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
@@ -84,7 +92,7 @@ from conditions
 group by time_bucket('1day', timec);
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m2tab
+insert into  _timescaledb_internal.ts_internal_mat_m1tab
 select
  time_bucket('1day', timec), _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity))
 ,1
@@ -94,7 +102,7 @@ group by time_bucket('1day', timec) ;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --should have same results --
 select timec, minl, sumt, sumh
-from mat_m2
+from mat_m1
 order by timec;
 
 select time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
@@ -108,51 +116,51 @@ order by 1;
 
 drop table conditions cascade;
 
-CREATE TABLE conditions2 (
+CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
       humidity    DOUBLE PRECISION  NULL
     );
 
-select table_name from create_hypertable( 'conditions2', 'timec');
+select table_name from create_hypertable( 'conditions', 'timec');
 
-insert into conditions2 values ( '2010-01-01 09:00:00-08', 'SFO', 55, 45);
-insert into conditions2 values ( '2010-01-02 09:00:00-08', 'por', 100, 100);
-insert into conditions2 values ( '2010-01-02 09:00:00-08', 'NYC', 65, 45);
-insert into conditions2 values ( '2010-01-02 09:00:00-08', 'SFO', 65, 45);
-insert into conditions2 values ( '2010-01-03 09:00:00-08', 'NYC', 45, 55);
-insert into conditions2 values ( '2010-01-05 09:00:00-08', 'SFO', 75, 100);
-insert into conditions2 values ( '2018-11-01 09:00:00-08', 'NYC', 45, 35);
-insert into conditions2 values ( '2018-11-02 09:00:00-08', 'NYC', 35, 15);
-insert into conditions2 values ( '2018-11-03 09:00:00-08', 'NYC', 35, 25);
+insert into conditions values ( '2010-01-01 09:00:00-08', 'SFO', 55, 45);
+insert into conditions values ( '2010-01-02 09:00:00-08', 'por', 100, 100);
+insert into conditions values ( '2010-01-02 09:00:00-08', 'NYC', 65, 45);
+insert into conditions values ( '2010-01-02 09:00:00-08', 'SFO', 65, 45);
+insert into conditions values ( '2010-01-03 09:00:00-08', 'NYC', 45, 55);
+insert into conditions values ( '2010-01-05 09:00:00-08', 'SFO', 75, 100);
+insert into conditions values ( '2018-11-01 09:00:00-08', 'NYC', 45, 35);
+insert into conditions values ( '2018-11-02 09:00:00-08', 'NYC', 35, 15);
+insert into conditions values ( '2018-11-03 09:00:00-08', 'NYC', 35, 25);
 
 
-create or replace view mat_m3( timec, minl, sumth, stddevh)
+create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 group by time_bucket('1week', timec) ;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m3tab
+insert into  _timescaledb_internal.ts_internal_mat_m1tab
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
-from conditions2
+from conditions
 group by time_bucket('1week', timec) ;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --should have same results --
 select timec, minl, sumth, stddevh
-from mat_m3
+from mat_m1
 order by timec;
 
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+ sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 group by time_bucket('1week', timec)
 order by time_bucket('1week', timec);
 
@@ -163,69 +171,69 @@ order by time_bucket('1week', timec);
 -- TODO catalog entry should get deleted?
 
 -- apply where clause on result of mat_m1 --
-drop view mat_m3 cascade;
-create or replace view mat_m4( timec, minl, sumth, stddevh)
+drop view mat_m1 cascade;
+create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec)
 ;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m4tab
+insert into  _timescaledb_internal.ts_internal_mat_m1tab
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
-from conditions2
+from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec) ;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --should have same results --
 select timec, minl, sumth, stddevh
-from mat_m4
+from mat_m1
 where stddevh is not null
 order by timec;
 
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+ sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec)
 order by time_bucket('1week', timec);
 
 -- TEST5 --
 ---------test with having clause ----------------------
-drop view mat_m4 cascade;
-create or replace view mat_m5( timec, minl, sumth, stddevh)
+drop view mat_m1 cascade;
+create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 group by time_bucket('1week', timec)
 having stddev(humidity) is not null;
 ;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m5tab
+insert into  _timescaledb_internal.ts_internal_mat_m1tab
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
-from conditions2
+from conditions
 group by time_bucket('1week', timec) ;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- should have same results --
-select * from mat_m5
+select * from mat_m1
 order by sumth;
 
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions2
+from conditions
 group by time_bucket('1week', timec)
 having stddev(humidity) is not null
 order by sum(temperature)+sum(humidity);
@@ -234,9 +242,9 @@ order by sum(temperature)+sum(humidity);
 --group by with more than 1 group column
 -- having clause with a mix of columns from select list + others
 
-drop table conditions2 cascade;
+drop table conditions cascade;
 
-CREATE TABLE conditions3 (
+CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
@@ -245,68 +253,65 @@ CREATE TABLE conditions3 (
       highp       numeric null
     );
 
-select table_name from create_hypertable( 'conditions3', 'timec');
+select table_name from create_hypertable( 'conditions', 'timec');
 
-insert into conditions3
+insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75, 40, 70;
-insert into conditions3
+insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 35, 45, 50, 40;
-insert into conditions3
+insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, 71, 28;
 
-create or replace view mat_m6( timec, minl, sumth, stddevh)
+--drop view mat_m1 cascade;
+create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions3
+from conditions
 group by  time_bucket('1week', timec)
 having min(location) >= 'NYC' and avg(temperature) > 20
 ;
 
 select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
-(Select oid from pg_class where relname like 'ts_internal_mat_m6tab')
+(Select oid from pg_class where relname like 'ts_internal_mat_m1tab')
 order by attnum, attname;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m6tab
+insert into  _timescaledb_internal.ts_internal_mat_m1tab
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,_timescaledb_internal.partialize_agg( avg(temperature))
 ,1
-from conditions3
+from conditions
 group by time_bucket('1week', timec) ;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --should have same results --
 select timec, minl, sumth, stddevh
-from mat_m6
+from mat_m1
 order by timec, minl;
 
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
-from conditions3
+from conditions
 group by  time_bucket('1week', timec)
 having min(location) >= 'NYC' and avg(temperature) > 20 and avg(lowp) > 10
 order by time_bucket('1week', timec), min(location);
 
---TEST6 -- catalog entries and select from internal view
---check the entry in the catalog tables --
-select partial_view_name from _timescaledb_catalog.continuous_agg where user_view_name like 'mat_m6';
+--TEST6 -- select from internal view
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into _timescaledb_internal.ts_internal_mat_m6tab
-select * from _timescaledb_internal.ts_internal_mat_m6view;
+insert into _timescaledb_internal.ts_internal_mat_m1tab
+select * from _timescaledb_internal.ts_internal_mat_m1view;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --lets drop the view and check
-drop view mat_m6 cascade;
---TODO does not work --
---select partial_view_name from _timescaledb_catalog.continuous_agg where user_view_name like 'mat_m6';
+drop view mat_m1 cascade;
 
-drop table conditions3;
-CREATE TABLE conditions4 (
+drop table conditions;
+CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
@@ -316,13 +321,13 @@ CREATE TABLE conditions4 (
       allnull     double precision null
     );
 
-select table_name from create_hypertable( 'conditions4', 'timec');
+select table_name from create_hypertable( 'conditions', 'timec');
 
-insert into conditions4
+insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75, 40, 70, NULL;
-insert into conditions4
+insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 35, 45, 50, 40, NULL;
-insert into conditions4
+insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
 
 
@@ -330,7 +335,7 @@ SELECT
   $$
   select time_bucket('1week', timec) ,
   min(location) as col1, sum(temperature)+sum(humidity) as col2, stddev(humidity) as col3, min(allnull) as col4
-  from conditions4
+  from conditions
   group by  time_bucket('1week', timec)
   having min(location) >= 'NYC' and avg(temperature) > 20
   $$ AS "QUERY"
@@ -345,7 +350,7 @@ SELECT
   $$
   select time_bucket('1week', timec), location,
   sum(temperature)+sum(humidity) as col2, stddev(humidity) as col3, min(allnull) as col4
-  from conditions4
+  from conditions
   group by location, time_bucket('1week', timec)
   $$ AS "QUERY"
 \gset
@@ -354,6 +359,7 @@ SELECT
 \ir include/cont_agg_equal.sql
 \set ECHO all
 
+--TEST7 -- drop tests for view and hypertable
 --DROP tests
 \set ON_ERROR_STOP 0
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
@@ -394,8 +400,8 @@ select count(*) from pg_class where relname = 'mat_test';
 
 
 --test dropping raw table
-DROP TABLE conditions4;
-CREATE TABLE conditions5 (
+DROP TABLE conditions;
+CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
@@ -405,7 +411,7 @@ CREATE TABLE conditions5 (
       allnull     double precision null
     );
 
-select table_name from create_hypertable( 'conditions5', 'timec');
+select table_name from create_hypertable( 'conditions', 'timec');
 
 --no data in hyper table on purpose so that CASCADE is not required because of chunks
 
@@ -413,13 +419,11 @@ create or replace view mat_drop_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous_agg = 'start')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
-from conditions5
+from conditions
 group by time_bucket('1day', timec);
 
-SELECT * FROM _timescaledb_config.bgw_job;
-
 \set ON_ERROR_STOP 0
-DROP TABLE conditions5;
+DROP TABLE conditions;
 \set ON_ERROR_STOP 1
 
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
@@ -431,7 +435,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
-DROP TABLE conditions5 CASCADE;
+DROP TABLE conditions CASCADE;
 
 --catalog entry should be gone
 SELECT count(*)

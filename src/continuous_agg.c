@@ -14,6 +14,8 @@
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <storage/lmgr.h>
+#include <catalog/pg_trigger.h>
+#include <commands/trigger.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
@@ -73,8 +75,11 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 /*
  * Drops continuous aggs and all related objects.
  *
- * These objects are: the user view itself, the catalog entry, the partial view,
- * the materialization hypertable.
+ * These objects are: the user view itself, the catalog entry in
+ * continuous-agg , the partial view,
+ * the materialization hypertable and
+ * trigger on the raw hypertable (hypertable specified in the user view ).
+ * NOTE: The order in which the objects are dropped should be EXACTLy same as in materialize.c"
  *
  * drop_user_view indicates whether to drop the user view.
  *                (should be false if called as part of the drop-user-view callback)
@@ -84,9 +89,10 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
-	ObjectAddress user_view, partial_view;
-	Hypertable *mat_hypertable;
+	ObjectAddress user_view, partial_view, rawht_trig;
+	Hypertable *mat_hypertable, *raw_hypertable;
 	int count = 0;
+	Oid rawht_trigoid;
 
 	/* NOTE: the order in which we drop matters, it must obey obey the lock order,
 	 *       see tsl/src/materialization.c
@@ -119,6 +125,20 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		count++;
 	}
 	Assert(count == 1);
+
+	/* drop the invalidation trigger on the raw hypertable if the table
+	 * has not been dropped already
+	 */
+	raw_hypertable = ts_hypertable_get_by_id(agg->data.raw_hypertable_id);
+	if (raw_hypertable && raw_hypertable->main_table_relid != InvalidOid)
+	{
+		rawht_trigoid =
+			get_trigger_oid(raw_hypertable->main_table_relid, CAGGINVAL_TRIGGER_NAME, false);
+		rawht_trig = (ObjectAddress){ .classId = TriggerRelationId,
+									  .objectId = rawht_trigoid,
+									  .objectSubId = 0 };
+		performDeletion(&rawht_trig, DROP_RESTRICT, 0);
+	}
 
 	/* delete the materialization table */
 	ts_hypertable_drop(mat_hypertable);
