@@ -414,3 +414,7 @@ SELECT materialization_id, watermark
 SELECT hypertable_id, watermark
     FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
     WHERE hypertable_id=:raw_table_id;
+
+--cleanup of continuous agg views --
+drop view test_t_mat_view cascade;
+drop view extreme_view cascade;
