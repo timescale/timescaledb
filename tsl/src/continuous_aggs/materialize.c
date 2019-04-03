@@ -59,10 +59,13 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 void
 continous_agg_materialize(int32 materialization_id, bool verbose)
 {
+	Oid raw_table_oid;
+	Relation raw_table_relation;
 	Oid materialization_table_oid;
 	Relation materialization_table_relation;
 	Oid partial_view_oid;
 	Relation partial_view_relation;
+	LockRelId raw_lock_relid;
 	LockRelId materialization_lock_relid;
 	LockRelId partial_view_lock_relid;
 	Form_continuous_agg cagg;
@@ -92,14 +95,21 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	/* We're going to close this transaction, so SessionLock the objects we are using for this
 	 * materialization to ensure they're not alter in a way which would invalidate our work.
 	 * We need to lock:
+	 *     The raw table, to prevent it from being ALTERed too much
 	 *     The materialization table, to prevent concurrent materializations
 	 *     The partial_view, to prevent it from being renamed (we pass the names across
 	 * transactions) and to prevent the view definition from being altered We still wish to allow
-	 * SELECTs on all of these Continuous aggregate state should be locked in the order user view
-	 *    raw hypertable
+	 * SELECTs on all of these Continuous aggregate state should be locked in the order
+	 *    raw hypertable / user view
 	 *    materialization table
 	 *    partial view
 	 */
+	raw_table_oid = ts_hypertable_get_by_id(cagg_data.raw_hypertable_id)->main_table_relid;
+	raw_table_relation = relation_open(raw_table_oid, AccessShareLock);
+	raw_lock_relid = raw_table_relation->rd_lockInfo.lockRelId;
+	LockRelationIdForSession(&raw_lock_relid, AccessShareLock);
+	relation_close(raw_table_relation, NoLock);
+
 	materialization_table_oid =
 		ts_hypertable_get_by_id(cagg_data.mat_hypertable_id)->main_table_relid;
 	materialization_table_relation =
@@ -122,9 +132,7 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	new_invalidation_threshold =
 		get_materialization_end_point_for_table(cagg_data.raw_hypertable_id,
 												materialization_id,
-												// TODO this should be a seperate value, possibly in
-												// the job
-												cagg_data.bucket_width,
+												cagg_data.refresh_lag,
 												cagg_data.bucket_width,
 												&materializing_new_range,
 												verbose);
@@ -188,6 +196,7 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 finish:
 	UnlockRelationIdForSession(&partial_view_lock_relid, ShareRowExclusiveLock);
 	UnlockRelationIdForSession(&materialization_lock_relid, ShareRowExclusiveLock);
+	UnlockRelationIdForSession(&raw_lock_relid, AccessShareLock);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 }

@@ -146,7 +146,7 @@ scanner_ctx_get_scanner(ScannerCtx *ctx)
  *
  * Return the number of tuples that where found.
  */
-void
+TSDLLEXPORT void
 ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 {
 	TupleDesc tuple_desc;
@@ -177,7 +177,7 @@ ts_scanner_limit_reached(ScannerCtx *ctx, InternalScannerCtx *ictx)
 	return ctx->limit > 0 && ictx->tinfo.count >= ctx->limit;
 }
 
-void
+TSDLLEXPORT void
 ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 {
 	Scanner *scanner = scanner_ctx_get_scanner(ictx->sctx);
@@ -194,7 +194,7 @@ ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 	ictx->closed = true;
 }
 
-TupleInfo *
+TSDLLEXPORT TupleInfo *
 ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 {
 	Scanner *scanner = scanner_ctx_get_scanner(ctx);
@@ -245,7 +245,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
  *
  * Return the number of tuples that where found.
  */
-int
+TSDLLEXPORT int
 ts_scanner_scan(ScannerCtx *ctx)
 {
 	InternalScannerCtx ictx = { 0 };

@@ -16,8 +16,10 @@
 #include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
-
 #include "bgw_policy/reorder.h"
+#include "continuous_aggs/materialize.h"
+#include "continuous_aggs/job.h"
+
 #include "errors.h"
 #include "job.h"
 #include "hypertable.h"
@@ -174,6 +176,33 @@ execute_drop_chunks_policy(int32 job_id)
 	return true;
 }
 
+static bool
+execute_materialize_continuous_aggregate(int32 job_id)
+{
+	bool started = false;
+	int32 materialization_id;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+	}
+
+	materialization_id = ts_continuous_agg_job_find_materializtion_by_job_id(job_id);
+	if (materialization_id < 0)
+		elog(ERROR, "cannot find continuous aggregate for job %d", job_id);
+
+	CommitTransactionCommand();
+
+	/* always materialize verbosely for now */
+	continous_agg_materialize(materialization_id, true);
+
+	if (!started)
+		StartTransactionCommand();
+
+	return true;
+}
+
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
@@ -186,6 +215,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_reorder_policy(job, reorder_chunk, true);
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
+		case JOB_TYPE_CONTINUOUS_AGGREGATE:
+			return execute_materialize_continuous_aggregate(job->fd.id);
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid enterprise job type: \"%s\"",
