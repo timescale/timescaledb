@@ -618,13 +618,31 @@ SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name=
 CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON continuous_agg_test_t
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
-SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  |        partial_view_name        | bucket_width 
--------------------+-------------------+------------------+-----------------+-----------------------+---------------------------------+--------------
-                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | ts_internal_test_t_mat_viewview |   7200000000
+SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
+       partial_view_schema, partial_view_name,
+       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag),
+       job_id
+    FROM _timescaledb_catalog.continuous_agg;
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  |        partial_view_name        |      to_timestamp      | to_interval | job_id 
+-------------------+-------------------+------------------+-----------------+-----------------------+---------------------------------+------------------------+-------------+--------
+                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | ts_internal_test_t_mat_viewview | 1970-01-01 02:00:00+00 | @ 4 hours   |   1000
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.continuous_agg
+    SET refresh_lag=7200000000
+    WHERE mat_hypertable_id=:mat_hypertable_id;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
+SELECT _timescaledb_internal.to_interval(refresh_lag)
+    FROM _timescaledb_catalog.continuous_agg;
+ to_interval 
+-------------
+ @ 2 hours
+(1 row)
+
 SELECT * FROM test_t_mat_view;
  time_bucket | value 
 -------------+-------
@@ -867,8 +885,8 @@ SELECT hypertable_id, watermark
 INSERT INTO continuous_agg_extreme VALUES
     (:big_int_min+10, 11);
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  new materialization range for public.continuous_agg_extreme (time column time) (-9223372036854775799)
-INFO:  materializing continuous aggregate public.extreme_view: new range up to -9223372036854775799
+INFO:  new materialization range for public.continuous_agg_extreme (time column time) (-9223372036854775800)
+INFO:  materializing continuous aggregate public.extreme_view: new range up to -9223372036854775800
 SELECT * FROM extreme_view;
      time_bucket      | value 
 ----------------------+-------
@@ -880,7 +898,7 @@ SELECT materialization_id, watermark
     WHERE materialization_id=:mat_hypertable_id;
  materialization_id |      watermark       
 --------------------+----------------------
-                  8 | -9223372036854775799
+                  8 | -9223372036854775800
 (1 row)
 
 SELECT hypertable_id, watermark
@@ -888,34 +906,39 @@ SELECT hypertable_id, watermark
     WHERE hypertable_id=:raw_table_id;
  hypertable_id |      watermark       
 ---------------+----------------------
-             7 | -9223372036854775799
+             7 | -9223372036854775800
 (1 row)
 
 -- we don't materialize the max value, but attempting will materialize the entire
 -- table up to the materialization limit
 INSERT INTO continuous_agg_extreme VALUES
     (100,                     101),
+    (:big_int_max-5,          201),
+    (:big_int_max-4,          201),
+    (:big_int_max-3,          201),
     (:big_int_max-2,          201),
     (:big_int_max-1,          201),
     (:big_int_max,   :big_int_max);
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  new materialization range for public.continuous_agg_extreme (time column time) (9223372036854775806)
-INFO:  materializing continuous aggregate public.extreme_view: new range up to 9223372036854775806
+INFO:  new materialization range for public.continuous_agg_extreme (time column time) (9223372036854775805)
+INFO:  materializing continuous aggregate public.extreme_view: new range up to 9223372036854775805
 SELECT * FROM extreme_view ORDER BY 1;
      time_bucket      | value 
 ----------------------+-------
  -9223372036854775808 |     1
  -9223372036854775798 |    11
                   100 |   101
-  9223372036854775805 |   201
-(4 rows)
+  9223372036854775802 |   201
+  9223372036854775803 |   201
+  9223372036854775804 |   201
+(6 rows)
 
 SELECT materialization_id, watermark
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id=:mat_hypertable_id;
  materialization_id |      watermark      
 --------------------+---------------------
-                  8 | 9223372036854775806
+                  8 | 9223372036854775805
 (1 row)
 
 SELECT hypertable_id, watermark
@@ -923,6 +946,6 @@ SELECT hypertable_id, watermark
     WHERE hypertable_id=:raw_table_id;
  hypertable_id |      watermark      
 ---------------+---------------------
-             7 | 9223372036854775806
+             7 | 9223372036854775805
 (1 row)
 

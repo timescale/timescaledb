@@ -13,7 +13,7 @@ ts_scan_iterator_close(ScanIterator *iterator)
 	ts_scanner_end_scan(&iterator->ctx, &iterator->ictx);
 }
 
-void
+TSDLLEXPORT void
 ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumber,
 							   StrategyNumber strategy, RegProcedure procedure, Datum argument)
 {

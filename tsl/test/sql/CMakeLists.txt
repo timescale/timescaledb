@@ -11,6 +11,7 @@ set(TEST_FILES
 )
 
 set(TEST_FILES_DEBUG
+    bgw_continuous_aggs
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
     ddl_hook.sql

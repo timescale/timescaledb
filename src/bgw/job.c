@@ -33,6 +33,7 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
 	[JOB_TYPE_REORDER] = "reorder",
 	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
+	[JOB_TYPE_CONTINUOUS_AGGREGATE] = "continuous_aggregate",
 	[JOB_TYPE_UNKNOWN] = "unknown",
 };
 
@@ -308,6 +309,7 @@ ts_bgw_job_execute(BgwJob *job)
 		}
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_DROP_CHUNKS:
+		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return ts_cm_functions->bgw_policy_job_execute(job);
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
