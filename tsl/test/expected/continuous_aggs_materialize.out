@@ -949,3 +949,8 @@ SELECT hypertable_id, watermark
              7 | 9223372036854775805
 (1 row)
 
+--cleanup of continuous agg views --
+drop view test_t_mat_view cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_16_chunk
+drop view extreme_view cascade;
+NOTICE:  drop cascades to 4 other objects

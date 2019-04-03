@@ -73,7 +73,7 @@ CREATE TRIGGER continuous_agg_insert_trigger
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 
 -- min distance from end should be 1
-SELECT * FROM _timescaledb_catalog.continuous_agg;
+SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
 SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
 
 -- job was created

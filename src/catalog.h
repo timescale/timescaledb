@@ -796,6 +796,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_bucket_width,
 	Anum_continuous_agg_job_id,
 	Anum_continuous_agg_refresh_lag,
+	Anum_continuous_agg_user_view_query,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -812,6 +813,7 @@ typedef struct FormData_continuous_agg
 	int64 bucket_width;
 	int32 job_id;
 	int64 refresh_lag;
+	void * user_view_query; /* use heap_get_attr to access this */
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
