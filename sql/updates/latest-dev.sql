@@ -8,8 +8,12 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     user_view_schema NAME NOT NULL,
     user_view_name NAME NOT NULL,
     partial_view_schema NAME NOT NULL,
-    partial_view_name    NAME NOT NULL,
-    bucket_width  BIGINT NOT NULL
+    partial_view_name NAME NOT NULL,
+    bucket_width  BIGINT NOT NULL,
+    job_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE RESTRICT,
+    refresh_lag BIGINT NOT NULL,
+    UNIQUE(user_view_schema, user_view_name),
+    UNIQUE(partial_view_schema, partial_view_name)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 

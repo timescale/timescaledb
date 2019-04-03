@@ -270,8 +270,22 @@ CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON continuous_agg_test_t
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 
-SELECT * FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
+       partial_view_schema, partial_view_name,
+       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag),
+       job_id
+    FROM _timescaledb_catalog.continuous_agg;
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.continuous_agg
+    SET refresh_lag=7200000000
+    WHERE mat_hypertable_id=:mat_hypertable_id;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET SESSION timezone TO 'UTC';
+SET SESSION datestyle TO 'ISO';
+
+SELECT _timescaledb_internal.to_interval(refresh_lag)
+    FROM _timescaledb_catalog.continuous_agg;
 
 SELECT * FROM test_t_mat_view;
 SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
@@ -385,6 +399,9 @@ SELECT hypertable_id, watermark
 -- table up to the materialization limit
 INSERT INTO continuous_agg_extreme VALUES
     (100,                     101),
+    (:big_int_max-5,          201),
+    (:big_int_max-4,          201),
+    (:big_int_max-3,          201),
     (:big_int_max-2,          201),
     (:big_int_max-1,          201),
     (:big_int_max,   :big_int_max);

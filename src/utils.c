@@ -300,6 +300,18 @@ ts_internal_to_time_value(int64 value, Oid type)
 	}
 }
 
+TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
+
+Datum
+ts_pg_unix_microseconds_to_interval(PG_FUNCTION_ARGS)
+{
+	int64 microseconds = PG_GETARG_INT64(0);
+	Interval *interval = palloc0(sizeof(*interval));
+	interval->day = microseconds / USECS_PER_DAY;
+	interval->time = microseconds % USECS_PER_DAY;
+	PG_RETURN_INTERVAL_P(interval);
+}
+
 TSDLLEXPORT Datum
 ts_internal_to_interval_value(int64 value, Oid type)
 {
@@ -310,12 +322,7 @@ ts_internal_to_interval_value(int64 value, Oid type)
 		case INT8OID:
 			return ts_integer_to_internal_value(value, type);
 		case INTERVALOID:
-		{
-			Interval *interval = palloc0(sizeof(*interval));
-			interval->day = value / USECS_PER_DAY;
-			interval->time = value % USECS_PER_DAY;
-			return IntervalPGetDatum(interval);
-		}
+			return DirectFunctionCall1(ts_pg_unix_microseconds_to_interval, Int64GetDatum(value));
 		default:
 			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
 	}

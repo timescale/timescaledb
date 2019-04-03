@@ -794,6 +794,8 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
 	Anum_continuous_agg_bucket_width,
+	Anum_continuous_agg_job_id,
+	Anum_continuous_agg_refresh_lag,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -808,15 +810,38 @@ typedef struct FormData_continuous_agg
 	NameData partial_view_schema;
 	NameData partial_view_name;
 	int64 bucket_width;
+	int32 job_id;
+	int64 refresh_lag;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
 
 enum
 {
-	CONTINUOUS_AGG_PKEY = 0,
+	CONTINUOUS_AGG_JOB_ID_KEY = 0,
+	CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY,
+	CONTINUOUS_AGG_PKEY,
+	CONTINUOUS_AGG_USER_VIEW_SCHEMA_USER_VIEW_NAME_KEY,
 	_MAX_CONTINUOUS_AGG_INDEX,
 };
+typedef enum Anum_continuous_agg_job_id_key
+{
+	Anum_continuous_agg_job_id_key_job_id = 1,
+	_Anum_continuous_agg_job_id_key_max,
+} Anum_continuous_agg_job_id_key;
+
+#define Natts_continuous_agg_job_id_key (_Anum_continuous_agg_job_id_key_max - 1)
+
+typedef enum Anum_continuous_agg_partial_view_schema_partial_view_name_key
+{
+	Anum_continuous_agg_partial_view_schema_partial_view_name_key_partial_view_schema = 1,
+	Anum_continuous_agg_partial_view_schema_partial_view_name_key_partial_view_name,
+	_Anum_continuous_agg_partial_view_schema_partial_view_name_key_max,
+} Anum_continuous_agg_partial_view_schema_partial_view_name_key;
+
+#define Natts_continuous_agg_partial_view_schema_partial_view_name_key                             \
+	(_Anum_continuous_agg_partial_view_schema_partial_view_name_key_max - 1)
+
 typedef enum Anum_continuous_agg_pkey
 {
 	Anum_continuous_agg_pkey_mat_hypertable_id = 1,
@@ -824,6 +849,16 @@ typedef enum Anum_continuous_agg_pkey
 } Anum_continuous_agg_pkey;
 
 #define Natts_continuous_agg_pkey (_Anum_continuous_agg_pkey_max - 1)
+
+typedef enum Anum_continuous_agg_user_view_schema_user_view_name_key
+{
+	Anum_continuous_agg_user_view_schema_user_view_name_key_user_view_schema = 1,
+	Anum_continuous_agg_user_view_schema_user_view_name_key_user_view_name,
+	_Anum_continuous_agg_user_view_schema_user_view_name_key_max,
+} Anum_continuous_agg_user_view_schema_user_view_name_key;
+
+#define Natts_continuous_agg_user_view_schema_user_view_name_key                                   \
+	(_Anum_continuous_agg_user_view_schema_user_view_name_key_max - 1)
 
 /****** CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE definitions*/
 #define CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME "continuous_aggs_completed_threshold"

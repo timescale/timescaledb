@@ -148,17 +148,6 @@ CREATE INDEX IF NOT EXISTS chunk_index_hypertable_id_hypertable_index_name_idx
 ON _timescaledb_catalog.chunk_index(hypertable_id, hypertable_index_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
-    mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    raw_hypertable_id INTEGER NOT NULL REFERENCES  _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    user_view_schema NAME NOT NULL,
-    user_view_name NAME NOT NULL,
-    partial_view_schema NAME NOT NULL,
-    partial_view_name    NAME NOT NULL,
-    bucket_width  BIGINT NOT NULL
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
-
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
@@ -230,6 +219,21 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.telemetry_metadata (
     value   TEXT NOT NULL
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.telemetry_metadata', $$WHERE key='exported_uuid'$$);
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
+    mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    raw_hypertable_id INTEGER NOT NULL REFERENCES  _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    user_view_schema NAME NOT NULL,
+    user_view_name NAME NOT NULL,
+    partial_view_schema NAME NOT NULL,
+    partial_view_name NAME NOT NULL,
+    bucket_width  BIGINT NOT NULL,
+    job_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE RESTRICT,
+    refresh_lag BIGINT NOT NULL,
+    UNIQUE(user_view_schema, user_view_name),
+    UNIQUE(partial_view_schema, partial_view_name)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_threshold(
     hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
