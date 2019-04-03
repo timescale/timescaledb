@@ -11,15 +11,18 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <access/htup_details.h>
-#include <utils/builtins.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
+#include <storage/lmgr.h>
+#include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
-#include "scan_iterator.h"
+#include "compat.h"
+
+#include "bgw/job.h"
 #include "continuous_agg.h"
 #include "hypertable.h"
-#include "compat.h"
+#include "scan_iterator.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -85,6 +88,10 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	Hypertable *mat_hypertable;
 	int count = 0;
 
+	/* NOTE: the order in which we drop matters, it must obey obey the lock order,
+	 *       see tsl/src/materialization.c
+	 */
+	// TODO decide on where the bgw job table should be locked
 	/* Delete view itself */
 	if (drop_user_view)
 	{
@@ -94,36 +101,39 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 				get_relname_relid(NameStr(agg->data.user_view_name),
 								  get_namespace_oid(NameStr(agg->data.user_view_schema), false)),
 		};
+		LockRelationOid(user_view.objectId, AccessExclusiveLock);
 		performDeletion(&user_view, DROP_RESTRICT, 0);
 	}
 
 	/* Delete catalog entry. */
+	mat_hypertable = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
 	init_scan_by_mat_hypertable_id(&iterator, agg->data.mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		HeapTuple tuple = ti->tuple;
+		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
+		/* delete the job */
+		ts_bgw_job_delete_by_id(form->job_id);
 		ts_catalog_delete(ti->scanrel, ti->tuple);
 		count++;
 	}
 	Assert(count == 1);
 
-	/* Drop partial view, materialized table */
+	/* delete the materialization table */
+	ts_hypertable_drop(mat_hypertable);
+
+	/* Drop partial view */
 	partial_view = (ObjectAddress){
 		.classId = RelationRelationId,
 		.objectId =
 			get_relname_relid(NameStr(agg->data.partial_view_name),
 							  get_namespace_oid(NameStr(agg->data.partial_view_schema), false)),
 	};
-
 	/* The partial view may already be dropped by PG's dependency system (e.g. the raw table was
 	 * dropped) */
 	if (OidIsValid(partial_view.objectId))
 		performDeletion(&partial_view, DROP_RESTRICT, 0);
-
-	mat_hypertable = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
-
-	/* Drop materialized hypertable */
-	ts_hypertable_drop(mat_hypertable);
 }
 
 /*

@@ -9,6 +9,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTA
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
     AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_interval(unixtime_us BIGINT) RETURNS INTERVAL
+    AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_interval' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
 -- with or without timezones). In metatables and other internal systems all time values are stored as bigint.
 -- Converting from int* columns to internal representation is a cast to bigint.

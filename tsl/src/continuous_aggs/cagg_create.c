@@ -39,13 +39,16 @@
 #include <utils/catcache.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
+
 #include "cagg_create.h"
+
 #include "catalog.h"
 #include "compat.h"
-#include "hypertable_cache.h"
-#include "extension_constants.h"
-#include "hypertable.h"
 #include "dimension.h"
+#include "extension_constants.h"
+#include "hypertable_cache.h"
+#include "hypertable.h"
+#include "continuous_aggs/job.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -180,7 +183,7 @@ static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matco
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
-						 char *partial_schema, char *partial_view, int64 bucket_width)
+						 char *partial_schema, char *partial_view, int64 bucket_width, int32 job_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -209,6 +212,10 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&partial_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = bucket_width;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] =
+		ts_continuous_agg_job_get_default_refresh_lag(bucket_width);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
@@ -1318,6 +1325,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL;
 	int32 mat_htid;
+	int32 job_id;
 
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, panquery->groupClause);
 	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
@@ -1357,6 +1365,9 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	create_view_for_query(partial_selquery, part_rel);
 
 	Assert(mat_rel != NULL);
+	/* Step 4 register the BGW job */
+	job_id = ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width);
+
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 	create_cagg_catlog_entry(mat_htid,
@@ -1365,7 +1376,9 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 							 stmt->view->relname,
 							 part_rel->schemaname,
 							 part_rel->relname,
-							 origquery_ht->bucket_width);
+							 origquery_ht->bucket_width,
+							 job_id);
+
 	return;
 }
 
