@@ -65,8 +65,8 @@ SELECT * FROM timescaledb_information.policy_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag 
--------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | user_view_query 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+-----------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -90,10 +90,10 @@ CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON test_continuous_agg_table
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 -- min distance from end should be 1
-SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema |      user_view_name      |  partial_view_schema  |            partial_view_name             | bucket_width | job_id | refresh_lag 
--------------------+-------------------+------------------+--------------------------+-----------------------+------------------------------------------+--------------+--------+-------------
-                 2 |                 1 | public           | test_continuous_agg_view | _timescaledb_internal | ts_internal_test_continuous_agg_viewview |            2 |   1000 |           4
+SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
+ mat_hypertable_id | user_view_schema |      user_view_name      | bucket_width | job_id | refresh_lag 
+-------------------+------------------+--------------------------+--------------+--------+-------------
+                 2 | public           | test_continuous_agg_view |            2 |   1000 |           4
 (1 row)
 
 SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
