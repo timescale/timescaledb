@@ -190,23 +190,22 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 
 -- test constraint aware append with parallel aggregation
 SET max_parallel_workers_per_gather = 1;
-:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Gather (actual rows=2 loops=1)
+EXPLAIN (costs off) SELECT count(*) FROM "test" WHERE length(version()) > 0;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
          Workers Planned: 1
-         Workers Launched: 1
-         ->  Partial Aggregate (actual rows=1 loops=2)
-               ->  Result (actual rows=500000 loops=2)
+         ->  Partial Aggregate
+               ->  Result
                      One-Time Filter: (length(version()) > 0)
-                     ->  Custom Scan (ConstraintAwareAppend) (actual rows=500000 loops=2)
+                     ->  Custom Scan (ConstraintAwareAppend)
                            Hypertable: test
                            Chunks left after exclusion: 2
-                           ->  Append (actual rows=500000 loops=2)
-                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=250000 loops=2)
-                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
-(13 rows)
+                           ->  Append
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk
+(12 rows)
 
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
   count  
