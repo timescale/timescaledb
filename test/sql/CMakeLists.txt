@@ -3,7 +3,6 @@ set(TEST_FILES
   agg_bookends_results_diff.sql
   alter.sql
   append.sql
-  c_unit_tests.sql
   chunk_adaptive.sql
   chunk_utils.sql
   chunks.sql
@@ -88,6 +87,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
     bgw_launcher.sql
     bgw_db_scheduler.sql
+    c_unit_tests.sql
     installation_metadata.sql
     loader.sql
     multi_transaction_index.sql
