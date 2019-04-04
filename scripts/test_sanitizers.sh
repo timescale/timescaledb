@@ -45,8 +45,9 @@ cleanup() {
         docker rm -vf timescaledb-san 2>/dev/null
     else
         # docker logs timescaledb-san
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/test/regression.diffs /tsdb_build/timescaledb/build/tsl/test/regression.diffs"
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/test/log/postmaster.log"
+        # only print respective postmaster.log when regression.diffs exists
+        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/test/regression.diffs && cat /tsdb_build/timescaledb/build/test/log/postmaster.log"
+        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/tsl/test/regression.diffs && cat /tsdb_build/timescaledb/build/tsl/test/log/postmaster.log"
     fi
 
     echo "Exit status is $status"
