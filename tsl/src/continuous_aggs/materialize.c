@@ -59,8 +59,10 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 void
 continous_agg_materialize(int32 materialization_id, bool verbose)
 {
+	Hypertable *raw_hypertable;
 	Oid raw_table_oid;
 	Relation raw_table_relation;
+	Hypertable *materialization_table;
 	Oid materialization_table_oid;
 	Relation materialization_table_relation;
 	Oid partial_view_oid;
@@ -104,14 +106,21 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	 *    materialization table
 	 *    partial view
 	 */
-	raw_table_oid = ts_hypertable_get_by_id(cagg_data.raw_hypertable_id)->main_table_relid;
+	raw_hypertable = ts_hypertable_get_by_id(cagg_data.raw_hypertable_id);
+	if (raw_hypertable == NULL)
+		elog(ERROR, "hypertable dropped before materialization could start");
+
+	raw_table_oid = raw_hypertable->main_table_relid;
 	raw_table_relation = relation_open(raw_table_oid, AccessShareLock);
 	raw_lock_relid = raw_table_relation->rd_lockInfo.lockRelId;
 	LockRelationIdForSession(&raw_lock_relid, AccessShareLock);
 	relation_close(raw_table_relation, NoLock);
 
-	materialization_table_oid =
-		ts_hypertable_get_by_id(cagg_data.mat_hypertable_id)->main_table_relid;
+	materialization_table = ts_hypertable_get_by_id(cagg_data.mat_hypertable_id);
+	materialization_table_oid = materialization_table->main_table_relid;
+	if (materialization_table == NULL)
+		elog(ERROR, "materialization table dropped before materialization could start");
+
 	materialization_table_relation =
 		relation_open(materialization_table_oid, ShareRowExclusiveLock);
 	materialization_lock_relid = materialization_table_relation->rd_lockInfo.lockRelId;
@@ -121,6 +130,7 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	partial_view_oid =
 		get_relname_relid(NameStr(cagg_data.partial_view_name),
 						  get_namespace_oid(NameStr(cagg_data.partial_view_schema), false));
+	Assert(OidIsValid(partial_view_oid));
 	partial_view_relation = relation_open(partial_view_oid, ShareRowExclusiveLock);
 	partial_view_lock_relid = materialization_table_relation->rd_lockInfo.lockRelId;
 	LockRelationIdForSession(&partial_view_lock_relid, ShareRowExclusiveLock);
