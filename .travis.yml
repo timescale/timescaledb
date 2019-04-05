@@ -68,6 +68,17 @@ jobs:
         - git diff --exit-code
         - docker exec pgbuild /bin/bash -c "/tsdb_build/scripts/export_prefix_check.sh"
 
+    - if: (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Git hook tests"
+      before_install:
+      install:
+      after_failure:
+      after_script:
+      script:
+        - python2 ./scripts/githooks/commit_msg_tests.py
+        - python3 ./scripts/githooks/commit_msg_tests.py
+
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6"
