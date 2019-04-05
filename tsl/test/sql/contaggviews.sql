@@ -56,7 +56,7 @@ select * from mat_m1 order by a ;
 
 --check triggers on user hypertable --
 \c :TEST_DBNAME :ROLE_SUPERUSER
-select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class  
+select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class
 where tgrelid = pg_class.oid and pg_class.relname like 'foo'
 order by tgname;
 
@@ -426,7 +426,18 @@ group by time_bucket('1day', timec);
 DROP TABLE conditions;
 \set ON_ERROR_STOP 1
 
-SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+--insert data now
+
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75, 40, 70, NULL;
+insert into conditions
+select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 35, 45, 50, 40, NULL;
+insert into conditions
+select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
+
+
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
        partial_view_schema as "PART_VIEW_SCHEMA"
@@ -435,12 +446,25 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
+REFRESH MATERIALIZED VIEW mat_drop_test;
+
+--force invalidation
+insert into conditions
+select generate_series('2017-11-01 00:00'::timestamp, '2017-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
+
+select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
+select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
 DROP TABLE conditions CASCADE;
 
 --catalog entry should be gone
 SELECT count(*)
 FROM _timescaledb_catalog.continuous_agg ca
 WHERE user_view_name = 'mat_drop_test';
+select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
+select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
