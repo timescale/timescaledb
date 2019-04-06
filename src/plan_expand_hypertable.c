@@ -62,15 +62,11 @@ init_chunk_exclusion_func()
 }
 
 static bool
-is_chunk_exclusion_func(Node *node)
+is_chunk_exclusion_func(Expr *node)
 {
-	if (IsA(node, FuncExpr))
-	{
-		FuncExpr *explicit_exclusion = (FuncExpr *) node;
+	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == chunk_exclusion_func)
+		return true;
 
-		if (explicit_exclusion->funcid == chunk_exclusion_func)
-			return true;
-	}
 	return false;
 }
 
@@ -80,100 +76,87 @@ is_chunk_exclusion_func(Node *node)
  * to be as comprehensive as the PG native derivation. This is inspired
  * by the derivation in `deconstruct_recurse` in PG
  *
- * We also try to detect explicit chunk exclusion and validate it is properly used. If
- * explicit chunk exclusion function is detected we'll skip adding restrictions since
- * they will not be used anyway.
+ * When we detect explicit chunk exclusion with the chunks_in function
+ * we stop further processing and do an early exit.
  *
- * This method is modifying the query tree by removing `chunks_in` function node
- * from the WHERE clause. This is done to prevent the function from making the
- * planner believe that an index-only scan is not possible (since function is
- * only used to exclude chunks we actually don't need that function to run so it
- * can be removed).
+ * This function removes chunks_in from the list of quals, because chunks_in is
+ * just used as marker function to trigger explicit chunk exclusion and the function
+ * will throw an error when executed.
  */
 static Node *
-collect_quals_mutator(Node *node, CollectQualCtx *ctx)
+process_quals(Node *quals, CollectQualCtx *ctx)
+{
+	ListCell *lc;
+	ListCell *prev = NULL;
+
+	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
+	{
+		Expr *qual = lfirst(lc);
+		RestrictInfo *restrictinfo;
+		Relids relids = pull_varnos((Node *) qual);
+
+		/*
+		 * skip expressions not for current rel
+		 */
+		if (bms_num_members(relids) != 1 || !bms_is_member(ctx->rel->relid, relids))
+			continue;
+
+		if (is_chunk_exclusion_func(qual))
+		{
+			FuncExpr *func_expr = (FuncExpr *) qual;
+
+			/* validation */
+			Assert(func_expr->args->length == 2);
+			if (!IsA(linitial(func_expr->args), Var))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("first parameter for chunks_in function needs to be record")));
+
+			ctx->chunk_exclusion_func = func_expr;
+			ctx->restrictions = NIL;
+			quals = (Node *) list_delete_cell((List *) quals, lc, prev);
+			return quals;
+		}
+
+#if PG96
+		restrictinfo = make_restrictinfo(qual, true, false, false, relids, NULL, NULL);
+#else
+		restrictinfo = make_restrictinfo(qual,
+										 true,
+										 false,
+										 false,
+										 ctx->root->qual_security_level,
+										 relids,
+										 NULL,
+										 NULL);
+#endif
+		ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+	}
+	return quals;
+}
+
+static bool
+collect_quals_walker(Node *node, CollectQualCtx *ctx)
 {
 	if (node == NULL)
-		return NULL;
+		return false;
 
 	if (IsA(node, FromExpr))
 	{
-		FromExpr *f = (FromExpr *) node;
-		ListCell *lc;
-		ListCell *prev = NULL;
-		ListCell *next = NULL;
-		bool func_removed = false;
-
-		for (lc = list_head((List *) f->quals); lc != NULL;)
-		{
-			Node *qual = (Node *) lfirst(lc);
-			RestrictInfo *restrictinfo;
-			Relids relids;
-			bool belongs_to_cur_rel = false;
-
-			next = lnext(lc);
-
-			relids = pull_varnos(qual);
-
-			belongs_to_cur_rel =
-				bms_num_members(relids) == 1 && bms_is_member(ctx->rel->relid, relids);
-
-			if (!belongs_to_cur_rel)
-			{
-				lc = next;
-				continue;
-			}
-
-			if (is_chunk_exclusion_func(qual))
-			{
-				FuncExpr *func_expr = (FuncExpr *) qual;
-
-				/* validation */
-				if (ctx->chunk_exclusion_func != NULL)
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("only one chunks_in call is allowed per hypertable")));
-
-				Assert(func_expr->args->length == 2);
-				if (!IsA(linitial(func_expr->args), Var))
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg(
-								 "first parameter for chunks_in function needs to be a record")));
-
-				ctx->chunk_exclusion_func = func_expr;
-			}
-
-			if (ctx->chunk_exclusion_func == NULL)
-			{
-#if PG96
-				restrictinfo =
-					make_restrictinfo((Expr *) qual, true, false, false, relids, NULL, NULL);
-#else
-				restrictinfo = make_restrictinfo((Expr *) qual,
-												 true,
-												 false,
-												 false,
-												 ctx->root->qual_security_level,
-												 relids,
-												 NULL,
-												 NULL);
-#endif
-				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
-			}
-			else if (!func_removed && ctx->chunk_exclusion_func != NULL)
-			{
-				f->quals = (Node *) list_delete_cell((List *) (f->quals), lc, prev);
-				func_removed = true;
-			}
-			prev = lc;
-			lc = next;
-		}
-		if (ctx->chunk_exclusion_func != NULL)
-			return (Node *) f;
+		FromExpr *f = castNode(FromExpr, node);
+		f->quals = process_quals(f->quals, ctx);
+	}
+	else if (IsA(node, JoinExpr))
+	{
+		JoinExpr *j = castNode(JoinExpr, node);
+		j->quals = process_quals(j->quals, ctx);
 	}
 
-	return expression_tree_mutator(node, collect_quals_mutator, ctx);
+	/* skip processing if we found a chunks_in call for current relation */
+	if (ctx->chunk_exclusion_func != NULL)
+		return true;
+
+	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
 
 static List *
@@ -458,7 +441,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	init_chunk_exclusion_func();
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
-	collect_quals_mutator((Node *) root->parse->jointree, &ctx);
+	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
 
