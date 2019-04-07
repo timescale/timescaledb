@@ -2,12 +2,12 @@ set(TEST_FILES
     edition.sql
     gapfill.sql
     reorder.sql
-    ddl_hook.sql
 )
 
 set(TEST_FILES_DEBUG
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
+    ddl_hook.sql
     tsl_tables.sql
 )
 
