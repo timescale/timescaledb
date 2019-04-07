@@ -502,19 +502,24 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 		if (IsA(toppath, WindowAggPath) && toppath->winclause->winref > 1)
 		{
 			WindowAggPath *path;
+
 			for (path = (WindowAggPath *) toppath->subpath; IsA(path, WindowAggPath);
 				 path = (WindowAggPath *) path->subpath)
 			{
-				List *exprs = NIL;
+				PathTarget *pt_top = toppath->path.pathtarget;
+				PathTarget *pt;
 				ListCell *lc_expr;
+				int i = -1;
 
+				pt = create_empty_pathtarget();
 				/*
 				 * for each child we build targetlist based on top path
 				 * targetlist
 				 */
-				foreach (lc_expr, toppath->path.pathtarget->exprs)
+				foreach (lc_expr, pt_top->exprs)
 				{
 					gapfill_walker_context context;
+					i++;
 
 					gapfill_expression_walker(lfirst(lc_expr), window_function_walker, &context);
 
@@ -531,7 +536,7 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 							 * window function of current level or below
 							 * so we can put in verbatim
 							 */
-							exprs = lappend(exprs, lfirst(lc_expr));
+							add_column_to_pathtarget(pt, lfirst(lc_expr), pt_top->sortgrouprefs[i]);
 						else if (context.call.window->args != NIL)
 						{
 							ListCell *lc_arg;
@@ -551,13 +556,15 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 								}
 
 							if (contain_var_clause(linitial(context.call.window->args)))
-								exprs = lappend(exprs, linitial(context.call.window->args));
+								add_column_to_pathtarget(pt,
+														 linitial(context.call.window->args),
+														 pt_top->sortgrouprefs[i]);
 						}
 					}
 					else
-						exprs = lappend(exprs, lfirst(lc_expr));
+						add_column_to_pathtarget(pt, lfirst(lc_expr), pt_top->sortgrouprefs[i]);
 				}
-				path->path.pathtarget->exprs = exprs;
+				path->path.pathtarget = pt;
 			}
 		}
 	}
