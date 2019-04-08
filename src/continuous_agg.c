@@ -30,6 +30,29 @@
 #include <utils/fmgrprotos.h>
 #endif
 
+static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
+		[ContinuousEnabled] = {
+			.arg_name = "continuous",
+			.type_id = BOOLOID,
+			.default_val = BoolGetDatum(false),
+		},
+		[ContinuousViewOptionRefreshInterval] = {
+			.arg_name = "refresh_interval",
+			.type_id = INTERVALOID,
+		},
+		[ContinuousViewOptionRefreshLag] = {
+			 .arg_name = "refresh_lag",
+			 .type_id = TEXTOID,
+		},
+};
+
+WithClauseResult *
+ts_continuous_agg_with_clause_parse(const List *defelems)
+{
+	return ts_with_clauses_parse(defelems,
+								 continuous_aggregate_with_clause_def,
+								 TS_ARRAY_LEN(continuous_aggregate_with_clause_def));
+}
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {

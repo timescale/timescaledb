@@ -8,14 +8,10 @@
 #include <postgres.h>
 #include <c.h>
 
-int32 ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width);
+#include "bgw/job.h"
+
+int32 ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refresh_interval);
 
 int32 ts_continuous_agg_job_find_materializtion_by_job_id(int32 job_id);
-
-static inline int64
-ts_continuous_agg_job_get_default_refresh_lag(int64 bucket_width)
-{
-	return bucket_width * 2;
-}
 
 #endif

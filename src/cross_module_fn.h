@@ -20,6 +20,8 @@
 #include "export.h"
 #include "bgw/job.h"
 #include "process_utility.h"
+#include "with_clause_parser.h"
+#include "continuous_agg.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -60,8 +62,11 @@ typedef struct CrossModuleFunctions
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
-	bool (*process_cagg_viewstmt)(ViewStmt *stmt, const char *query_string, void *pstmt);
+	bool (*process_cagg_viewstmt)(ViewStmt *stmt, const char *query_string, void *pstmt,
+								  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_trigfn;
+	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
+										  WithClauseResult *with_clause_options);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

@@ -41,6 +41,7 @@
 #include <utils/catcache.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
+#include <utils/int8.h>
 
 #include "cagg_create.h"
 
@@ -53,6 +54,7 @@
 #include "continuous_aggs/job.h"
 #include "dimension.h"
 #include "continuous_agg.h"
+#include "options.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -144,10 +146,11 @@ typedef struct FinalizeQueryInfo
 
 typedef struct CAggTimebucketInfo
 {
-	int32 htid;					  /* hypertable id */
-	Oid htoid;					  /* hypertable oid */
-	AttrNumber htpartcolno;		  /*primary partitioning column */
-								  /* This should also be the column used by time_bucket */
+	int32 htid;				/* hypertable id */
+	Oid htoid;				/* hypertable oid */
+	AttrNumber htpartcolno; /*primary partitioning column */
+							/* This should also be the column used by time_bucket */
+	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
 	int64 bucket_width;			  /*bucket_width of time_bucket */
 	Index sortref;				  /*sortref index of the group by clause for
@@ -176,6 +179,7 @@ static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *ma
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
+									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
 									List *targetList);
@@ -187,8 +191,8 @@ static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matco
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
-						 char *partial_schema, char *partial_view, int64 bucket_width, int32 job_id,
-						 Query *userquery_parse)
+						 char *partial_schema, char *partial_view, int64 bucket_width,
+						 int64 refresh_lag, int32 job_id, Query *userquery_parse)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -219,8 +223,7 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 		NameGetDatum(&partial_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = bucket_width;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] =
-		ts_continuous_agg_job_get_default_refresh_lag(bucket_width);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = refresh_lag;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_query)] =
 		CStringGetTextDatum(userview_query);
 
@@ -449,12 +452,13 @@ get_timebucketfnoid()
 /* initialize caggtimebucket */
 static void
 caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
-						AttrNumber hypertable_partition_colno,
+						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
 						int64 hypertable_partition_col_interval)
 {
 	src->htid = hypertable_id;
 	src->htoid = hypertable_oid;
 	src->htpartcolno = hypertable_partition_colno;
+	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
 	src->bucket_width = 0; /*invalid value */
 }
@@ -529,6 +533,14 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 		elog(ERROR,
 			 "time_bucket function missing from GROUP BY clause for continuous aggregate query");
 	}
+}
+
+static int64
+get_refresh_lag(Oid column_type, int64 bucket_width, WithClauseResult *with_clause_options)
+{
+	if (with_clause_options[ContinuousViewOptionRefreshLag].is_default)
+		return bucket_width * 2;
+	return continuous_agg_parse_refresh_lag(column_type, with_clause_options);
 }
 
 static bool
@@ -668,6 +680,7 @@ cagg_validate_query(Query *query)
 									ht->fd.id,
 									ht->main_table_relid,
 									part_dimension->column_attno,
+									part_dimension->fd.column_type,
 									part_dimension->fd.interval_length);
 		}
 		ts_cache_release(hcache);
@@ -1352,7 +1365,8 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
  * panquery is the output of running parse_anlayze( ViewStmt->query)
  */
 static void
-cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
+cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
+			WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
@@ -1368,6 +1382,11 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 	int32 job_id;
 	char trigarg[NAMEDATALEN];
 	int ret;
+	Interval *refresh_interval =
+		DatumGetIntervalP(with_clause_options[ContinuousViewOptionRefreshInterval].parsed);
+	int64 refresh_lag = get_refresh_lag(origquery_ht->htpartcoltype,
+										origquery_ht->bucket_width,
+										with_clause_options);
 
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, panquery->groupClause);
 	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
@@ -1408,7 +1427,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 
 	Assert(mat_rel != NULL);
 	/* Step 4a register the BGW job */
-	job_id = ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width);
+	job_id =
+		ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width, refresh_interval);
 
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
@@ -1419,6 +1439,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
 							 part_rel->schemaname,
 							 part_rel->relname,
 							 origquery_ht->bucket_width,
+							 refresh_lag,
 							 job_id,
 							 panquery);
 
@@ -1438,7 +1459,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht)
  * step 2: create underlying tables and views
  */
 bool
-tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt)
+tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
+									WithClauseResult *with_clause_options)
 {
 	Query *query = NULL;
 	CAggTimebucketInfo timebucket_exprinfo;
@@ -1468,6 +1490,6 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 		return true;
 	}
 	timebucket_exprinfo = cagg_validate_query(query);
-	cagg_create(stmt, query, &timebucket_exprinfo);
+	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
 	return true;
 }
