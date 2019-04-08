@@ -85,7 +85,7 @@ continuous_agg_job_get_default_schedule_interval(int32 raw_table_id, int64 bucke
 }
 
 int32
-ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width)
+ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refresh_interval)
 {
 	NameData application_name;
 	NameData job_type;
@@ -94,14 +94,16 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width)
 	namestrcpy(&job_type, "continuous_aggregate");
 	namestrcpy(&application_name, "Continuous Aggregate Background Job");
 
-	job_id =
-		ts_bgw_job_insert_relation(&application_name,
-								   &job_type,
-								   continuous_agg_job_get_default_schedule_interval(raw_table_id,
-																					bucket_width),
-								   DEFAULT_MAX_RUNTIME,
-								   DEFAULT_MAX_RETRIES,
-								   DEFAULT_RETRY_PERIOD);
+	if (refresh_interval == NULL)
+		refresh_interval =
+			continuous_agg_job_get_default_schedule_interval(raw_table_id, bucket_width);
+
+	job_id = ts_bgw_job_insert_relation(&application_name,
+										&job_type,
+										refresh_interval,
+										DEFAULT_MAX_RUNTIME,
+										DEFAULT_MAX_RETRIES,
+										DEFAULT_RETRY_PERIOD);
 	return job_id;
 }
 

@@ -3,11 +3,15 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#ifndef TIMESCALEDB_WITH_CLAUSE_PARSER_H
+#define TIMESCALEDB_WITH_CLAUSE_PARSER_H
 #include <postgres.h>
 #include <c.h>
 
 #include <nodes/parsenodes.h>
 #include <utils.h>
+
+#include "compat.h"
 
 typedef struct WithClauseDefinition
 {
@@ -22,8 +26,9 @@ typedef struct WithClauseResult
 	Datum parsed;
 } WithClauseResult;
 
-extern void ts_with_clause_filter(const List *def_elems, List **within_namespace,
-								  List **not_within_namespace);
+extern TSDLLEXPORT void ts_with_clause_filter(const List *def_elems, List **within_namespace,
+											  List **not_within_namespace);
 
-extern WithClauseResult *ts_with_clauses_parse(const List *def_elems,
-											   const WithClauseDefinition *args, Size nargs);
+extern TSDLLEXPORT WithClauseResult *
+ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs);
+#endif /* TIMESCALEDB_WITH_CLAUSE_PARSER_H */

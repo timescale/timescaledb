@@ -37,7 +37,7 @@ insert into foo values( 2 , 15 , 20);
 insert into foo values( 2 , 16 , 20);
 
 create or replace view mat_m1( a, countb )
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select a, count(b)
 from foo
@@ -85,7 +85,7 @@ insert into conditions values ( '2018-11-02 09:00:00-08', 'NYC', 35, 15);
 
 
 create or replace view mat_m1( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -112,7 +112,6 @@ order by 1;
 
 -- TEST3 --
 -- drop on table conditions should cascade to materialized mat_v1
--- Oid used in timescaledb_catalog table from catalog table -- TODO
 
 drop table conditions cascade;
 
@@ -137,7 +136,7 @@ insert into conditions values ( '2018-11-03 09:00:00-08', 'NYC', 35, 25);
 
 
 create or replace view mat_m1( timec, minl, sumth, stddevh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
@@ -168,12 +167,11 @@ order by time_bucket('1week', timec);
 --materialized view with group by clause + expression in SELECT
 -- use previous data from conditions
 --drop only the view.
--- TODO catalog entry should get deleted?
 
 -- apply where clause on result of mat_m1 --
 drop view mat_m1 cascade;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
@@ -209,7 +207,7 @@ order by time_bucket('1week', timec);
 ---------test with having clause ----------------------
 drop view mat_m1 cascade;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
@@ -264,7 +262,7 @@ select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 
 --drop view mat_m1 cascade;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
@@ -416,7 +414,7 @@ select table_name from create_hypertable( 'conditions', 'timec');
 --no data in hyper table on purpose so that CASCADE is not required because of chunks
 
 create or replace view mat_drop_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -472,3 +470,59 @@ SELECT * FROM _timescaledb_config.bgw_job;
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
 select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
 select count(*) from pg_class where relname = 'mat_drop_test';
+
+--TEST With options
+
+CREATE TABLE conditions (
+      timec       TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable( 'conditions', 'timec');
+
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h')
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec);
+
+SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
+
+ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
+SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+
+DROP TABLE conditions CASCADE;
+
+--test WITH using a hypertable with an integer time dimension
+CREATE TABLE conditions (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '500', timescaledb.refresh_interval = '2h')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
+
+SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
+
+ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '100');
+SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
