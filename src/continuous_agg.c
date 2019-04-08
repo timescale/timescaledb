@@ -372,10 +372,22 @@ ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema, cons
 		elog(ERROR, "unknown continuous aggregate view type");
 }
 
+static inline bool
+ts_continuous_agg_is_user_view_schema(FormData_continuous_agg *data, const char *schema)
+{
+	return namestrcmp(&data->user_view_schema, schema) == 0;
+}
+
+static inline bool
+ts_continuous_agg_is_partial_view_schema(FormData_continuous_agg *data, const char *schema)
+{
+	return namestrcmp(&data->partial_view_schema, schema) == 0;
+}
+
 bool
 ts_continuous_agg_is_user_view(FormData_continuous_agg *data, const char *schema, const char *name)
 {
-	return (namestrcmp(&data->user_view_schema, schema) == 0) &&
+	return ts_continuous_agg_is_user_view_schema(data, schema) &&
 		   (namestrcmp(&data->user_view_name, name) == 0);
 }
 
@@ -383,6 +395,77 @@ bool
 ts_continuous_agg_is_partial_view(FormData_continuous_agg *data, const char *schema,
 								  const char *name)
 {
-	return (namestrcmp(&data->partial_view_schema, schema) == 0) &&
+	return ts_continuous_agg_is_partial_view_schema(data, schema) &&
 		   (namestrcmp(&data->partial_view_name, name) == 0);
+}
+
+static FormData_continuous_agg *
+ensure_new_tuple(HeapTuple old_tuple, HeapTuple *new_tuple)
+{
+	if (*new_tuple == NULL)
+		*new_tuple = heap_copytuple(old_tuple);
+
+	return (FormData_continuous_agg *) GETSTRUCT(*new_tuple);
+}
+
+void
+ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *tinfo = ts_scan_iterator_tuple_info(&iterator);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tinfo->tuple);
+		HeapTuple new_tuple = NULL;
+
+		if (ts_continuous_agg_is_user_view_schema(data, old_schema))
+		{
+			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			namestrcpy(&new_data->user_view_schema, new_schema);
+		}
+
+		if (ts_continuous_agg_is_partial_view_schema(data, old_schema))
+		{
+			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			namestrcpy(&new_data->partial_view_schema, new_schema);
+		}
+
+		if (new_tuple != NULL)
+			ts_catalog_update(tinfo->scanrel, new_tuple);
+	}
+	return;
+}
+
+extern void
+ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, char *new_name)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *tinfo = ts_scan_iterator_tuple_info(&iterator);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tinfo->tuple);
+		HeapTuple new_tuple = NULL;
+
+		if (ts_continuous_agg_is_user_view(data, old_schema, name))
+		{
+			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			namestrcpy(&new_data->user_view_schema, new_schema);
+			namestrcpy(&new_data->user_view_name, new_name);
+		}
+
+		if (ts_continuous_agg_is_partial_view(data, old_schema, name))
+		{
+			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			namestrcpy(&new_data->partial_view_schema, new_schema);
+			namestrcpy(&new_data->partial_view_name, new_name);
+		}
+
+		if (new_tuple != NULL)
+			ts_catalog_update(tinfo->scanrel, new_tuple);
+	}
+	return;
 }

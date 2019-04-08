@@ -26,4 +26,8 @@ extern bool ts_continuous_agg_is_user_view(FormData_continuous_agg *data, const 
 extern bool ts_continuous_agg_is_partial_view(FormData_continuous_agg *data, const char *schema,
 											  const char *name);
 
+extern void ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema);
+extern void ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema,
+										  char *new_name);
+
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CONTIGUOUS_AGG_H */
