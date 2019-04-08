@@ -21,7 +21,7 @@ select table_name from create_hypertable('conditions', 'timec');
 \c :TEST_DBNAME :ROLE_SUPERUSER
 create  view mat_m1 WITH ( timescaledb.continuous_agg = 'start')
 AS
-Select sum( temperature ), min(location) 
+Select sum( temperature ), min(location)
 from conditions
 group by time_bucket('1week', timec);
 
@@ -30,5 +30,84 @@ GRANT select on mat_m1 to :ROLE_DEFAULT_PERM_USER;
 select count(*) from mat_m1;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select count(*) from mat_m1;
- 
 
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE SCHEMA rename_schema;
+GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
+SELECT create_hypertable('foo', 'time');
+
+CREATE VIEW rename_test WITH ( timescaledb.continuous_agg = 'start')
+AS SELECT time_bucket('1week', time), COUNT(data)
+    FROM foo
+    GROUP BY 1;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+ALTER VIEW rename_test SET SCHEMA rename_schema;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER VIEW _timescaledb_internal.ts_internal_rename_testview SET SCHEMA public;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+ALTER SCHEMA rename_schema RENAME TO new_name_schema;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+ALTER VIEW ts_internal_rename_testview SET SCHEMA new_name_schema;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+ALTER VIEW foo_name_schema.rename_test SET SCHEMA public;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+ALTER VIEW rename_test RENAME TO rename_c_aggregate;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+SELECT * FROM rename_c_aggregate;
+
+ALTER VIEW rename_schema.ts_internal_rename_testview RENAME TO partial_view;
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;

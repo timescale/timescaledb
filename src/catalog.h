@@ -813,7 +813,7 @@ typedef struct FormData_continuous_agg
 	int64 bucket_width;
 	int32 job_id;
 	int64 refresh_lag;
-	void * user_view_query; /* use heap_get_attr to access this */
+	void *user_view_query; /* use heap_get_attr to access this */
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
