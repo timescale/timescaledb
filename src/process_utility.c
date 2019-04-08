@@ -180,16 +180,17 @@ process_add_hypertable(ProcessUtilityArgs *args, Hypertable *ht)
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
 
-/* Change the schema of a hypertable or a chunk */
 static void
-process_alterobjectschema(ProcessUtilityArgs *args)
+process_altertableschema(ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
 	Oid relid;
 	Cache *hcache;
 	Hypertable *ht;
 
-	if (alterstmt->objectType != OBJECT_TABLE || NULL == alterstmt->relation)
+	Assert(alterstmt->objectType == OBJECT_TABLE);
+
+	if (NULL == alterstmt->relation)
 		return;
 
 	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
@@ -215,6 +216,48 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(hcache);
+}
+
+static void
+process_alterviewschema(ProcessUtilityArgs *args)
+{
+	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
+	Oid relid;
+	char *schema;
+	char *name;
+
+	Assert(alterstmt->objectType == OBJECT_VIEW);
+
+	if (NULL == alterstmt->relation)
+		return;
+
+	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+	if (!OidIsValid(relid))
+		return;
+
+	schema = get_namespace_name(get_rel_namespace(relid));
+	name = get_rel_name(relid);
+
+	ts_continuous_agg_rename_view(schema, name, alterstmt->newschema, name);
+}
+
+/* Change the schema of a hypertable or a chunk */
+static void
+process_alterobjectschema(ProcessUtilityArgs *args)
+{
+	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
+
+	switch (alterstmt->objectType)
+	{
+		case OBJECT_TABLE:
+			process_altertableschema(args);
+			break;
+		case OBJECT_VIEW:
+			process_alterviewschema(args);
+			break;
+		default:
+			return;
+	};
 }
 
 static bool
@@ -999,6 +1042,14 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	}
 }
 
+static void
+process_rename_view(Oid relid, RenameStmt *stmt)
+{
+	char *schema = get_namespace_name(get_rel_namespace(relid));
+	char *name = get_rel_name(relid);
+	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname);
+}
+
 /* Visit all internal catalog tables with a schema column to check for applicable rename */
 static void
 process_rename_schema(RenameStmt *stmt)
@@ -1020,6 +1071,7 @@ process_rename_schema(RenameStmt *stmt)
 	ts_chunks_rename_schema_name(stmt->subname, stmt->newname);
 	ts_dimensions_rename_schema_name(stmt->subname, stmt->newname);
 	ts_hypertables_rename_schema_name(stmt->subname, stmt->newname);
+	ts_continuous_agg_rename_schema_name(stmt->subname, stmt->newname);
 }
 
 static void
@@ -1128,6 +1180,9 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_TABCONSTRAINT:
 			process_rename_constraint(args, hcache, relid, stmt);
+			break;
+		case OBJECT_VIEW:
+			process_rename_view(relid, stmt);
 			break;
 		case OBJECT_SCHEMA:
 			process_rename_schema(stmt);
