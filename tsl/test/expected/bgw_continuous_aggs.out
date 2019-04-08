@@ -79,7 +79,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 CREATE VIEW test_continuous_agg_view
-    WITH ( timescaledb.continuous_agg = 'start')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;

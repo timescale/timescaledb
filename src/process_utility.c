@@ -2205,6 +2205,75 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 }
 
 static void
+process_altercontinuousagg_set_with(ContinuousAgg *cagg, const List *defelems)
+{
+	WithClauseResult *parse_results;
+	List *pg_options = NIL, *cagg_options = NIL;
+
+	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
+	if (list_length(pg_options) > 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
+						"aggregate")));
+
+	if (list_length(cagg_options) > 0)
+	{
+		parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
+		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
+	}
+}
+
+static bool
+process_altertable_start_view(ProcessUtilityArgs *args)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
+	Oid view_relid = AlterTableLookupRelation(stmt, NoLock);
+	NameData view_name;
+	NameData view_schema;
+	ContinuousAgg *cagg;
+	ListCell *lc;
+
+	if (!OidIsValid(view_relid))
+		return false;
+
+	namestrcpy(&view_name, get_rel_name(view_relid));
+	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
+	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
+
+	if (cagg == NULL)
+		return false;
+
+	if (ts_continuous_agg_is_partial_view(&cagg->data, NameStr(view_schema), NameStr(view_name)))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot alter the internal view of a continuous aggregate")));
+
+	foreach (lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			case AT_SetRelOptions:
+				if (!IsA(cmd->def, List))
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("expected set options to contain a list")));
+				process_altercontinuousagg_set_with(cagg, (List *) cmd->def);
+				break;
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot alter only SET options of a continuous "
+								"aggregate")));
+		}
+	}
+	/* All commands processed by us, nothing for postgres to do.*/
+	return true;
+}
+
+static bool
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2213,9 +2282,11 @@ process_altertable_start(ProcessUtilityArgs *args)
 	{
 		case OBJECT_TABLE:
 			process_altertable_start_table(args);
-			break;
+			return false;
+		case OBJECT_VIEW:
+			return process_altertable_start_view(args);
 		default:
-			break;
+			return false;
 	}
 }
 
@@ -2540,18 +2611,9 @@ process_create_trigger_end(Node *parsetree)
 	foreach_chunk_relation(stmt->relation, create_trigger_chunk, stmt);
 }
 
-/* TODO need to decide on additional options for create view for continuous aggregate */
-typedef enum CaggViewOptions
-{
-	CaggViewState = 0
-} CaggViewOptions;
-
 static bool
 process_viewstmt(ProcessUtilityArgs *args)
 {
-	WithClauseDefinition caggview_with_clauses[] = {
-		[CaggViewState] = { .arg_name = "continuous_agg", .type_id = TEXTOID, .default_val = 'f' }
-	};
 	WithClauseResult *parse_results;
 	bool is_cagg = false;
 	Node *parsetree = args->parsetree;
@@ -2562,23 +2624,26 @@ process_viewstmt(ProcessUtilityArgs *args)
 	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
 	if (cagg_options)
 	{
-		parse_results = ts_with_clauses_parse(cagg_options,
-											  caggview_with_clauses,
-											  TS_ARRAY_LEN(caggview_with_clauses));
-		if (parse_results[CaggViewState].is_default == false)
-			is_cagg = true;
+		parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
+		is_cagg = DatumGetBool(parse_results[ContinuousEnabled].parsed);
 	}
+
 	if (!is_cagg)
 		return false;
+
 	if (pg_options != NIL)
-		elog(ERROR,
-			 "only timescaledb namespace parameters allowed in WITH clause for continuous "
-			 "aggregate");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
+						"aggregate")));
 
 #if !PG96
-	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, args->pstmt);
+	return ts_cm_functions->process_cagg_viewstmt(stmt,
+												  args->query_string,
+												  args->pstmt,
+												  parse_results);
 #else
-	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, NULL);
+	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, NULL, parse_results);
 #endif
 }
 
@@ -2652,7 +2717,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handled = process_truncate(args);
 			break;
 		case T_AlterTableStmt:
-			process_altertable_start(args);
+			handled = process_altertable_start(args);
 			break;
 		case T_RenameStmt:
 			process_rename(args);

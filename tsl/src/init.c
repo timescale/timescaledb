@@ -23,6 +23,8 @@
 #include "continuous_aggs/cagg_create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
+#include "continuous_aggs/options.h"
+#include "process_utility.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -77,6 +79,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_trigfn = continuous_agg_trigfn,
+	.continuous_agg_update_options = continuous_agg_update_options,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

@@ -19,7 +19,7 @@ select table_name from create_hypertable('conditions', 'timec');
 
 -- check that GRANTS work correctly
 \c :TEST_DBNAME :ROLE_SUPERUSER
-create  view mat_m1 WITH ( timescaledb.continuous_agg = 'start')
+create  view mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum( temperature ), min(location)
 from conditions
@@ -43,7 +43,7 @@ GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
 SELECT create_hypertable('foo', 'time');
 
-CREATE VIEW rename_test WITH ( timescaledb.continuous_agg = 'start')
+CREATE VIEW rename_test WITH ( timescaledb.continuous)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1;
