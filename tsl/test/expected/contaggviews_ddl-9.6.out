@@ -19,7 +19,7 @@ select table_name from create_hypertable('conditions', 'timec');
 
 -- check that GRANTS work correctly
 \c :TEST_DBNAME :ROLE_SUPERUSER
-create  view mat_m1 WITH ( timescaledb.continuous_agg = 'start')
+create  view mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum( temperature ), min(location)
 from conditions
@@ -49,7 +49,7 @@ NOTICE:  adding not-null constraint to column "time"
  (3,public,foo,t)
 (1 row)
 
-CREATE VIEW rename_test WITH ( timescaledb.continuous_agg = 'start')
+CREATE VIEW rename_test WITH ( timescaledb.continuous)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1;

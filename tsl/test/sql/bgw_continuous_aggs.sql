@@ -62,7 +62,7 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 CREATE TABLE test_continuous_agg_table(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
 CREATE VIEW test_continuous_agg_view
-    WITH ( timescaledb.continuous_agg = 'start')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;

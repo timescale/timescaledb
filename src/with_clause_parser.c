@@ -141,7 +141,7 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 
 	PG_TRY();
 	{
-		val = OidInputFunctionCall(in_fn, value, typIOParam, 0);
+		val = OidInputFunctionCall(in_fn, value, typIOParam, -1);
 	}
 	PG_CATCH();
 	{

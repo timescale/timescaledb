@@ -8,7 +8,7 @@
 drop view if exists mat_test cascade;
 
 create view mat_test
-WITH ( timescaledb.continuous_agg = 'start')
+WITH ( timescaledb.continuous)
 as :QUERY
 ;
 

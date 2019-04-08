@@ -260,7 +260,7 @@ SET SESSION datestyle TO 'ISO';
 SELECT * FROM continuous_agg_test_t;
 
 CREATE VIEW test_t_mat_view
-    WITH ( timescaledb.continuous_agg = 'start')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
         GROUP BY 1;
@@ -348,7 +348,7 @@ SELECT create_hypertable('continuous_agg_extreme', 'time', chunk_time_interval=>
 -- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
 CREATE VIEW extreme_view
-    WITH ( timescaledb.continuous_agg = 'start')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
         GROUP BY 1;
