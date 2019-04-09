@@ -1627,7 +1627,7 @@ SELECT count(*) FROM twodim;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Distributed table with custom type that has no binary output
 CREATE TABLE disttable_with_ct(time timestamptz, txn_id rxid, val float, info text);
-SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 1);
+SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 2);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
@@ -1653,4 +1653,28 @@ SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
  Tue Jan 01 01:01:00 2019 PST | ts-1-10-20 | 1.1 | a
  Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
 (2 rows)
+
+-- Test DELETE with replication
+DELETE FROM disttable_with_ct WHERE info = 'a';
+-- Check if row is gone
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+             time             |   txn_id   | val |      substring       
+------------------------------+------------+-----+----------------------
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+(1 row)
+
+-- Connect to data nodes to see if data is gone
+\c server_1
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+             time             |   txn_id   | val |      substring       
+------------------------------+------------+-----+----------------------
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+(1 row)
+
+\c server_2
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+             time             |   txn_id   | val |      substring       
+------------------------------+------------+-----+----------------------
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+(1 row)
 

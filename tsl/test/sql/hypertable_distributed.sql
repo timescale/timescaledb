@@ -616,7 +616,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Distributed table with custom type that has no binary output
 CREATE TABLE disttable_with_ct(time timestamptz, txn_id rxid, val float, info text);
-SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 1);
+SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 2);
 
 -- Insert data with custom type
 INSERT INTO disttable_with_ct VALUES
@@ -628,4 +628,14 @@ SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 
 SET timescaledb.enable_connection_binary_data=false;
 
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+
+-- Test DELETE with replication
+DELETE FROM disttable_with_ct WHERE info = 'a';
+-- Check if row is gone
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+-- Connect to data nodes to see if data is gone
+\c server_1
+SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+\c server_2
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;

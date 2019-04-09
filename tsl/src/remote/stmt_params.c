@@ -84,7 +84,7 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 													 &isbinary,
 													 !ts_guc_enable_connection_binary_data);
 		fmgr_info(typefnoid, &params->conv_funcs[idx]);
-		params->formats[idx] = 1;
+		params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
 		idx++;
 	}
 
@@ -148,9 +148,17 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 	{
 		bytea *output_bytes;
 		Assert(params->ctid);
-		output_bytes = SendFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
-		params->values[idx] = VARDATA(output_bytes);
-		params->lengths[idx] = (int) VARSIZE(output_bytes) - VARHDRSZ;
+		if (params->formats[idx] == FORMAT_BINARY)
+		{
+			output_bytes =
+				SendFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
+			params->values[idx] = VARDATA(output_bytes);
+			params->lengths[idx] = (int) VARSIZE(output_bytes) - VARHDRSZ;
+		}
+		else
+			params->values[idx] =
+				OutputFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
+
 		idx++;
 		param_idx++;
 	}
@@ -171,12 +179,10 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 
 		if (isnull)
 			params->values[idx] = NULL;
-		else if (params->formats[idx] == 0)
-			/* text */
+		else if (params->formats[idx] == FORMAT_TEXT)
 			params->values[idx] = OutputFunctionCall(&params->conv_funcs[param_idx], value);
-		else if (params->formats[idx] == 1)
+		else if (params->formats[idx] == FORMAT_BINARY)
 		{
-			/* binary */
 			bytea *output_bytes = SendFunctionCall(&params->conv_funcs[param_idx], value);
 			params->values[idx] = VARDATA(output_bytes);
 			params->lengths[idx] = VARSIZE(output_bytes) - VARHDRSZ;
