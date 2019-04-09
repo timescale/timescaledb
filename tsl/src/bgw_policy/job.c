@@ -168,6 +168,7 @@ execute_drop_chunks_policy(int32 job_id)
 							INTERVALOID,
 							InvalidOid,
 							args->fd.cascade,
+							false,
 							LOG);
 	elog(LOG, "completed dropping chunks");
 

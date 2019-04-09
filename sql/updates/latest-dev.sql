@@ -72,3 +72,23 @@ CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (hypertable_id, lowest_modified_value ASC);
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log TO PUBLIC;
+
+DROP FUNCTION IF EXISTS drop_chunks(
+    older_than "any",
+    table_name  NAME,
+    schema_name NAME,
+    cascade  BOOLEAN,
+    newer_than "any",
+    verbose BOOLEAN
+);
+
+CREATE OR REPLACE FUNCTION drop_chunks(
+    older_than "any" = NULL,
+    table_name  NAME = NULL,
+    schema_name NAME = NULL,
+    cascade  BOOLEAN = FALSE,
+    newer_than "any" = NULL,
+    verbose BOOLEAN = FALSE,
+    cascade_to_materializations BOOLEAN = NULL
+) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+LANGUAGE C STABLE PARALLEL SAFE;

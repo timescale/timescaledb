@@ -37,6 +37,7 @@ select count(*) from mat_m1;
 (1 row)
 
 \set ON_ERROR_STOP 1
+-- schema tests
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA rename_schema;
 GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
@@ -155,4 +156,225 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
  public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view
  public           | rename_c_aggregate | rename_schema         | partial_view
 (2 rows)
+
+-- drop_chunks tests
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+DROP TABLE foo CASCADE;
+NOTICE:  drop cascades to view rename_schema.partial_view
+CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
+SELECT hypertable_id AS drop_chunks_table_id
+    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
+NOTICE:  adding not-null constraint to column "time"
+CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('5', time), COUNT(data)
+    FROM drop_chunks_table
+    GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
+        schema_name AS drop_chunks_mat_schema,
+        table_name AS drop_chunks_mat_table_name
+    FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
+    WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_id
+        AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
+-- create 3 chunks, with 3 time bucket
+INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
+REFRESH MATERIALIZED VIEW drop_chunks_view;
+INFO:  new materialization range for public.drop_chunks_table (time column time) (15)
+INFO:  materializing continuous aggregate public.drop_chunks_view: new range up to 15
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     5
+           5 |     5
+          10 |     5
+(3 rows)
+
+-- cannot drop directly from the materialization table
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(schema_name => :'drop_chunks_mat_schema',
+    table_name => :'drop_chunks_mat_table_name',
+    newer_than => -20,
+    verbose => true);
+ERROR:  cannot drop_chunks on a continuous aggregate materialization table
+\set ON_ERROR_STOP 1
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     5
+           5 |     5
+          10 |     5
+(3 rows)
+
+-- cannot drop from the raw table without specifying cascade_to_materializations
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 10);
+ERROR:  cannot drop_chunks on hypertable that has a continuous aggregate without cascade_to_materializations set to true
+\set ON_ERROR_STOP 1
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     5
+           5 |     5
+          10 |     5
+(3 rows)
+
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(older_than => 200);
+ERROR:  cannot drop_chunks on hypertable that has a continuous aggregate without cascade_to_materializations set to true
+\set ON_ERROR_STOP 1
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     5
+           5 |     5
+          10 |     5
+(3 rows)
+
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 13, cascade_to_materializations => true);
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     2
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+          10 |     5
+(1 row)
+
+-- drop chunks when the chunksize and time_bucket aren't aligned
+DROP TABLE drop_chunks_table CASCADE;
+NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_drop_chunks_viewview
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_4_chunk
+CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
+SELECT hypertable_id AS drop_chunks_table_u_id
+    FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
+NOTICE:  adding not-null constraint to column "time"
+CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('3', time), COUNT(data)
+    FROM drop_chunks_table_u
+    GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
+        schema_name AS drop_chunks_mat_schema,
+        table_name AS drop_chunks_mat_table_u_name
+    FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
+    WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_u_id
+        AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
+-- create 3 chunks, with 3 time bucket
+INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
+REFRESH MATERIALIZED VIEW drop_chunks_view;
+INFO:  new materialization range for public.drop_chunks_table_u (time column time) (15)
+INFO:  materializing continuous aggregate public.drop_chunks_view: new range up to 15
+SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
+ count 
+-------
+     4
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     3
+           3 |     3
+           6 |     3
+           9 |     3
+          12 |     3
+(5 rows)
+
+SELECT drop_chunks(table_name => 'drop_chunks_table_u', older_than => 13, cascade_to_materializations => true);
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+-- everything in the first chunk (values within [0, 6]) should be dropped
+-- the time_bucket [6, 8] will lose it's first value, but should still have
+-- the other two
+SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           6 |     2
+           9 |     3
+          12 |     3
+(3 rows)
 

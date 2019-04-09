@@ -74,7 +74,8 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     schema_name NAME = NULL,
     cascade  BOOLEAN = FALSE,
     newer_than "any" = NULL,
-    verbose BOOLEAN = FALSE
+    verbose BOOLEAN = FALSE,
+    cascade_to_materializations BOOLEAN = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 

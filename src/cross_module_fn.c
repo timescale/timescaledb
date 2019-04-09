@@ -199,6 +199,14 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 	error_no_default_fn_community();
 	pg_unreachable();
 }
+
+static void
+continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **chunks,
+											   Size num_chunks)
+{
+	error_no_default_fn_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -235,6 +243,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
+	.continuous_agg_drop_chunks_by_chunk_id = continuous_agg_drop_chunks_by_chunk_id_default,
 	.continuous_agg_trigfn = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 };
