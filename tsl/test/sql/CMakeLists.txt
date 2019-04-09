@@ -71,6 +71,12 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
   )
 endif ()
 
+if (NOT ${PG_VERSION} VERSION_LESS "11")
+  list(APPEND TEST_FILES
+    partitionwise_distributed.sql
+    )
+endif ()
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
 endif(CMAKE_BUILD_TYPE MATCHES Debug)

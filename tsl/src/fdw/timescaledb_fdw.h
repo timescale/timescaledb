@@ -78,6 +78,7 @@ typedef struct TsFdwRelationInfo
 	List *shippable_extensions; /* OIDs of whitelisted extensions */
 
 	/* Cached catalog information. */
+	ForeignTable *table;
 	ForeignServer *server;
 	UserMapping *user; /* only set in use_remote_estimate mode */
 
