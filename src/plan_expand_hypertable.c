@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <nodes/relation.h>
 #include <parser/parsetree.h>
+#include <optimizer/clauses.h>
 #include <optimizer/var.h>
 #include <optimizer/restrictinfo.h>
 #include <nodes/plannodes.h>
@@ -15,6 +16,7 @@
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_namespace.h>
 #include "compat.h"
 #if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
@@ -70,6 +72,188 @@ is_chunk_exclusion_func(Expr *node)
 	return false;
 }
 
+static bool
+is_time_bucket_function(Expr *node)
+{
+	if (IsA(node, FuncExpr) &&
+		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
+		return true;
+
+	return false;
+}
+
+/*
+ * Transform time_bucket calls of the following form in WHERE clause:
+ *
+ * time_bucket(width, column) OP value
+ *
+ * Since time_bucket always returns the lower bound of the bucket
+ * for lower bound comparisons the width is not relevant and the
+ * following transformation can be applied:
+ *
+ * time_bucket(width, column) > value
+ * column > value
+ *
+ * Example with values:
+ *
+ * time_bucket(10, column) > 109
+ * column > 109
+ *
+ * For upper bound comparisons width needs to be taken into account
+ * and we need to extend the upper bound by width to capture all
+ * possible values.
+ *
+ * time_bucket(width, column) < value
+ * column < value + width
+ *
+ * Example with values:
+ *
+ * time_bucket(10, column) < 100
+ * column < 100 + 10
+ *
+ * Expressions with value on the left side will be switched around
+ * when building the expression for RestrictInfo.
+ *
+ * Caller must ensure that only 2 argument time_bucket versions
+ * are used.
+ */
+static OpExpr *
+transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
+{
+	Expr *left = linitial(op->args);
+	Expr *right = lsecond(op->args);
+
+	FuncExpr *time_bucket = castNode(FuncExpr, (IsA(left, FuncExpr) ? left : right));
+	Expr *value = IsA(right, Const) ? right : left;
+
+	Const *width = linitial(time_bucket->args);
+	Oid opno = op->opno;
+	TypeCacheEntry *tce;
+	int strategy;
+
+	/* caller must ensure time_bucket only has 2 arguments */
+	Assert(list_length(time_bucket->args) == 2);
+
+	/*
+	 * if time_bucket call is on wrong side we switch operator
+	 */
+	if (IsA(right, FuncExpr))
+	{
+		opno = get_commutator(op->opno);
+
+		if (!OidIsValid(opno))
+			return op;
+	}
+
+	tce = lookup_type_cache(exprType((Node *) time_bucket), TYPECACHE_BTREE_OPFAMILY);
+	strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
+
+	if (strategy == BTGreaterStrategyNumber || strategy == BTGreaterEqualStrategyNumber)
+	{
+		/* column > value */
+		op = copyObject(op);
+		op->args = list_make2(lsecond(time_bucket->args), value);
+
+		/*
+		 * if we switched operator we need to adjust OpExpr as well
+		 */
+		if (IsA(right, FuncExpr))
+		{
+			op->opno = opno;
+			op->opfuncid = InvalidOid;
+		}
+
+		return op;
+	}
+	else if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
+	{
+		/* column < value + width */
+		Expr *subst;
+		Oid resulttype;
+		Oid subst_opno = get_operator("+",
+									  PG_CATALOG_NAMESPACE,
+									  exprType((Node *) value),
+									  exprType((Node *) width));
+
+		if (!OidIsValid(subst_opno))
+			return op;
+
+		if (tce->type_id == TIMESTAMPTZOID && width->consttype == INTERVALOID &&
+			DatumGetIntervalP(width)->month == 0 && DatumGetIntervalP(width)->day != 0)
+		{
+			/*
+			 * If width interval has day component we merge it with
+			 * time component because estimating the day component
+			 * depends on the session timezone and that would be
+			 * unsafe during planning time.
+			 * But since time_bucket calculation always is relative
+			 * to UTC it is safe to do this transformation and assume
+			 * day to always be 24 hours.
+			 */
+			Interval *interval;
+
+			width = copyObject(width);
+			interval = DatumGetIntervalP(width->constvalue);
+			interval->time += interval->day * USECS_PER_DAY;
+			interval->day = 0;
+		}
+
+		resulttype = get_op_rettype(subst_opno);
+		subst = make_opclause(subst_opno,
+							  tce->type_id,
+							  false,
+							  value,
+							  (Expr *) width,
+							  InvalidOid,
+							  InvalidOid);
+
+		/*
+		 * check if resulttype of operation returns correct datatype
+		 *
+		 * date OP interval returns timestamp so we need to insert
+		 * a cast to keep toplevel expr intact when datatypes don't match
+		 */
+		if (tce->type_id != resulttype)
+		{
+			Oid cast_func = get_cast_func(resulttype, tce->type_id);
+
+			if (!OidIsValid(cast_func))
+				return op;
+
+			subst = (Expr *)
+				makeFuncExpr(cast_func, tce->type_id, list_make1(subst), InvalidOid, InvalidOid, 0);
+		}
+
+		if (tce->type_id == TIMESTAMPTZOID && width->consttype == INTERVALOID)
+		{
+			/*
+			 * TIMESTAMPTZ OP INTERVAL is marked stable and unsafe
+			 * to evaluate at plan time unless it only has a time
+			 * component
+			 */
+			Interval *interval = DatumGetIntervalP(width->constvalue);
+
+			if (interval->day == 0 && interval->month == 0)
+				subst = (Expr *) estimate_expression_value(root, (Node *) subst);
+		}
+
+		op = copyObject(op);
+
+		/*
+		 * if we switched operator we need to adjust OpExpr as well
+		 */
+		if (IsA(right, FuncExpr))
+		{
+			op->opno = opno;
+			op->opfuncid = InvalidOid;
+		}
+
+		op->args = list_make2(lsecond(time_bucket->args), subst);
+	}
+
+	return op;
+}
+
 /* Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
@@ -116,6 +300,23 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			ctx->restrictions = NIL;
 			quals = (Node *) list_delete_cell((List *) quals, lc, prev);
 			return quals;
+		}
+
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
+				 list_length(castNode(FuncExpr, left)->args) == 2 &&
+				 is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) &&
+				 list_length(castNode(FuncExpr, right)->args) == 2 &&
+				 is_time_bucket_function(right)))
+			{
+				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
+			}
 		}
 
 #if PG96

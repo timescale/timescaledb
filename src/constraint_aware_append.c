@@ -96,53 +96,6 @@ can_exclude_chunk(PlannerInfo *root, Scan *scan, EState *estate, Index rt_index,
 		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
 }
 
-/*
- * get_operator
- *
- *    finds an operator given an exact specification (name, namespace,
- *    left and right type IDs).
- */
-static Oid
-get_operator(const char *name, Oid namespace, Oid left, Oid right)
-{
-	HeapTuple tup;
-	Oid opoid = InvalidOid;
-
-	tup = SearchSysCache4(OPERNAMENSP,
-						  PointerGetDatum(name),
-						  ObjectIdGetDatum(left),
-						  ObjectIdGetDatum(right),
-						  ObjectIdGetDatum(namespace));
-	if (HeapTupleIsValid(tup))
-	{
-		opoid = HeapTupleGetOid(tup);
-		ReleaseSysCache(tup);
-	}
-
-	return opoid;
-}
-
-/*
- * lookup cast func oid in pg_cast
- */
-static Oid
-get_cast_func(Oid source, Oid target)
-{
-	Oid result = InvalidOid;
-	HeapTuple casttup;
-
-	casttup = SearchSysCache2(CASTSOURCETARGET, ObjectIdGetDatum(source), ObjectIdGetDatum(target));
-	if (HeapTupleIsValid(casttup))
-	{
-		Form_pg_cast castform = (Form_pg_cast) GETSTRUCT(casttup);
-
-		result = castform->castfunc;
-		ReleaseSysCache(casttup);
-	}
-
-	return result;
-}
-
 #define DATATYPE_PAIR(left, right, type1, type2)                                                   \
 	((left == type1 && right == type2) || (left == type2 && right == type1))
 
