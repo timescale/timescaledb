@@ -90,6 +90,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_commands.sql
     dist_ddl.sql
     dist_util.sql
+    partitionwise_distributed.sql
     remote_connection.sql
     remote_connection_cache.sql
     remote_copy.sql
