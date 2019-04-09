@@ -10,6 +10,9 @@
 
 #include "with_clause_parser.h"
 
+#define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
+
 bool tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
 										 WithClauseResult *with_clause_options);
+
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H */

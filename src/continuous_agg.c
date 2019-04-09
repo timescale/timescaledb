@@ -181,6 +181,56 @@ continuous_agg_init(ContinuousAgg *cagg, FormData_continuous_agg *fd)
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
 }
 
+ContinuousAggHypertableStatus
+ts_continuous_agg_hypertable_status(int32 hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ContinuousAggHypertableStatus status = HypertableIsNotContinuousAgg;
+
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+
+		if (data->raw_hypertable_id == hypertable_id)
+			status |= HypertableIsRawTable;
+		if (data->mat_hypertable_id == hypertable_id)
+			status |= HypertableIsMaterialization;
+
+		if (status == HypertableIsMaterializationAndRaw)
+		{
+			ts_scan_iterator_close(&iterator);
+			return status;
+		}
+	}
+
+	return status;
+}
+
+TSDLLEXPORT List *
+ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
+{
+	List *continuous_aggs = NIL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		ContinuousAgg *ca;
+		Form_continuous_agg data =
+			(Form_continuous_agg) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+
+		if (data->raw_hypertable_id != raw_hypertable_id)
+			continue;
+
+		ca = palloc0(sizeof(*ca));
+		continuous_agg_init(ca, data);
+		continuous_aggs = lappend(continuous_aggs, ca);
+	}
+
+	return continuous_aggs;
+}
+
 ContinuousAgg *
 ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 {
