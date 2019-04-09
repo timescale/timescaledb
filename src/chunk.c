@@ -36,6 +36,8 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "catalog.h"
+#include "continuous_agg.h"
+#include "cross_module_fn.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -1895,18 +1897,40 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 
 void
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type, bool cascade, int32 log_level)
+						Oid older_than_type, Oid newer_than_type, bool cascade,
+						bool cascades_to_materializations, int32 log_level)
 {
 	int i = 0;
 	uint64 num_chunks = 0;
-	Chunk **chunks = chunk_get_chunks_in_time_range(table_relid,
-													older_than_datum,
-													newer_than_datum,
-													older_than_type,
-													newer_than_type,
-													"drop_chunks",
-													CurrentMemoryContext,
-													&num_chunks);
+	Chunk **chunks;
+	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
+
+	switch (ts_continuous_agg_hypertable_status(hypertable_id))
+	{
+		case HypertableIsMaterialization:
+		case HypertableIsMaterializationAndRaw:
+			elog(ERROR, "cannot drop_chunks on a continuous aggregate materialization table");
+			return;
+		case HypertableIsRawTable:
+			if (!cascades_to_materializations)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot drop_chunks on hypertable that has a continuous aggregate "
+								"without cascade_to_materializations set to true")));
+			break;
+		default:
+			cascades_to_materializations = false;
+			break;
+	}
+
+	chunks = chunk_get_chunks_in_time_range(table_relid,
+											older_than_datum,
+											newer_than_datum,
+											older_than_type,
+											newer_than_type,
+											"drop_chunks",
+											CurrentMemoryContext,
+											&num_chunks);
 
 	for (; i < num_chunks; i++)
 	{
@@ -1926,6 +1950,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		/* Drop the table */
 		performDeletion(&objaddr, cascade, 0);
 	}
+
+	if (cascades_to_materializations)
+		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, chunks, num_chunks);
 }
 
 Datum
@@ -1943,6 +1970,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Oid newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
 	bool cascade = PG_GETARG_BOOL(3);
 	bool verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
+	bool cascades_to_materializations = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
 	int elevel = verbose ? INFO : DEBUG2;
 
 	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))
@@ -2016,6 +2044,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 								older_than_type,
 								newer_than_type,
 								cascade,
+								cascades_to_materializations,
 								elevel);
 	}
 
