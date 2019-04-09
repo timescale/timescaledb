@@ -60,8 +60,6 @@
 #define PARTIALFN "partialize_agg"
 #define TIMEBUCKETFN "time_bucket"
 #define CHUNKTUPFN "chunk_for_tuple"
-
-#define MATCHUNKCOLNM "chunk_id"
 #define MATPARTCOLNM "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
@@ -999,7 +997,10 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *us
 
 	/* add a chunk_id column for materialization table */
 	Node *vexpr = (Node *) makeVar(1, colno, INT4OID, -1, InvalidOid, 0);
-	col = makeColumnDef(MATCHUNKCOLNM, exprType(vexpr), exprTypmod(vexpr), exprCollation(vexpr));
+	col = makeColumnDef(CONTINUOUS_AGG_CHUNK_ID_COL_NAME,
+						exprType(vexpr),
+						exprTypmod(vexpr),
+						exprCollation(vexpr));
 	matcolinfo->matcollist = lappend(matcolinfo->matcollist, col);
 
 	/* need to add an entry to the target list for computing chunk_id column
@@ -1019,7 +1020,10 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *us
 								InvalidOid,
 								InvalidOid,
 								COERCE_EXPLICIT_CALL);
-	chunk_te = makeTargetEntry((Expr *) chunk_fnexpr, colno, pstrdup(MATCHUNKCOLNM), false);
+	chunk_te = makeTargetEntry((Expr *) chunk_fnexpr,
+							   colno,
+							   pstrdup(CONTINUOUS_AGG_CHUNK_ID_COL_NAME),
+							   false);
 	matcolinfo->partial_seltlist = lappend(matcolinfo->partial_seltlist, chunk_te);
 	/*any internal column needs to be added to the group-by clause as well */
 	maxRef = 0;

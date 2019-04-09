@@ -9,8 +9,11 @@
 #include <catalog/pg_type.h>
 
 #include <catalog.h>
+#include <chunk.h>
+
 #include "with_clause_parser.h"
 #include "compat.h"
+
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
 typedef enum ContinuousAggViewOption
@@ -27,6 +30,18 @@ typedef struct ContinuousAgg
 	FormData_continuous_agg data;
 } ContinuousAgg;
 
+typedef enum ContinuousAggHypertableStatus
+{
+	HypertableIsNotContinuousAgg = 0,
+	HypertableIsMaterialization = 1,
+	HypertableIsRawTable = 2,
+	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
+} ContinuousAggHypertableStatus;
+
+extern ContinuousAggHypertableStatus ts_continuous_agg_hypertable_status(int32 hypertable_id);
+extern void ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks,
+													  Size num_chunks);
+extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name);
 extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema,
