@@ -66,11 +66,7 @@ CREATE VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
---TODO this should be created as part of CREATE VIEW
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON test_continuous_agg_table
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 
 -- min distance from end should be 1
 SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
@@ -106,3 +102,15 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
+
+--check the information views --
+\x
+select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
+from timescaledb_information.continuous_aggregates
+where view_name::text like '%test_continuous_agg_view';
+
+--TODO
+--select view_name, viewdefinition from timescaledb_information.continuous_aggregate_settings where view_name::text like '%test_continuous_agg_view';
+
+select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
+

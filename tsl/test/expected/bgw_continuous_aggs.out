@@ -84,11 +84,7 @@ CREATE VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 NOTICE:  adding not-null constraint to column "time_partition_col"
---TODO this should be created as part of CREATE VIEW
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON test_continuous_agg_table
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 -- min distance from end should be 1
 SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
  mat_hypertable_id | user_view_schema |      user_view_name      | bucket_width | job_id | refresh_lag 
@@ -159,4 +155,26 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
            2 |     5
            4 |     9
 (3 rows)
+
+--check the information views --
+\x
+select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
+from timescaledb_information.continuous_aggregates
+where view_name::text like '%test_continuous_agg_view';
+-[ RECORD 1 ]--------------+--------------------------------------------------------------
+view_name                  | test_continuous_agg_view
+view_owner                 | default_perm_user
+refresh_lag                | 4
+refresh_interval           | @ 12 hours
+materialization_hypertable | _timescaledb_internal.ts_internal_test_continuous_agg_viewtab
+
+--TODO
+--select view_name, viewdefinition from timescaledb_information.continuous_aggregate_settings where view_name::text like '%test_continuous_agg_view';
+select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
+-[ RECORD 1 ]----------+-------------------------
+view_name              | test_continuous_agg_view
+completed_threshold    | 6
+invalidation_threshold | 6
+job_status             | scheduled
+last_run_duration      | 
 
