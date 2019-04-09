@@ -58,6 +58,18 @@ SELECT create_hypertable('hyper_timefunc', 'time', 'device_id', 4, chunk_time_in
 
 INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 
+CREATE TABLE metrics_timestamp(time timestamp);
+SELECT create_hypertable('metrics_timestamp','time');
+INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1d'::interval);
+
+CREATE TABLE metrics_timestamptz(time timestamptz);
+SELECT create_hypertable('metrics_timestamptz','time');
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
+
+CREATE TABLE metrics_date(time date);
+SELECT create_hypertable('metrics_date','time');
+INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date,'2000-02-01'::date,'1d'::interval);
+
 ANALYZE hyper;
 ANALYZE hyper_w_space;
 ANALYZE tag;

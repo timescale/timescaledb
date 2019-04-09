@@ -469,3 +469,52 @@ get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
 	}
 	elog(ERROR, "failed to find function %s in schema %s with %d args", name, schema_name, nargs);
 }
+
+/*
+ * get_operator
+ *
+ *    finds an operator given an exact specification (name, namespace,
+ *    left and right type IDs).
+ */
+Oid
+get_operator(const char *name, Oid namespace, Oid left, Oid right)
+{
+	HeapTuple tup;
+	Oid opoid = InvalidOid;
+
+	tup = SearchSysCache4(OPERNAMENSP,
+						  PointerGetDatum(name),
+						  ObjectIdGetDatum(left),
+						  ObjectIdGetDatum(right),
+						  ObjectIdGetDatum(namespace));
+	if (HeapTupleIsValid(tup))
+	{
+		opoid = HeapTupleGetOid(tup);
+		ReleaseSysCache(tup);
+	}
+
+	return opoid;
+}
+
+/*
+ * get_cast_func
+ *
+ * returns Oid of functions that implements cast from source to target
+ */
+Oid
+get_cast_func(Oid source, Oid target)
+{
+	Oid result = InvalidOid;
+	HeapTuple casttup;
+
+	casttup = SearchSysCache2(CASTSOURCETARGET, ObjectIdGetDatum(source), ObjectIdGetDatum(target));
+	if (HeapTupleIsValid(casttup))
+	{
+		Form_pg_cast castform = (Form_pg_cast) GETSTRUCT(casttup);
+
+		result = castform->castfunc;
+		ReleaseSysCache(casttup);
+	}
+
+	return result;
+}

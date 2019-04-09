@@ -61,6 +61,10 @@ extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
 
 extern Oid get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[]);
 
+extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
+
+extern Oid get_cast_func(Oid source, Oid target);
+
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 										 size_t copy_size);
 
