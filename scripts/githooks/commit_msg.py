@@ -23,7 +23,7 @@ class GitCommitMessage:
         if filename != None:
             with open(filename, 'r') as f:
                 for line in f:
-                    if line.startswith('# ------------------------ >8 ------------------------')
+                    if line.startswith('# ------------------------ >8 ------------------------'):
                         break
                     if not line.startswith('#'):
                         lines.append(line)
