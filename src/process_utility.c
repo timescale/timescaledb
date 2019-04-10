@@ -613,6 +613,23 @@ process_truncate(ProcessUtilityArgs *args)
 
 			if (ht != NULL)
 			{
+				ContinuousAggHypertableStatus agg_status =
+					ts_continuous_agg_hypertable_status(ht->fd.id);
+				if ((agg_status & HypertableIsMaterialization) != 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg(
+								 "cannot TRUNCATE a hypertable underlying a continuous aggregate"),
+							 errhint("DELETE from the underlying table to remove data.")));
+
+				if (agg_status == HypertableIsRawTable)
+					ereport(ERROR,
+							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+							 errmsg("cannot TRUNCATE a hypertable that has a continuous aggregate"),
+							 errhint(
+								 "either DROP the continuous aggregate, or DELETE or drop_chunks "
+								 "from the table this continuous aggregate is based on.")));
+
 				if (!relation_should_recurse(rv))
 					ereport(ERROR,
 							(errcode(ERRCODE_WRONG_OBJECT_TYPE),

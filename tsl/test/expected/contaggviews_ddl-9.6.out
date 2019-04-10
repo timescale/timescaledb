@@ -378,3 +378,10 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           12 |     3
 (3 rows)
 
+-- TRUNCATE test
+\set ON_ERROR_STOP 0
+TRUNCATE drop_chunks_table_u;
+ERROR:  cannot TRUNCATE a hypertable that has a continuous aggregate
+TRUNCATE :drop_chunks_mat_table_u;
+ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
+\set ON_ERROR_STOP 1
