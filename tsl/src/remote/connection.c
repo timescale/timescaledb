@@ -306,7 +306,7 @@ remote_connection_close(PGconn *conn)
  * collisions are highly improbable; just be sure to use %u not %d to print.
  */
 unsigned int
-remote_connection_get_cursor_number(PGconn *conn)
+remote_connection_get_cursor_number()
 {
 	return ++cursor_number;
 }
@@ -326,7 +326,7 @@ remote_connection_reset_cursor_number()
  * increasing the risk of prepared-statement name collisions by resetting.
  */
 unsigned int
-remote_connection_get_prep_stmt_number(PGconn *conn)
+remote_connection_get_prep_stmt_number()
 {
 	return ++prep_stmt_number;
 }
