@@ -58,8 +58,20 @@ ALTER VIEW rename_test SET SCHEMA rename_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'rename_test'
+\gset
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER VIEW _timescaledb_internal.ts_internal_rename_testview SET SCHEMA public;
+ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET SCHEMA public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
@@ -69,7 +81,7 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER VIEW _timescaledb_internal._dir_rename_testview SET SCHEMA public;
+ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
@@ -85,7 +97,7 @@ ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
-ALTER VIEW ts_internal_rename_testview SET SCHEMA new_name_schema;
+ALTER VIEW :"PART_VIEW_NAME" SET SCHEMA new_name_schema;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -120,14 +132,14 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 
 SELECT * FROM rename_c_aggregate;
 
-ALTER VIEW rename_schema.ts_internal_rename_testview RENAME TO partial_view;
+ALTER VIEW rename_schema.:"PART_VIEW_NAME" RENAME TO partial_view;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
 --rename direct view
-ALTER VIEW _dir_rename_testview RENAME TO direct_view;
+ALTER VIEW :"DIR_VIEW_NAME" RENAME TO direct_view;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -282,7 +294,7 @@ AS SELECT time_bucket('3', time), SUM(data)
 
 -- no continuous aggregates on a continuous aggregate materialization table
 CREATE VIEW new_name_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
-AS SELECT time_bucket('6', time_partition_col), COUNT(tscol2)
+AS SELECT time_bucket('6', time_partition_col), COUNT(agg_2_2)
     FROM new_name
     GROUP BY 1;
 

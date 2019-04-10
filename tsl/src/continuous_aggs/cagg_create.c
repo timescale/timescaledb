@@ -89,21 +89,21 @@
 			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
 	} while (0);
 
-#define PRINT_MATCOLNAME(colbuf, colno)                                                            \
+#define PRINT_MATCOLNAME(colbuf, type, original_query_resno, colno)                                \
 	do                                                                                             \
 	{                                                                                              \
-		int ret = snprintf(colbuf, NAMEDATALEN, "tscol%d", colno);                                 \
+		int ret = snprintf(colbuf, NAMEDATALEN, "%s_%d_%d", type, original_query_resno, colno);    \
 		if (ret < 0 || ret >= NAMEDATALEN)                                                         \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
 					 errmsg("bad materialization table column name")));                            \
 	} while (0);
 
-#define PRINT_MATINTERNAL_NAME(buf, prefix, relname)                                               \
+#define PRINT_MATINTERNAL_NAME(buf, prefix, hypertable_id)                                         \
 	do                                                                                             \
 	{                                                                                              \
-		int ret = snprintf(buf, NAMEDATALEN, prefix, relname);                                     \
-		if (ret < 0 || ret >= NAMEDATALEN)                                                         \
+		int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);                               \
+		if (ret < 0 || ret > NAMEDATALEN)                                                          \
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
@@ -161,16 +161,18 @@ typedef struct AggPartCxt
 	struct MatTableColumnInfo *mattblinfo;
 	bool addcol;
 	Oid ignore_aggoid;
+	int original_query_resno;
 } AggPartCxt;
 
 /* STATIC functions defined on the structs above */
 static void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tlist,
 									List *grouplist);
-static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input);
+static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
+										int original_query_resno);
 static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo,
 										   RangeTblEntry *usertbl_rte, int32 usertbl_htid);
 static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo,
-															 RangeVar *mat_rel,
+															 int32 hypertable_id, RangeVar *mat_rel,
 															 CAggTimebucketInfo *origquery_tblinfo,
 															 ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
@@ -243,7 +245,8 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
  * timecol_interval - is the partitioning column's interval for hypertable partition
  */
 static void
-cagg_create_hypertable(Oid mat_tbloid, const char *matpartcolname, int64 mat_tbltimecol_interval)
+cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
+					   int64 mat_tbltimecol_interval)
 {
 	bool created;
 	int flags = 0;
@@ -260,6 +263,7 @@ cagg_create_hypertable(Oid mat_tbloid, const char *matpartcolname, int64 mat_tbl
 	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
 	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
+											 hypertable_id,
 											 flags,
 											 time_dim_info,
 											 NULL,
@@ -322,7 +326,8 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
  * table
  */
 static int32
-mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, RangeVar *mat_rel,
+mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
+												RangeVar *mat_rel,
 												CAggTimebucketInfo *origquery_tblinfo,
 												ObjectAddress *mataddress)
 {
@@ -365,7 +370,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 
 	/*convert the mat. table to a hypertable */
 	matpartcol_interval = MATPARTCOL_INTERVAL_FACTOR * (origquery_tblinfo->htpartcol_interval_len);
-	cagg_create_hypertable(mat_relid, matpartcolname, matpartcol_interval);
+	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 	/* retrieve the hypertable id from the cache */
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, mat_relid);
@@ -995,7 +1000,7 @@ mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tli
  * values computed by mutable function.
  */
 static Var *
-mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
+mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_query_resno)
 {
 	int matcolno = list_length(out->matcollist) + 1;
 	char colbuf[NAMEDATALEN];
@@ -1018,7 +1023,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
 		case T_Aggref:
 		{
 			FuncExpr *fexpr = get_partialize_funcexpr((Aggref *) input);
-			PRINT_MATCOLNAME(colbuf, matcolno);
+			PRINT_MATCOLNAME(colbuf, "agg", original_query_resno, matcolno);
 			colname = colbuf;
 			coltype = BYTEAOID;
 			coltypmod = -1;
@@ -1034,7 +1039,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input)
 				colname = pstrdup(tle->resname);
 			else
 			{
-				PRINT_MATCOLNAME(colbuf, matcolno);
+				PRINT_MATCOLNAME(colbuf, "grp", original_query_resno, matcolno);
 				colname = colbuf;
 			}
 			/* is this the time_bucket column */
@@ -1170,7 +1175,7 @@ add_aggregate_partialize_mutator(Node *node, AggPartCxt *cxt)
 
 		/* step 1: create partialize( aggref) column
 		 * for materialization table */
-		var = mattablecolumninfo_addentry(cxt->mattblinfo, node);
+		var = mattablecolumninfo_addentry(cxt->mattblinfo, node, cxt->original_query_resno);
 		cxt->addcol = true;
 		/* step 2: create finalize_agg expr using var
 		 * for the clumn added to the materialization table
@@ -1294,6 +1299,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		TargetEntry *modte = copyObject(tle);
 		cxt.addcol = false;
+		cxt.original_query_resno = resno;
 		/* if tle has aggrefs , get the corresponding
 		 * finalize_agg expression and save it in modte
 		 * also add correspong materialization table column info
@@ -1307,7 +1313,8 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 		if (cxt.addcol == false && (tle->resjunk == false || tle->ressortgroupref > 0))
 		{
 			Var *var;
-			var = mattablecolumninfo_addentry(cxt.mattblinfo, (Node *) tle);
+			var =
+				mattablecolumninfo_addentry(cxt.mattblinfo, (Node *) tle, cxt.original_query_resno);
 			/* fix the expression for the target entry */
 			modte->expr = (Expr *) var;
 		}
@@ -1340,6 +1347,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 	 * overwrite finalize_agg exprs that we have in the havingQual*/
 	cxt.addcol = false;
 	cxt.ignore_aggoid = get_finalizefnoid();
+	cxt.original_query_resno = 0;
 	inp->final_havingqual =
 		expression_tree_mutator((Node *) newhavingQual, add_aggregate_partialize_mutator, &cxt);
 }
@@ -1498,6 +1506,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	char relnamebuf[NAMEDATALEN];
 	MatTableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
+	CatalogSecurityContext sec_ctx;
 
 	Query *final_selquery;
 	Query *partial_selquery;	/* query to populate the mattable*/
@@ -1505,7 +1514,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	RangeTblEntry *usertbl_rte;
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
-	int32 mat_htid;
+	int32 materialize_hypertable_id;
 	int32 job_id;
 	char trigarg[NAMEDATALEN];
 	int ret;
@@ -1533,12 +1542,16 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, origquery_ht->htid);
 
 	/* Step 1: create the materialization table */
-	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%stab", stmt->view->relname);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+	ts_catalog_restore_user(&sec_ctx);
+	PRINT_MATINTERNAL_NAME(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-	mat_htid = mattablecolumninfo_create_materialization_table(&mattblinfo,
-															   mat_rel,
-															   origquery_ht,
-															   &mataddress);
+	mattablecolumninfo_create_materialization_table(&mattblinfo,
+													materialize_hypertable_id,
+													mat_rel,
+													origquery_ht,
+													&mataddress);
 	/* Step 2: create view with select finalize from materialization
 	 * table
 	 */
@@ -1550,7 +1563,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	 */
 	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
 
-	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%sview", stmt->view->relname);
+	PRINT_MATINTERNAL_NAME(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(partial_selquery, part_rel);
 
@@ -1559,7 +1572,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	 * to display the view correctly without having to replicate the PG source code for make_viewdef
 	 */
 	orig_userview_query = fixup_userview_query_tlist(panquery, stmt->aliases);
-	PRINT_MATINTERNAL_NAME(relnamebuf, "_dir_%sview", stmt->view->relname);
+	PRINT_MATINTERNAL_NAME(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
 
@@ -1569,7 +1582,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
-	create_cagg_catlog_entry(mat_htid,
+	create_cagg_catlog_entry(materialize_hypertable_id,
 							 origquery_ht->htid,
 							 get_namespace_name(nspid), /*schema name for user view */
 							 stmt->view->relname,
