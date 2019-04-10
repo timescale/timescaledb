@@ -153,7 +153,7 @@ ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 --make sure the appropriate DROP are still blocked.
 \set ON_ERROR_STOP 0
 DROP table :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
-ERROR:  cannot drop table _timescaledb_internal.ts_internal_mat_beforetab because other objects depend on it
+ERROR:  cannot drop table _timescaledb_internal._materialized_hypertable_3 because other objects depend on it
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW mat_before;

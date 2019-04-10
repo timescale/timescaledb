@@ -623,9 +623,9 @@ SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag),
        job_id
     FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  |        partial_view_name        |      to_timestamp      | to_interval | job_id 
--------------------+-------------------+------------------+-----------------+-----------------------+---------------------------------+------------------------+-------------+--------
-                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | ts_internal_test_t_mat_viewview | 1970-01-01 02:00:00+00 | @ 4 hours   |   1000
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  | partial_view_name |      to_timestamp      | to_interval | job_id 
+-------------------+-------------------+------------------+-----------------+-----------------------+-------------------+------------------------+-------------+--------
+                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | _partial_view_6   | 1970-01-01 02:00:00+00 | @ 4 hours   |   1000
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
@@ -643,14 +643,23 @@ SELECT _timescaledb_internal.to_interval(refresh_lag)
  @ 2 hours
 (1 row)
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'test_t_mat_view'
+\gset
 SELECT * FROM test_t_mat_view;
  time_bucket | value 
 -------------+-------
 (0 rows)
 
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
- time_partition_col | tscol2 | chunk_id 
---------------------+--------+----------
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
+ time_partition_col | agg_2_2 | chunk_id 
+--------------------+---------+----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -668,9 +677,9 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 REFRESH MATERIALIZED VIEW test_t_mat_view;
 INFO:  new materialization range for public.continuous_agg_test_t (time column time) (1549072800000000)
 INFO:  materializing continuous aggregate public.test_t_mat_view: new range up to 1549072800000000
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
- time_partition_col | tscol2 | chunk_id 
---------------------+--------+----------
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
+ time_partition_col | agg_2_2 | chunk_id 
+--------------------+---------+----------
 (0 rows)
 
 SELECT * FROM test_t_mat_view ORDER BY 1;
@@ -702,9 +711,9 @@ REFRESH MATERIALIZED VIEW test_t_mat_view;
 INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold (1549072800000000)
 INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize
 INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
- time_partition_col | tscol2 | chunk_id 
---------------------+--------+----------
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
+ time_partition_col | agg_2_2 | chunk_id 
+--------------------+---------+----------
 (0 rows)
 
 SELECT * FROM test_t_mat_view ORDER BY 1;

@@ -57,51 +57,62 @@ AS SELECT time_bucket('1week', time), COUNT(data)
 NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- public           | rename_test    | _timescaledb_internal | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ public           | rename_test    | _timescaledb_internal | _partial_view_4
 (2 rows)
 
 ALTER VIEW rename_test SET SCHEMA rename_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- rename_schema    | rename_test    | _timescaledb_internal | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ rename_schema    | rename_test    | _timescaledb_internal | _partial_view_4
 (2 rows)
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'rename_test'
+\gset
 \c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER VIEW _timescaledb_internal.ts_internal_rename_testview SET SCHEMA public;
+ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET SCHEMA public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- rename_schema    | rename_test    | public                | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ rename_schema    | rename_test    | public                | _partial_view_4
 (2 rows)
 
 --alter direct view schema
 SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  direct_view_schema   |   direct_view_name   
-------------------+----------------+-----------------------+----------------------
- public           | mat_m1         | _timescaledb_internal | _dir_mat_m1view
- rename_schema    | rename_test    | _timescaledb_internal | _dir_rename_testview
+ user_view_schema | user_view_name |  direct_view_schema   | direct_view_name 
+------------------+----------------+-----------------------+------------------
+ public           | mat_m1         | _timescaledb_internal | _direct_view_2
+ rename_schema    | rename_test    | _timescaledb_internal | _direct_view_4
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER VIEW _timescaledb_internal._dir_rename_testview SET SCHEMA public;
+ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      |  direct_view_schema   |   direct_view_name   
-------------------+----------------+-----------------------+-----------------------------+-----------------------+----------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view      | _timescaledb_internal | _dir_mat_m1view
- rename_schema    | rename_test    | public                | ts_internal_rename_testview | public                | _dir_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
+------------------+----------------+-----------------------+-------------------+-----------------------+------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
+ rename_schema    | rename_test    | public                | _partial_view_4   | public                | _direct_view_4
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -109,19 +120,19 @@ ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- new_name_schema  | rename_test    | public                | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ new_name_schema  | rename_test    | public                | _partial_view_4
 (2 rows)
 
-ALTER VIEW ts_internal_rename_testview SET SCHEMA new_name_schema;
+ALTER VIEW :"PART_VIEW_NAME" SET SCHEMA new_name_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- new_name_schema  | rename_test    | new_name_schema       | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ new_name_schema  | rename_test    | new_name_schema       | _partial_view_4
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -129,19 +140,19 @@ ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- foo_name_schema  | rename_test    | foo_name_schema       | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ foo_name_schema  | rename_test    | foo_name_schema       | _partial_view_4
 (2 rows)
 
 ALTER VIEW foo_name_schema.rename_test SET SCHEMA public;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- public           | rename_test    | foo_name_schema       | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ public           | rename_test    | foo_name_schema       | _partial_view_4
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -149,19 +160,19 @@ ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      
-------------------+----------------+-----------------------+-----------------------------
- public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view
- public           | rename_test    | rename_schema         | ts_internal_rename_testview
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ public           | mat_m1         | _timescaledb_internal | _partial_view_2
+ public           | rename_test    | rename_schema         | _partial_view_4
 (2 rows)
 
 ALTER VIEW rename_test RENAME TO rename_c_aggregate;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  |      partial_view_name      
-------------------+--------------------+-----------------------+-----------------------------
- public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view
- public           | rename_c_aggregate | rename_schema         | ts_internal_rename_testview
+ user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name 
+------------------+--------------------+-----------------------+-------------------
+ public           | mat_m1             | _timescaledb_internal | _partial_view_2
+ public           | rename_c_aggregate | rename_schema         | _partial_view_4
 (2 rows)
 
 SELECT * FROM rename_c_aggregate;
@@ -169,25 +180,25 @@ SELECT * FROM rename_c_aggregate;
 -------------+-------
 (0 rows)
 
-ALTER VIEW rename_schema.ts_internal_rename_testview RENAME TO partial_view;
+ALTER VIEW rename_schema.:"PART_VIEW_NAME" RENAME TO partial_view;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  |   partial_view_name    |  direct_view_schema   |   direct_view_name   
-------------------+--------------------+-----------------------+------------------------+-----------------------+----------------------
- public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view | _timescaledb_internal | _dir_mat_m1view
- public           | rename_c_aggregate | rename_schema         | partial_view           | public                | _dir_rename_testview
+ user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
+------------------+--------------------+-----------------------+-------------------+-----------------------+------------------
+ public           | mat_m1             | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
+ public           | rename_c_aggregate | rename_schema         | partial_view      | public                | _direct_view_4
 (2 rows)
 
 --rename direct view
-ALTER VIEW _dir_rename_testview RENAME TO direct_view;
+ALTER VIEW :"DIR_VIEW_NAME" RENAME TO direct_view;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  |   partial_view_name    |  direct_view_schema   | direct_view_name 
-------------------+--------------------+-----------------------+------------------------+-----------------------+------------------
- public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view | _timescaledb_internal | _dir_mat_m1view
- public           | rename_c_aggregate | rename_schema         | partial_view           | public                | direct_view
+ user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
+------------------+--------------------+-----------------------+-------------------+-----------------------+------------------
+ public           | mat_m1             | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
+ public           | rename_c_aggregate | rename_schema         | partial_view      | public                | direct_view
 (2 rows)
 
 -- drop_chunks tests
@@ -422,7 +433,7 @@ ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
 \set ON_ERROR_STOP 0
 -- test a variety of ALTER TABLE statements
 ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
-ERROR:  cannot rename column "chunk_id" of materialization table "ts_internal_drop_chunks_viewtab"
+ERROR:  cannot rename column "chunk_id" of materialization table "_materialized_hypertable_8"
 ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
 ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
@@ -453,7 +464,7 @@ ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE INDEX new_name_idx ON new_name(chunk_id);
 SELECT * FROM new_name;
- time_partition_col |       tscol2       | chunk_id 
+ time_partition_col |      agg_2_2       | chunk_id 
 --------------------+--------------------+----------
                   6 | \x0000000000000002 |        6
                   9 | \x0000000000000003 |        6
@@ -478,7 +489,7 @@ AS SELECT time_bucket('3', time), SUM(data)
 ERROR:  hypertable already has a continuous aggregate
 -- no continuous aggregates on a continuous aggregate materialization table
 CREATE VIEW new_name_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
-AS SELECT time_bucket('6', time_partition_col), COUNT(tscol2)
+AS SELECT time_bucket('6', time_partition_col), COUNT(agg_2_2)
     FROM new_name
     GROUP BY 1;
 ERROR:  hypertable is a continuous aggregate materialization table

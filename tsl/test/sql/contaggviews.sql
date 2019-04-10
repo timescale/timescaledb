@@ -45,7 +45,17 @@ group by time_bucket(1, a), a;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
+insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select a, _timescaledb_internal.partialize_agg(count(b)),
 time_bucket(1, a)
 ,1
@@ -91,8 +101,18 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec);
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1day', timec), _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity))
 ,1
@@ -143,8 +163,18 @@ min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by time_bucket('1week', timec) ;
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
@@ -180,8 +210,18 @@ where location = 'NYC'
 group by time_bucket('1week', timec)
 ;
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
@@ -216,8 +256,18 @@ group by time_bucket('1week', timec)
 having stddev(humidity) is not null;
 ;
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
@@ -270,14 +320,23 @@ from conditions
 group by  time_bucket('1week', timec)
 having min(location) >= 'NYC' and avg(temperature) > 20
 ;
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_m1'
+\gset
 
 select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
-(Select oid from pg_class where relname like 'ts_internal_mat_m1tab')
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into  _timescaledb_internal.ts_internal_mat_m1tab
+insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,_timescaledb_internal.partialize_agg( avg(temperature))
@@ -305,8 +364,8 @@ where view_name::text like 'mat_m1';
 --TEST6 -- select from internal view
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-insert into _timescaledb_internal.ts_internal_mat_m1tab
-select * from _timescaledb_internal.ts_internal_mat_m1view;
+insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+select * from :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --lets drop the view and check
