@@ -109,8 +109,8 @@ select view_name, view_owner, refresh_lag, refresh_interval, materialization_hyp
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 
---TODO
---select view_name, viewdefinition from timescaledb_information.continuous_aggregate_settings where view_name::text like '%test_continuous_agg_view';
+select view_name, view_definition from timescaledb_information.continuous_aggregates
+where view_name::text like '%test_continuous_agg_view';
 
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
 

@@ -298,6 +298,10 @@ group by  time_bucket('1week', timec)
 having min(location) >= 'NYC' and avg(temperature) > 20 and avg(lowp) > 10
 order by time_bucket('1week', timec), min(location);
 
+--check view defintion in information views
+select view_name, view_definition from timescaledb_information.continuous_aggregates
+where view_name::text like 'mat_m1';
+
 --TEST6 -- select from internal view
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -363,7 +367,9 @@ SELECT
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
-       partial_view_schema as "PART_VIEW_SCHEMA"
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_test'
@@ -371,6 +377,7 @@ WHERE user_view_name = 'mat_test'
 
 DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
+DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
 DROP VIEW mat_test;
 \set ON_ERROR_STOP 1
 
@@ -379,9 +386,10 @@ SELECT count(*)
 FROM _timescaledb_catalog.continuous_agg ca
 WHERE user_view_name = 'mat_test';
 
---mat table, user_view, and partial view all there
+--mat table, user_view, direct view and partial view all there
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
 select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+select count(*) from pg_class where relname = :'DIR_VIEW_NAME';
 select count(*) from pg_class where relname = 'mat_test';
 
 DROP VIEW mat_test CASCADE;
@@ -391,9 +399,10 @@ SELECT count(*)
 FROM _timescaledb_catalog.continuous_agg ca
 WHERE user_view_name = 'mat_test';
 
---mat table, user_view, and partial view all gone
+--mat table, user_view, direct view and partial view all gone
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
 select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+select count(*) from pg_class where relname = :'DIR_VIEW_NAME';
 select count(*) from pg_class where relname = 'mat_test';
 
 

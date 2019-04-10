@@ -1039,5 +1039,5 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 (4 rows)
 
 DROP TABLE continuous_agg_negative CASCADE;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_negative_view_5view
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
