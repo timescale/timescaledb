@@ -149,7 +149,7 @@ order by 1;
 -- TEST3 --
 -- drop on table conditions should cascade to materialized mat_v1
 drop table conditions cascade;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -307,7 +307,7 @@ order by sum(temperature)+sum(humidity);
 --group by with more than 1 group column
 -- having clause with a mix of columns from select list + others
 drop table conditions cascade;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
       timec       TIMESTAMPTZ       NOT NULL,
@@ -388,6 +388,20 @@ order by time_bucket('1week', timec), min(location);
  Sun Dec 30 16:00:00 2018 PST | NYC |      210 | 21.2132034355964
 (3 rows)
 
+--check view defintion in information views
+select view_name, view_definition from timescaledb_information.continuous_aggregates
+where view_name::text like 'mat_m1';
+ view_name |                                                 view_definition                                                 
+-----------+-----------------------------------------------------------------------------------------------------------------
+ mat_m1    |  SELECT time_bucket('@ 7 days'::interval, conditions.timec) AS timec,                                          +
+           |     min(conditions.location) AS minl,                                                                          +
+           |     (sum(conditions.temperature) + sum(conditions.humidity)) AS sumth,                                         +
+           |     stddev(conditions.humidity) AS stddevh                                                                     +
+           |    FROM conditions                                                                                             +
+           |   GROUP BY (time_bucket('@ 7 days'::interval, conditions.timec))                                               +
+           |  HAVING ((min(conditions.location) >= 'NYC'::text) AND (avg(conditions.temperature) > (20)::double precision));
+(1 row)
+
 --TEST6 -- select from internal view
 \c :TEST_DBNAME :ROLE_SUPERUSER
 insert into _timescaledb_internal.ts_internal_mat_m1tab
@@ -457,7 +471,9 @@ psql:include/cont_agg_equal.sql:13: NOTICE:  adding not-null constraint to colum
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
-       partial_view_schema as "PART_VIEW_SCHEMA"
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_test'
@@ -465,7 +481,9 @@ WHERE user_view_name = 'mat_test'
 DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 ERROR:  cannot drop table _timescaledb_internal.ts_internal_mat_testtab because other objects depend on it
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
-ERROR:  cannot drop the partial view because it is required by a continuous aggregate
+ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
+DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
+ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW mat_test;
 ERROR:  dropping a continous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
@@ -478,7 +496,7 @@ WHERE user_view_name = 'mat_test';
      1
 (1 row)
 
---mat table, user_view, and partial view all there
+--mat table, user_view, direct view and partial view all there
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
  count 
 -------
@@ -486,6 +504,12 @@ select count(*) from pg_class where relname = :'PART_VIEW_NAME';
 (1 row)
 
 select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from pg_class where relname = :'DIR_VIEW_NAME';
  count 
 -------
      1
@@ -508,7 +532,7 @@ WHERE user_view_name = 'mat_test';
      0
 (1 row)
 
---mat table, user_view, and partial view all gone
+--mat table, user_view, direct view and partial view all gone
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
  count 
 -------
@@ -516,6 +540,12 @@ select count(*) from pg_class where relname = :'PART_VIEW_NAME';
 (1 row)
 
 select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from pg_class where relname = :'DIR_VIEW_NAME';
  count 
 -------
      0
@@ -597,7 +627,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidatio
 (1 row)
 
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_drop_testview
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 --catalog entry should be gone
 SELECT count(*)
@@ -699,7 +729,7 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 (1 row)
 
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_with_testview
+NOTICE:  drop cascades to 2 other objects
 --test WITH using a hypertable with an integer time dimension
 CREATE TABLE conditions (
       timec       INT       NOT NULL,

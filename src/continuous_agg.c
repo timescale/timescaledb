@@ -30,6 +30,8 @@
 #include <utils/fmgrprotos.h>
 #endif
 
+#define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
+
 static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 		[ContinuousEnabled] = {
 			.arg_name = "continuous",
@@ -243,8 +245,8 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 	{
 		FormData_continuous_agg *data =
 			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
-		if (ts_continuous_agg_is_user_view(data, schema, name) ||
-			ts_continuous_agg_is_partial_view(data, schema, name))
+		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, schema, name);
+		if (vtyp != ContinuousAggNone)
 		{
 			ca = palloc0(sizeof(*ca));
 			continuous_agg_init(ca, data);
@@ -260,9 +262,10 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
  *
  * These objects are: the user view itself, the catalog entry in
  * continuous-agg , the partial view,
- * the materialization hypertable and
- * trigger on the raw hypertable (hypertable specified in the user view ).
- * NOTE: The order in which the objects are dropped should be EXACTLy same as in materialize.c"
+ * the materialization hypertable,
+ * trigger on the raw hypertable (hypertable specified in the user view )
+ * copy of the user view query (aka the direct view)
+ * NOTE: The order in which the objects are dropped should be EXACTLY the same as in materialize.c"
  *
  * drop_user_view indicates whether to drop the user view.
  *                (should be false if called as part of the drop-user-view callback)
@@ -274,7 +277,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
 	Catalog *catalog = ts_catalog_get();
 	ObjectAddress user_view = { .objectId = InvalidOid }, partial_view = { .objectId = InvalidOid },
-				  rawht_trig = { .objectId = InvalidOid };
+				  rawht_trig = { .objectId = InvalidOid }, direct_view = { .objectId = InvalidOid };
 	Hypertable *mat_hypertable, *raw_hypertable;
 	int32 count = 0;
 	bool raw_hypertable_has_other_caggs = true;
@@ -341,6 +344,15 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	if (OidIsValid(partial_view.objectId))
 		LockRelationOid(partial_view.objectId, AccessExclusiveLock);
 
+	direct_view = (ObjectAddress){
+		.classId = RelationRelationId,
+		.objectId =
+			get_relname_relid(NameStr(agg->data.direct_view_name),
+							  get_namespace_oid(NameStr(agg->data.direct_view_schema), false)),
+	};
+	if (OidIsValid(direct_view.objectId))
+		LockRelationOid(direct_view.objectId, AccessExclusiveLock);
+
 	/*  END OF LOCKING. Perform actual deletions now. */
 
 	if (OidIsValid(user_view.objectId))
@@ -377,6 +389,8 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 
 	if (OidIsValid(partial_view.objectId))
 		performDeletion(&partial_view, DROP_RESTRICT, 0);
+	if (OidIsValid(direct_view.objectId))
+		performDeletion(&direct_view, DROP_RESTRICT, 0);
 }
 
 /*
@@ -412,9 +426,9 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 	}
 }
 
-/* Block dropping the partial view if the continuous aggregate still exists */
+/* Block dropping the partial and direct view if the continuous aggregate still exists */
 static void
-drop_partial_view(ContinuousAgg *agg)
+drop_internal_view(ContinuousAgg *agg)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
@@ -429,47 +443,63 @@ drop_partial_view(ContinuousAgg *agg)
 	if (count > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-				 errmsg("cannot drop the partial view because it is required by a continuous "
-						"aggregate")));
+				 errmsg(
+					 "cannot drop the partial/direct view because it is required by a continuous "
+					 "aggregate")));
 }
 
 /* This gets called when a view gets dropped. */
 void
 ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema, const char *name)
 {
-	if (ts_continuous_agg_is_user_view(&ca->data, schema, name))
-		drop_continuous_agg(ca, false /* The user view has already been dropped */);
-	else if (ts_continuous_agg_is_partial_view(&ca->data, schema, name))
-		drop_partial_view(ca);
-	else
-		elog(ERROR, "unknown continuous aggregate view type");
+	ContinuousAggViewType vtyp;
+	vtyp = ts_continuous_agg_view_type(&ca->data, schema, name);
+	switch (vtyp)
+	{
+		case ContinuousAggUserView:
+			drop_continuous_agg(ca, false /* The user view has already been dropped */);
+			break;
+		case ContinuousAggPartialView:
+		case ContinuousAggDirectView:
+			drop_internal_view(ca);
+			break;
+		default:
+			elog(ERROR, "unknown continuous aggregate view type");
+	}
 }
 
 static inline bool
 ts_continuous_agg_is_user_view_schema(FormData_continuous_agg *data, const char *schema)
 {
-	return namestrcmp(&data->user_view_schema, schema) == 0;
+	return CHECK_NAME_MATCH(&data->user_view_schema, schema);
 }
 
 static inline bool
 ts_continuous_agg_is_partial_view_schema(FormData_continuous_agg *data, const char *schema)
 {
-	return namestrcmp(&data->partial_view_schema, schema) == 0;
+	return CHECK_NAME_MATCH(&data->partial_view_schema, schema);
 }
 
-bool
-ts_continuous_agg_is_user_view(FormData_continuous_agg *data, const char *schema, const char *name)
+static inline bool
+ts_continuous_agg_is_direct_view_schema(FormData_continuous_agg *data, const char *schema)
 {
-	return ts_continuous_agg_is_user_view_schema(data, schema) &&
-		   (namestrcmp(&data->user_view_name, name) == 0);
+	return CHECK_NAME_MATCH(&data->direct_view_schema, schema);
 }
 
-bool
-ts_continuous_agg_is_partial_view(FormData_continuous_agg *data, const char *schema,
-								  const char *name)
+ContinuousAggViewType
+ts_continuous_agg_view_type(FormData_continuous_agg *data, const char *schema, const char *name)
 {
-	return ts_continuous_agg_is_partial_view_schema(data, schema) &&
-		   (namestrcmp(&data->partial_view_name, name) == 0);
+	if (CHECK_NAME_MATCH(&data->user_view_schema, schema) &&
+		CHECK_NAME_MATCH(&data->user_view_name, name))
+		return ContinuousAggUserView;
+	else if (CHECK_NAME_MATCH(&data->partial_view_schema, schema) &&
+			 CHECK_NAME_MATCH(&data->partial_view_name, name))
+		return ContinuousAggPartialView;
+	else if (CHECK_NAME_MATCH(&data->direct_view_schema, schema) &&
+			 CHECK_NAME_MATCH(&data->direct_view_name, name))
+		return ContinuousAggDirectView;
+	else
+		return ContinuousAggNone;
 }
 
 static FormData_continuous_agg *
@@ -505,6 +535,12 @@ ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema)
 			namestrcpy(&new_data->partial_view_schema, new_schema);
 		}
 
+		if (ts_continuous_agg_is_direct_view_schema(data, old_schema))
+		{
+			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			namestrcpy(&new_data->direct_view_schema, new_schema);
+		}
+
 		if (new_tuple != NULL)
 			ts_catalog_update(tinfo->scanrel, new_tuple);
 	}
@@ -522,19 +558,32 @@ ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, ch
 		TupleInfo *tinfo = ts_scan_iterator_tuple_info(&iterator);
 		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tinfo->tuple);
 		HeapTuple new_tuple = NULL;
-
-		if (ts_continuous_agg_is_user_view(data, old_schema, name))
+		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, old_schema, name);
+		switch (vtyp)
 		{
-			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
-			namestrcpy(&new_data->user_view_schema, new_schema);
-			namestrcpy(&new_data->user_view_name, new_name);
-		}
-
-		if (ts_continuous_agg_is_partial_view(data, old_schema, name))
-		{
-			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
-			namestrcpy(&new_data->partial_view_schema, new_schema);
-			namestrcpy(&new_data->partial_view_name, new_name);
+			case ContinuousAggUserView:
+			{
+				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				namestrcpy(&new_data->user_view_schema, new_schema);
+				namestrcpy(&new_data->user_view_name, new_name);
+				break;
+			}
+			case ContinuousAggPartialView:
+			{
+				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				namestrcpy(&new_data->partial_view_schema, new_schema);
+				namestrcpy(&new_data->partial_view_name, new_name);
+				break;
+			}
+			case ContinuousAggDirectView:
+			{
+				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				namestrcpy(&new_data->direct_view_schema, new_schema);
+				namestrcpy(&new_data->direct_view_name, new_name);
+				break;
+			}
+			default:
+				break;
 		}
 
 		if (new_tuple != NULL)
