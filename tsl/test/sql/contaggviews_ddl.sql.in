@@ -219,3 +219,10 @@ SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
+
+-- TRUNCATE test
+\set ON_ERROR_STOP 0
+TRUNCATE drop_chunks_table_u;
+TRUNCATE :drop_chunks_mat_table_u;
+\set ON_ERROR_STOP 1
+
