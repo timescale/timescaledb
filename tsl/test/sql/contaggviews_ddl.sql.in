@@ -226,3 +226,33 @@ TRUNCATE drop_chunks_table_u;
 TRUNCATE :drop_chunks_mat_table_u;
 \set ON_ERROR_STOP 1
 
+-- ALTER TABLE tests
+\set ON_ERROR_STOP 0
+-- test a variety of ALTER TABLE statements
+ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
+ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
+ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
+ALTER TABLE :drop_chunks_mat_table_u ENABLE ROW LEVEL SECURITY;
+ALTER TABLE :drop_chunks_mat_table_u ADD COLUMN fizzle INTEGER;
+ALTER TABLE :drop_chunks_mat_table_u DROP COLUMN chunk_id;
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id DROP NOT NULL;
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET DEFAULT 1;
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET STORAGE EXTERNAL;
+ALTER TABLE :drop_chunks_mat_table_u DISABLE TRIGGER ALL;
+ALTER TABLE :drop_chunks_mat_table_u SET TABLESPACE foo;
+ALTER TABLE :drop_chunks_mat_table_u NOT OF;
+ALTER TABLE :drop_chunks_mat_table_u OWNER TO CURRENT_USER;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
+ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE INDEX new_name_idx ON new_name(chunk_id);
+
+SELECT * FROM new_name;
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+
+DROP INDEX new_name_idx;
