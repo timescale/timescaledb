@@ -285,7 +285,9 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		return old_completed_threshold;
 	}
 
-	if (end_time <= PG_INT64_MIN + max_materialization_distance)
+	/* check for values which would overflow 64 bit subtraction*/
+	if (max_materialization_distance >= 0 &&
+		end_time <= PG_INT64_MIN + max_materialization_distance)
 	{
 		if (verbose)
 			elog(INFO,
@@ -297,6 +299,16 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 				 end_time);
 		*materializing_new_range = false;
 		return old_completed_threshold;
+	}
+	else if (max_materialization_distance < 0 &&
+			 end_time >= PG_INT64_MAX + max_materialization_distance)
+	{
+		/* note since max_materialization_distance is negative
+		 * PG_INT64_MAX + max_materialization_distance is smaller than PG_INT64_MAX
+		 * pick a value so that end_time -= max_materialization_distance will be
+		 * PG_INT64_MAX, we should materialize everything
+		 */
+		end_time = PG_INT64_MAX + max_materialization_distance;
 	}
 
 	end_time -= max_materialization_distance;

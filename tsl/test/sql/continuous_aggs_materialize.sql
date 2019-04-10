@@ -416,5 +416,45 @@ SELECT hypertable_id, watermark
     WHERE hypertable_id=:raw_table_id;
 
 --cleanup of continuous agg views --
-drop view test_t_mat_view cascade;
-drop view extreme_view cascade;
+DROP view test_t_mat_view CASCADE;
+DROP view extreme_view CASCADE;
+
+-- negative lag test
+CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
+SELECT create_hypertable('continuous_agg_negative', 'time', chunk_time_interval=> 10);
+
+CREATE VIEW negative_view_5
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('5', time), COUNT(data) as value
+        FROM continuous_agg_negative
+        GROUP BY 1;
+
+-- two chunks, 4 buckets
+INSERT INTO continuous_agg_negative
+    SELECT i, i FROM generate_series(0, 11) AS i;
+REFRESH MATERIALIZED VIEW negative_view_5;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+-- inserting 12 and 13 will cause the next bucket to materialize
+-- even though the time_bucket would require us INSERT 14
+INSERT INTO continuous_agg_negative VALUES (12, 12), (13, 13);
+REFRESH MATERIALIZED VIEW negative_view_5;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+-- bucket is finished as normal with the additional value
+INSERT INTO continuous_agg_negative VALUES (14, 14);
+REFRESH MATERIALIZED VIEW negative_view_5;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+-- we can handle values near max
+INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
+REFRESH MATERIALIZED VIEW negative_view_5;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+
+-- even when the subrtraction would make a completion time greater than max
+INSERT INTO continuous_agg_negative VALUES (:big_int_max-1, 201);
+REFRESH MATERIALIZED VIEW negative_view_5;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+DROP TABLE continuous_agg_negative CASCADE;
