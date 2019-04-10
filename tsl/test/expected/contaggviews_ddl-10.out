@@ -385,3 +385,55 @@ ERROR:  cannot TRUNCATE a hypertable that has a continuous aggregate
 TRUNCATE :drop_chunks_mat_table_u;
 ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
 \set ON_ERROR_STOP 1
+-- ALTER TABLE tests
+\set ON_ERROR_STOP 0
+-- test a variety of ALTER TABLE statements
+ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
+ERROR:  cannot rename column "chunk_id" of materialization table "ts_internal_drop_chunks_viewtab"
+ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u ENABLE ROW LEVEL SECURITY;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u ADD COLUMN fizzle INTEGER;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u DROP COLUMN chunk_id;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id DROP NOT NULL;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET DEFAULT 1;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET STORAGE EXTERNAL;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u DISABLE TRIGGER ALL;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u SET TABLESPACE foo;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u NOT OF;
+ERROR:  operation not supported on materialization tables
+ALTER TABLE :drop_chunks_mat_table_u OWNER TO CURRENT_USER;
+ERROR:  operation not supported on materialization tables
+\set ON_ERROR_STOP 1
+ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
+ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE INDEX new_name_idx ON new_name(chunk_id);
+SELECT * FROM new_name;
+ time_partition_col |       tscol2       | chunk_id 
+--------------------+--------------------+----------
+                  6 | \x0000000000000002 |        6
+                  9 | \x0000000000000003 |        6
+                 12 | \x0000000000000002 |        6
+                 12 | \x0000000000000001 |        7
+(4 rows)
+
+SELECT * FROM drop_chunks_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           6 |     2
+           9 |     3
+          12 |     3
+(3 rows)
+
+DROP INDEX new_name_idx;
