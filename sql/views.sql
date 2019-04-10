@@ -59,7 +59,8 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
     viewinfo.viewowner as view_owner,
     cagg.refresh_lag,
     bgwjob.schedule_interval as refresh_interval,
-    format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable
+    format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
+    directview.viewdefinition as view_definition
   FROM  _timescaledb_catalog.continuous_agg cagg, 
         _timescaledb_catalog.hypertable ht, LATERAL
         ( select C.oid, pg_get_userbyid( C.relowner) as viewowner
@@ -68,7 +69,11 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
           and N.nspname = cagg.user_view_schema ) viewinfo, LATERAL
         ( select schedule_interval
           FROM  _timescaledb_config.bgw_job
-          where id = cagg.job_id ) bgwjob
+          where id = cagg.job_id ) bgwjob, LATERAL
+        ( select pg_get_viewdef(C.oid) as viewdefinition
+          FROM pg_class C LEFT JOIN pg_namespace N on (N.oid = C.relnamespace)
+          where C.relkind = 'v' and C.relname = cagg.direct_view_name
+          and N.nspname = cagg.direct_view_schema ) directview
   WHERE cagg.mat_hypertable_id = ht.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as

@@ -190,21 +190,22 @@ static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matco
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
 						 char *partial_schema, char *partial_view, int64 bucket_width,
-						 int64 refresh_lag, int32 job_id, Query *userquery_parse)
+						 int64 refresh_lag, int32 job_id, char *direct_schema, char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	TupleDesc desc;
-	NameData user_schnm, user_viewnm, partial_schnm, partial_viewnm;
+	NameData user_schnm, user_viewnm, partial_schnm, partial_viewnm, direct_schnm, direct_viewnm;
 	Datum values[Natts_continuous_agg];
 	bool nulls[Natts_continuous_agg] = { false };
 	CatalogSecurityContext sec_ctx;
-	char *userview_query = nodeToString(userquery_parse);
 
 	namestrcpy(&user_schnm, user_schema);
 	namestrcpy(&user_viewnm, user_view);
 	namestrcpy(&partial_schnm, partial_schema);
 	namestrcpy(&partial_viewnm, partial_view);
+	namestrcpy(&direct_schnm, direct_schema);
+	namestrcpy(&direct_viewnm, direct_view);
 	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
@@ -222,8 +223,10 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = bucket_width;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = refresh_lag;
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_query)] =
-		CStringGetTextDatum(userview_query);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
+		NameGetDatum(&direct_schnm);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
+		NameGetDatum(&direct_viewnm);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -1334,6 +1337,34 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	return final_selquery;
 }
 
+/* assign aliases to the targetlist for the view query provided by the user
+ * we shoudl not reply on the default resnames say the query has : sum(temp), sum(humidity)
+ * the default resname is "sum" this would cause a conflict and create view will fail.
+ */
+static Query *
+fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
+{
+	Query *ret_query = copyObject(userquery);
+	if (tlist_aliases != NIL)
+	{
+		ListCell *lc;
+		ListCell *alist_item = list_head(tlist_aliases);
+		foreach (lc, ret_query->targetList)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(lc);
+
+			/* junk columns don't get aliases */
+			if (tle->resjunk)
+				continue;
+			tle->resname = pstrdup(strVal(lfirst(alist_item)));
+			alist_item = lnext(alist_item);
+			if (alist_item == NULL)
+				break; /* done assigning aliases */
+		}
+	}
+	return ret_query;
+}
+
 /* Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
  * b) create a view that references the underlying
@@ -1378,10 +1409,11 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	FinalizeQueryInfo finalqinfo;
 
 	Query *final_selquery;
-	Query *partial_selquery; /* query to populate the mattable*/
+	Query *partial_selquery;	/* query to populate the mattable*/
+	Query *orig_userview_query; /* copy of the original user query for dummy view */
 	RangeTblEntry *usertbl_rte;
 	Oid nspid;
-	RangeVar *part_rel = NULL, *mat_rel = NULL;
+	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 mat_htid;
 	int32 job_id;
 	char trigarg[NAMEDATALEN];
@@ -1392,7 +1424,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 										origquery_ht->bucket_width,
 										with_clause_options);
 
-	mattablecolumninfo_init(&mattblinfo, NIL, NIL, panquery->groupClause);
+	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(panquery->groupClause));
 	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
 
 	/* invalidate all options on the stmt before using it
@@ -1426,11 +1458,18 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 
 	PRINT_MATINTERNAL_NAME(relnamebuf, "ts_internal_%sview", stmt->view->relname);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-
 	create_view_for_query(partial_selquery, part_rel);
 
-	Assert(mat_rel != NULL);
-	/* Step 4a register the BGW job */
+	/* Additional miscellaneous steps */
+	/* create a dummy view to store the user supplied view query. This is to get PG
+	 * to display the view correctly without having to replicate the PG source code for make_viewdef
+	 */
+	orig_userview_query = fixup_userview_query_tlist(panquery, stmt->aliases);
+	PRINT_MATINTERNAL_NAME(relnamebuf, "_dir_%sview", stmt->view->relname);
+	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
+	create_view_for_query(orig_userview_query, dum_rel);
+
+	/* register the BGW job to process continuous aggs*/
 	job_id =
 		ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width, refresh_interval);
 
@@ -1445,9 +1484,10 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 							 origquery_ht->bucket_width,
 							 refresh_lag,
 							 job_id,
-							 panquery);
+							 dum_rel->schemaname,
+							 dum_rel->relname);
 
-	/* create trigger on raw hypertable -specified in the user view query*/
+	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
 	ret = snprintf(trigarg, NAMEDATALEN, "%d", origquery_ht->htid);
 	if (ret < 0 || ret >= NAMEDATALEN)
 		ereport(ERROR,
