@@ -160,6 +160,36 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 	}
 }
 
+/* on continuous aggregate materialization tables we block all altercommands except for ADD INDEX */
+static void
+check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
+{
+	ListCell *lc;
+	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+	if ((status & HypertableIsMaterialization) == 0)
+		return;
+
+	/* only allow if all commands are allowed */
+	foreach (lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			case AT_AddIndex:
+			case AT_ReAddIndex:
+				/* allowed on materialization tables */
+				continue;
+			default:
+				/* disable by default */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on materialization tables")));
+				break;
+		}
+	}
+}
+
 static void
 relation_not_only(RangeVar *rv)
 {
@@ -620,7 +650,8 @@ process_truncate(ProcessUtilityArgs *args)
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg(
 								 "cannot TRUNCATE a hypertable underlying a continuous aggregate"),
-							 errhint("DELETE from the underlying table to remove data.")));
+							 errhint(
+								 "DELETE from the table this continuous aggregate is based on.")));
 
 				if (agg_status == HypertableIsRawTable)
 					ereport(ERROR,
@@ -1022,6 +1053,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 					 errhint("Rename the hypertable column instead.")));
 		return;
 	}
+
+	/* block renaming columns on the materialization table of a continuous agg*/
+	if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot rename column \"%s\" of materialization table \"%s\"",
+						stmt->subname,
+						get_rel_name(relid))));
 
 	process_add_hypertable(args, ht);
 
@@ -2133,6 +2172,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	ht = ts_hypertable_cache_get_entry(hcache, relid);
 	if (ht != NULL)
 	{
+		check_continuous_agg_alter_table_allowed(ht, stmt);
 		relation_not_only(stmt->relation);
 		process_add_hypertable(args, ht);
 	}
