@@ -39,6 +39,13 @@
 static unsigned int cursor_number = 0;
 static unsigned int prep_stmt_number = 0;
 
+typedef struct TSConnection
+{
+	PGconn *pg_conn;   /* PostgreSQL connection */
+	bool processing;   /* TRUE if there is ongoin Async request processing */
+	MemoryContext ctx; /* Memory context where connection is allocated */
+} TSConnection;
+
 static PQconninfoOption *
 get_libpq_options()
 {
@@ -173,7 +180,7 @@ check_conn_params(const char **keywords, const char **values)
  * number of ways to break things.
  */
 void
-remote_connection_configure(PGconn *conn)
+remote_connection_configure(TSConnection *conn)
 {
 	/* Force the search path to contain only pg_catalog (see deparse.c) */
 	remote_connection_exec_ok_command(conn, "SET search_path = pg_catalog");
@@ -198,6 +205,37 @@ remote_connection_configure(PGconn *conn)
 	remote_connection_exec_ok_command(conn, "SET extra_float_digits = 3");
 }
 
+static TSConnection *
+remote_connection_create(PGconn *pg_conn, bool processing, MemoryContext mctx)
+{
+	TSConnection *conn = palloc0(sizeof(TSConnection));
+	conn->pg_conn = pg_conn;
+	conn->processing = processing;
+	conn->ctx = mctx;
+	return conn;
+}
+
+PGconn *
+remote_connection_get_pg_conn(TSConnection *conn)
+{
+	Assert(conn != NULL);
+	return conn->pg_conn;
+}
+
+bool
+remote_connection_is_processing(TSConnection *conn)
+{
+	Assert(conn != NULL);
+	return conn->processing;
+}
+
+void
+remote_connection_set_processing(TSConnection *conn, bool processing)
+{
+	Assert(conn != NULL);
+	conn->processing = processing;
+}
+
 /*
  * Configure remote connection using current instance UUID.
  *
@@ -205,7 +243,7 @@ remote_connection_configure(PGconn *conn)
  * originated by frontend server.
  */
 static void
-remote_connection_set_peer_dist_id(PGconn *conn)
+remote_connection_set_peer_dist_id(TSConnection *conn)
 {
 	PGresult *res;
 	char *request;
@@ -226,11 +264,15 @@ remote_connection_set_peer_dist_id(PGconn *conn)
  * that the connection cache handles all of this for you so use that if you can.
  */
 
-PGconn *
-remote_connection_open(char *server_name, List *server_options, List *user_options,
-					   bool set_dist_id)
+TSConnection *
+remote_connection_open(const char *server_name, List *server_options, List *user_options,
+					   MemoryContext mctx, bool set_dist_id)
 {
-	PGconn *volatile conn = NULL;
+	TSConnection *conn = NULL;
+	PGconn *volatile pg_conn = NULL;
+	MemoryContext old_mctx;
+
+	old_mctx = MemoryContextSwitchTo(mctx);
 
 	/*
 	 * Use PG_TRY block to ensure closing connection on error.
@@ -270,19 +312,19 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 		/* verify connection parameters and make connection */
 		check_conn_params(keywords, values);
 
-		conn = PQconnectdbParams(keywords, values, false);
-		if (!conn || PQstatus(conn) != CONNECTION_OK)
+		pg_conn = PQconnectdbParams(keywords, values, false);
+		if (!pg_conn || PQstatus(pg_conn) != CONNECTION_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
 					 errmsg("could not connect to server \"%s\"", server_name),
-					 errdetail_internal("%s", pchomp(PQerrorMessage(conn)))));
+					 errdetail_internal("%s", pchomp(PQerrorMessage(pg_conn)))));
 
 		/*
 		 * Check that non-superuser has used password to establish connection;
 		 * otherwise, he's piggybacking on the postgres server's user
 		 * identity. See also dblink_security_check() in contrib/dblink.
 		 */
-		if (!superuser() && !PQconnectionUsedPassword(conn))
+		if (!superuser() && !PQconnectionUsedPassword(pg_conn))
 			ereport(ERROR,
 					(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
 					 errmsg("password is required"),
@@ -290,6 +332,7 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 						 "Non-superuser cannot connect if the server does not request a password."),
 					 errhint("Target server's authentication method must be changed.")));
 
+		conn = remote_connection_create(pg_conn, false, mctx);
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
@@ -304,11 +347,12 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 	PG_CATCH();
 	{
 		/* Release PGconn data structure if we managed to create one */
-		if (conn)
-			PQfinish(conn);
+		if (pg_conn)
+			PQfinish(pg_conn);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+	MemoryContextSwitchTo(old_mctx);
 
 	return conn;
 }
@@ -317,8 +361,8 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
  * Open a connection using current user UserMapping. If UserMapping is not found,
  * it might succeed opening a connection if a current user is a superuser.
  */
-PGconn *
-remote_connection_open_default(char *server_name)
+TSConnection *
+remote_connection_open_default(const char *server_name)
 {
 	ForeignServer *fs = GetForeignServerByName(server_name, false);
 	volatile UserMapping *um = NULL;
@@ -342,13 +386,23 @@ remote_connection_open_default(char *server_name)
 	}
 	PG_END_TRY();
 
-	return remote_connection_open(server_name, fs->options, um ? um->options : NULL, true);
+	return remote_connection_open(server_name,
+								  fs->options,
+								  um ? um->options : NULL,
+								  CurrentMemoryContext,
+								  true);
 }
 
 void
-remote_connection_close(PGconn *conn)
+remote_connection_close(TSConnection *conn)
 {
-	PQfinish(conn);
+	MemoryContext old;
+	Assert(conn != NULL);
+	old = MemoryContextSwitchTo(conn->ctx);
+	PQfinish(conn->pg_conn);
+	conn->pg_conn = NULL;
+	pfree(conn);
+	MemoryContextSwitchTo(old);
 }
 
 /*
@@ -404,7 +458,8 @@ remote_connection_get_prep_stmt_number()
  * marked with have_error = true.
  */
 void
-remote_connection_report_error(int elevel, PGresult *res, PGconn *conn, bool clear, const char *sql)
+remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn, bool clear,
+							   const char *sql)
 {
 	/* If requested, PGresult must be released before leaving this function. */
 	PG_TRY();
@@ -431,7 +486,7 @@ remote_connection_report_error(int elevel, PGresult *res, PGconn *conn, bool cle
 		 * return NULL, not a PGresult at all.
 		 */
 		if (message_primary == NULL)
-			message_primary = pchomp(PQerrorMessage(conn));
+			message_primary = pchomp(PQerrorMessage(remote_connection_get_pg_conn(conn)));
 
 		ereport(elevel,
 				(errcode(sqlstate),
@@ -528,11 +583,14 @@ remote_connection_drain(PGconn *conn, TimestampTz endtime)
  * cancel the query and discard any pending result, and false if not.
  */
 bool
-remote_connection_cancel_query(PGconn *conn)
+remote_connection_cancel_query(TSConnection *conn)
 {
 	PGcancel *cancel;
 	char errbuf[256];
 	TimestampTz endtime;
+
+	if (!conn)
+		return true;
 
 	/*
 	 * If it takes too long to cancel the query and discard the result, assume
@@ -540,11 +598,15 @@ remote_connection_cancel_query(PGconn *conn)
 	 */
 	endtime = TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 30000);
 
+	/* We assume that processing is over no matter if cancel completes
+	 * successfully or not. */
+	remote_connection_set_processing(conn, false);
+
 	/*
 	 * Issue cancel request.  Unfortunately, there's no good way to limit the
 	 * amount of time that we might block inside PQgetCancel().
 	 */
-	if ((cancel = PQgetCancel(conn)))
+	if ((cancel = PQgetCancel(conn->pg_conn)))
 	{
 		if (!PQcancel(cancel, errbuf, sizeof(errbuf)))
 		{
@@ -557,5 +619,5 @@ remote_connection_cancel_query(PGconn *conn)
 		PQfreeCancel(cancel);
 	}
 
-	return remote_connection_drain(conn, endtime);
+	return remote_connection_drain(conn->pg_conn, endtime);
 }

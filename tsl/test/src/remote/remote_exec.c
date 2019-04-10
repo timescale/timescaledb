@@ -54,7 +54,7 @@ print_result(int elevel, const char *server_name, AsyncResponseResult *result)
 }
 
 static void
-set_connection_settings(PGconn *conn)
+set_connection_settings(TSConnection *conn)
 {
 	AsyncResponseResult *result;
 	char *search_path;
@@ -87,7 +87,7 @@ query_is_empty(const char *query)
 }
 
 static void
-split_query_and_execute(PGconn *conn, const char *server_name, const char *sql)
+split_query_and_execute(TSConnection *conn, const char *server_name, const char *sql)
 {
 	AsyncResponseResult *result;
 	char *sql_copy = pstrdup(sql);
@@ -130,7 +130,7 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 		const char *server_name = lfirst(lc);
 		ForeignServer *foreign_server;
 		UserMapping *um;
-		PGconn *conn;
+		TSConnection *conn;
 
 		foreign_server = GetForeignServerByName(server_name, false);
 		um = GetUserMapping(GetUserId(), foreign_server->serverid);

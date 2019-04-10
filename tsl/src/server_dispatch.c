@@ -201,7 +201,7 @@ enum CustomScanPrivateIndex
 typedef struct ServerState
 {
 	Oid umid; /* Must be first */
-	PGconn *conn;
+	TSConnection *conn;
 	Tuplestorestate *primary_tupstore; /* Tuples this server is primary
 										* for. These tuples are returned when
 										* RETURNING is specified. */
@@ -406,7 +406,7 @@ server_dispatch_set_state(ServerDispatchState *sds, DispatchState new_state)
 }
 
 static PreparedStmt *
-prepare_server_insert_stmt(ServerDispatchState *sds, PGconn *conn, int total_params)
+prepare_server_insert_stmt(ServerDispatchState *sds, TSConnection *conn, int total_params)
 {
 	AsyncRequest *req;
 
@@ -493,10 +493,8 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 													stmt_params_converted_tuples(sds->stmt_params));
 			Assert(sql_stmt != NULL);
 			Assert(ss->num_tuples_sent < TUPSTORE_FLUSH_THRESHOLD);
-			req = async_request_send_with_stmt_params(ss->conn,
-													  sql_stmt,
-													  sds->stmt_params,
-													  response_type);
+			req =
+				async_request_send_with_params(ss->conn, sql_stmt, sds->stmt_params, response_type);
 			break;
 		default:
 			elog(ERROR, "unexpected server dispatch state %s", state_names[sds->state]);

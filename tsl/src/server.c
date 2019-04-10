@@ -249,12 +249,12 @@ server_bootstrap_database(const char *servername, const char *host, int32 port, 
 						  bool if_not_exists, const char *bootstrap_database,
 						  const char *bootstrap_user, const char *bootstrap_password)
 {
-	PGconn *conn;
+	TSConnection *conn;
 	List *server_options;
 
 	server_options =
 		create_server_options(host, port, bootstrap_database, bootstrap_user, bootstrap_password);
-	conn = remote_connection_open((char *) servername, server_options, NULL, false);
+	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
 
 	PG_TRY();
 	{
@@ -301,11 +301,11 @@ static void
 server_bootstrap_extension(const char *servername, const char *host, int32 port, const char *dbname,
 						   bool if_not_exists, const char *user, const char *user_password)
 {
-	PGconn *conn;
+	TSConnection *conn;
 	List *server_options;
 
 	server_options = create_server_options(host, port, dbname, user, user_password);
-	conn = remote_connection_open((char *) servername, server_options, NULL, false);
+	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
 
 	PG_TRY();
 	{
@@ -367,11 +367,11 @@ add_distributed_id_to_backend(const char *servername, const char *host, int32 po
 							  const char *dbname, bool if_not_exists, const char *user,
 							  const char *user_password)
 {
-	PGconn *conn;
+	TSConnection *conn;
 	List *server_options;
 
 	server_options = create_server_options(host, port, dbname, user, user_password);
-	conn = remote_connection_open((char *) servername, server_options, NULL, false);
+	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
 
 	PG_TRY();
 	{
@@ -399,7 +399,7 @@ remove_distributed_id_from_backend(const char *servername)
 {
 	ForeignServer *fs = GetForeignServerByName(servername, false);
 	UserMapping *um;
-	PGconn *conn;
+	TSConnection *conn;
 
 	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
 	 * user mapping isn't found.  The catch block allows superusers to perform this operation
@@ -413,7 +413,11 @@ remove_distributed_id_from_backend(const char *servername)
 		um = NULL;
 	}
 	PG_END_TRY();
-	conn = remote_connection_open((char *) servername, fs->options, um ? um->options : NULL, true);
+	conn = remote_connection_open(servername,
+								  fs->options,
+								  um ? um->options : NULL,
+								  CurrentMemoryContext,
+								  true);
 
 	PG_TRY();
 	{
@@ -766,7 +770,7 @@ server_ping(PG_FUNCTION_ARGS)
 {
 #if !PG96
 	char *server_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	volatile PGconn *conn = NULL;
+	volatile TSConnection *conn = NULL;
 	volatile PGresult *res = NULL;
 	ForeignServer *foregin_server;
 	bool success = false;
@@ -789,7 +793,7 @@ server_ping(PG_FUNCTION_ARGS)
 	PG_TRY();
 	{
 		conn = remote_connection_open_default(server_name);
-		res = remote_connection_query_ok_result((PGconn *) conn, ping_query);
+		res = remote_connection_query_ok_result((TSConnection *) conn, ping_query);
 		success = true;
 	}
 	PG_CATCH();
@@ -803,7 +807,7 @@ server_ping(PG_FUNCTION_ARGS)
 	PG_END_TRY();
 
 	if (conn)
-		remote_connection_close((PGconn *) conn);
+		remote_connection_close((TSConnection *) conn);
 
 	if (res)
 		remote_connection_result_close((PGresult *) res);

@@ -27,26 +27,22 @@ TS_FUNCTION_INFO_V1(tsl_test_remote_async);
 static void
 test_basic_request()
 {
-	PGconn *conn;
-	PGconn *conn_disconnected = NULL;
+	TSConnection *conn;
+	TSConnection *conn_disconnected = NULL;
 	AsyncRequest *req;
 	AsyncResponseResult *result;
 	conn = get_connection();
 
-	req = async_request_send_with_params_elevel(conn, "SELECT 1", 0, NULL, ERROR);
+	req = async_request_send_with_params_elevel(conn, "SELECT 1", NULL, ERROR);
 	result = async_request_wait_any_result(req);
 	Assert(PQresultStatus(async_response_result_get_pg_result(result)) == PGRES_TUPLES_OK);
 	async_response_result_close(result);
 
-	req = async_request_send_with_params_elevel(conn, "SELECT jjj", 0, NULL, ERROR);
+	req = async_request_send_with_params_elevel(conn, "SELECT jjj", NULL, ERROR);
 	EXPECT_ERROR_STMT(result = async_request_wait_ok_result(req));
 
 	EXPECT_ERROR_STMT(
-		req = async_request_send_with_params_elevel(conn_disconnected, "SELECT 1", 0, NULL, ERROR));
-
-	elog(WARNING, "Expect warning about bad connection pointer:");
-	req = async_request_send_with_params_elevel(conn_disconnected, "SELECT 1", 0, NULL, WARNING);
-	Assert(NULL == req);
+		req = async_request_send_with_params_elevel(conn_disconnected, "SELECT 1", NULL, ERROR));
 
 	remote_connection_close(conn);
 }
@@ -54,7 +50,7 @@ test_basic_request()
 static void
 test_parameter_order()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	AsyncRequest *req;
 	PGresult *pg_res;
 	const char **params = (const char **) palloc(sizeof(char *) * 5);
@@ -63,7 +59,10 @@ test_parameter_order()
 	/* Parameters get ordered correctly */
 	params[0] = "0";
 	params[1] = "1";
-	req = async_request_send_with_params_elevel(conn, "SELECT $2, $1", 2, params, ERROR);
+	req = async_request_send_with_params_elevel(conn,
+												"SELECT $2, $1",
+												stmt_params_create_from_values(params, 2),
+												ERROR);
 	result = async_request_wait_any_result(req);
 	pg_res = async_response_result_get_pg_result(result);
 	Assert(PQresultStatus(pg_res) == PGRES_TUPLES_OK);
@@ -77,8 +76,8 @@ test_parameter_order()
 static void
 test_request_set()
 {
-	PGconn *conn = get_connection();
-	PGconn *conn_2 = get_connection();
+	TSConnection *conn = get_connection();
+	TSConnection *conn_2 = get_connection();
 	AsyncRequest *req_1;
 	AsyncRequest *req_2;
 	AsyncRequestSet *set;
@@ -92,10 +91,10 @@ test_request_set()
 
 	/* test the set stuff */
 	set = async_request_set_create();
-	req_1 = async_request_send_with_params_elevel(conn, "SELECT 1", 0, NULL, ERROR);
+	req_1 = async_request_send(conn, "SELECT 1");
 	async_request_attach_user_data(req_1, &var_1);
 	async_request_set_add(set, req_1);
-	req_2 = async_request_send_with_params_elevel(conn_2, "SELECT 2", 0, NULL, ERROR);
+	req_2 = async_request_send(conn_2, "SELECT 2");
 	async_request_attach_user_data(req_2, &var_2);
 	async_request_set_add(set, req_2);
 
@@ -135,7 +134,7 @@ test_request_set()
 static void
 test_node_death()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	AsyncResponseResult *result;
 	AsyncResponse *response;
 	PGresult *pg_res;
@@ -200,8 +199,8 @@ test_node_death()
 static void
 test_timeout()
 {
-	PGconn *conn = get_connection();
-	PGconn *conn_2 = get_connection();
+	TSConnection *conn = get_connection();
+	TSConnection *conn_2 = get_connection();
 	AsyncRequestSet *set;
 	AsyncResponse *response;
 
@@ -209,13 +208,10 @@ test_timeout()
 	 * Test timeout by locking a table in conn_2 and timing out on locking
 	 * conn
 	 */
-	async_request_wait_ok_command(
-		async_request_send_with_params_elevel(conn_2, "BEGIN;", 0, NULL, ERROR));
-	async_request_wait_ok_command(
-		async_request_send_with_params_elevel(conn_2, "LOCK \"S 1\".\"T 1\"", 0, NULL, ERROR));
+	async_request_wait_ok_command(async_request_send(conn_2, "BEGIN;"));
+	async_request_wait_ok_command(async_request_send(conn_2, "LOCK \"S 1\".\"T 1\""));
 
-	async_request_wait_ok_command(
-		async_request_send_with_params_elevel(conn, "BEGIN;", 0, NULL, ERROR));
+	async_request_wait_ok_command(async_request_send(conn, "BEGIN;"));
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "LOCK \"S 1\".\"T 1\"");
 	response = async_request_set_wait_any_response_deadline(
@@ -229,19 +225,37 @@ test_timeout()
 	/* cancel the locked query and do another query */
 	Assert(remote_connection_cancel_query(conn));
 	/* the txn is aborted waiting for abort */
-	EXPECT_ERROR_STMT(async_request_wait_ok_result(
-		async_request_send_with_params_elevel(conn, "SELECT 1;", 0, NULL, ERROR)));
-	async_request_wait_ok_command(
-		async_request_send_with_params_elevel(conn, "ABORT;", 0, NULL, ERROR));
-	async_request_wait_ok_result(
-		async_request_send_with_params_elevel(conn, "SELECT 1;", 0, NULL, ERROR));
+	EXPECT_ERROR_STMT(async_request_wait_ok_result(async_request_send(conn, "SELECT 1;")));
+	async_request_wait_ok_command(async_request_send(conn, "ABORT;"));
+	async_request_wait_ok_result(async_request_send(conn, "SELECT 1;"));
 
 	/* release conn_2 lock */
-	async_request_wait_ok_command(
-		async_request_send_with_params_elevel(conn_2, "COMMIT;", 0, NULL, ERROR));
+	async_request_wait_ok_command(async_request_send(conn_2, "COMMIT;"));
 
 	remote_connection_close(conn);
 	remote_connection_close(conn_2);
+}
+
+static void
+test_multiple_reqests()
+{
+	TSConnection *conn = get_connection();
+	AsyncRequest *req1;
+	AsyncRequest *req2;
+
+	req1 = async_request_send(conn, "SELECT 1");
+	req2 = async_request_send(conn, "SELECT 1");
+
+	async_request_wait_ok_result(req1);
+	async_request_wait_ok_result(req2);
+
+	req1 = async_request_send(conn, "SELECT 1");
+	req2 = async_request_send(conn, "SELECT 1");
+	EXPECT_ERROR_STMT(async_request_wait_ok_result(req2));
+	async_request_wait_ok_result(req1);
+	async_request_wait_ok_result(req2);
+
+	remote_connection_close(conn);
 }
 
 Datum
@@ -251,6 +265,7 @@ tsl_test_remote_async(PG_FUNCTION_ARGS)
 	test_parameter_order();
 	test_request_set();
 	test_node_death();
+	test_multiple_reqests();
 	test_timeout();
 
 	PG_RETURN_VOID();

@@ -42,7 +42,7 @@
 typedef struct RemoteTxn
 {
 	Oid user_mapping_oid; /* hash key (must be first) */
-	PGconn *conn;		  /* connection to foreign server, or NULL */
+	TSConnection *conn;   /* connection to foreign server, or NULL */
 	/* Remaining fields are invalid when conn is NULL: */
 	int xact_depth;			/* 0 = no xact open, 1 = main xact open, 2 =
 							 * one level of subxact open, etc */
@@ -131,7 +131,7 @@ remote_txn_size()
 }
 
 void
-remote_txn_init(RemoteTxn *entry, PGconn *conn, UserMapping *user)
+remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user)
 {
 	ForeignServer *server = GetForeignServer(user->serverid);
 
@@ -165,7 +165,7 @@ remote_txn_set_will_prep_statement(RemoteTxn *entry, RemoteTxnPrepStmtOption pre
 	entry->have_prep_stmt |= will_prep_stmt;
 }
 
-PGconn *
+TSConnection *
 remote_txn_get_connection(RemoteTxn *txn)
 {
 	return txn->conn;
@@ -196,7 +196,7 @@ remote_txn_report_prepare_transaction_result(RemoteTxn *txn, bool success)
  * If the query can't be sent, errors out, or times out, the return value is false.
  */
 static bool
-exec_cleanup_command(PGconn *conn, const char *query)
+exec_cleanup_command(TSConnection *conn, const char *query)
 {
 	TimestampTz end_time;
 	AsyncRequest *req;
@@ -281,7 +281,7 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 	PGresult *res;
 	char *count_string;
 
-	if (PQTRANS_IDLE != PQtransactionStatus(entry->conn))
+	if (PQTRANS_IDLE != PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)))
 		return;
 
 	res = remote_connection_query_any_result(entry->conn,
@@ -324,7 +324,7 @@ remote_txn_abort(RemoteTxn *entry)
 	if (in_error_recursion_trouble())
 		return false;
 
-	switch (PQtransactionStatus(entry->conn))
+	switch (PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)))
 	{
 		case PQTRANS_IDLE:
 		case PQTRANS_INTRANS:
@@ -345,6 +345,9 @@ remote_txn_abort(RemoteTxn *entry)
 		case PQTRANS_UNKNOWN:
 			return false;
 	}
+
+	/* At this point any on going queries should have completed */
+	remote_connection_set_processing(entry->conn, false);
 
 	if (!exec_cleanup_command(entry->conn, abort_sql))
 		return false;
@@ -461,6 +464,7 @@ bool
 remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 {
 	StringInfoData sql;
+	PGconn *pg_conn = remote_connection_get_pg_conn(entry->conn);
 
 	Assert(entry->xact_depth == curlevel);
 	Assert(entry->xact_depth > 1);
@@ -469,8 +473,8 @@ remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 	if (in_error_recursion_trouble())
 		return false;
 
-	if (PQtransactionStatus(entry->conn) != PQTRANS_INTRANS &&
-		PQtransactionStatus(entry->conn) != PQTRANS_INERROR)
+	if (PQtransactionStatus(pg_conn) != PQTRANS_INTRANS &&
+		PQtransactionStatus(pg_conn) != PQTRANS_INERROR)
 		return false;
 
 	entry->have_subtxn_error = true;
@@ -481,7 +485,7 @@ remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 	 * completed.  Check to see if a command is still being processed by the
 	 * remote server, and if so, request cancellation of the command.
 	 */
-	if (PQtransactionStatus(entry->conn) == PQTRANS_ACTIVE &&
+	if (PQtransactionStatus(pg_conn) == PQTRANS_ACTIVE &&
 		!remote_connection_cancel_query(entry->conn))
 		return false;
 

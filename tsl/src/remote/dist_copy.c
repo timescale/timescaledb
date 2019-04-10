@@ -243,16 +243,17 @@ send_binary_copy_header(PGconn *connection)
 }
 
 static void
-start_remote_copy_on_new_connection(CopyConnectionState *state, PGconn *connection)
+start_remote_copy_on_new_connection(CopyConnectionState *state, TSConnection *connection)
 {
-	if (PQisnonblocking(connection))
+	PGconn *pg_conn = remote_connection_get_pg_conn(connection);
+	if (PQisnonblocking(pg_conn))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("distributed copy doesn't support non-blocking connections")));
 
 	if (!list_member_ptr(state->connections_in_use, connection))
 	{
-		PGresult *res = PQexec(connection, state->outgoing_copy_cmd);
+		PGresult *res = PQexec(pg_conn, state->outgoing_copy_cmd);
 
 		if (PQresultStatus(res) != PGRES_COPY_IN)
 			ereport(ERROR,
@@ -261,7 +262,7 @@ start_remote_copy_on_new_connection(CopyConnectionState *state, PGconn *connecti
 							PQresultStatus(res))));
 
 		if (state->using_binary)
-			send_binary_copy_header(connection);
+			send_binary_copy_header(pg_conn);
 
 		state->connections_in_use = lappend(state->connections_in_use, connection);
 	}
@@ -282,7 +283,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 		ChunkServer *cs = lfirst(lc);
 		ForeignServer *fs = GetForeignServerByName(NameStr(cs->fd.server_name), false);
 		UserMapping *um = GetUserMapping(GetUserId(), fs->serverid);
-		PGconn *connection = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
+		TSConnection *connection = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
 
 		start_remote_copy_on_new_connection(state, connection);
 		chunk_connections->connections = lappend(chunk_connections->connections, connection);
@@ -307,23 +308,23 @@ finish_outstanding_copies(CopyConnectionState *state)
 
 	foreach (lc, state->connections_in_use)
 	{
-		PGconn *connection = lfirst(lc);
+		TSConnection *conn = lfirst(lc);
+		PGconn *pg_conn = remote_connection_get_pg_conn(conn);
 		PGresult *res;
 
 		if (state->using_binary)
-			if (send_end_binary_copy_data(connection) != 1)
+			if (send_end_binary_copy_data(pg_conn) != 1)
 				ereport(ERROR,
 						(errcode(ERRCODE_CONNECTION_EXCEPTION),
-						 errmsg("%s", PQerrorMessage(connection))));
+						 errmsg("%s", PQerrorMessage(pg_conn))));
 
-		if (PQputCopyEnd(connection, NULL) == -1)
+		if (PQputCopyEnd(pg_conn, NULL) == -1)
 			ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_EXCEPTION),
-					 errmsg("%s", PQerrorMessage(connection))));
+					(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQerrorMessage(pg_conn))));
 
-		results = lappend(results, PQgetResult(connection));
+		results = lappend(results, PQgetResult(pg_conn));
 		/* Need to get result a second time to move the connection out of copy mode */
-		res = PQgetResult(connection);
+		res = PQgetResult(pg_conn);
 		Assert(res == NULL);
 	}
 
@@ -783,13 +784,14 @@ send_copy_data(StringInfo row_data, List *connections)
 
 	foreach (lc, connections)
 	{
-		int result = PQputCopyData(lfirst(lc), row_data->data, row_data->len);
+		PGconn *pg_conn = remote_connection_get_pg_conn(lfirst(lc));
+		int result = PQputCopyData(pg_conn, row_data->data, row_data->len);
 
 		if (result != 1)
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_EXCEPTION),
 					 errmsg("%s",
-							result == -1 ? PQerrorMessage(lfirst(lc)) :
+							result == -1 ? PQerrorMessage(pg_conn) :
 										   "unexpected response while sending copy data")));
 	}
 }

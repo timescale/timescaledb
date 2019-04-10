@@ -22,7 +22,6 @@
 #include <utils/inval.h>
 
 #include "remote/connection.h"
-#include "connection.h"
 #include "remote/connection_cache.h"
 #include "export.h"
 #include "test_utils.h"
@@ -38,8 +37,8 @@ test_basic_cache()
 	ForeignServer *foreign_server_2;
 	UserMapping *um_1;
 	UserMapping *um_2;
-	PGconn *conn_1;
-	PGconn *conn_2;
+	TSConnection *conn_1;
+	TSConnection *conn_2;
 	pid_t pid_1;
 	pid_t pid_2;
 	pid_t pid_prime;
@@ -82,7 +81,7 @@ test_basic_cache()
 static void
 invalidate_server()
 {
-	PGconn *conn_modify = get_connection();
+	TSConnection *conn_modify = get_connection();
 	remote_connection_exec_ok_command(conn_modify,
 									  "ALTER SERVER loopback_1 OPTIONS (application_name "
 									  "'" NEW_APPLICATION_NAME "')");
@@ -94,7 +93,7 @@ invalidate_server()
 static void
 invalidate_user()
 {
-	PGconn *conn_modify = get_connection();
+	TSConnection *conn_modify = get_connection();
 	remote_connection_exec_ok_command(conn_modify,
 									  "ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_1 "
 									  "OPTIONS (password 'testpass')");
@@ -107,7 +106,7 @@ test_invalidate_server()
 {
 	ForeignServer *foreign_server_1;
 	UserMapping *um_1;
-	PGconn *conn_1;
+	TSConnection *conn_1;
 	pid_t pid_1;
 	pid_t pid_prime;
 	Cache *cache;
@@ -150,7 +149,7 @@ test_invalidate_user()
 {
 	ForeignServer *foreign_server_1;
 	UserMapping *um_1;
-	PGconn *conn_1;
+	TSConnection *conn_1;
 	pid_t pid_1;
 	pid_t pid_prime;
 	Cache *cache;
@@ -188,7 +187,7 @@ test_remove()
 {
 	ForeignServer *foreign_server_1;
 	UserMapping *um_1;
-	PGconn *conn_1;
+	TSConnection *conn_1;
 	pid_t pid_1;
 	pid_t pid_prime;
 	Cache *cache;

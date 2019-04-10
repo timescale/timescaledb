@@ -13,7 +13,7 @@ Cache *connection_cache_current = NULL;
 typedef struct ConnectionCacheEntry
 {
 	Oid user_mapping_oid;
-	PGconn *conn;
+	TSConnection *conn;
 } ConnectionCacheEntry;
 
 typedef struct ConnectionCacheQuery
@@ -77,8 +77,11 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * because PGconn allocation happens using malloc. Which is why calling
 	 * remote_connection_close at cleanup is critical.
 	 */
-	entry->conn =
-		remote_connection_open(server->servername, server->options, q->user_mapping->options, true);
+	entry->conn = remote_connection_open(server->servername,
+										 server->options,
+										 q->user_mapping->options,
+										 cache->hctl.hcxt,
+										 true);
 	return entry;
 }
 
@@ -119,7 +122,7 @@ remote_connection_cache_pin()
 	return ts_cache_pin(connection_cache_current);
 }
 
-PGconn *
+TSConnection *
 remote_connection_cache_get_connection(Cache *cache, UserMapping *user_mapping)
 {
 	ConnectionCacheQuery query = {

@@ -21,7 +21,7 @@ is used by xact callbacks.
 */
 extern Cache *remote_connection_cache_pin(void);
 
-extern PGconn *remote_connection_cache_get_connection(Cache *cache, UserMapping *user);
+extern TSConnection *remote_connection_cache_get_connection(Cache *cache, UserMapping *user);
 
 extern void remote_connection_cache_remove(Cache *cache, UserMapping *user_mapping);
 extern void remote_connection_cache_remove_by_oid(Cache *cache, Oid user_mapping_oid);

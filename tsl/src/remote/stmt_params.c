@@ -35,6 +35,7 @@ typedef struct StmtParams
 	List *target_attr_nums;
 	MemoryContext mctx;	/* where we allocate param values */
 	MemoryContext tmp_ctx; /* used for converting values */
+	bool preset;		   /* idicating if we set values explicitly */
 } StmtParams;
 
 /*
@@ -77,6 +78,7 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 	params->converted_tuples = 0;
 	params->mctx = new;
 	params->tmp_ctx = tmp_ctx;
+	params->preset = false;
 
 	if (params->ctid)
 	{
@@ -113,6 +115,32 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 	return params;
 }
 
+StmtParams *
+stmt_params_create_from_values(const char **param_values, int n_params)
+{
+	StmtParams *params;
+	MemoryContext old;
+	MemoryContext new;
+
+	if (n_params > MAX_PG_STMT_PARAMS)
+		elog(ERROR, "too many parameters in prepared statement. Max is %d", MAX_PG_STMT_PARAMS);
+
+	new = AllocSetContextCreate(CurrentMemoryContext,
+								"stmt params mem context",
+								ALLOCSET_DEFAULT_SIZES);
+	old = MemoryContextSwitchTo(new);
+
+	params = palloc(sizeof(StmtParams));
+	memset(params, 0, sizeof(StmtParams));
+	params->mctx = new;
+	params->num_params = n_params;
+
+	params->values = param_values;
+	params->preset = true;
+	MemoryContextSwitchTo(old);
+	return params;
+}
+
 static bool
 all_values_in_binary_format(int *formats, int num_params)
 {
@@ -138,6 +166,7 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 	int param_idx = 0;
 
 	Assert(params->num_params > 0);
+	Assert(params->formats != NULL);
 	idx = params->converted_tuples * params->num_params;
 
 	Assert(params->converted_tuples < params->num_tuples);
@@ -204,7 +233,8 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 void
 stmt_params_reset(StmtParams *params)
 {
-	MemoryContextReset(params->tmp_ctx);
+	if (params->tmp_ctx)
+		MemoryContextReset(params->tmp_ctx);
 	params->converted_tuples = 0;
 }
 
@@ -220,31 +250,42 @@ stmt_params_free(StmtParams *params)
 const int *
 stmt_params_formats(StmtParams *stmt_params)
 {
-	return stmt_params->formats;
+	if (stmt_params)
+		return stmt_params->formats;
+	return NULL;
 }
 
 const int *
 stmt_params_lengths(StmtParams *stmt_params)
 {
-	return stmt_params->lengths;
+	if (stmt_params)
+		return stmt_params->lengths;
+	return NULL;
 }
 
 const char *const *
 stmt_params_values(StmtParams *stmt_params)
 {
-	return stmt_params->values;
+	if (stmt_params)
+		return stmt_params->values;
+	return NULL;
 }
 
 const int
 stmt_params_num_params(StmtParams *stmt_params)
 {
-	return stmt_params->num_params;
+	if (stmt_params)
+		return stmt_params->num_params;
+	return 0;
 }
 
 const int
 stmt_params_total_values(StmtParams *stmt_params)
 {
-	return stmt_params->converted_tuples * stmt_params->num_params;
+	if (stmt_params)
+		return stmt_params->preset ? stmt_params->num_params :
+									 stmt_params->converted_tuples * stmt_params->num_params;
+	return 0;
 }
 
 const int

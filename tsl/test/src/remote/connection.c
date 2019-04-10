@@ -19,7 +19,6 @@
 #include <nodes/pg_list.h>
 #include <utils/guc.h>
 
-#include "connection.h"
 #include "export.h"
 #include "remote/connection.h"
 #include "test_utils.h"
@@ -43,7 +42,7 @@ test_options()
 static void
 test_numbers_associated_with_connections()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	Assert(remote_connection_get_cursor_number() == 1);
 	Assert(remote_connection_get_cursor_number() == 2);
 	Assert(remote_connection_get_cursor_number() == 3);
@@ -60,7 +59,7 @@ test_numbers_associated_with_connections()
 static void
 test_simple_queries()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	PGresult *res;
 	remote_connection_query_ok_result(conn, "SELECT 1");
 	remote_connection_query_ok_result(conn, "SET search_path = pg_catalog");
@@ -87,7 +86,7 @@ test_simple_queries()
 static void
 test_prepared_stmts()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	const char **params = (const char **) palloc(sizeof(char *) * 5);
 	PreparedStmt *prep;
 	PGresult *res;
@@ -120,7 +119,7 @@ test_prepared_stmts()
 static void
 test_params()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	const char **params = (const char **) palloc(sizeof(char *) * 5);
 	PGresult *res;
 
@@ -148,48 +147,4 @@ tsl_test_remote_connection(PG_FUNCTION_ARGS)
 	test_params();
 
 	PG_RETURN_VOID();
-}
-
-pid_t
-remote_connecton_get_remote_pid(PGconn *conn)
-{
-	PGresult *res;
-	char *sql = "SELECT pg_backend_pid()";
-	char *pid_string;
-	unsigned long pid_long;
-
-	res = PQexec(conn, sql);
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-		return 0;
-
-	Assert(1 == PQntuples(res));
-	Assert(1 == PQnfields(res));
-
-	pid_string = PQgetvalue(res, 0, 0);
-	pid_long = strtol(pid_string, NULL, 10);
-
-	PQclear(res);
-	return pid_long;
-}
-
-char *
-remote_connecton_get_application_name(PGconn *conn)
-{
-	PGresult *res;
-	char *sql = "SELECT application_name from  pg_stat_activity where pid = pg_backend_pid()";
-	char *app_name;
-
-	res = PQexec(conn, sql);
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-		return 0;
-
-	Assert(1 == PQntuples(res));
-	Assert(1 == PQnfields(res));
-
-	app_name = pstrdup(PQgetvalue(res, 0, 0));
-
-	PQclear(res);
-	return app_name;
 }

@@ -14,13 +14,14 @@
 #include "node_killer.h"
 #include "guc.h"
 #include "export.h"
-#include "connection.h"
+#include "remote/connection.h"
 #include "remote/dist_txn.h"
+#include "test_utils.h"
 
 typedef struct RemoteNodeKiller
 {
 	pid_t pid;
-	PGconn *conn;
+	TSConnection *conn;
 } RemoteNodeKiller;
 
 static char *kill_event = NULL;
@@ -29,7 +30,7 @@ static RemoteNodeKiller *rnk_event = NULL;
 TS_FUNCTION_INFO_V1(ts_remote_node_killer_set_event);
 
 RemoteNodeKiller *
-remote_node_killer_init(PGconn *conn)
+remote_node_killer_init(TSConnection *conn)
 {
 	RemoteNodeKiller *rnk = palloc(sizeof(RemoteNodeKiller));
 

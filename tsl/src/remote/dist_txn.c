@@ -96,7 +96,7 @@ dist_txn_state_throw_deferred_error()
 }
 
 /*
- * Get a PGconn which can be used to execute queries on the remote PostgreSQL
+ * Get a connection which can be used to execute queries on the remote PostgreSQL
  * server with the user's authorization.  A new connection is established
  * if we don't already have a suitable one, and a transaction is opened at
  * the right subtransaction nesting depth if we didn't do that already.
@@ -105,7 +105,7 @@ dist_txn_state_throw_deferred_error()
  * statements.  Since those don't go away automatically at transaction end
  * (not even on error), we need this flag to cue manual cleanup.
  */
-PGconn *
+TSConnection *
 remote_dist_txn_get_connection(UserMapping *user, RemoteTxnPrepStmtOption prep_stmt_opt)
 {
 	bool found;

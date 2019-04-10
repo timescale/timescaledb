@@ -23,6 +23,7 @@
 
 #include "remote/async.h"
 #include "remote/dist_txn.h"
+#include "remote/stmt_params.h"
 #include "chunk_api.h"
 
 /*
@@ -399,10 +400,13 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 	{
 		ChunkServer *cs = lfirst(lc);
 		UserMapping *um = GetUserMapping(GetUserId(), cs->foreign_server_oid);
-		PGconn *conn = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
+		TSConnection *conn = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
 		AsyncRequest *req;
 
-		req = async_request_send_with_params(conn, CHUNK_CREATE_STMT, 4, params);
+		req = async_request_send_with_params(conn,
+											 CHUNK_CREATE_STMT,
+											 stmt_params_create_from_values(params, 4),
+											 FORMAT_TEXT);
 
 		async_request_attach_user_data(req, cs);
 		async_request_set_add(reqset, req);

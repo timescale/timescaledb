@@ -23,20 +23,41 @@
 
 #define MAX_ASYNC_TIMEOUT_MS 60000
 
+/**
+ * State machine for AsyncRequest:
+ *
+ *   +-------------+           +--------------+        +--------------+
+ *   |             |           |              |        |              |
+ *   |  DEFERRED   +---------->+  EXECUTING   +------->+   COMPLETED  |
+ *   |             |           |              |        |              |
+ *   +-------------+           +--------------+        +--------------+
+ *
+ **/
+
+typedef enum AsyncRequestState
+{
+	DEFERRED,
+	EXECUTING,
+	COMPLETED,
+} AsyncRequestState;
+
 typedef struct AsyncRequest
 {
-	char *sql;
-	PGconn *conn;
-	char *stmt_name;
-	int n_params;
+	const char *sql;
+	TSConnection *conn;
+	AsyncRequestState state;
+	const char *stmt_name;
+	int prep_stmt_params;
 	void *user_data; /* custom data saved with the request */
+	StmtParams *params;
+	int res_format; /* text or binary */
 } AsyncRequest;
 
 typedef struct PreparedStmt
 {
-	char *sql;
-	PGconn *conn;
-	char *stmt_name;
+	const char *sql;
+	TSConnection *conn;
+	const char *stmt_name;
 	int n_params;
 } PreparedStmt;
 
@@ -65,7 +86,55 @@ typedef struct AsyncRequestSet
 	List *requests;
 } AsyncRequestSet;
 
-/* create request and send a request. Note that we can only send one sql statement per request.
+static AsyncRequest *
+async_request_create(TSConnection *conn, const char *sql, const char *stmt_name,
+					 int prep_stmt_params, StmtParams *stmt_params, int res_format)
+{
+	AsyncRequest *req;
+	if (conn == NULL)
+		elog(ERROR, "can't create AsyncRequest with NULL connection");
+	req = palloc(sizeof(AsyncRequest));
+	*req = (AsyncRequest){
+		.conn = conn,
+		.state = DEFERRED,
+		.sql = pstrdup(sql),
+		.stmt_name = stmt_name,
+		.params = stmt_params,
+		.prep_stmt_params = prep_stmt_params,
+		.res_format = res_format,
+	};
+	return req;
+}
+
+static void
+async_request_set_state(AsyncRequest *req, AsyncRequestState new_state)
+{
+	if (req->state != DEFERRED)
+		Assert(req->state != new_state);
+
+#ifdef USE_ASSERT_CHECKING
+	switch (new_state)
+	{
+		case DEFERRED:
+			/* initial state */
+			Assert(req->state == DEFERRED);
+			break;
+		case EXECUTING:
+			Assert(req->state == DEFERRED);
+			break;
+		case COMPLETED:
+			Assert(req->state == EXECUTING);
+	}
+#endif
+	req->state = new_state;
+}
+
+/* Send a request. In case there is an ongoing request for the connection,
+   we will not send the request but set its status to DEFERRED.
+   Getting a response from DEFERRED AsyncRequest will try sending it if
+   the connection is not in use.
+
+   Note that we can only send one sql statement per request.
    This is because we use `PQsendQueryParams` which uses the extended query protocol
    instead of the simple one. The extended protocol does not support multiple
    statements. In the future we can use a `PQsendQuery` variant for queries without parameters,
@@ -73,87 +142,73 @@ typedef struct AsyncRequestSet
    an optimization for another time.
 */
 static AsyncRequest *
-async_request_send_with_params_formats_elevel(PGconn *conn, const char *sql, int n_params,
-											  const char *const *param_values,
-											  const int *param_lengths, const int *param_formats,
-											  int elevel, int res_format)
+async_request_send_internal(AsyncRequest *req, int elevel)
 {
-	AsyncRequest *req = palloc(sizeof(AsyncRequest));
-
-	*req = (AsyncRequest){
-		.conn = conn,
-		.sql = pstrdup(sql),
-		.stmt_name = NULL,
-	};
-
-	/*
-	 * Notice that we pass NULL for paramTypes, thus forcing the remote server
-	 * to infer types for all parameters.  Since we explicitly cast every
-	 * parameter (see deparse.c), the "inference" is trivial and will produce
-	 * the desired result.  This allows us to avoid assuming that the remote
-	 * server has the same OIDs we do for the parameters' types.
-	 *
-	 * Note that if we ever switch to binary format for parameters and
-	 * results, the types will probably still remain NULL to prevent a
-	 * dependency on type OIDs. See
-	 * https://www.postgresql.org/docs/current/static/libpq-exec.html.
-	 *
-	 */
-
-	if (0 == PQsendQueryParams(conn,
-							   sql,
-							   n_params,
-							   /* param types - see note above */ NULL,
-							   param_values,
-							   param_lengths,
-							   param_formats,
-							   res_format))
+	if (req->state != DEFERRED)
+		elog(ERROR, "can't send async request in state \"%d\"", req->state);
+	if (remote_connection_is_processing(req->conn))
+		return req;
+	if (req->stmt_name)
 	{
 		/*
-		 * null is fine to pass down as the res, the connection error message
-		 * will get through
+		 * We intentionally do not specify parameter types here, but leave the
+		 * remote server to derive them by default.  This avoids possible problems
+		 * with the remote server using different type OIDs than we do.  All of
+		 * the prepared statements we use in this module are simple enough that
+		 * the remote server will make the right choices.
 		 */
-		remote_connection_report_error(elevel, NULL, conn, false, sql);
-		return NULL;
+		if (!PQsendPrepare(remote_connection_get_pg_conn(req->conn),
+						   req->stmt_name,
+						   req->sql,
+						   req->prep_stmt_params,
+						   NULL))
+		{
+			/*
+			 * null is fine to pass down as the res, the connection error message
+			 * will get through
+			 */
+			remote_connection_report_error(elevel, NULL, req->conn, false, req->sql);
+			return NULL;
+		}
 	}
-
+	else
+	{
+		if (0 == PQsendQueryParams(remote_connection_get_pg_conn(req->conn),
+								   req->sql,
+								   stmt_params_total_values(req->params),
+								   /* param types - see note above */ NULL,
+								   stmt_params_values(req->params),
+								   stmt_params_lengths(req->params),
+								   stmt_params_formats(req->params),
+								   req->res_format))
+		{
+			/*
+			 * null is fine to pass down as the res, the connection error message
+			 * will get through
+			 */
+			remote_connection_report_error(elevel, NULL, req->conn, false, req->sql);
+			return NULL;
+		}
+	}
+	async_request_set_state(req, EXECUTING);
+	remote_connection_set_processing(req->conn, true);
 	return req;
 }
 
 AsyncRequest *
-async_request_send_with_params_elevel_res_format(PGconn *conn, const char *sql, int n_params,
-												 const char *const *param_values, int elevel,
-												 int res_format)
-{
-	return async_request_send_with_params_formats_elevel(conn,
-														 sql,
-														 n_params,
-														 param_values,
-														 NULL,
-														 NULL,
-														 elevel,
-														 res_format);
-}
-
-AsyncRequest *
-async_request_send_with_stmt_params_elevel_res_format(PGconn *conn, const char *sql_statement,
+async_request_send_with_stmt_params_elevel_res_format(TSConnection *conn, const char *sql_statement,
 													  StmtParams *params, int elevel,
 													  int res_format)
 {
-	return async_request_send_with_params_formats_elevel(conn,
-														 sql_statement,
-														 stmt_params_total_values(params),
-														 stmt_params_values(params),
-														 stmt_params_lengths(params),
-														 stmt_params_formats(params),
-														 elevel,
-														 res_format);
+	AsyncRequest *req = async_request_create(conn, sql_statement, NULL, 0, params, res_format);
+	req = async_request_send_internal(req, elevel);
+	return req;
 }
 
 AsyncRequest *
-async_request_send_prepare(PGconn *conn, const char *sql, int n_params)
+async_request_send_prepare(TSConnection *conn, const char *sql, int n_params)
 {
-	AsyncRequest *req = palloc(sizeof(AsyncRequest));
+	AsyncRequest *req;
 	size_t stmt_name_len = NAMEDATALEN;
 	char *stmt_name = palloc(sizeof(char) * stmt_name_len);
 	int written;
@@ -165,78 +220,32 @@ async_request_send_prepare(PGconn *conn, const char *sql, int n_params)
 	if (written < 0 || written >= stmt_name_len)
 		elog(ERROR, "cannot create prepared statement name");
 
-	*req = (AsyncRequest){
-		.conn = conn,
-		.sql = pstrdup(sql),
-		.stmt_name = stmt_name,
-		.n_params = n_params,
-	};
+	req = async_request_create(conn, sql, stmt_name, n_params, NULL, FORMAT_TEXT);
+	req = async_request_send_internal(req, ERROR);
 
-	/*
-	 * We intentionally do not specify parameter types here, but leave the
-	 * remote server to derive them by default.  This avoids possible problems
-	 * with the remote server using different type OIDs than we do.  All of
-	 * the prepared statements we use in this module are simple enough that
-	 * the remote server will make the right choices.
-	 */
-
-	if (!PQsendPrepare(req->conn, req->stmt_name, req->sql, 0, NULL))
-	{
-		/*
-		 * null is fine to pass down as the res, the connection error message
-		 * will get through
-		 */
-		remote_connection_report_error(ERROR, NULL, conn, false, sql);
-		return NULL;
-	}
-	return req;
-}
-
-static AsyncRequest *
-async_request_send_prepared_stmt_with_formats(PreparedStmt *stmt, const char *const *param_values,
-											  const int *param_lengths, const int *param_formats,
-											  int res_format)
-{
-	AsyncRequest *req = palloc(sizeof(AsyncRequest));
-
-	*req = (AsyncRequest){
-		.conn = stmt->conn,
-		.sql = stmt->sql,
-		.stmt_name = NULL,
-	};
-
-	if (!PQsendQueryPrepared(stmt->conn,
-							 stmt->stmt_name,
-							 stmt->n_params,
-							 param_values,
-							 param_lengths,
-							 param_formats,
-							 res_format))
-	{
-		/*
-		 * null is fine to pass down as the res, the connection error message
-		 * will get through
-		 */
-		remote_connection_report_error(ERROR, NULL, req->conn, false, req->sql);
-		return NULL;
-	}
 	return req;
 }
 
 extern AsyncRequest *
-async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *paramValues)
+async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_values)
 {
-	return async_request_send_prepared_stmt_with_formats(stmt, paramValues, NULL, NULL, 0);
+	AsyncRequest *req =
+		async_request_create(stmt->conn,
+							 stmt->sql,
+							 NULL,
+							 stmt->n_params,
+							 stmt_params_create_from_values((const char **) param_values,
+															stmt->n_params),
+							 FORMAT_TEXT);
+	return async_request_send_internal(req, ERROR);
 }
 
 AsyncRequest *
 async_request_send_prepared_stmt_with_params(PreparedStmt *stmt, StmtParams *params, int res_format)
 {
-	return async_request_send_prepared_stmt_with_formats(stmt,
-														 stmt_params_values(params),
-														 stmt_params_lengths(params),
-														 stmt_params_formats(params),
-														 res_format);
+	AsyncRequest *req =
+		async_request_create(stmt->conn, stmt->sql, NULL, stmt->n_params, params, res_format);
+	return async_request_send_internal(req, ERROR);
 }
 
 /* Set user data. Often it is useful to attach data with a request so
@@ -461,10 +470,20 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 	foreach (lc, set->requests)
 	{
 		AsyncRequest *req = lfirst(lc);
+		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
 
-		if (!PQisBusy(req->conn))
+		if (remote_connection_is_processing(req->conn) && req->state == DEFERRED)
+			elog(ERROR, "can't get a response because previous request hasn't completed");
+
+		if (req->state == DEFERRED)
+			async_request_send_internal(req, ERROR);
+
+		if (req->state != EXECUTING)
+			elog(ERROR, "can't get a response for a request that's not currently executing");
+
+		if (!PQisBusy(pg_conn))
 		{
-			PGresult *res = PQgetResult(req->conn);
+			PGresult *res = PQgetResult(pg_conn);
 
 			if (NULL == res)
 			{
@@ -472,6 +491,8 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 				 * NULL return means query is complete
 				 */
 				set->requests = list_delete_ptr(set->requests, req);
+				remote_connection_set_processing(req->conn, false);
+				async_request_set_state(req, COMPLETED);
 				/* set changed so rerun function */
 				return get_single_response_nonblocking(set);
 			}
@@ -532,7 +553,11 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 	{
 		AsyncRequest *req = lfirst(lc);
 
-		AddWaitEventToSet(we_set, WL_SOCKET_READABLE, PQsocket(req->conn), NULL, req);
+		AddWaitEventToSet(we_set,
+						  WL_SOCKET_READABLE,
+						  PQsocket(remote_connection_get_pg_conn(req->conn)),
+						  NULL,
+						  req);
 	}
 
 	while (true)
@@ -557,7 +582,7 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 			wait_req = event.user_data;
 			Assert(wait_req != NULL);
 
-			if (0 == PQconsumeInput(wait_req->conn))
+			if (0 == PQconsumeInput(remote_connection_get_pg_conn(wait_req->conn)))
 			{
 				/* This is often an error but not always */
 				remote_connection_report_error(elevel, NULL, wait_req->conn, false, wait_req->sql);
@@ -675,7 +700,7 @@ async_response_result_generate_prepared_stmt(AsyncResponseResult *result)
 		.conn = result->request->conn,
 		.sql = result->request->sql,
 		.stmt_name = result->request->stmt_name,
-		.n_params = result->request->n_params,
+		.n_params = result->request->prep_stmt_params,
 	};
 
 	return prep;
