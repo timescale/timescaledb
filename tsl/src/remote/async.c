@@ -159,10 +159,8 @@ async_request_send_prepare(PGconn *conn, const char *sql, int n_params)
 	int written;
 
 	/* Construct name we'll use for the prepared statement. */
-	written = snprintf(stmt_name,
-					   stmt_name_len,
-					   "ts_prep_%u",
-					   remote_connection_get_prep_stmt_number(conn));
+	written =
+		snprintf(stmt_name, stmt_name_len, "ts_prep_%u", remote_connection_get_prep_stmt_number());
 
 	if (written < 0 || written >= stmt_name_len)
 		elog(ERROR, "cannot create prepared statement name");

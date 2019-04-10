@@ -1588,7 +1588,7 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 													   REMOTE_TXN_NO_PREP_STMT);
 
 	/* Assign a unique ID for my cursor */
-	fsstate->cursor_number = remote_connection_get_cursor_number(fsstate->conn);
+	fsstate->cursor_number = remote_connection_get_cursor_number();
 	fsstate->cursor_exists = false;
 
 	/* Get private info created by planner functions. */

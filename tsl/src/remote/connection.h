@@ -34,9 +34,9 @@ extern void remote_connection_report_error(int elevel, PGresult *res, PGconn *co
 extern ConnOptionType remote_connection_option_type(const char *keyword);
 extern bool remote_connection_valid_user_option(const char *keyword);
 extern bool remote_connection_valid_server_option(const char *keyword);
-extern unsigned int remote_connection_get_cursor_number(PGconn *conn);
+extern unsigned int remote_connection_get_cursor_number(void);
 void remote_connection_reset_cursor_number(void);
-extern unsigned int remote_connection_get_prep_stmt_number(PGconn *conn);
+extern unsigned int remote_connection_get_prep_stmt_number(void);
 
 extern bool remote_connection_cancel_query(PGconn *conn);
 
