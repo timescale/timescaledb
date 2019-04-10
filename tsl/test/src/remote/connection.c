@@ -19,13 +19,16 @@
 #include <nodes/pg_list.h>
 #include <utils/guc.h>
 
-#include "connection.h"
 #include "export.h"
 #include "test_utils.h"
 #include "connection.h"
 
-PGconn *
-get_connection(void)
+static const char *sql_get_backend_pid = "SELECT pg_backend_pid()";
+static const char *sql_get_application_name =
+	"SELECT application_name from  pg_stat_activity where pid = pg_backend_pid()";
+
+TSConnection *
+get_connection()
 {
 	return remote_connection_open("testdb",
 								  list_make3(makeDefElem("user",
@@ -43,6 +46,7 @@ get_connection(void)
 																					 false))),
 														 -1)),
 								  NIL,
+								  CurrentMemoryContext,
 								  false);
 }
 
@@ -65,7 +69,7 @@ test_options()
 static void
 test_numbers_associated_with_connections()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	TestAssertTrue(remote_connection_get_cursor_number() == 1);
 	TestAssertTrue(remote_connection_get_cursor_number() == 2);
 	TestAssertTrue(remote_connection_get_cursor_number() == 3);
@@ -82,7 +86,7 @@ test_numbers_associated_with_connections()
 static void
 test_simple_queries()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	PGresult *res;
 	remote_connection_query_ok_result(conn, "SELECT 1");
 	remote_connection_query_ok_result(conn, "SET search_path = pg_catalog");
@@ -109,7 +113,7 @@ test_simple_queries()
 static void
 test_prepared_stmts()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	const char **params = (const char **) palloc(sizeof(char *) * 5);
 	PreparedStmt *prep;
 	PGresult *res;
@@ -142,7 +146,7 @@ test_prepared_stmts()
 static void
 test_params()
 {
-	PGconn *conn = get_connection();
+	TSConnection *conn = get_connection();
 	const char **params = (const char **) palloc(sizeof(char *) * 5);
 	PGresult *res;
 
@@ -172,14 +176,13 @@ tsl_test_remote_connection(PG_FUNCTION_ARGS)
 }
 
 pid_t
-remote_connecton_get_remote_pid(PGconn *conn)
+remote_connecton_get_remote_pid(TSConnection *conn)
 {
 	PGresult *res;
-	char *sql = "SELECT pg_backend_pid()";
 	char *pid_string;
 	unsigned long pid_long;
 
-	res = PQexec(conn, sql);
+	res = PQexec(remote_connection_get_pg_conn(conn), sql_get_backend_pid);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		return 0;
@@ -195,13 +198,12 @@ remote_connecton_get_remote_pid(PGconn *conn)
 }
 
 char *
-remote_connecton_get_application_name(PGconn *conn)
+remote_connecton_get_application_name(TSConnection *conn)
 {
 	PGresult *res;
-	char *sql = "SELECT application_name from  pg_stat_activity where pid = pg_backend_pid()";
 	char *app_name;
 
-	res = PQexec(conn, sql);
+	res = PQexec(remote_connection_get_pg_conn(conn), sql_get_application_name);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		return 0;

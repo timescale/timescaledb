@@ -14,7 +14,8 @@
 
 /* Get a remote connection for a distributed txn corresponding to the current local txn. */
 
-extern PGconn *remote_dist_txn_get_connection(UserMapping *user, RemoteTxnPrepStmtOption prep_stmt);
+extern TSConnection *remote_dist_txn_get_connection(UserMapping *user,
+													RemoteTxnPrepStmtOption prep_stmt);
 
 #ifdef DEBUG
 extern void (*testing_callback_call_hook)(const char *event);

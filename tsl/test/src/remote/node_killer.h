@@ -9,8 +9,10 @@
 #include <postgres.h>
 #include <libpq-fe.h>
 
+#include "remote/connection.h"
+
 typedef struct RemoteNodeKiller RemoteNodeKiller;
-extern RemoteNodeKiller *remote_node_killer_init(PGconn *conn);
+extern RemoteNodeKiller *remote_node_killer_init(TSConnection *conn);
 void remote_node_killer_kill(RemoteNodeKiller *rnk);
 
 extern void remote_node_killer_kill_on_event(const char *event);

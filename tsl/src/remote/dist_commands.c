@@ -31,7 +31,7 @@ typedef struct DistCmdResult
 	DistCmdResponse responses[FLEXIBLE_ARRAY_MEMBER];
 } DistCmdResult;
 
-static PGconn *
+static TSConnection *
 ts_dist_cmd_get_connection_for_server(const char *server, RemoteTxnPrepStmtOption ps_opt)
 {
 	ForeignServer *fs = GetForeignServerByName(server, false);
@@ -80,7 +80,7 @@ ts_dist_cmd_invoke_on_servers(const char *sql, List *server_names)
 	foreach (lc, server_names)
 	{
 		const char *server_name = lfirst(lc);
-		PGconn *connection =
+		TSConnection *connection =
 			ts_dist_cmd_get_connection_for_server(server_name, REMOTE_TXN_NO_PREP_STMT);
 
 		AsyncRequest *req = async_request_send(connection, sql);
@@ -177,7 +177,8 @@ ts_dist_cmd_prepare_command(const char *sql, size_t n_params, List *server_names
 	foreach (lc, server_names)
 	{
 		const char *name = lfirst(lc);
-		PGconn *connection = ts_dist_cmd_get_connection_for_server(name, REMOTE_TXN_USE_PREP_STMT);
+		TSConnection *connection =
+			ts_dist_cmd_get_connection_for_server(name, REMOTE_TXN_USE_PREP_STMT);
 		DistPreparedStmt *cmd = palloc(sizeof(DistPreparedStmt));
 		AsyncRequest *ar = async_request_send_prepare(connection, sql, n_params);
 
