@@ -83,6 +83,27 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
  rename_schema    | rename_test    | public                | ts_internal_rename_testview
 (2 rows)
 
+--alter direct view schema
+SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+ user_view_schema | user_view_name |  direct_view_schema   |   direct_view_name   
+------------------+----------------+-----------------------+----------------------
+ public           | mat_m1         | _timescaledb_internal | _dir_mat_m1view
+ rename_schema    | rename_test    | _timescaledb_internal | _dir_rename_testview
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER VIEW _timescaledb_internal._dir_rename_testview SET SCHEMA public;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+ user_view_schema | user_view_name |  partial_view_schema  |      partial_view_name      |  direct_view_schema   |   direct_view_name   
+------------------+----------------+-----------------------+-----------------------------+-----------------------+----------------------
+ public           | mat_m1         | _timescaledb_internal | ts_internal_mat_m1view      | _timescaledb_internal | _dir_mat_m1view
+ rename_schema    | rename_test    | public                | ts_internal_rename_testview | public                | _dir_rename_testview
+(2 rows)
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -149,19 +170,31 @@ SELECT * FROM rename_c_aggregate;
 (0 rows)
 
 ALTER VIEW rename_schema.ts_internal_rename_testview RENAME TO partial_view;
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  |   partial_view_name    
-------------------+--------------------+-----------------------+------------------------
- public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view
- public           | rename_c_aggregate | rename_schema         | partial_view
+ user_view_schema |   user_view_name   |  partial_view_schema  |   partial_view_name    |  direct_view_schema   |   direct_view_name   
+------------------+--------------------+-----------------------+------------------------+-----------------------+----------------------
+ public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view | _timescaledb_internal | _dir_mat_m1view
+ public           | rename_c_aggregate | rename_schema         | partial_view           | public                | _dir_rename_testview
+(2 rows)
+
+--rename direct view
+ALTER VIEW _dir_rename_testview RENAME TO direct_view;
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+ user_view_schema |   user_view_name   |  partial_view_schema  |   partial_view_name    |  direct_view_schema   | direct_view_name 
+------------------+--------------------+-----------------------+------------------------+-----------------------+------------------
+ public           | mat_m1             | _timescaledb_internal | ts_internal_mat_m1view | _timescaledb_internal | _dir_mat_m1view
+ public           | rename_c_aggregate | rename_schema         | partial_view           | public                | direct_view
 (2 rows)
 
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_mat_m1view
+NOTICE:  drop cascades to 2 other objects
 DROP TABLE foo CASCADE;
-NOTICE:  drop cascades to view rename_schema.partial_view
+NOTICE:  drop cascades to 2 other objects
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_id
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
@@ -305,7 +338,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
-NOTICE:  drop cascades to view _timescaledb_internal.ts_internal_drop_chunks_viewview
+NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_4_chunk
 CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_u_id

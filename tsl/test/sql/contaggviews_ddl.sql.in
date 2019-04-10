@@ -65,6 +65,17 @@ ALTER VIEW _timescaledb_internal.ts_internal_rename_testview SET SCHEMA public;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
+--alter direct view schema
+SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER VIEW _timescaledb_internal._dir_rename_testview SET SCHEMA public;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
@@ -111,7 +122,14 @@ SELECT * FROM rename_c_aggregate;
 
 ALTER VIEW rename_schema.ts_internal_rename_testview RENAME TO partial_view;
 
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+--rename direct view
+ALTER VIEW _dir_rename_testview RENAME TO direct_view;
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
 -- drop_chunks tests

@@ -23,6 +23,14 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionRefreshInterval,
 } ContinuousAggViewOption;
 
+typedef enum ContinuousAggViewType
+{
+	ContinuousAggUserView = 0,
+	ContinuousAggPartialView,
+	ContinuousAggDirectView,
+	ContinuousAggNone
+} ContinuousAggViewType;
+
 extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
 
 typedef struct ContinuousAgg
@@ -49,11 +57,9 @@ extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *
 
 extern void ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id);
 
-extern TSDLLEXPORT bool ts_continuous_agg_is_user_view(FormData_continuous_agg *data,
-													   const char *schema, const char *name);
-extern TSDLLEXPORT bool ts_continuous_agg_is_partial_view(FormData_continuous_agg *data,
-														  const char *schema, const char *name);
-
+extern TSDLLEXPORT ContinuousAggViewType ts_continuous_agg_view_type(FormData_continuous_agg *data,
+																	 const char *schema,
+																	 const char *name);
 extern void ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema);
 extern void ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema,
 										  char *new_name);

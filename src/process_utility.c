@@ -894,7 +894,7 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 		if (cagg == NULL)
 			continue;
 
-		if (ts_continuous_agg_is_user_view(&cagg->data, schema, name))
+		if (ts_continuous_agg_view_type(&cagg->data, schema, name) == ContinuousAggUserView)
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 					 errmsg("dropping a continous aggregate requires using CASCADE")));
@@ -2290,6 +2290,7 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	NameData view_schema;
 	ContinuousAgg *cagg;
 	ListCell *lc;
+	ContinuousAggViewType vtyp;
 
 	if (!OidIsValid(view_relid))
 		return false;
@@ -2301,7 +2302,8 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	if (cagg == NULL)
 		return false;
 
-	if (ts_continuous_agg_is_partial_view(&cagg->data, NameStr(view_schema), NameStr(view_name)))
+	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
+	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter the internal view of a continuous aggregate")));
