@@ -287,12 +287,12 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
--[ RECORD 1 ]--------------+--------------------------------------------------------------
+-[ RECORD 1 ]--------------+-------------------------------------------------
 view_name                  | test_continuous_agg_view
 view_owner                 | default_perm_user
 refresh_lag                | -2
 refresh_interval           | @ 12 hours
-materialization_hypertable | _timescaledb_internal.ts_internal_test_continuous_agg_viewtab
+materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
 
 select view_name, view_definition from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';

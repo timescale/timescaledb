@@ -671,7 +671,7 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
 
 static void
-hypertable_insert_relation(Relation rel, Name schema_name, Name table_name,
+hypertable_insert_relation(Relation rel, int32 hypertable_id, Name schema_name, Name table_name,
 						   Name associated_schema_name, Name associated_table_prefix,
 						   Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
 						   int64 chunk_target_size, int16 num_dimensions)
@@ -702,8 +702,11 @@ hypertable_insert_relation(Relation rel, Name schema_name, Name table_name,
 		Int64GetDatum(chunk_target_size);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] =
-		Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE));
+
+	if (hypertable_id == INVALID_HYPERTABLE_ID)
+		hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+
+	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(hypertable_id);
 
 	if (NULL != associated_table_prefix)
 		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
@@ -724,15 +727,17 @@ hypertable_insert_relation(Relation rel, Name schema_name, Name table_name,
 }
 
 static void
-hypertable_insert(Name schema_name, Name table_name, Name associated_schema_name,
-				  Name associated_table_prefix, Name chunk_sizing_func_schema,
-				  Name chunk_sizing_func_name, int64 chunk_target_size, int16 num_dimensions)
+hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
+				  Name associated_schema_name, Name associated_table_prefix,
+				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
+				  int64 chunk_target_size, int16 num_dimensions)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
 	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel,
+							   hypertable_id,
 							   schema_name,
 							   table_name,
 							   associated_schema_name,
@@ -1444,6 +1449,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				 errmsg("invalid time_column_name: cannot be NULL")));
 
 	created = ts_hypertable_create_from_info(table_relid,
+											 INVALID_HYPERTABLE_ID,
 											 flags,
 											 time_dim_info,
 											 space_dim_info,
@@ -1467,9 +1473,10 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
  * exists.
  */
 bool
-ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *time_dim_info,
-							   DimensionInfo *space_dim_info, Name associated_schema_name,
-							   Name associated_table_prefix, ChunkSizingInfo *chunk_sizing_info)
+ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
+							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
+							   Name associated_schema_name, Name associated_table_prefix,
+							   ChunkSizingInfo *chunk_sizing_info)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1650,7 +1657,8 @@ ts_hypertable_create_from_info(Oid table_relid, uint32 flags, DimensionInfo *tim
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
 	namestrcpy(&table_name, get_rel_name(table_relid));
 
-	hypertable_insert(&schema_name,
+	hypertable_insert(hypertable_id,
+					  &schema_name,
 					  &table_name,
 					  associated_schema_name,
 					  associated_table_prefix,

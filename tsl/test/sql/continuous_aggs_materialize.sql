@@ -287,8 +287,18 @@ SET SESSION datestyle TO 'ISO';
 SELECT _timescaledb_internal.to_interval(refresh_lag)
     FROM _timescaledb_catalog.continuous_agg;
 
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'test_t_mat_view'
+\gset
+
 SELECT * FROM test_t_mat_view;
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
@@ -296,7 +306,7 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     WHERE materialization_id = :mat_hypertable_id;
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
 SELECT * FROM test_t_mat_view ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
@@ -305,7 +315,7 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-SELECT * FROM _timescaledb_internal.ts_internal_test_t_mat_viewtab ORDER BY 1;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
 SELECT * FROM test_t_mat_view ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
