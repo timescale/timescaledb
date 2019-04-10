@@ -65,16 +65,16 @@ static void
 test_numbers_associated_with_connections()
 {
 	PGconn *conn = get_connection();
-	TestAssertTrue(remote_connection_get_cursor_number(conn) == 1);
-	TestAssertTrue(remote_connection_get_cursor_number(conn) == 2);
-	TestAssertTrue(remote_connection_get_cursor_number(conn) == 3);
+	TestAssertTrue(remote_connection_get_cursor_number() == 1);
+	TestAssertTrue(remote_connection_get_cursor_number() == 2);
+	TestAssertTrue(remote_connection_get_cursor_number() == 3);
 	remote_connection_reset_cursor_number();
-	TestAssertTrue(remote_connection_get_cursor_number(conn) == 1);
-	TestAssertTrue(remote_connection_get_cursor_number(conn) == 2);
+	TestAssertTrue(remote_connection_get_cursor_number() == 1);
+	TestAssertTrue(remote_connection_get_cursor_number() == 2);
 
-	TestAssertTrue(remote_connection_get_prep_stmt_number(conn) == 1);
-	TestAssertTrue(remote_connection_get_prep_stmt_number(conn) == 2);
-	TestAssertTrue(remote_connection_get_prep_stmt_number(conn) == 3);
+	TestAssertTrue(remote_connection_get_prep_stmt_number() == 1);
+	TestAssertTrue(remote_connection_get_prep_stmt_number() == 2);
+	TestAssertTrue(remote_connection_get_prep_stmt_number() == 3);
 	remote_connection_close(conn);
 }
 
