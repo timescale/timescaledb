@@ -43,15 +43,19 @@ remote_txn_store_get(RemoteTxnStore *store, UserMapping *user_mapping, bool *fou
 	RemoteTxn *entry;
 
 	entry = hash_search(store->hashtable, &user_mapping_oid, HASH_ENTER, &found);
+
 	if (!found)
 	{
-		PGconn *conn;
+		TSConnection *conn;
+		PGconn *pg_conn;
 
 		PG_TRY();
 		{
 			conn = remote_connection_cache_get_connection(store->cache, user_mapping);
+			Assert(conn != NULL);
+			pg_conn = remote_connection_get_pg_conn(conn);
 
-			if (PQstatus(conn) != CONNECTION_OK || PQtransactionStatus(conn) != PQTRANS_IDLE)
+			if (PQstatus(pg_conn) != CONNECTION_OK || PQtransactionStatus(pg_conn) != PQTRANS_IDLE)
 			{
 				/*
 				 * Cached connection is sick. A previous transaction may have

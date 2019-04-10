@@ -11,8 +11,8 @@
 
 #include <remote/connection.h>
 
-extern PGconn *get_connection(void);
-extern pid_t remote_connecton_get_remote_pid(PGconn *conn);
-extern char *remote_connecton_get_application_name(PGconn *conn);
+extern TSConnection *get_connection(void);
+extern pid_t remote_connecton_get_remote_pid(TSConnection *conn);
+extern char *remote_connecton_get_application_name(TSConnection *conn);
 
 #endif /* TIMESCALEDB_TSL_TEST_REMOTE_CONNECTION_H */

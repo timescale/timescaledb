@@ -47,8 +47,6 @@ SELECT _timescaledb_internal.test_remote_connection();
 (1 row)
 
 SELECT _timescaledb_internal.test_remote_async();
-WARNING:  Expect warning about bad connection pointer:
-WARNING:  remote connection error: connection pointer is NULL
 WARNING:  Expect warning about communication error:
 WARNING:  remote connection error: server closed the connection unexpectedly
 	This probably means the server terminated abnormally

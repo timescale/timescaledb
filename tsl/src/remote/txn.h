@@ -21,7 +21,7 @@ typedef enum
 } RemoteTxnPrepStmtOption;
 
 /* actions */
-extern void remote_txn_init(RemoteTxn *entry, PGconn *conn, UserMapping *user);
+extern void remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user);
 extern void remote_txn_begin(RemoteTxn *entry, int txnlevel);
 extern bool remote_txn_abort(RemoteTxn *entry);
 extern void remote_txn_write_persistent_record(RemoteTxn *entry);
@@ -32,7 +32,7 @@ extern void remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel);
 /* accessors/info */
 extern void remote_txn_set_will_prep_statement(RemoteTxn *entry,
 											   RemoteTxnPrepStmtOption prep_stmt_option);
-extern PGconn *remote_txn_get_connection(RemoteTxn *txn);
+extern TSConnection *remote_txn_get_connection(RemoteTxn *txn);
 extern Oid remote_txn_get_user_mapping_oid(RemoteTxn *txn);
 extern bool remote_txn_is_still_in_progress(TransactionId frontend_xid);
 extern size_t remote_txn_size(void);

@@ -11,10 +11,13 @@
 #include <nodes/pg_list.h>
 #include <executor/tuptable.h>
 
+#include "data_format.h"
+
 typedef struct StmtParams StmtParams;
 
 extern StmtParams *stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc,
 									  int num_tuples);
+extern StmtParams *stmt_params_create_from_values(const char **param_values, int n_params);
 extern void stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot,
 									   ItemPointer tupleid);
 extern const int *stmt_params_formats(StmtParams *stmt_params);
