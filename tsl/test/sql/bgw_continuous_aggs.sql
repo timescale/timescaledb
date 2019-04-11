@@ -103,8 +103,61 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
---check the information views --
+-- fast restart test
+SELECT ts_bgw_params_reset_time();
+
+DROP VIEW test_continuous_agg_view CASCADE;
+
+CREATE VIEW test_continuous_agg_view
+    WITH (timescaledb.continuous,
+        timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value
+        FROM test_continuous_agg_table
+        GROUP BY 1;
+
+SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+SELECT * FROM sorted_bgw_log;
+
+-- job ran once, successfully
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
+-- data at 0
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+
+SELECT * FROM sorted_bgw_log;
+
+-- job ran again, fast restart
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
+-- data at 2
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+
+SELECT * FROM sorted_bgw_log;
+
+SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
+
+-- job ran again, fast restart
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
+-- data at 4
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+
 \x
+--check the information views --
 select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
@@ -113,4 +166,3 @@ select view_name, view_definition from timescaledb_information.continuous_aggreg
 where view_name::text like '%test_continuous_agg_view';
 
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
-

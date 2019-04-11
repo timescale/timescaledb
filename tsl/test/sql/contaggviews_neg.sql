@@ -412,6 +412,14 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
+
+-- max_interval_per_job must be at least time_bucket
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='10')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
 \set ON_ERROR_STOP 1
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)

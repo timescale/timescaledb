@@ -36,6 +36,15 @@
 #define ALTER_JOB_SCHEDULE_NUM_COLS 5
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
+static void
+enable_fast_restart(BgwJob *job, const char *job_name)
+{
+	BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
+
+	ts_bgw_job_stat_set_next_start(job, job_stat->fd.last_start);
+	elog(LOG, "the %s job is scheduled to run again immediately", job_name);
+}
+
 /*
  * Returns the ID of a chunk to reorder. Eligible chunks must be at least the
  * 3rd newest chunk in the hypertable (not entirely exact because we use the number
@@ -127,12 +136,7 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 											 ts_timer_get_current_timestamp());
 
 	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1)
-	{
-		BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
-
-		ts_bgw_job_stat_set_next_start(job, job_stat->fd.last_start);
-		elog(LOG, "Fast catchup enabled on reorder");
-	}
+		enable_fast_restart(job, "reorder");
 
 commit:
 	if (started)
@@ -178,10 +182,11 @@ execute_drop_chunks_policy(int32 job_id)
 }
 
 static bool
-execute_materialize_continuous_aggregate(int32 job_id)
+execute_materialize_continuous_aggregate(BgwJob *job)
 {
 	bool started = false;
 	int32 materialization_id;
+	bool finshed_all_materialization;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -189,17 +194,22 @@ execute_materialize_continuous_aggregate(int32 job_id)
 		StartTransactionCommand();
 	}
 
-	materialization_id = ts_continuous_agg_job_find_materializtion_by_job_id(job_id);
+	materialization_id = ts_continuous_agg_job_find_materializtion_by_job_id(job->fd.id);
 	if (materialization_id < 0)
-		elog(ERROR, "cannot find continuous aggregate for job %d", job_id);
+		elog(ERROR, "cannot find continuous aggregate for job %d", job->fd.id);
 
 	CommitTransactionCommand();
 
 	/* always materialize verbosely for now */
-	continous_agg_materialize(materialization_id, true);
+	finshed_all_materialization = continuous_agg_materialize(materialization_id, true);
 
-	if (!started)
-		StartTransactionCommand();
+	StartTransactionCommand();
+
+	if (!finshed_all_materialization)
+		enable_fast_restart(job, "materialize continuous aggregate");
+
+	if (started)
+		CommitTransactionCommand();
 
 	return true;
 }
@@ -217,7 +227,7 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-			return execute_materialize_continuous_aggregate(job->fd.id);
+			return execute_materialize_continuous_aggregate(job);
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid enterprise job type: \"%s\"",
