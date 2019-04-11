@@ -5,16 +5,59 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <utils/builtins.h>
 #include <utils/timestamp.h>
 
 #include "catalog.h"
 #include "installation_metadata.h"
 #include "telemetry/uuid.h"
 #include "telemetry/metadata.h"
+#include "scan_iterator.h"
+#include "jsonb_utils.h"
 
 #define INSTALLATION_METADATA_UUID_KEY_NAME "uuid"
 #define INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME "exported_uuid"
 #define INSTALLATION_METADATA_TIMESTAMP_KEY_NAME "install_timestamp"
+
+/*
+ * add all entries from _timescaledb_catalog.installation_metadata
+ */
+void
+ts_metadata_add_values(JsonbParseState *state)
+{
+	Datum key, value;
+	bool key_isnull, value_isnull;
+	ScanIterator iterator =
+		ts_scan_iterator_create(INSTALLATION_METADATA, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), INSTALLATION_METADATA, INSTALLATION_METADATA_PKEY_IDX);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = iterator.tinfo;
+
+		key = heap_getattr(ti->tuple, Anum_installation_metadata_key, ti->desc, &key_isnull);
+
+		if (!key_isnull)
+		{
+			Name key_name = DatumGetName(key);
+
+			/* skip keys included as toplevel items */
+			if (namestrcmp(key_name, INSTALLATION_METADATA_UUID_KEY_NAME) != 0 &&
+				namestrcmp(key_name, INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME) != 0 &&
+				namestrcmp(key_name, INSTALLATION_METADATA_TIMESTAMP_KEY_NAME) != 0)
+			{
+				value = heap_getattr(ti->tuple,
+									 Anum_installation_metadata_value,
+									 ti->desc,
+									 &value_isnull);
+
+				if (!value_isnull)
+					ts_jsonb_add_str(state, DatumGetCString(key), TextDatumGetCString(value));
+			}
+		}
+	}
+}
 
 static Datum
 get_uuid_by_key(const char *key)

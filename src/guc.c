@@ -46,6 +46,7 @@ int ts_guc_telemetry_level = TELEMETRY_BASIC;
 TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
+char *ts_telemetry_cloud = NULL;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -205,6 +206,18 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
+							   /* short_dec= */ "cloud provider",
+							   /* long_dec= */ "cloud provider used for this instance",
+							   /* valueAddr= */ &ts_telemetry_cloud,
+							   /* bootValue= */ NULL,
+							   /* context= */ PGC_SIGHUP,
+							   /* flags= */ 0,
+							   /* check_hook= */ NULL,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
+
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",
 							 /* short_dec= */ "immediately shutdown the bgw scheduler",
