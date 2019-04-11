@@ -183,7 +183,7 @@ continuous_agg_init(ContinuousAgg *cagg, FormData_continuous_agg *fd)
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
 }
 
-ContinuousAggHypertableStatus
+TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id)
 {
 	ScanIterator iterator =

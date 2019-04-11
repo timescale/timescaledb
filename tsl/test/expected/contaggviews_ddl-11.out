@@ -469,4 +469,24 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           12 |     3
 (3 rows)
 
+\set ON_ERROR_STOP 0
+-- only one continuous aggregate per hypertable
+CREATE VIEW second_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('3', time), SUM(data)
+    FROM drop_chunks_table_u
+    GROUP BY 1;
+ERROR:  hypertable already has a continuous aggregate
+-- no continuous aggregates on a continuous aggregate materialization table
+CREATE VIEW new_name_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('6', time_partition_col), COUNT(tscol2)
+    FROM new_name
+    GROUP BY 1;
+ERROR:  hypertable is a continuous aggregate materialization table
+-- cannot create a continuous aggregate on a continuous aggregate view
+CREATE VIEW drop_chunks_view_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('6', time_bucket), SUM(count)
+    FROM drop_chunks_view
+    GROUP BY 1;
+ERROR:  invalid SELECT query for continuous aggregate
+\set ON_ERROR_STOP 1
 DROP INDEX new_name_idx;

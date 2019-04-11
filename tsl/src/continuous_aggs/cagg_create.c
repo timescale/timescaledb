@@ -47,6 +47,7 @@
 
 #include "catalog.h"
 #include "compat.h"
+#include "continuous_agg.h"
 #include "dimension.h"
 #include "extension_constants.h"
 #include "hypertable_cache.h"
@@ -1585,6 +1586,7 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 #if !PG96
 	PlannedStmt *pstmt_info = (PlannedStmt *) pstmt;
 	RawStmt *rawstmt = NULL;
+
 	/* we have a continuous aggregate query. convert to Query structure
 	 */
 	rawstmt = makeNode(RawStmt);
@@ -1606,7 +1608,33 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 						 "materialization")));
 		return true;
 	}
+
 	timebucket_exprinfo = cagg_validate_query(query);
+
+	/* there can only be one continuous aggregate per table */
+	switch (ts_continuous_agg_hypertable_status(timebucket_exprinfo.htid))
+	{
+		case HypertableIsMaterialization:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable is a continuous aggregate materialization table"),
+					 errhint("creating continuous aggregates based on continuous aggregates is not "
+							 "yet supported")));
+			return false;
+		case HypertableIsRawTable:
+		case HypertableIsMaterializationAndRaw:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable already has a continuous aggregate"),
+					 errhint("hypertables currently only support a single continuous aggregate. "
+							 "Drop the other continuous aggreagate to add a new one.")));
+			return false;
+		case HypertableIsNotContinuousAgg:
+			break;
+		default:
+			Assert(false && "unerachable");
+	}
+
 	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
 	return true;
 }

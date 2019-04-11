@@ -46,7 +46,8 @@ typedef enum ContinuousAggHypertableStatus
 	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
 } ContinuousAggHypertableStatus;
 
-extern ContinuousAggHypertableStatus ts_continuous_agg_hypertable_status(int32 hypertable_id);
+extern TSDLLEXPORT ContinuousAggHypertableStatus
+ts_continuous_agg_hypertable_status(int32 hypertable_id);
 extern void ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks,
 													  Size num_chunks);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
