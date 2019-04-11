@@ -57,7 +57,7 @@ partialize_function_call_walker(Node *node, PartializeWalkerState *state)
 
 /* We currently cannot handle cases like
  *     SELECT sum(i), partialize(sum(i)) ...
- * instead we use this function to ensure that if any of the aggregates in a staetment are
+ * instead we use this function to ensure that if any of the aggregates in a statement are
  * partialized, all of them are
  */
 static bool
@@ -89,11 +89,11 @@ plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo
 	Assert(partialfnoid != InvalidOid);
 
 	state.fnoid = partialfnoid;
-	expression_tree_walker((Node *) parse->targetList, partialize_function_call_walker, &state);
+	partialize_function_call_walker((Node *) parse->targetList, &state);
 
 	if (state.found_partialize)
 	{
-		expression_tree_walker((Node *) parse->targetList, ensure_only_partials, NULL);
+		ensure_only_partials((Node *) parse->targetList, NULL);
 
 		foreach (lc, input_rel->pathlist)
 		{
