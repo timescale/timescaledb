@@ -2752,8 +2752,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
-	// TODO should check that this was in fact a continuous agg
-	ts_cm_functions->continous_agg_materialize(materialization_id, true);
+	ts_cm_functions->continuous_agg_materialize(materialization_id, true);
 
 	StartTransactionCommand();
 	return true;

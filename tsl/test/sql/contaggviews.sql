@@ -536,6 +536,10 @@ SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '100');
 SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
+-- we can SET multiple options in one commad
+ALTER VIEW mat_with_test SET (timescaledb.refresh_lag = '100', timescaledb.max_interval_per_job='400');
+SELECT refresh_lag, max_interval_per_job FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
+
 DROP TABLE conditions CASCADE;
 
 --

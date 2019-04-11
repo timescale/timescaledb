@@ -458,3 +458,59 @@ REFRESH MATERIALIZED VIEW negative_view_5;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
 DROP TABLE continuous_agg_negative CASCADE;
+
+-- max_interval_per_job tests
+CREATE TABLE continuous_agg_max_mat(time BIGINT, data BIGINT);
+SELECT create_hypertable('continuous_agg_max_mat', 'time', chunk_time_interval=> 10);
+
+-- only allow two time_buckets per run
+CREATE VIEW max_mat_view
+    WITH (timescaledb.continuous, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), COUNT(data) as value
+        FROM continuous_agg_max_mat
+        GROUP BY 1;
+
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 10) AS i;
+
+-- first run create two materializations
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+
+-- repeated runs will eventually materialize all the data
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+
+-- time type
+CREATE TABLE continuous_agg_max_mat_t(time TIMESTAMPTZ, data TIMESTAMPTZ);
+SELECT create_hypertable('continuous_agg_max_mat_t', 'time');
+
+-- only allow two time_buckets per run
+CREATE VIEW max_mat_view_t
+    WITH (timescaledb.continuous, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
+    AS SELECT time_bucket('2 hours', time), COUNT(data) as value
+        FROM continuous_agg_max_mat_t
+        GROUP BY 1;
+
+INSERT INTO continuous_agg_max_mat_t
+    SELECT i, i FROM
+        generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour') AS i;
+
+-- first run create two materializations
+REFRESH MATERIALIZED VIEW max_mat_view_t;
+SELECT * FROM max_mat_view_t ORDER BY 1;
+
+-- repeated runs will eventually materialize all the data
+REFRESH MATERIALIZED VIEW max_mat_view_t;
+SELECT * FROM max_mat_view_t ORDER BY 1;
+
+REFRESH MATERIALIZED VIEW max_mat_view_t;
+SELECT * FROM max_mat_view_t ORDER BY 1;
+
+REFRESH MATERIALIZED VIEW max_mat_view_t;
+SELECT * FROM max_mat_view_t ORDER BY 1;
