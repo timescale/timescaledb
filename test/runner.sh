@@ -6,6 +6,7 @@ CURRENT_DIR=$(dirname $0)
 EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 PG_REGRESS_PSQL=$1
 PSQL=${PSQL:-$PG_REGRESS_PSQL}
+PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
 TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
