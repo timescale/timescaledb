@@ -48,11 +48,14 @@
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
+#define REQ_INSTALLATION_METADATA "db_metadata"
 #define REQ_LICENSE_INFO "license"
 #define REQ_LICENSE_EDITION "edition"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
 #define REQ_TS_LAST_TUNE_TIME "last_tuned_time"
 #define REQ_TS_LAST_TUNE_VERSION "last_tuned_version"
+#define REQ_INSTANCE_METADATA "instance_metadata"
+#define REQ_TS_TELEMETRY_CLOUD "cloud"
 
 #define PG_PROMETHEUS "pg_prometheus"
 #define POSTGIS "postgis"
@@ -270,6 +273,28 @@ build_version_body(void)
 
 	if (ts_last_tune_version != NULL)
 		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
+
+	/* add cloud to telemetry when set */
+	if (ts_telemetry_cloud != NULL)
+	{
+		ext_key.type = jbvString;
+		ext_key.val.string.val = REQ_INSTANCE_METADATA;
+		ext_key.val.string.len = strlen(REQ_INSTANCE_METADATA);
+		pushJsonbValue(&parseState, WJB_KEY, &ext_key);
+
+		pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(parseState, REQ_TS_TELEMETRY_CLOUD, ts_telemetry_cloud);
+		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	}
+
+	/* Add additional content from installation_metadata */
+	ext_key.type = jbvString;
+	ext_key.val.string.val = REQ_INSTALLATION_METADATA;
+	ext_key.val.string.len = strlen(REQ_INSTALLATION_METADATA);
+	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
+	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+	ts_metadata_add_values(parseState);
+	pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 
 	/* end of telemetry object */
 	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
