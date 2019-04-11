@@ -798,6 +798,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_refresh_lag,
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
+	Anum_continuous_agg_max_interval_per_job,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -816,6 +817,7 @@ typedef struct FormData_continuous_agg
 	int64 refresh_lag;
 	NameData direct_view_schema;
 	NameData direct_view_name;
+	int64 max_interval_per_job;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
