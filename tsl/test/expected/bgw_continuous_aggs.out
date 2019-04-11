@@ -65,8 +65,8 @@ SELECT * FROM timescaledb_information.policy_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | direct_view_schema | direct_view_name 
--------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+--------------------+------------------
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | direct_view_schema | direct_view_name | max_interval_per_job 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+--------------------+------------------+----------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -156,15 +156,141 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
            4 |     9
 (3 rows)
 
---check the information views --
+-- fast restart test
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+DROP VIEW test_continuous_agg_view CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
+CREATE VIEW test_continuous_agg_view
+    WITH (timescaledb.continuous,
+        timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value
+        FROM test_continuous_agg_table
+        GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time | application_name |                    msg                     
+--------+-----------+------------------+--------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+(4 rows)
+
+-- job ran once, successfully
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
+(1 row)
+
+-- data at 0
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time | application_name |                     msg                      
+--------+-----------+------------------+----------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
+(6 rows)
+
+-- job ran again, fast restart
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | t                |          2 |               2 |              0 |             0
+(1 row)
+
+-- data at 2
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+           2 |     5
+(2 rows)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time | application_name |                     msg                      
+--------+-----------+------------------+----------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      0 |     25000 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
+      0 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |     50000 | DB Scheduler     | [TESTING] Wait until 75000, started at 50000
+(8 rows)
+
+SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
+  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
+------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
+ 1001 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 1 day
+(1 row)
+
+-- job ran again, fast restart
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |           next_start            |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+---------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          3 |               3 |              0 |             0
+(1 row)
+
+-- data at 4
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+           2 |     5
+           4 |     9
+(3 rows)
+
 \x
+--check the information views --
 select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 -[ RECORD 1 ]--------------+--------------------------------------------------------------
 view_name                  | test_continuous_agg_view
 view_owner                 | default_perm_user
-refresh_lag                | 4
+refresh_lag                | -2
 refresh_interval           | @ 12 hours
 materialization_hypertable | _timescaledb_internal.ts_internal_test_continuous_agg_viewtab
 

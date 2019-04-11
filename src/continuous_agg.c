@@ -46,6 +46,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			 .arg_name = "refresh_lag",
 			 .type_id = TEXTOID,
 		},
+		[ContinuousViewOptionMaxIntervalPerRun] = {
+			.arg_name = "max_interval_per_job",
+			.type_id = TEXTOID,
+		},
 };
 
 WithClauseResult *

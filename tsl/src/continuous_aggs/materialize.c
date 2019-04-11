@@ -44,10 +44,10 @@
 
 static Form_continuous_agg get_continuous_agg(int32 mat_hypertable_id);
 static int64 get_materialization_end_point_for_table(int32 raw_hypertable_id,
-													 int32 materialization_id,
-													 int64 max_materialization_distance,
-													 int64 bucket_width,
-													 bool *materializing_new_range, bool verbose);
+													 int32 materialization_id, int64 refresh_lag,
+													 int64 bucket_width, int64 max_interval_per_job,
+													 bool *materializing_new_range,
+													 bool *truncated_materialization, bool verbose);
 static int64 invalidation_threshold_get(int32 materialization_id);
 static void drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out);
 static void invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold);
@@ -56,8 +56,8 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
 
 /* must be called without a transaction started */
-void
-continous_agg_materialize(int32 materialization_id, bool verbose)
+bool
+continuous_agg_materialize(int32 materialization_id, bool verbose)
 {
 	Hypertable *raw_hypertable;
 	Oid raw_table_oid;
@@ -74,6 +74,7 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	FormData_continuous_agg cagg_data;
 	int64 new_invalidation_threshold;
 	bool materializing_new_range = false;
+	bool truncated_materialization = false;
 	List *invalidations = NIL;
 	SchemaAndName partial_view;
 
@@ -136,15 +137,14 @@ continous_agg_materialize(int32 materialization_id, bool verbose)
 	LockRelationIdForSession(&partial_view_lock_relid, ShareRowExclusiveLock);
 	relation_close(partial_view_relation, NoLock);
 
-	/* TODO should we pin the number of rows materialized per-run?
-	 *      if so, we should be a count here
-	 */
 	new_invalidation_threshold =
 		get_materialization_end_point_for_table(cagg_data.raw_hypertable_id,
 												materialization_id,
 												cagg_data.refresh_lag,
 												cagg_data.bucket_width,
+												cagg_data.max_interval_per_job,
 												&materializing_new_range,
+												&truncated_materialization,
 												verbose);
 
 	if (verbose)
@@ -209,6 +209,7 @@ finish:
 	UnlockRelationIdForSession(&raw_lock_relid, AccessShareLock);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
+	return !truncated_materialization;
 }
 
 static ScanTupleResult
@@ -247,14 +248,17 @@ get_continuous_agg(int32 mat_hypertable_id)
 	return cagg;
 }
 
-static bool hypertable_get_max(SchemaAndName hypertable, Name time_column, int64 search_start,
-							   Oid time_type, int64 *max_out);
+static bool hypertable_get_min_and_max(SchemaAndName hypertable, Name time_column,
+									   int64 search_start, Oid time_type, int64 *min_out,
+									   int64 *max_out);
 
 static int64
 get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materialization_id,
-										int64 max_materialization_distance, int64 bucket_width,
-										bool *materializing_new_range, bool verbose)
+										int64 refresh_lag, int64 bucket_width,
+										int64 max_interval_per_job, bool *materializing_new_range,
+										bool *truncated_materialization, bool verbose)
 {
+	int64 start_time = PG_INT64_MIN;
 	int64 end_time = PG_INT64_MIN;
 	Hypertable *raw_table = ts_hypertable_get_by_id(raw_hypertable_id);
 	SchemaAndName hypertable = {
@@ -267,11 +271,12 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	Oid time_column_type = time_column->fd.column_type;
 	bool found_new_tuples = false;
 
-	found_new_tuples = hypertable_get_max(hypertable,
-										  &time_column_name,
-										  old_completed_threshold,
-										  time_column_type,
-										  &end_time);
+	found_new_tuples = hypertable_get_min_and_max(hypertable,
+												  &time_column_name,
+												  old_completed_threshold,
+												  time_column_type,
+												  &start_time,
+												  &end_time);
 
 	if (!found_new_tuples)
 	{
@@ -285,9 +290,10 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		return old_completed_threshold;
 	}
 
+	Assert(end_time >= start_time);
+
 	/* check for values which would overflow 64 bit subtraction*/
-	if (max_materialization_distance >= 0 &&
-		end_time <= PG_INT64_MIN + max_materialization_distance)
+	if (refresh_lag >= 0 && end_time <= PG_INT64_MIN + refresh_lag)
 	{
 		if (verbose)
 			elog(INFO,
@@ -300,25 +306,24 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		*materializing_new_range = false;
 		return old_completed_threshold;
 	}
-	else if (max_materialization_distance < 0 &&
-			 end_time >= PG_INT64_MAX + max_materialization_distance)
+	else if (refresh_lag < 0 && end_time >= PG_INT64_MAX + refresh_lag)
 	{
-		/* note since max_materialization_distance is negative
-		 * PG_INT64_MAX + max_materialization_distance is smaller than PG_INT64_MAX
-		 * pick a value so that end_time -= max_materialization_distance will be
+		/* note since refresh_lag is negative
+		 * PG_INT64_MAX + refresh_lag is smaller than PG_INT64_MAX
+		 * pick a value so that end_time -= refresh_lag will be
 		 * PG_INT64_MAX, we should materialize everything
 		 */
-		end_time = PG_INT64_MAX + max_materialization_distance;
+		end_time = PG_INT64_MAX + refresh_lag;
 	}
 
-	end_time -= max_materialization_distance;
+	end_time -= refresh_lag;
 	end_time = ts_time_bucket_by_type(bucket_width, end_time, time_column_type);
-	if (end_time <= old_completed_threshold)
+	if (end_time <= old_completed_threshold || end_time < start_time)
 	{
 		if (verbose)
 			elog(INFO,
 				 "new materialization range not found for %s.%s (time column %s): "
-				 "not enough new data past completeion threshold (%ld)",
+				 "not enough new data past completion threshold (%ld)",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
@@ -326,6 +331,28 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		*materializing_new_range = false;
 		return old_completed_threshold;
 	}
+
+	/* pin the end time to start_time + max_interval_per_job
+	 * so we don't materialize more than max_interval_per_job per run
+	 */
+	if (end_time - start_time > max_interval_per_job)
+	{
+		if (verbose)
+			elog(INFO,
+				 "new materialization range for %s.%s larger than allowed in one run, truncating "
+				 "(time column %s) (%ld)",
+				 NameStr(*hypertable.schema),
+				 NameStr(*hypertable.name),
+				 NameStr(time_column_name),
+				 end_time);
+		end_time = ts_time_bucket_by_type(bucket_width,
+										  start_time + max_interval_per_job,
+										  time_column_type);
+		Assert(end_time > old_completed_threshold);
+		*truncated_materialization = true;
+	}
+	else
+		*truncated_materialization = false;
 
 	if (verbose)
 		elog(INFO,
@@ -336,16 +363,18 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 			 end_time);
 
 	Assert(end_time > old_completed_threshold);
+	Assert(end_time >= start_time);
 
 	*materializing_new_range = true;
 	return end_time;
 }
 
 static bool
-hypertable_get_max(SchemaAndName hypertable, Name time_column, int64 search_start, Oid time_type,
-				   int64 *max_out)
+hypertable_get_min_and_max(SchemaAndName hypertable, Name time_column, int64 search_start,
+						   Oid time_type, int64 *min_out, int64 *max_out)
 {
 	Datum last_time_value;
+	Datum first_time_value;
 	bool val_is_null;
 	bool search_start_is_infinite = false;
 	Oid arg_types[] = { time_type };
@@ -367,25 +396,35 @@ hypertable_get_max(SchemaAndName hypertable, Name time_column, int64 search_star
 	if (res != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI while search for new tuples");
 
+	/* We always SELECT both max and min in the following queries. There are two cases
+	 * 1. there is no index on time: then we want to perform only one seqscan.
+	 * 2. there is a btree index on time: then postgres will transform the query
+	 *    into two index-only scans, which should add very little extra work
+	 *    compared to the materialization.
+	 * Ordered append append also fires, so we never scan beyond the first and last chunks
+	 */
 	if (search_start_is_infinite && search_start < 0)
 	{
 		/* previous completed time is -infinity, or does not exist, so we must scan from the
 		 * beginning */
 		nargs = 0;
 		appendStringInfo(command,
-						 "SELECT max(%s) FROM %s.%s",
+						 "SELECT max(%s), min(%s) FROM %s.%s",
+						 quote_identifier(NameStr(*time_column)),
 						 quote_identifier(NameStr(*time_column)),
 						 quote_identifier(NameStr(*hypertable.schema)),
 						 quote_identifier(NameStr(*hypertable.name)));
 	}
 	else
 	{
+		*min_out = search_start;
 		/* normal case, add a WHERE to take advantage of chunk constraints */
 		/*We handled the +infinity case above*/
 		Assert(!search_start_is_infinite);
 		nargs = 1;
 		appendStringInfo(command,
-						 "SELECT max(%s) FROM %s.%s WHERE %s > $1",
+						 "SELECT max(%s), min(%s) FROM %s.%s WHERE %s >= $1",
+						 quote_identifier(NameStr(*time_column)),
 						 quote_identifier(NameStr(*time_column)),
 						 quote_identifier(NameStr(*hypertable.schema)),
 						 quote_identifier(NameStr(*hypertable.name)),
@@ -403,11 +442,14 @@ hypertable_get_max(SchemaAndName hypertable, Name time_column, int64 search_star
 		elog(ERROR, "could not find new invalidation threshold");
 
 	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == time_type);
+	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 2) == time_type);
 
+	first_time_value = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &val_is_null);
 	last_time_value = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &val_is_null);
 
 	if (!val_is_null)
 	{
+		*min_out = ts_time_value_to_internal(first_time_value, time_type);
 		*max_out = ts_time_value_to_internal(last_time_value, time_type);
 		found_new_tuples = true;
 	}

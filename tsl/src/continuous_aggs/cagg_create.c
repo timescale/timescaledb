@@ -191,7 +191,8 @@ static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matco
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
 						 char *partial_schema, char *partial_view, int64 bucket_width,
-						 int64 refresh_lag, int32 job_id, char *direct_schema, char *direct_view)
+						 int64 refresh_lag, int64 max_interval_per_job, int32 job_id,
+						 char *direct_schema, char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -228,6 +229,8 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 		NameGetDatum(&direct_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
 		NameGetDatum(&direct_viewnm);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] =
+		max_interval_per_job;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -543,6 +546,16 @@ get_refresh_lag(Oid column_type, int64 bucket_width, WithClauseResult *with_clau
 	if (with_clause_options[ContinuousViewOptionRefreshLag].is_default)
 		return bucket_width * 2;
 	return continuous_agg_parse_refresh_lag(column_type, with_clause_options);
+}
+
+static int64
+get_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options, int64 bucket_width)
+{
+	if (with_clause_options[ContinuousViewOptionMaxIntervalPerRun].is_default)
+		return PG_INT64_MAX;
+	return continuous_agg_parse_max_interval_per_job(column_type,
+													 with_clause_options,
+													 bucket_width);
 }
 
 static bool
@@ -1497,6 +1510,9 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	int64 refresh_lag = get_refresh_lag(origquery_ht->htpartcoltype,
 										origquery_ht->bucket_width,
 										with_clause_options);
+	int64 max_interval_per_job = get_max_interval_per_job(origquery_ht->htpartcoltype,
+														  with_clause_options,
+														  origquery_ht->bucket_width);
 
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(panquery->groupClause));
 	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
@@ -1557,6 +1573,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 							 part_rel->relname,
 							 origquery_ht->bucket_width,
 							 refresh_lag,
+							 max_interval_per_job,
 							 job_id,
 							 dum_rel->schemaname,
 							 dum_rel->relname);

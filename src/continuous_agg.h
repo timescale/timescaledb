@@ -21,6 +21,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousEnabled = 0,
 	ContinuousViewOptionRefreshLag,
 	ContinuousViewOptionRefreshInterval,
+	ContinuousViewOptionMaxIntervalPerRun,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType
