@@ -3,7 +3,7 @@ set(SOURCES
   license.c
   reorder.c
   telemetry.c
-  util_aggfns.c
+  partialize_finalize.c
   planner.c
 )
 

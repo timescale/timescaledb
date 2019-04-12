@@ -11,11 +11,12 @@
 #include <utils/datum.h>
 #include <utils/builtins.h>
 #include <access/htup_details.h>
-#include "compat.h"
-#include <util_aggfns.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_collation.h>
 #include <parser/parse_agg.h>
+
+#include "compat.h"
+#include "partialize_finalize.h"
 
 TS_FUNCTION_INFO_V1(tsl_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(tsl_finalize_agg_ffunc);
