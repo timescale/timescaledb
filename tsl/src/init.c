@@ -12,7 +12,7 @@
 
 #include "planner.h"
 #include "gapfill/gapfill.h"
-#include "util_aggfns.h"
+#include "partialize_finalize.h"
 
 #include "license.h"
 #include "reorder.h"

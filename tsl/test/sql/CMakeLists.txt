@@ -2,7 +2,7 @@ set(TEST_FILES
     edition.sql
     gapfill.sql
     reorder.sql
-    partial_aggs.sql
+    partialize_finalize.sql
 )
 
 set(TEST_FILES_DEBUG

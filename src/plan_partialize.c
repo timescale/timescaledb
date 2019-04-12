@@ -8,7 +8,7 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/planner.h>
 #include <utils/lsyscache.h>
-#include <plan_partialize.h>
+#include "plan_partialize.h"
 #include "extension_constants.h"
 #include "utils.h"
 

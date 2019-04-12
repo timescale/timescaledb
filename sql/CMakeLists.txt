@@ -39,7 +39,7 @@ set(SOURCE_FILES
   views.sql
   gapfill.sql
   maintenance_utils.sql
-  util_aggregates.sql
+  partialize_finalize.sql
 )
 
 # These files should be pre-pended to update scripts so that they are
