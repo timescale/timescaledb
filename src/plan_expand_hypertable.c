@@ -1005,6 +1005,7 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
 {
+	TimescaleDBPrivate *priv = rel->fdw_private;
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
 	List *inh_oids;
@@ -1055,19 +1056,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		propagate_join_quals(root, rel, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
-
-	if (ts_cm_functions->hypertable_should_be_expanded != NULL &&
-		!ts_cm_functions->hypertable_should_be_expanded(rel, rte, ht, inh_oids))
-		return;
-
 	oldrelation = table_open(parent_oid, NoLock);
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the
-	 * children to them
+	 * children to them. We include potential server rels we might need to
+	 * create in case of a distributed hypertable.
 	 */
 	old_rel_array_len = root->simple_rel_array_size;
-	root->simple_rel_array_size += list_length(inh_oids);
+	root->simple_rel_array_size += (list_length(inh_oids) + list_length(ht->servers));
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
 	/* postgres expects these arrays to be 0'ed until intialized */
@@ -1086,7 +1083,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
-	if (enable_partitionwise_aggregate || ht->fd.replication_factor > 0)
+	if (enable_partitionwise_aggregate || hypertable_is_distributed(ht))
 		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
 #endif
 
@@ -1160,6 +1157,37 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	table_close(oldrelation, NoLock);
+
+	priv->serverids = ts_hypertable_get_serverids_list(ht);
+
+	/* For distributed hypertables, we'd like to turn per-chunk plans into
+	 * per-server plans. We proactively add RTEs for the per-server rels here
+	 * because the PostgreSQL planning code that we call to replan the
+	 * per-server queries assumes there are RTEs for each rel that is considered
+	 * a "partition."
+	 *
+	 * Note that each per-server RTE reuses the relid (OID) of the parent
+	 * hypertable relation. This makes sense since each remote server's
+	 * hypertable is an identical (albeit partial) version of the frontend's
+	 * hypertable. The upside of this is that the planner can plan remote
+	 * queries to take into account the indexes on the hypertable to produce
+	 * more efficient remote queries. In contrast, chunks are foreign tables so
+	 * they do not have indexes.
+	 */
+	foreach (l, priv->serverids)
+	{
+		RangeTblEntry *server_rte = copyObject(rte);
+
+		server_rte->inh = false;
+		server_rte->ctename = NULL;
+		server_rte->requiredPerms = 0;
+		server_rte->securityQuals = NIL;
+		parse->rtable = lappend(parse->rtable, server_rte);
+		rti = list_length(parse->rtable);
+		root->simple_rte_array[rti] = server_rte;
+		root->simple_rel_array[rti] = NULL;
+		priv->server_relids = bms_add_member(priv->server_relids, rti);
+	}
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
 

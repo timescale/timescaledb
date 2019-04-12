@@ -75,16 +75,14 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT * FROM test_ft;
 (4 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
-                      QUERY PLAN                       
--------------------------------------------------------
- HashAggregate
-   Output: avg(c0), c1
-   Group Key: test_ft.c1
-   ->  Foreign Scan on public.test_ft
-         Output: c0, c1
-         Server: server_1
-         Remote SQL: SELECT c0, c1 FROM public.test_ft
-(7 rows)
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Foreign Scan
+   Output: (avg(c0)), c1
+   Relations: Aggregate on (public.test_ft)
+   Server: server_1
+   Remote SQL: SELECT avg(c0), c1 FROM public.test_ft GROUP BY 2
+(5 rows)
 
 SELECT * FROM test_ft;
  c0 |   c1   
@@ -97,8 +95,8 @@ SELECT * FROM test_ft;
 SELECT avg(c0) FROM test_ft GROUP BY c1;
         avg         
 --------------------
- 1.5000000000000000
  2.0000000000000000
+ 1.5000000000000000
 (2 rows)
 
 -- Update rows
