@@ -77,11 +77,11 @@ SELECT
     stddev_samp(temperature),
     variance(temperature),
     var_pop(temperature),
-    var_samp(temperature)
-    --last(temperature, timec) as last_temp,
-    --last(highlow, timec) as last_hl,
-    --first(highlow, timec) as first_hl,
-    --histogram(temperature, 0, 100, 5)
+    var_samp(temperature),
+    last(temperature, timec) as last_temp,
+    last(highlow, timec) as last_hl,
+    first(highlow, timec) as first_hl,
+    histogram(temperature, 0, 100, 5)
   FROM TABLE
   GROUP BY bucket, location
   HAVING min(location) >= 'NYC' and avg(temperature) > 20
@@ -155,7 +155,7 @@ ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 DROP table :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 ERROR:  cannot drop table _timescaledb_internal.ts_internal_mat_beforetab because other objects depend on it
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
-ERROR:  cannot drop the partial view because it is required by a continuous aggregate
+ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW mat_before;
 ERROR:  dropping a continous aggregate requires using CASCADE
 DROP VIEW mat_after;
