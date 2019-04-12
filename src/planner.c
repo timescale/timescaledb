@@ -461,9 +461,11 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
 static inline bool
-should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered, int order_attno)
+should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
+					int order_attno)
 {
-	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append)
+	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append ||
+		hypertable_is_distributed(ht))
 		return false;
 
 	switch (nodeTag(path))
@@ -538,6 +540,21 @@ should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered
 		default:
 			return false;
 	}
+}
+
+static inline bool
+should_constraint_aware_append(Hypertable *ht, Path *path)
+{
+	/* Constraint-aware append currently expects children that scans a real
+	 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
+	 * distributed hypertable because the append children are typically
+	 * per-server relations without a corresponding "real" table in the
+	 * system. Further, per-server appends shouldn't need runtime pruning in any
+	 * case. */
+	if (hypertable_is_distributed(ht))
+		return false;
+
+	return ts_constraint_aware_append_possible(path);
 }
 
 #if PG12_GE
@@ -688,7 +705,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			{
 				case T_AppendPath:
 				case T_MergeAppendPath:
-					if (should_chunk_append(root, rel, *pathptr, ordered, order_attno))
+					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 						*pathptr = ts_chunk_append_path_create(root,
 															   rel,
 															   ht,
@@ -696,7 +713,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 															   false,
 															   ordered,
 															   nested_oids);
-					else if (ts_constraint_aware_append_possible(*pathptr))
+					else if (should_constraint_aware_append(ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
@@ -712,10 +729,10 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			{
 				case T_AppendPath:
 				case T_MergeAppendPath:
-					if (should_chunk_append(root, rel, *pathptr, false, 0))
+					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 						*pathptr =
 							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
-					else if (ts_constraint_aware_append_possible(*pathptr))
+					else if (should_constraint_aware_append(ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:

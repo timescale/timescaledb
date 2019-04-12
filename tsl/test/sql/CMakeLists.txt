@@ -83,6 +83,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
+    partitionwise_distributed.sql
   )
   list(APPEND TEST_FILES_DEBUG
     deparse.sql
@@ -90,7 +91,6 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_commands.sql
     dist_ddl.sql
     dist_util.sql
-    partitionwise_distributed.sql
     remote_connection.sql
     remote_connection_cache.sql
     remote_copy.sql

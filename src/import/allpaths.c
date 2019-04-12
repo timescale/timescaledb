@@ -277,7 +277,11 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 }
 
 #if PG12_GE
-/* copied from allpaths.c */
+/*
+ * set_dummy_rel_pathlist, copied from allpaths.c.
+ *
+ * This was a public function prior to PG12.
+ */
 static void
 set_dummy_rel_pathlist(RelOptInfo *rel)
 {
@@ -310,7 +314,19 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 	 */
 	set_cheapest(rel);
 }
+
 #endif /* PG12_GE */
+
+/*
+ * Exported version of set_dummy_rel_pathlist.
+ *
+ * Note that in PostgreSQLs prior to PG12, set_dummy_rel_pathlist was public.
+ */
+void
+ts_set_dummy_rel_pathlist(RelOptInfo *rel)
+{
+	return set_dummy_rel_pathlist(rel);
+}
 
 /* copied from allpaths.c */
 static void

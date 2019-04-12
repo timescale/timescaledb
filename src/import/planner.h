@@ -24,8 +24,8 @@
 
 #include "export.h"
 
-extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
-										 List **translated_vars);
+extern TSDLLEXPORT void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
+													 Index newvarno, List **translated_vars);
 extern size_t ts_estimate_hashagg_tablesize(struct Path *path,
 											const struct AggClauseCosts *agg_costs,
 											double dNumGroups);

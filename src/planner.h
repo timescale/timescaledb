@@ -27,6 +27,8 @@ typedef struct TimescaleDBPrivate
 	List *nested_oids;
 	bool compressed;
 	List *chunk_oids;
+	List *serverids;
+	Relids server_relids;
 	TsFdwRelationInfo *fdw_relation_info;
 } TimescaleDBPrivate;
 
