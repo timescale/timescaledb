@@ -535,3 +535,77 @@ SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name
 
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '100');
 SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
+
+DROP TABLE conditions CASCADE;
+
+--
+-- TEST FINALIZEFUNC_EXTRA
+--
+
+-- create special aggregate to test ffunc_extra
+-- Raise warning with the actual type being passed in
+CREATE OR REPLACE FUNCTION fake_ffunc(a int8, b int, c int, d int, x anyelement)
+RETURNS anyelement AS $$
+BEGIN
+ RAISE WARNING 'type % %', pg_typeof(d), pg_typeof(x);
+ RETURN x;
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fake_sfunc(a int8, b int, c int, d int, x anyelement)
+RETURNS int8 AS $$
+BEGIN
+ RETURN b;
+END; $$
+LANGUAGE plpgsql;
+
+
+CREATE AGGREGATE aggregate_to_test_ffunc_extra(int, int, int, anyelement) (
+    SFUNC = fake_sfunc,
+    STYPE = int8,
+    COMBINEFUNC = int8pl,
+    FINALFUNC = fake_ffunc,
+    PARALLEL = SAFE,
+    FINALFUNC_EXTRA
+);
+
+CREATE TABLE conditions (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+
+insert into conditions
+select generate_series(0, 200, 10), 'POR', 55, 75, 40, 70, NULL;
+
+
+create or replace view mat_ffunc_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test'::text)
+from conditions
+group by time_bucket(100, timec);
+
+REFRESH MATERIALIZED VIEW mat_ffunc_test;
+
+SELECT * FROM mat_ffunc_test;
+
+DROP view mat_ffunc_test cascade;
+
+create or replace view mat_ffunc_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigint '123')
+from conditions
+group by time_bucket(100, timec);
+
+REFRESH MATERIALIZED VIEW mat_ffunc_test;
+
+SELECT * FROM mat_ffunc_test;
