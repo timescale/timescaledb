@@ -8,6 +8,7 @@ set(TEST_FILES
     ddl_hook.sql
     contaggviews.sql
     contaggviews_neg.sql
+    contaggviews_dump.sql
 )
 
 set(TEST_FILES_DEBUG

@@ -69,11 +69,11 @@ SELECT
     stddev_samp(temperature),
     variance(temperature),
     var_pop(temperature),
-    var_samp(temperature)
-    --last(temperature, timec) as last_temp,
-    --last(highlow, timec) as last_hl,
-    --first(highlow, timec) as first_hl,
-    --histogram(temperature, 0, 100, 5)
+    var_samp(temperature),
+    last(temperature, timec) as last_temp,
+    last(highlow, timec) as last_hl,
+    first(highlow, timec) as first_hl,
+    histogram(temperature, 0, 100, 5)
   FROM TABLE
   GROUP BY bucket, location
   HAVING min(location) >= 'NYC' and avg(temperature) > 20
