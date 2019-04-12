@@ -772,3 +772,93 @@ SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name
          100
 (1 row)
 
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 2 other objects
+--
+-- TEST FINALIZEFUNC_EXTRA
+--
+-- create special aggregate to test ffunc_extra
+-- Raise warning with the actual type being passed in
+CREATE OR REPLACE FUNCTION fake_ffunc(a int8, b int, c int, d int, x anyelement)
+RETURNS anyelement AS $$
+BEGIN
+ RAISE WARNING 'type % %', pg_typeof(d), pg_typeof(x);
+ RETURN x;
+END;
+$$
+LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION fake_sfunc(a int8, b int, c int, d int, x anyelement)
+RETURNS int8 AS $$
+BEGIN
+ RETURN b;
+END; $$
+LANGUAGE plpgsql;
+CREATE AGGREGATE aggregate_to_test_ffunc_extra(int, int, int, anyelement) (
+    SFUNC = fake_sfunc,
+    STYPE = int8,
+    COMBINEFUNC = int8pl,
+    FINALFUNC = fake_ffunc,
+    PARALLEL = SAFE,
+    FINALFUNC_EXTRA
+);
+CREATE TABLE conditions (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+ table_name 
+------------
+ conditions
+(1 row)
+
+insert into conditions
+select generate_series(0, 200, 10), 'POR', 55, 75, 40, 70, NULL;
+create or replace view mat_ffunc_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test'::text)
+from conditions
+group by time_bucket(100, timec);
+NOTICE:  adding not-null constraint to column "time_partition_col"
+REFRESH MATERIALIZED VIEW mat_ffunc_test;
+INFO:  new materialization range for public.conditions (time column timec) (400)
+INFO:  materializing continuous aggregate public.mat_ffunc_test: new range up to 400
+SELECT * FROM mat_ffunc_test;
+WARNING:  type integer text
+WARNING:  type integer text
+WARNING:  type integer text
+ time_bucket | aggregate_to_test_ffunc_extra 
+-------------+-------------------------------
+         200 | 
+           0 | 
+         100 | 
+(3 rows)
+
+DROP view mat_ffunc_test cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_61_chunk
+create or replace view mat_ffunc_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigint '123')
+from conditions
+group by time_bucket(100, timec);
+NOTICE:  adding not-null constraint to column "time_partition_col"
+REFRESH MATERIALIZED VIEW mat_ffunc_test;
+INFO:  new materialization range for public.conditions (time column timec) (400)
+INFO:  materializing continuous aggregate public.mat_ffunc_test: new range up to 400
+SELECT * FROM mat_ffunc_test;
+WARNING:  type integer bigint
+WARNING:  type integer bigint
+WARNING:  type integer bigint
+ time_bucket | aggregate_to_test_ffunc_extra 
+-------------+-------------------------------
+         200 |                              
+           0 |                              
+         100 |                              
+(3 rows)
+
