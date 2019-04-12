@@ -15,6 +15,7 @@
 #include <util_aggfns.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_collation.h>
+#include <parser/parse_agg.h>
 
 TS_FUNCTION_INFO_V1(tsl_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(tsl_finalize_agg_ffunc);
@@ -185,9 +186,70 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 	PG_RETURN_DATUM(deserialized);
 }
 
+/* Convert a 2-dimensional array of schema, names to type OIDs */
+static Oid *
+get_input_types(ArrayType *input_types, size_t *number_types)
+{
+	ArrayMetaState meta = { .element_type = NAMEOID };
+	ArrayIterator iter;
+	Datum slice_datum;
+	bool slice_null;
+	Oid *type_oids;
+	int type_index = 0;
+
+	if (input_types == NULL)
+		elog(ERROR, "cannot pass null input_type with FINALFUNC_EXTRA aggregates");
+
+	get_typlenbyvalalign(meta.element_type, &meta.typlen, &meta.typbyval, &meta.typalign);
+
+	if (ARR_NDIM(input_types) != 2)
+		elog(ERROR, "invalid input type array: wrong number of dimensions");
+
+	*number_types = ARR_DIMS(input_types)[0];
+	type_oids = palloc0(sizeof(*type_oids) * (*number_types));
+
+	iter = array_create_iterator(input_types, 1, &meta);
+
+	while (array_iterate(iter, &slice_datum, &slice_null))
+	{
+		Datum *slice_fields;
+		int slice_elems;
+		Name schema;
+		Name type_name;
+		Oid schema_oid;
+		Oid type_oid;
+		ArrayType *slice_array = DatumGetArrayTypeP(slice_datum);
+		if (slice_null)
+			elog(ERROR, "invalid input type array slice: cannot be null");
+		deconstruct_array(slice_array,
+						  meta.element_type,
+						  meta.typlen,
+						  meta.typbyval,
+						  meta.typalign,
+						  &slice_fields,
+						  NULL,
+						  &slice_elems);
+		if (slice_elems != 2)
+			elog(ERROR, "invalid input type array: expecting slices of size 2");
+
+		schema = DatumGetName(slice_fields[0]);
+		type_name = DatumGetName(slice_fields[1]);
+
+		schema_oid = get_namespace_oid(NameStr(*schema), false);
+		type_oid = GetSysCacheOid2(TYPENAMENSP,
+								   PointerGetDatum(NameStr(*type_name)),
+								   ObjectIdGetDatum(schema_oid));
+		if (!OidIsValid(type_oid))
+			elog(ERROR, "invalid input type: %s.%s", NameStr(*schema), NameStr(*type_name));
+
+		type_oids[type_index++] = type_oid;
+	}
+	return type_oids;
+};
+
 static FATransitionState *
 fa_transition_state_init(MemoryContext *fa_context, Oid inner_agg_fn_oid, Oid collation,
-						 AggState *fa_aggstate)
+						 AggState *fa_aggstate, ArrayType *input_types)
 {
 	FATransitionState *tstate = NULL;
 	HeapTuple inner_agg_tuple;
@@ -212,18 +274,6 @@ fa_transition_state_init(MemoryContext *fa_context, Oid inner_agg_fn_oid, Oid co
 		elog(ERROR,
 			 "function calls with direct args are not supported by TimescaleDB finalize agg");
 
-	/*
-	 * For now we're going to disallow functions that have finalextra args. We
-	 * had hoped to support but, it turns out that it's a bit harder to support
-	 * than we'd realized, basically because the final extra arg  currently
-	 * means that null values of the arg types are passed in to the finalize
-	 * function. We can't do this currently as we have effectively lost those
-	 * values. This can be one arg or more than one arg depending on the
-	 * aggregate type etc.
-	 */
-	if (inner_agg_form->aggfinalextra)
-		elog(ERROR,
-			 "function calls with finalextra args are not supported by TimescaleDB finalize agg");
 	tstate->final_meta->finalfnoid = inner_agg_form->aggfinalfn;
 	tstate->combine_meta->combinefnoid = inner_agg_form->aggcombinefn;
 	tstate->combine_meta->deserialfnoid = inner_agg_form->aggdeserialfn;
@@ -258,14 +308,43 @@ fa_transition_state_init(MemoryContext *fa_context, Oid inner_agg_fn_oid, Oid co
 	/* initialize finalfn specific state */
 	if (OidIsValid(tstate->final_meta->finalfnoid))
 	{
+		int num_args = 1;
+		Oid *types = NULL;
+		size_t number_types = 0;
+		if (inner_agg_form->aggfinalextra)
+		{
+			types = get_input_types(input_types, &number_types);
+			num_args += number_types;
+		}
+		if (num_args != get_func_nargs(tstate->final_meta->finalfnoid))
+			elog(ERROR, "invalid number of input types");
+
 		fmgr_info(tstate->final_meta->finalfnoid, &tstate->final_meta->finalfn);
 		/* pass the aggstate information from our current call context */
 		InitFunctionCallInfoData(tstate->final_meta->finalfn_fcinfo,
 								 &tstate->final_meta->finalfn,
-								 1,
+								 num_args,
 								 collation,
 								 (void *) fa_aggstate,
 								 NULL);
+		if (number_types > 0)
+		{
+			Expr *expr;
+			int i;
+			build_aggregate_finalfn_expr(types,
+										 num_args,
+										 inner_agg_form->aggtranstype,
+										 types[number_types - 1],
+										 collation,
+										 tstate->final_meta->finalfnoid,
+										 &expr);
+			fmgr_info_set_expr((Node *) expr, &tstate->final_meta->finalfn);
+			for (i = 1; i < num_args; i++)
+			{
+				tstate->final_meta->finalfn_fcinfo.arg[i] = (Datum) 0;
+				tstate->final_meta->finalfn_fcinfo.argnull[i] = true;
+			}
+		}
 	}
 
 	/* Need to init tstate->per_group_state->trans_value */
@@ -311,8 +390,8 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 {
 	Oid inner_agg_input_collid;
 	FATransitionState *tstate = PG_ARGISNULL(0) ? NULL : (FATransitionState *) PG_GETARG_POINTER(0);
-	bytea *inner_agg_serialized_state = PG_ARGISNULL(4) ? NULL : PG_GETARG_BYTEA_P(4);
-	bool inner_agg_serialized_state_isnull = PG_ARGISNULL(4) ? true : false;
+	bytea *inner_agg_serialized_state = PG_ARGISNULL(5) ? NULL : PG_GETARG_BYTEA_P(5);
+	bool inner_agg_serialized_state_isnull = PG_ARGISNULL(5) ? true : false;
 	Datum inner_agg_deserialized_state;
 	AggState *fa_aggstate;
 	MemoryContext fa_context, old_context;
@@ -332,6 +411,7 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 	{
 		char *inner_agg_input_coll_schema = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
 		char *inner_agg_input_coll_name = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
+		ArrayType *input_types = PG_ARGISNULL(4) ? NULL : PG_GETARG_ARRAYTYPE_P(4);
 		Oid inner_agg_fn_oid = aggfnoid_from_aggname(PG_GETARG_TEXT_PP(1));
 
 		inner_agg_input_collid =
@@ -341,7 +421,8 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 		tstate = fa_transition_state_init(&fa_context,
 										  inner_agg_fn_oid,
 										  inner_agg_input_collid,
-										  fa_aggstate);
+										  fa_aggstate,
+										  input_types);
 		/* intial trans_value = the partial state of the inner agg from first invocation */
 		tstate->per_group_state->trans_value =
 			inner_agg_deserialize(tstate->combine_meta,
@@ -407,7 +488,12 @@ tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 	old_context = MemoryContextSwitchTo(fa_context);
 	if (OidIsValid(tstate->final_meta->finalfnoid))
 	{
-		if (!(tstate->final_meta->finalfn.fn_strict && tstate->per_group_state->trans_value_isnull))
+		/* don't execute if strict and the trans value is NULL or there are extra args (all extra
+		 * args are always NULL) */
+		if (!(tstate->final_meta->finalfn.fn_strict &&
+			  tstate->per_group_state->trans_value_isnull) &&
+			!(tstate->final_meta->finalfn.fn_strict &&
+			  tstate->final_meta->finalfn_fcinfo.nargs > 1))
 		{
 			tstate->final_meta->finalfn_fcinfo.arg[0] = tstate->per_group_state->trans_value;
 			tstate->final_meta->finalfn_fcinfo.argnull[0] =
