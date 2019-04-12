@@ -6,13 +6,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.partialize_agg(arg ANYELEMENT)
 RETURNS BYTEA AS '@MODULE_PATHNAME@', 'ts_partialize_agg' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_sfunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS internal 
+tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
+RETURNS internal
 AS '@MODULE_PATHNAME@', 'ts_finalize_agg_sfunc'
 LANGUAGE C IMMUTABLE ;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_ffunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
+tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
 RETURNS anyelement
 AS '@MODULE_PATHNAME@', 'ts_finalize_agg_ffunc'
 LANGUAGE C IMMUTABLE ;
