@@ -728,45 +728,101 @@ static Oid
 get_finalizefnoid()
 {
 	Oid finalfnoid;
-	Oid finalfnargtypes[] = { TEXTOID, NAMEOID, NAMEOID, BYTEAOID, ANYELEMENTOID };
+	Oid finalfnargtypes[] = { TEXTOID,  NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
+							  BYTEAOID, ANYELEMENTOID };
 	List *funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(FINALFN));
 	int nargs = sizeof(finalfnargtypes) / sizeof(finalfnargtypes[0]);
 	finalfnoid = LookupFuncName(funcname, nargs, finalfnargtypes, false);
 	return finalfnoid;
 }
 
+/* Build a [N][2] array where N is number of arguments and the inner array is of [schema_name,
+ * type_name] */
+static Datum
+get_input_types_array_datum(Aggref *original_aggregate)
+{
+	ListCell *lc;
+	MemoryContext builder_context =
+		AllocSetContextCreate(CurrentMemoryContext, "input types builder", ALLOCSET_DEFAULT_SIZES);
+	Oid name_array_type_oid = get_array_type(NAMEOID);
+	ArrayBuildStateArr *outer_builder =
+		initArrayResultArr(name_array_type_oid, NAMEOID, builder_context, false);
+	Datum result;
+
+	foreach (lc, original_aggregate->args)
+	{
+		TargetEntry *te = lfirst(lc);
+		Oid type_oid = exprType((Node *) te->expr);
+		ArrayBuildState *schema_name_builder = initArrayResult(NAMEOID, builder_context, false);
+		HeapTuple tp;
+		Form_pg_type typtup;
+		char *schema_name;
+		Name type_name = (Name) palloc0(NAMEDATALEN);
+		Datum schema_datum;
+		Datum type_name_datum;
+		Datum inner_array_datum;
+
+		tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
+		if (!HeapTupleIsValid(tp))
+			elog(ERROR, "cache lookup failed for type %u", type_oid);
+
+		typtup = (Form_pg_type) GETSTRUCT(tp);
+		namecpy(type_name, &typtup->typname);
+		schema_name = get_namespace_name(typtup->typnamespace);
+		ReleaseSysCache(tp);
+
+		type_name_datum = NameGetDatum(type_name);
+		/* using name in because creating from a char * (that may be null or too long) */
+		schema_datum = DirectFunctionCall1(namein, CStringGetDatum(schema_name));
+
+		accumArrayResult(schema_name_builder, schema_datum, false, NAMEOID, builder_context);
+		accumArrayResult(schema_name_builder, type_name_datum, false, NAMEOID, builder_context);
+
+		inner_array_datum = makeArrayResult(schema_name_builder, CurrentMemoryContext);
+
+		accumArrayResultArr(outer_builder,
+							inner_array_datum,
+							false,
+							name_array_type_oid,
+							builder_context);
+	}
+	result = makeArrayResultArr(outer_builder, CurrentMemoryContext, false);
+
+	MemoryContextDelete(builder_context);
+	return result;
+}
+
 /* creates an aggref of the form:
- * finalize-agg(  "sum(int)",
- *                collationname, collation_schname,
- *                <partial-column-name>,
+ * finalize-agg(
+ *                "sum(int)" TEXT,
+ *                collation_schema_name NAME, collation_name NAME,
+ *                input_types_array NAME[N][2],
+ *                <partial-column-name> BYTEA,
  *                null::<return-type of sum(int)>
- *                )
+ *             )
  * here sum(int) is the input aggregate "inp" in the parameter-list
  */
 static Aggref *
-get_finalize_aggref(Aggref *inp, Var *inpcol)
+get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 {
 	Aggref *aggref;
 	TargetEntry *te;
-	char *arg1str;
-	Const *aggfn1arg, *oid2arg, *nullarg, *oid3arg;
-	Var *bytearg;
+	char *agggregate_signature;
+	Const *aggregate_signature_const, *collation_schema_const, *collation_name_const,
+		*input_types_const, *return_type_const;
+	Oid name_array_type_oid = get_array_type(NAMEOID);
+	Var *partial_bytea_var;
 	List *tlist = NIL;
 	int tlist_attno = 1;
 	List *argtypes = NIL;
-	char *arg3_collstr = NULL, *arg2_collnamestr = NULL;
-	Datum arg3_collval = (Datum) 0;
-	Datum arg2_collnameval = (Datum) 0;
+	char *collation_name = NULL, *collation_schema_name = NULL;
+	Datum collation_name_datum = (Datum) 0;
+	Datum collation_schema_datum = (Datum) 0;
 	Oid finalfnoid = get_finalizefnoid();
-	/* The arguments are input aggref oid,
-	 * inputcollation name, inputcollation schemaname,
-	 *	bytea column-value, NULL::returntype
-	 */
-	argtypes = lappend_oid(argtypes, TEXTOID);
-	argtypes = lappend_oid(argtypes, NAMEOID);
-	argtypes = lappend_oid(argtypes, NAMEOID);
-	argtypes = lappend_oid(argtypes, BYTEAOID);
+
+	argtypes = list_make5_oid(TEXTOID, NAMEOID, NAMEOID, name_array_type_oid, BYTEAOID);
 	argtypes = lappend_oid(argtypes, inp->aggtype);
+
 	aggref = makeNode(Aggref);
 	aggref->aggfnoid = finalfnoid;
 	aggref->aggtype = inp->aggtype;
@@ -784,17 +840,18 @@ get_finalize_aggref(Aggref *inp, Var *inpcol)
 	aggref->aggsplit = AGGSPLIT_SIMPLE; // TODO make sure plannerdoes not change this ???
 	aggref->location = -1;				/*unknown */
 										/* construct the arguments */
-	arg1str = DatumGetCString(DirectFunctionCall1(regprocedureout, inp->aggfnoid));
-	aggfn1arg = makeConst(TEXTOID,
-						  -1,
-						  DEFAULT_COLLATION_OID,
-						  -1,
-						  CStringGetTextDatum(arg1str),
-						  false,
-						  false /* passbyval */
+	agggregate_signature = DatumGetCString(DirectFunctionCall1(regprocedureout, inp->aggfnoid));
+	aggregate_signature_const = makeConst(TEXTOID,
+										  -1,
+										  DEFAULT_COLLATION_OID,
+										  -1,
+										  CStringGetTextDatum(agggregate_signature),
+										  false,
+										  false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) aggfn1arg, tlist_attno++, NULL, false);
+	te = makeTargetEntry((Expr *) aggregate_signature_const, tlist_attno++, NULL, false);
 	tlist = lappend(tlist, te);
+
 	if (OidIsValid(inp->inputcollid))
 	{
 		/* similar to generate_collation_name */
@@ -804,41 +861,57 @@ get_finalize_aggref(Aggref *inp, Var *inpcol)
 		if (!HeapTupleIsValid(tp))
 			elog(ERROR, "cache lookup failed for collation %u", inp->inputcollid);
 		colltup = (Form_pg_collation) GETSTRUCT(tp);
-		arg3_collstr = pstrdup(NameStr(colltup->collname));
-		arg3_collval = DirectFunctionCall1(namein, CStringGetDatum(arg3_collstr));
+		collation_name = pstrdup(NameStr(colltup->collname));
+		collation_name_datum = DirectFunctionCall1(namein, CStringGetDatum(collation_name));
 
-		arg2_collnamestr = get_namespace_name(colltup->collnamespace);
-		if (arg2_collnamestr != NULL)
-			arg2_collnameval = DirectFunctionCall1(namein, CStringGetDatum(arg2_collnamestr));
+		collation_schema_name = get_namespace_name(colltup->collnamespace);
+		if (collation_schema_name != NULL)
+			collation_schema_datum =
+				DirectFunctionCall1(namein, CStringGetDatum(collation_schema_name));
 		ReleaseSysCache(tp);
 	}
-	oid2arg = makeConst(NAMEOID,
-						-1,
-						InvalidOid,
-						NAMEDATALEN,
-						arg2_collnameval,
-						(arg2_collnamestr == NULL) ? true : false,
-						false /* passbyval */
+	collation_schema_const = makeConst(NAMEOID,
+									   -1,
+									   InvalidOid,
+									   NAMEDATALEN,
+									   collation_schema_datum,
+									   (collation_schema_name == NULL) ? true : false,
+									   false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) oid2arg, tlist_attno++, NULL, false);
+	te = makeTargetEntry((Expr *) collation_schema_const, tlist_attno++, NULL, false);
 	tlist = lappend(tlist, te);
-	oid3arg = makeConst(NAMEOID,
-						-1,
-						InvalidOid,
-						NAMEDATALEN,
-						arg3_collval,
-						(arg3_collstr == NULL) ? true : false,
-						false /* passbyval */
+
+	collation_name_const = makeConst(NAMEOID,
+									 -1,
+									 InvalidOid,
+									 NAMEDATALEN,
+									 collation_name_datum,
+									 (collation_name == NULL) ? true : false,
+									 false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) oid3arg, tlist_attno++, NULL, false);
+	te = makeTargetEntry((Expr *) collation_name_const, tlist_attno++, NULL, false);
 	tlist = lappend(tlist, te);
-	bytearg = copyObject(inpcol);
-	te = makeTargetEntry((Expr *) bytearg, tlist_attno++, NULL, false);
+
+	input_types_const = makeConst(get_array_type(NAMEOID),
+								  -1,
+								  InvalidOid,
+								  -1,
+								  get_input_types_array_datum(inp),
+								  false,
+								  false /* passbyval */
+	);
+	te = makeTargetEntry((Expr *) input_types_const, tlist_attno++, NULL, false);
 	tlist = lappend(tlist, te);
-	nullarg = makeNullConst(inp->aggtype, -1, inp->aggcollid);
-	te = makeTargetEntry((Expr *) nullarg, tlist_attno++, NULL, false);
+
+	partial_bytea_var = copyObject(partial_state_var);
+	te = makeTargetEntry((Expr *) partial_bytea_var, tlist_attno++, NULL, false);
 	tlist = lappend(tlist, te);
-	Assert(tlist_attno == 6);
+
+	return_type_const = makeNullConst(inp->aggtype, -1, inp->aggcollid);
+	te = makeTargetEntry((Expr *) return_type_const, tlist_attno++, NULL, false);
+	tlist = lappend(tlist, te);
+
+	Assert(tlist_attno == 7);
 	aggref->args = tlist;
 	return aggref;
 }
