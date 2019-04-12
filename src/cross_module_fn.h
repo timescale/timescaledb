@@ -56,8 +56,6 @@ typedef struct CrossModuleFunctions
 	Datum (*remove_reorder_policy)(PG_FUNCTION_ARGS);
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
 	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
-	bool (*hypertable_should_be_expanded)(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
-										  List *chunk_oids);
 	PGFunction gapfill_marker;
 	PGFunction gapfill_int16_time_bucket;
 	PGFunction gapfill_int32_time_bucket;

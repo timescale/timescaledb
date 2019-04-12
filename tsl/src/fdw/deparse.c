@@ -865,7 +865,6 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
 	 */
 	if (IS_UPPER_REL(foreignrel))
 		return fpinfo->grouped_tlist;
-
 	/*
 	 * We require columns specified in foreignrel->reltarget->exprs and those
 	 * required for evaluating the local conditions.
@@ -1055,7 +1054,8 @@ deparseFromExpr(List *quals, deparse_expr_cxt *context)
 {
 	StringInfo buf = context->buf;
 	RelOptInfo *scanrel = context->scanrel;
-	bool use_alias = bms_num_members(scanrel->relids) > 1;
+	/* Use alias if scan is on multiple rels, unless a per-server scan */
+	bool use_alias = bms_num_members(scanrel->relids) > 1 && context->sca == NULL;
 
 	/* For upper relations, scanrel must be either a joinrel or a baserel */
 	Assert(!IS_UPPER_REL(context->foreignrel) || IS_JOIN_REL(scanrel) || IS_SIMPLE_REL(scanrel));
@@ -2112,8 +2112,9 @@ deparseVar(Var *node, deparse_expr_cxt *context)
 	int relno;
 	int colno;
 
-	/* Qualify columns when multiple relations are involved. */
-	bool qualify_col = (bms_num_members(relids) > 1);
+	/* Qualify columns when multiple relations are involved, unless it is a
+	 * per-server scan. */
+	bool qualify_col = (bms_num_members(relids) > 1 && context->sca == NULL);
 
 	/*
 	 * If the Var belongs to the foreign relation that is deparsed as a

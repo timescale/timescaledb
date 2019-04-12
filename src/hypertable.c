@@ -2097,3 +2097,19 @@ ts_hypertable_get_servername_list(Hypertable *ht)
 
 	return list;
 }
+
+List *
+ts_hypertable_get_serverids_list(Hypertable *ht)
+{
+	List *serverids = NIL;
+	ListCell *lc;
+
+	foreach (lc, ht->servers)
+	{
+		HypertableServer *server = lfirst(lc);
+
+		serverids = lappend_oid(serverids, server->foreign_server_oid);
+	}
+
+	return serverids;
+}

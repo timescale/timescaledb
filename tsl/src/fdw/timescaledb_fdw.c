@@ -36,6 +36,7 @@
 #include <utils/selfuncs.h>
 #include <commands/defrem.h>
 #include <commands/explain.h>
+#include <rewrite/rewriteManip.h>
 #include <miscadmin.h>
 
 #include <export.h>
@@ -44,6 +45,7 @@
 #include <chunk_server.h>
 #include <chunk_insert_state.h>
 #include <server_dispatch.h>
+#include <planner_import.h>
 #include <remote/dist_txn.h>
 #include <remote/async.h>
 #include <remote/stmt_params.h>
@@ -624,11 +626,28 @@ fdw_relation_info_get(RelOptInfo *baserel)
 	return (TsFdwRelationInfo *) rel_private->fdw_relation_info;
 }
 
-static void
+static TsFdwRelationInfo *
+fdw_relation_info_alloc(RelOptInfo *baserel)
+{
+	TimescaleDBPrivate *rel_private;
+	TsFdwRelationInfo *fpinfo;
+
+	if (NULL == baserel->fdw_private)
+		baserel->fdw_private = palloc0(sizeof(*rel_private));
+
+	rel_private = baserel->fdw_private;
+
+	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(*fpinfo));
+	rel_private->fdw_relation_info = (void *) fpinfo;
+	fpinfo->type = TS_FDW_RELATION_INFO_FOREIGN_TABLE;
+
+	return fpinfo;
+}
+
+static TsFdwRelationInfo *
 fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid, Oid local_table_id,
 						 TsFdwRelationInfoType type)
 {
-	TimescaleDBPrivate *rel_private = baserel->fdw_private;
 	TsFdwRelationInfo *fpinfo;
 	ListCell *lc;
 	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
@@ -640,20 +659,15 @@ fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid,
 	 * We use TsFdwRelationInfo to pass various information to subsequent
 	 * functions.
 	 */
-	if (baserel->fdw_private == NULL)
-		baserel->fdw_private = palloc0(sizeof(*rel_private));
-	rel_private = baserel->fdw_private;
-
-	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(*fpinfo));
-	rel_private->fdw_relation_info = (void *) fpinfo;
-
+	fpinfo = fdw_relation_info_alloc(baserel);
 	fpinfo->type = type;
 
 	if (type == TS_FDW_RELATION_INFO_HYPERTABLE)
 	{
 		/* nothing more to do for hypertables */
 		Assert(!OidIsValid(server_oid));
-		return;
+
+		return fpinfo;
 	}
 	/* Base foreign tables need to be pushed down always. */
 	fpinfo->pushdown_safe = true;
@@ -815,7 +829,8 @@ fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid,
 	fpinfo->lower_subquery_rels = NULL;
 	/* Set the relation index. */
 	fpinfo->relation_index = baserel->relid;
-	return;
+
+	return fpinfo;
 }
 
 /* This creates the fdw_relation_info object for hypertables and foreign table type objects. */
@@ -1111,75 +1126,284 @@ add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_pa
 	}
 }
 
+static AppendRelInfo *
+create_append_rel_info(PlannerInfo *root, RelOptInfo *childrel, RelOptInfo *parentrel)
+{
+	RangeTblEntry *parent_rte = planner_rt_fetch(parentrel->relid, root);
+	Relation relation = heap_open(parent_rte->relid, NoLock);
+	AppendRelInfo *appinfo;
+
+	appinfo = makeNode(AppendRelInfo);
+	appinfo->parent_relid = parentrel->relid;
+	appinfo->child_relid = childrel->relid;
+	appinfo->parent_reltype = relation->rd_rel->reltype;
+	appinfo->child_reltype = relation->rd_rel->reltype;
+	ts_make_inh_translation_list(relation, relation, childrel->relid, &appinfo->translated_vars);
+	appinfo->parent_reloid = parent_rte->relid;
+	heap_close(relation, NoLock);
+
+	return appinfo;
+}
+
+static void
+add_append_rel_info_to_plannerinfo(PlannerInfo *root, RelOptInfo *childrel, RelOptInfo *parentrel)
+{
+	AppendRelInfo *appinfo = create_append_rel_info(root, childrel, parentrel);
+
+	root->append_rel_list = lappend(root->append_rel_list, appinfo);
+#if !(PG96 || PG10)
+	root->append_rel_array[childrel->relid] = appinfo;
+#endif
+}
+
 /*
- * This function adds hypertable-server paths for hypertables when the per-server queries
- * optimization is enabled. In this case, the base hypertable will not have its chunk's expanded and
- * so will be a plain relation. Here, we determine server-chunk assignment and create an append
- * relation with children corresponding to each hypertable-server. In the future, different
- * assignments can create their own append paths and have the cost optimizer pick the best one.
+ * Build a new RelOptInfo representing a server.
+ *
+ * Note that the relid index should point to the corresponding range table
+ * entry (RTE) we created for the server rel when expanding the
+ * hypertable. Each such RTE's relid (OID) refers to the hypertable's root
+ * table. This has the upside that the planner can use the hypertable's
+ * indexes to plan remote queries more efficiently. In contrast, chunks are
+ * foreign tables and they cannot have indexes.
+ */
+static RelOptInfo *
+build_server_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *parent)
+{
+	RelOptInfo *rel = build_simple_rel(root, relid, parent);
+
+	/* Use relevant exprs and restrictinfos from the parent rel */
+	rel->reltarget->exprs = copyObject(parent->reltarget->exprs);
+	rel->baserestrictinfo = parent->baserestrictinfo;
+	rel->baserestrictcost = parent->baserestrictcost;
+	rel->baserestrict_min_security = parent->baserestrict_min_security;
+	rel->lateral_vars = parent->lateral_vars;
+	rel->lateral_referencers = parent->lateral_referencers;
+	rel->lateral_relids = parent->lateral_relids;
+	rel->fdwroutine = GetFdwRoutineByServerId(serverid);
+	rel->serverid = serverid;
+
+	/* Add the hypertable relid to the relids set. This is mostly to beautify
+	 * the explain output by referencing the same table when projecting */
+	rel->relids = bms_add_member(rel->relids, parent->relid);
+
+	Assert(rel->fdwroutine == &timescaledb_fdw_routine);
+
+	return rel;
+}
+
+/*
+ * Build new RelOptInfos for each server.
+ *
+ * Each server rel will point to the root hypertable table, which is
+ * conceptually correct since we query the identical (partial) hypertables on
+ * the servers.
+ */
+static RelOptInfo **
+build_server_part_rels(PlannerInfo *root, RelOptInfo *hypertable_rel, int *nparts)
+{
+	TimescaleDBPrivate *priv = hypertable_rel->fdw_private;
+	RangeTblEntry *hypertable_rte = planner_rt_fetch(hypertable_rel->relid, root);
+	/* Update the partitioning to reflect the new per-server plan */
+	RelOptInfo **part_rels = palloc(sizeof(RelOptInfo *) * list_length(priv->serverids));
+	ListCell *lc;
+	int n = 0;
+	int i;
+
+	Assert(list_length(priv->serverids) == bms_num_members(priv->server_relids));
+	i = -1;
+
+	/* Each per-server rel actually references the real "root" hypertable rel
+	 * in their relids set. This is to, among other things, have per-server
+	 * rels reference the root hypertable in, e.g., EXPLAIN output. Howevever,
+	 * find_appinfos_by_relids() (prepunion.c) assumes that all relids in that
+	 * set are also in the append_rel_array, so we need to also add the root
+	 * hypertable rel to that array. */
+	add_append_rel_info_to_plannerinfo(root, hypertable_rel, hypertable_rel);
+
+	foreach (lc, priv->serverids)
+	{
+		Oid serverid = lfirst_oid(lc);
+		RelOptInfo *server_rel;
+
+		i = bms_next_member(priv->server_relids, i);
+
+		Assert(i > 0);
+
+		server_rel = build_server_rel(root, i, serverid, hypertable_rel);
+
+		fdw_relation_info_create(root,
+								 server_rel,
+								 serverid,
+								 hypertable_rte->relid,
+								 TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
+
+		part_rels[n++] = server_rel;
+
+		/* The planner expects an AppendRelInfo for any part_rels */
+		add_append_rel_info_to_plannerinfo(root, server_rel, hypertable_rel);
+	}
+
+	if (nparts != NULL)
+		*nparts = n;
+
+	return part_rels;
+}
+
+/*
+ * Get all chunk rels in an array.
+ *
+ * This provides backwards compatibility for PG10, which does not maintain a
+ * part_rels array for partitioned rels.
+ */
+static RelOptInfo **
+get_chunk_part_rels(RelOptInfo *hypertable_rel, int *nrels)
+{
+	RelOptInfo **part_rels = NULL;
+	int nparts = 0;
+#if PG10
+	ListCell *lc;
+	List *chunk_paths = NIL;
+
+	foreach (lc, hypertable_rel->pathlist)
+	{
+		Path *path = lfirst(lc);
+
+		switch (path->type)
+		{
+			case T_AppendPath:
+				chunk_paths = ((AppendPath *) path)->subpaths;
+				break;
+			case T_MergeAppendPath:
+				chunk_paths = ((MergeAppendPath *) path)->subpaths;
+				break;
+			default:
+				break;
+		}
+
+		if (chunk_paths != NIL)
+		{
+			ListCell *lc_path;
+
+			part_rels = palloc(sizeof(RelOptInfo *) * list_length(chunk_paths));
+
+			foreach (lc_path, chunk_paths)
+			{
+				Path *path = lfirst(lc_path);
+				part_rels[nparts++] = path->parent;
+			}
+			break;
+		}
+	}
+#else
+	part_rels = hypertable_rel->part_rels;
+	nparts = hypertable_rel->nparts;
+#endif
+
+	if (nrels != NULL)
+		*nrels = nparts;
+
+	return part_rels;
+}
+
+#if PG10
+/*
+ * Naive implementation of PG11-only add_paths_to_append_rel().
+ *
+ * This version only produces a basic append plan, while the PG11 equivalent
+ * produces append, merge append, partial and parallel append plans.
  */
 static void
-add_remote_hypertable_paths(PlannerInfo *root, RelOptInfo *hypertable_rel, Oid hypertable_relid)
+add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *parent, List *childrels)
 {
-	ListCell *lc;
-	List *subpaths = NIL;
 	AppendPath *appendpath;
-	List *server_chunk_assignment_list;
-	TimescaleDBPrivate *rel_info = hypertable_rel->fdw_private;
-	List *chunk_oids = rel_info->chunk_oids;
+	List *subpaths = NIL;
+	ListCell *lc;
 
-	/* nothing to do for empty hypertables */
-	if (chunk_oids == NIL)
+	foreach (lc, childrels)
+	{
+		RelOptInfo *rel = lfirst(lc);
+
+		subpaths = lappend(subpaths, rel->cheapest_total_path);
+	}
+
+	appendpath = create_append_path_compat(root, parent, subpaths, NIL, NULL, 0, false, NIL, -1);
+	add_path(parent, (Path *) appendpath);
+}
+#endif /* PG10 */
+
+/*
+ * Turn chunk append paths into server append paths.
+ *
+ * By default, a hypertable produces append plans where each child is a chunk
+ * to be scanned. This function computes alternative append plans where each
+ * child corresponds to a server.
+ *
+ * In the future, additional assignment algorithms can create their own
+ * append paths and have the cost optimizer pick the best one.
+ */
+static void
+add_per_server_paths(PlannerInfo *root, RelOptInfo *hypertable_rel, Oid hypertable_relid)
+{
+	RelOptInfo **server_rels;
+	RelOptInfo **chunk_rels;
+	int nserver_rels;
+	int nchunk_rels;
+	List *server_rels_list = NIL;
+	ServerChunkAssignments scas;
+	int i;
+
+	/* Get all chunks rels */
+	chunk_rels = get_chunk_part_rels(hypertable_rel, &nchunk_rels);
+
+	if (nchunk_rels <= 0)
 		return;
 
-	/* remove the parent if it is in there */
-	chunk_oids = list_delete_oid(chunk_oids, hypertable_relid);
-	server_chunk_assignment_list = server_chunk_assignment_by_using_attached_server(chunk_oids);
+	/* Create the RelOptInfo for each server */
+	server_rels = build_server_part_rels(root, hypertable_rel, &nserver_rels);
 
-	/* remove all existing paths, they are not valid because the contain the un-expanded parent */
-	hypertable_rel->pathlist = NIL;
-	foreach (lc, server_chunk_assignment_list)
+	Assert(nserver_rels > 0);
+
+	server_chunk_assignments_init(&scas, SCA_STRATEGY_ATTACHED_SERVER, root, nserver_rels);
+
+	/* Assign chunks to servers */
+	server_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
+
+	/* Create paths for each server rel and set server chunk assignments */
+	for (i = 0; i < nserver_rels; i++)
 	{
-		ForeignPath *subpath;
-		RelOptInfo *hypertable_server_rel;
-		TsFdwRelationInfo *hypertable_server_fpinfo;
-		ServerChunkAssignment *sca = lfirst(lc);
+		RelOptInfo *server_rel = server_rels[i];
+		RangeTblEntry *rte = planner_rt_fetch(server_rel->relid, root);
+		TsFdwRelationInfo *fpinfo = fdw_relation_info_get(server_rel);
+		ServerChunkAssignment *sca = server_chunk_assignment_get_or_create(&scas, server_rel);
 
-		Assert(list_length(sca->chunk_oids) == list_length(sca->remote_chunk_ids));
+		fpinfo->sca = sca;
 
-		hypertable_server_rel = palloc(sizeof(RelOptInfo));
-		memcpy(hypertable_server_rel, hypertable_rel, sizeof(*hypertable_server_rel));
-		hypertable_server_rel->serverid = sca->server_oid;
+		if (!bms_is_empty(sca->chunk_relids))
+		{
+			server_rel->rows = sca->rows;
+			fpinfo->rows = sca->rows;
+			fpinfo->startup_cost = sca->startup_cost;
+			fpinfo->total_cost = sca->total_cost;
+			server_rel->fdwroutine->GetForeignPaths(root, server_rel, rte->relid);
+			server_rels_list = lappend(server_rels_list, server_rel);
+		}
+		else
+			set_dummy_rel_pathlist(server_rel);
 
-		/* set the fdwroutine, which should always be the timescale_fdw routine because
-		 * hypertables should always be associated with the timescale_fdw */
-		hypertable_server_rel->fdwroutine = GetFdwRoutineByServerId(sca->server_oid);
-		Assert(hypertable_server_rel->fdwroutine == &timescaledb_fdw_routine);
-
-		hypertable_server_rel->fdw_private = NULL;
-		fdw_relation_info_create(root,
-								 hypertable_server_rel,
-								 sca->server_oid,
-								 hypertable_relid,
-								 TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
-		hypertable_server_fpinfo = fdw_relation_info_get(hypertable_server_rel);
-		hypertable_server_fpinfo->sca = sca;
-
-		subpath = create_foreignscan_path(root,
-										  hypertable_server_rel,
-										  NULL, /* default pathtarget */
-										  hypertable_server_fpinfo->rows,
-										  hypertable_server_fpinfo->startup_cost,
-										  hypertable_server_fpinfo->total_cost,
-										  NIL,  /* no pathkeys */
-										  NULL, /* no outer rel either */
-										  NULL, /* no extra plan */
-										  NIL); /* no fdw_private list */
-		subpaths = lappend(subpaths, subpath);
+		set_cheapest(server_rel);
 	}
-	appendpath =
-		create_append_path_compat(root, hypertable_rel, subpaths, NIL, NULL, 0, false, NIL, -1);
-	add_path(hypertable_rel, (Path *) appendpath);
+
+	hypertable_rel->pathlist = NIL;
+
+#if !PG10
+	/* Must keep partitioning info consistent with the append paths we create */
+	hypertable_rel->part_rels = server_rels;
+	hypertable_rel->nparts = nserver_rels;
+#endif
+
+	Assert(list_length(server_rels_list) > 0);
+
+	add_paths_to_append_rel(root, hypertable_rel, server_rels_list);
 }
 
 static void
@@ -1189,7 +1413,11 @@ get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	ForeignPath *path;
 
 	if (fpinfo->type == TS_FDW_RELATION_INFO_HYPERTABLE)
-		return add_remote_hypertable_paths(root, baserel, foreigntableid);
+	{
+		if (ts_guc_enable_per_server_queries)
+			add_per_server_paths(root, baserel, foreigntableid);
+		return;
+	}
 
 	if (baserel->reloptkind == RELOPT_JOINREL)
 		ereport(ERROR,
@@ -1253,9 +1481,9 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 		 * to check for remote-safety.
 		 *
 		 * Note: the join clauses we see here should be the exact same ones
-		 * previously examined by postgresGetForeignPaths.  Possibly it'd be
-		 * worth passing forward the classification work done then, rather
-		 * than repeating it here.
+		 * previously examined by GetForeignPaths.  Possibly it'd be worth
+		 * passing forward the classification work done then, rather than
+		 * repeating it here.
 		 *
 		 * This code must match "extract_actual_clauses(scan_clauses, false)"
 		 * except for the additional decision about remote versus local
@@ -1297,6 +1525,7 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 			 * there can be several associated with the chunk).
 			 */
 			scan_relid = 0;
+
 			/* since the relation is 0, have to build the tlist explicitly */
 			fdw_scan_tlist = build_tlist_to_deparse(foreignrel);
 		}
@@ -1331,8 +1560,8 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 		/*
 		 * We leave fdw_recheck_quals empty in this case, since we never need
 		 * to apply EPQ recheck clauses.  In the case of a joinrel, EPQ
-		 * recheck is handled elsewhere --- see postgresGetForeignJoinPaths().
-		 * If we're planning an upperrel (ie, remote grouping or aggregation)
+		 * recheck is handled elsewhere --- see GetForeignJoinPaths().  If
+		 * we're planning an upperrel (ie, remote grouping or aggregation)
 		 * then there's no EPQ to do because SELECT FOR UPDATE wouldn't be
 		 * allowed, and indeed we *can't* put the remote clauses into
 		 * fdw_recheck_quals because the unaggregated Vars won't be available
@@ -1359,7 +1588,7 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 							&params_list,
 							fpinfo->sca);
 
-	/* Remember remote_exprs for possible use by postgresPlanDirectModify */
+	/* Remember remote_exprs for possible use by PlanDirectModify */
 	fpinfo->final_remote_exprs = remote_exprs;
 
 	/*
@@ -1526,8 +1755,8 @@ prepare_query_params(PlanState *node, List *fdw_exprs, int num_params, FmgrInfo 
 	 * practice, we expect that all these expressions will be just Params, so
 	 * we could possibly do something more efficient than using the full
 	 * expression-eval machinery for this.  But probably there would be little
-	 * benefit, and it'd require postgres_fdw to know more than is desirable
-	 * about Param evaluation.)
+	 * benefit, and it'd require the foreign data wrapper to know more than is
+	 * desirable about Param evaluation.)
 	 */
 	*param_exprs = ExecInitExprList(fdw_exprs, node);
 
@@ -2684,6 +2913,7 @@ analyze_foreign_table(Relation relation, AcquireSampleRowsFunc *func, BlockNumbe
 	return false;
 }
 
+#if !PG10
 /*
  * Merge FDW options from input relations into a new set of options for a join
  * or an upper rel.
@@ -2694,16 +2924,18 @@ analyze_foreign_table(Relation relation, AcquireSampleRowsFunc *func, BlockNumbe
  * expected to NULL.
  */
 static void
-merge_fdw_options(TsFdwRelationInfo *fpinfo,
-				  const TsFdwRelationInfo *fpinfo_o,
+merge_fdw_options(TsFdwRelationInfo *fpinfo, const TsFdwRelationInfo *fpinfo_o,
 				  const TsFdwRelationInfo *fpinfo_i)
 {
 	/* We must always have fpinfo_o. */
 	Assert(fpinfo_o);
 
 	/* fpinfo_i may be NULL, but if present the servers must both match. */
-	Assert(!fpinfo_i ||
-		   fpinfo_i->server->serverid == fpinfo_o->server->serverid);
+	Assert(!fpinfo_i || fpinfo_i->server->serverid == fpinfo_o->server->serverid);
+
+	/* Currently, we don't support JOINs, so Asserting fpinfo_i is NULL here
+	 * in the meantime. */
+	Assert(fpinfo_i == NULL);
 
 	/*
 	 * Copy the server specific FDW options.  (For a join, both relations come
@@ -2715,28 +2947,6 @@ merge_fdw_options(TsFdwRelationInfo *fpinfo,
 	fpinfo->shippable_extensions = fpinfo_o->shippable_extensions;
 	fpinfo->use_remote_estimate = fpinfo_o->use_remote_estimate;
 	fpinfo->fetch_size = fpinfo_o->fetch_size;
-
-	/* Merge the table level options from either side of the join. */
-	if (fpinfo_i)
-	{
-		/*
-		 * We'll prefer to use remote estimates for this join if any table
-		 * from either side of the join is using remote estimates.  This is
-		 * most likely going to be preferred since they're already willing to
-		 * pay the price of a round trip to get the remote EXPLAIN.  In any
-		 * case it's not entirely clear how we might otherwise handle this
-		 * best.
-		 */
-		fpinfo->use_remote_estimate = fpinfo_o->use_remote_estimate ||
-			fpinfo_i->use_remote_estimate;
-
-		/*
-		 * Set fetch size to maximum of the joining sides, since we are
-		 * expecting the rows returned by the join to be proportional to the
-		 * relation sizes.
-		 */
-		fpinfo->fetch_size = Max(fpinfo_o->fetch_size, fpinfo_i->fetch_size);
-	}
 }
 
 /*
@@ -2745,24 +2955,23 @@ merge_fdw_options(TsFdwRelationInfo *fpinfo,
  * this function to TsFdwRelationInfo of the input relation.
  */
 static bool
-foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
-					Node *havingQual)
+foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual)
 {
-	Query	   *query = root->parse;
-	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) grouped_rel->fdw_private;
+	Query *query = root->parse;
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(grouped_rel);
 	PathTarget *grouping_target = grouped_rel->reltarget;
 	TsFdwRelationInfo *ofpinfo;
-	List	   *aggvars;
-	ListCell   *lc;
-	int			i;
-	List	   *tlist = NIL;
+	List *aggvars;
+	ListCell *lc;
+	int i;
+	List *tlist = NIL;
 
-	/* We currently don't support pushing Grouping Sets. */
-	if (query->groupingSets)
-		return false;
+	/* Cannot have grouping sets since that wouldn't be a distinct coverage of
+	 * all partition keys */
+	Assert(query->groupingSets == NIL);
 
 	/* Get the fpinfo of the underlying scan relation. */
-	ofpinfo = (TsFdwRelationInfo *) fpinfo->outerrel->fdw_private;
+	ofpinfo = (TsFdwRelationInfo *) fdw_relation_info_get(fpinfo->outerrel);
 
 	/*
 	 * If underlying scan relation has any local conditions, those conditions
@@ -2780,11 +2989,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 	 * expressions into target list which will be passed to foreign server.
 	 */
 	i = 0;
-	foreach(lc, grouping_target->exprs)
+	foreach (lc, grouping_target->exprs)
 	{
-		Expr	   *expr = (Expr *) lfirst(lc);
-		Index		sgref = get_pathtarget_sortgroupref(grouping_target, i);
-		ListCell   *l;
+		Expr *expr = (Expr *) lfirst(lc);
+		Index sgref = get_pathtarget_sortgroupref(grouping_target, i);
+		ListCell *l;
 
 		/* Check whether this expression is part of GROUP BY clause */
 		if (sgref && get_sortgroupref_clause_noerr(sgref, query->groupClause))
@@ -2823,8 +3032,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 			else
 			{
 				/* Not pushable as a whole; extract its Vars and aggregates */
-				aggvars = pull_var_clause((Node *) expr,
-										  PVC_INCLUDE_AGGREGATES);
+				aggvars = pull_var_clause((Node *) expr, PVC_INCLUDE_AGGREGATES);
 
 				/*
 				 * If any aggregate expression is not shippable, then we
@@ -2843,9 +3051,9 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 				 * GROUP BY column would cause the foreign server to complain
 				 * that the shipped query is invalid.
 				 */
-				foreach(l, aggvars)
+				foreach (l, aggvars)
 				{
-					Expr	   *expr = (Expr *) lfirst(l);
+					Expr *expr = (Expr *) lfirst(l);
 
 					if (IsA(expr, Aggref))
 						tlist = add_to_flat_tlist(tlist, list_make1(expr));
@@ -2862,11 +3070,11 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 	 */
 	if (havingQual)
 	{
-		ListCell   *lc;
+		ListCell *lc;
 
-		foreach(lc, (List *) havingQual)
+		foreach (lc, (List *) havingQual)
 		{
-			Expr	   *expr = (Expr *) lfirst(lc);
+			Expr *expr = (Expr *) lfirst(lc);
 			RestrictInfo *rinfo;
 
 			/*
@@ -2895,21 +3103,20 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 	 */
 	if (fpinfo->local_conds)
 	{
-		List	   *aggvars = NIL;
-		ListCell   *lc;
+		List *aggvars = NIL;
+		ListCell *lc;
 
-		foreach(lc, fpinfo->local_conds)
+		foreach (lc, fpinfo->local_conds)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
 
 			aggvars = list_concat(aggvars,
-								  pull_var_clause((Node *) rinfo->clause,
-												  PVC_INCLUDE_AGGREGATES));
+								  pull_var_clause((Node *) rinfo->clause, PVC_INCLUDE_AGGREGATES));
 		}
 
-		foreach(lc, aggvars)
+		foreach (lc, aggvars)
 		{
-			Expr	   *expr = (Expr *) lfirst(lc);
+			Expr *expr = (Expr *) lfirst(lc);
 
 			/*
 			 * If aggregates within local conditions are not safe to push
@@ -2946,8 +3153,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
 	 * output of corresponding ForeignScan.
 	 */
 	fpinfo->relation_name = makeStringInfo();
-	appendStringInfo(fpinfo->relation_name, "Aggregate on (%s)",
-					 ofpinfo->relation_name->data);
+	appendStringInfo(fpinfo->relation_name, "Aggregate on (%s)", ofpinfo->relation_name->data);
 
 	return true;
 }
@@ -2960,22 +3166,20 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel,
  * given grouped_rel.
  */
 static void
-add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
-						   RelOptInfo *grouped_rel,
+add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *grouped_rel,
 						   GroupPathExtraData *extra)
 {
-	Query	   *parse = root->parse;
-	TsFdwRelationInfo *ifpinfo = input_rel->fdw_private;
-	TsFdwRelationInfo *fpinfo = grouped_rel->fdw_private;
+	Query *parse = root->parse;
+	TsFdwRelationInfo *ifpinfo = fdw_relation_info_get(input_rel);
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(grouped_rel);
 	ForeignPath *grouppath;
-	double		rows;
-	int			width;
-	Cost		startup_cost;
-	Cost		total_cost;
+	double rows;
+	int width;
+	Cost startup_cost;
+	Cost total_cost;
 
 	/* Nothing to be done, if there is no grouping or aggregation required. */
-	if (!parse->groupClause && !parse->groupingSets && !parse->hasAggs &&
-		!root->hasHavingQual)
+	if (!parse->groupClause && !parse->groupingSets && !parse->hasAggs && !root->hasHavingQual)
 		return;
 
 	Assert(extra->patype == PARTITIONWISE_AGGREGATE_NONE ||
@@ -2991,6 +3195,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 	fpinfo->table = ifpinfo->table;
 	fpinfo->server = ifpinfo->server;
 	fpinfo->user = ifpinfo->user;
+	fpinfo->sca = ifpinfo->sca;
 	merge_fdw_options(fpinfo, ifpinfo, NULL);
 
 	/*
@@ -3003,8 +3208,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 		return;
 
 	/* Estimate the cost of push down */
-	estimate_path_cost_size(root, grouped_rel, NIL, NIL, &rows,
-							&width, &startup_cost, &total_cost);
+	estimate_path_cost_size(root, grouped_rel, NIL, NIL, &rows, &width, &startup_cost, &total_cost);
 
 	/* Now update this information in the fpinfo */
 	fpinfo->rows = rows;
@@ -3019,48 +3223,45 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
 										rows,
 										startup_cost,
 										total_cost,
-										NIL,	/* no pathkeys */
+										NIL, /* no pathkeys */
 										grouped_rel->lateral_relids,
 										NULL,
-										NIL);	/* no fdw_private */
+										NIL); /* no fdw_private */
 
 	/* Add generated path into grouped_rel by add_path(). */
 	add_path(grouped_rel, (Path *) grouppath);
 }
 
 /*
- * postgresGetForeignUpperPaths
+ * get_foreign_upper_paths
  *		Add paths for post-join operations like aggregation, grouping etc. if
  *		corresponding operations are safe to push down.
  *
  * Right now, we only support aggregate, grouping and having clause pushdown.
  */
 static void
-get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage,
-						RelOptInfo *input_rel, RelOptInfo *output_rel,
-						void *extra)
+get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
+						RelOptInfo *output_rel, void *extra)
 {
-	TsFdwRelationInfo *fpinfo;
+	TsFdwRelationInfo *fpinfo = input_rel->fdw_private ? fdw_relation_info_get(input_rel) : NULL;
 
 	/*
 	 * If input rel is not safe to pushdown, then simply return as we cannot
 	 * perform any post-join operations on the foreign server.
 	 */
-	if (!input_rel->fdw_private ||
-		!((TsFdwRelationInfo *) input_rel->fdw_private)->pushdown_safe)
+	if (NULL == fpinfo || !fpinfo->pushdown_safe)
 		return;
 
 	/* Ignore stages we don't support; and skip any duplicate calls. */
 	if (stage != UPPERREL_GROUP_AGG || output_rel->fdw_private)
 		return;
 
-	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(TsFdwRelationInfo));
+	fpinfo = fdw_relation_info_alloc(output_rel);
 	fpinfo->pushdown_safe = false;
-	output_rel->fdw_private = fpinfo;
 
-	add_foreign_grouping_paths(root, input_rel, output_rel,
-							   (GroupPathExtraData *) extra);
+	add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData *) extra);
 }
+#endif /* !PG10 */
 
 static FdwRoutine timescaledb_fdw_routine = {
 	.type = T_FdwRoutine,
@@ -3072,7 +3273,9 @@ static FdwRoutine timescaledb_fdw_routine = {
 	.IterateForeignScan = iterate_foreign_scan,
 	.EndForeignScan = end_foreign_scan,
 	.ReScanForeignScan = rescan_foreign_scan,
+#if !PG10
 	.GetForeignUpperPaths = get_foreign_upper_paths,
+#endif
 	/* update */
 	.IsForeignRelUpdatable = is_foreign_rel_updatable,
 	.PlanForeignModify = plan_foreign_modify,

@@ -50,28 +50,4 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 	ts_cache_release(hcache);
 }
-
-/*
- * For distributed hypertables, we skip expanding the hypertable chunks when using the
- * per-server-queries optimization. This is because we don't want the chunk relations in the plan.
- * Instead the fdw will create paths for hypertable-server relations during path creation.
- */
-bool
-tsl_hypertable_should_be_expanded(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
-								  List *chunk_oids)
-{
-	if (ts_guc_enable_per_server_queries && ht->fd.replication_factor > 0)
-	{
-		TimescaleDBPrivate *rel_info;
-
-		Assert(rel->fdw_private != NULL);
-		rel_info = rel->fdw_private;
-		rel_info->chunk_oids = chunk_oids;
-
-		/* turn off expansion */
-		rte->inh = false;
-		return false;
-	}
-	return true;
-}
 #endif

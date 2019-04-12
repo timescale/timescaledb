@@ -178,12 +178,19 @@ should_optimize_query(Hypertable *ht)
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
 static inline bool
-should_optimize_append(const Path *path)
+should_optimize_append(Hypertable *ht, const Path *path)
 {
 	RelOptInfo *rel = path->parent;
 	ListCell *lc;
 
-	if (!ts_guc_constraint_aware_append || constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
+	if (!ts_guc_constraint_aware_append || constraint_exclusion == CONSTRAINT_EXCLUSION_OFF ||
+		/* Constraint-aware append currently expects children that scans a real
+		 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
+		 * distributed hypertable because the append children are typically
+		 * per-server relations without a corresponding "real" table in the
+		 * system. Further, per-server appends shouldn't need runtime pruning in
+		 * any case. */
+		hypertable_is_distributed(ht))
 		return false;
 
 	/*
@@ -201,9 +208,11 @@ should_optimize_append(const Path *path)
 }
 
 static inline bool
-should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered, int order_attno)
+should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
+					int order_attno)
 {
-	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append)
+	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append ||
+		hypertable_is_distributed(ht))
 		return false;
 
 	switch (nodeTag(path))
@@ -388,14 +397,14 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			{
 				case T_AppendPath:
 				case T_MergeAppendPath:
-					if (should_chunk_append(root, rel, *pathptr, ordered, order_attno))
+					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 						*pathptr = ts_chunk_append_path_create(root,
 															   rel,
 															   ht,
 															   *pathptr,
 															   ordered,
 															   nested_oids);
-					else if (should_optimize_append(*pathptr))
+					else if (should_optimize_append(ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
@@ -411,14 +420,14 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			{
 				case T_AppendPath:
 				case T_MergeAppendPath:
-					if (should_chunk_append(root, rel, *pathptr, ordered, order_attno))
+					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 						*pathptr = ts_chunk_append_path_create(root,
 															   rel,
 															   ht,
 															   *pathptr,
 															   ordered,
 															   nested_oids);
-					else if (should_optimize_append(*pathptr))
+					else if (should_optimize_append(ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
@@ -463,10 +472,10 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
+		TimescaleDBPrivate *priv = palloc0(sizeof(TimescaleDBPrivate));
 
 		Assert(ht != NULL);
-
-		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
+		rel->fdw_private = priv;
 
 		ts_plan_expand_hypertable_chunks(ht, root, relation_objectid, inhparent, rel);
 #if !PG96 && !PG10

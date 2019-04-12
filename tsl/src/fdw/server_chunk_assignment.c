@@ -6,6 +6,9 @@
 #include <postgres.h>
 #include <foreign/foreign.h>
 #include <utils/hsearch.h>
+#include <parser/parsetree.h>
+#include <nodes/relation.h>
+#include <nodes/bitmapset.h>
 
 #include "server_chunk_assignment.h"
 #include "chunk.h"
@@ -25,50 +28,121 @@ get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
 	return cs->fd.server_chunk_id;
 }
 
-static List *
-server_chunk_assignment_list_add_chunk(List *server_chunk_assignment_list, Oid server_oid,
-									   Oid chunk_oid)
+/*
+ * Find an existing server chunk assignment or initialize a new one.
+ */
+static ServerChunkAssignment *
+get_or_create_sca(ServerChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 {
-	ListCell *lc;
-	ServerChunkAssignment *sca_match = NULL;
-	foreach (lc, server_chunk_assignment_list)
+	ServerChunkAssignment *sca;
+	bool found;
+
+	Assert(rel == NULL || rel->serverid == serverid);
+
+	sca = hash_search(scas->assignments, &serverid, HASH_ENTER, &found);
+
+	if (!found)
 	{
-		ServerChunkAssignment *sca = lfirst(lc);
-		if (sca->server_oid == server_oid)
-		{
-			sca_match = sca;
-			break;
-		}
+		/* New entry */
+		memset(sca, 0, sizeof(*sca));
+		sca->server_oid = serverid;
 	}
 
-	if (sca_match == NULL)
-	{
-		sca_match = palloc0(sizeof(*sca_match));
-		sca_match->server_oid = server_oid;
-		server_chunk_assignment_list = lappend(server_chunk_assignment_list, sca_match);
-	}
-
-	sca_match->chunk_oids = lappend_oid(sca_match->chunk_oids, chunk_oid);
-	sca_match->remote_chunk_ids =
-		lappend_int(sca_match->remote_chunk_ids,
-					get_remote_chunk_id_from_relid(server_oid, chunk_oid));
-	return server_chunk_assignment_list;
+	return sca;
 }
 
-List *
-server_chunk_assignment_by_using_attached_server(List *chunk_oids)
+/*
+ * Assign the given chunk relation to a server.
+ *
+ * The chunk is assigned according to the strategy set in the
+ * ServerChunkAssignments state.
+ */
+ServerChunkAssignment *
+server_chunk_assignment_assign_chunk(ServerChunkAssignments *scas, RelOptInfo *chunkrel)
 {
-	ListCell *lc;
-	List *server_chunk_assignment_list = NIL;
+	ServerChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
 
-	foreach (lc, chunk_oids)
+	if (!bms_is_member(chunkrel->relid, sca->chunk_relids))
 	{
-		Oid chunk_oid = lfirst_oid(lc);
-		ForeignTable *ftable = GetForeignTable(chunk_oid);
-		server_chunk_assignment_list =
-			server_chunk_assignment_list_add_chunk(server_chunk_assignment_list,
-												   ftable->serverid,
-												   chunk_oid);
+		RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
+		Path *path = chunkrel->cheapest_total_path;
+		MemoryContext old = MemoryContextSwitchTo(scas->mctx);
+
+		sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
+		sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
+		sca->remote_chunk_ids =
+			lappend_int(sca->remote_chunk_ids,
+						get_remote_chunk_id_from_relid(chunkrel->serverid, rte->relid));
+		sca->rows += chunkrel->rows;
+
+		if (path != NULL)
+		{
+			if (sca->startup_cost == 0.0)
+			{
+				sca->startup_cost = path->startup_cost;
+				sca->total_cost = path->startup_cost;
+			}
+			sca->total_cost += (path->total_cost - path->startup_cost);
+		}
+
+		MemoryContextSwitchTo(old);
 	}
-	return server_chunk_assignment_list;
+
+	return sca;
+}
+
+/*
+ * Initialize a new chunk assignment state with a specific assignment strategy.
+ */
+void
+server_chunk_assignments_init(ServerChunkAssignments *scas, ServerChunkAssignmentStrategy strategy,
+							  PlannerInfo *root, unsigned int nrels_hint)
+{
+	HASHCTL hctl = {
+		.keysize = sizeof(Oid),
+		.entrysize = sizeof(ServerChunkAssignment),
+		.hcxt = CurrentMemoryContext,
+	};
+
+	scas->strategy = strategy;
+	scas->root = root;
+	scas->mctx = hctl.hcxt;
+	scas->assignments = hash_create("server chunk assignments",
+									nrels_hint,
+									&hctl,
+									HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
+}
+
+/*
+ * Assign chunks to servers.
+ *
+ * Each chunk in the chunkrels array is a assigned a server using the strategy
+ * set in the ServerChunkAssignments state.
+ */
+ServerChunkAssignments *
+server_chunk_assignment_assign_chunks(ServerChunkAssignments *scas, RelOptInfo **chunkrels,
+									  unsigned int nrels)
+{
+	unsigned int i;
+
+	Assert(scas->assignments != NULL && scas->root != NULL);
+
+	for (i = 0; i < nrels; i++)
+	{
+		RelOptInfo *chunkrel = chunkrels[i];
+
+		Assert(IS_SIMPLE_REL(chunkrel) && chunkrel->fdw_private != NULL);
+		server_chunk_assignment_assign_chunk(scas, chunkrel);
+	}
+
+	return scas;
+}
+
+/*
+ * Get the server assignment for the given relation (chunk).
+ */
+ServerChunkAssignment *
+server_chunk_assignment_get_or_create(ServerChunkAssignments *scas, RelOptInfo *rel)
+{
+	return get_or_create_sca(scas, rel->serverid, rel);
 }
