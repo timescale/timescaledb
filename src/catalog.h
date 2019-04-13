@@ -40,7 +40,7 @@ typedef enum CatalogTable
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
-	INSTALLATION_METADATA,
+	TELEMETRY_METADATA,
 	BGW_POLICY_REORDER,
 	BGW_POLICY_DROP_CHUNKS,
 	BGW_POLICY_CHUNK_STATS,
@@ -587,42 +587,42 @@ enum Anum_bgw_job_stat_pkey_idx
 
 /******************************
  *
- * installation_metadata table definitions
+ * telemetry_metadata table definitions
  *
  ******************************/
 
-#define INSTALLATION_METADATA_TABLE_NAME "installation_metadata"
+#define TELEMETRY_METADATA_TABLE_NAME "telemetry_metadata"
 
-enum Anum_installation_metadata
+enum Anum_telemetry_metadata
 {
-	Anum_installation_metadata_key = 1,
-	Anum_installation_metadata_value,
-	_Anum_installation_metadata_max,
+	Anum_telemetry_metadata_key = 1,
+	Anum_telemetry_metadata_value,
+	_Anum_telemetry_metadata_max,
 };
 
-#define Natts_installation_metadata (_Anum_installation_metadata_max - 1)
+#define Natts_telemetry_metadata (_Anum_telemetry_metadata_max - 1)
 
-typedef struct FormData_installation_metadata
+typedef struct FormData_telemetry_metadata
 {
 	NameData key;
 	text *value;
-} FormData_installation_metadata;
+} FormData_telemetry_metadata;
 
-typedef FormData_installation_metadata *Form_installation_metadata;
+typedef FormData_telemetry_metadata *Form_telemetry_metadata;
 
-/* installation_metadata primary index attribute numbers */
-enum Anum_installation_metadata_pkey_idx
+/* telemetry_metadata primary index attribute numbers */
+enum Anum_telemetry_metadata_pkey_idx
 {
-	Anum_installation_metadata_pkey_idx_id = 1,
-	_Anum_installation_metadata_pkey_max,
+	Anum_telemetry_metadata_pkey_idx_id = 1,
+	_Anum_telemetry_metadata_pkey_max,
 };
 
-#define Natts_installation_metadata_pkey_idx (_Anum_installation_metadata_pkey_max - 1)
+#define Natts_telemetry_metadata_pkey_idx (_Anum_telemetry_metadata_pkey_max - 1)
 
 enum
 {
-	INSTALLATION_METADATA_PKEY_IDX = 0,
-	_MAX_INSTALLATION_METADATA_INDEX,
+	TELEMETRY_METADATA_PKEY_IDX = 0,
+	_MAX_TELEMETRY_METADATA_INDEX,
 };
 
 /****** BGW_POLICY_REORDER TABLE definitions */

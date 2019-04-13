@@ -30,7 +30,7 @@ set(SOURCES
   hypertable_restrict_info.c
   indexing.c
   init.c
-  installation_metadata.c
+  telemetry_metadata.c
   jsonb_utils.c
   license_guc.c
   partitioning.c
