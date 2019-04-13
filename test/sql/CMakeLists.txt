@@ -85,7 +85,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_launcher.sql
     bgw_db_scheduler.sql
     c_unit_tests.sql
-    installation_metadata.sql
+    telemetry_metadata.sql
     loader.sql
     multi_transaction_index.sql
     net.sql

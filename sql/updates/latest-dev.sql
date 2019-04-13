@@ -20,3 +20,7 @@ CREATE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT,  inner_agg_co
     FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
     FINALFUNC_EXTRA
 );
+
+ALTER TABLE _timescaledb_catalog.installation_metadata RENAME TO telemetry_metadata;
+ALTER INDEX _timescaledb_catalog.installation_metadata_pkey RENAME TO telemetry_metadata_pkey;
+

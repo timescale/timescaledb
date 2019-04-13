@@ -214,11 +214,11 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
 	UNIQUE(job_id,chunk_id)
 );
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.telemetry_metadata (
     key     NAME NOT NULL PRIMARY KEY,
     value   TEXT NOT NULL
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.installation_metadata', $$WHERE key='exported_uuid'$$);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.telemetry_metadata', $$WHERE key='exported_uuid'$$);
 
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not

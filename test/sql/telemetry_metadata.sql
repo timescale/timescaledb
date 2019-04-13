@@ -12,17 +12,17 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_install_timestamp() RETURN
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- uuid and install_timestamp should already be in the table before we generate
-SELECT COUNT(*) from _timescaledb_catalog.installation_metadata;
+SELECT COUNT(*) from _timescaledb_catalog.telemetry_metadata;
 SELECT _timescaledb_internal.test_uuid() as uuid_1 \gset
 SELECT _timescaledb_internal.test_exported_uuid() as uuid_ex_1 \gset
 SELECT _timescaledb_internal.test_install_timestamp() as timestamp_1 \gset
 
 -- Check that there is exactly 1 UUID row
-SELECT COUNT(*) from _timescaledb_catalog.installation_metadata where key='uuid';
+SELECT COUNT(*) from _timescaledb_catalog.telemetry_metadata where key='uuid';
 
 -- Check that exported_uuid and timestamp are also generated
-SELECT COUNT(*) from _timescaledb_catalog.installation_metadata where key='exported_uuid';
-SELECT COUNT(*) from _timescaledb_catalog.installation_metadata where key='install_timestamp';
+SELECT COUNT(*) from _timescaledb_catalog.telemetry_metadata where key='exported_uuid';
+SELECT COUNT(*) from _timescaledb_catalog.telemetry_metadata where key='install_timestamp';
 
 -- Make sure that the UUID is idempotent
 SELECT _timescaledb_internal.test_uuid() = :'uuid_1' as uuids_equal;
@@ -47,7 +47,7 @@ ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- Should have all 3 row, because pg_dump includes the insertion of uuid and timestamp.
-SELECT COUNT(*) FROM _timescaledb_catalog.installation_metadata;
+SELECT COUNT(*) FROM _timescaledb_catalog.telemetry_metadata;
 -- Verify that this is the old exported_uuid
 SELECT _timescaledb_internal.test_exported_uuid() = :'uuid_ex_1' as exported_uuids_equal;
 -- Verify that the uuid and timestamp are new

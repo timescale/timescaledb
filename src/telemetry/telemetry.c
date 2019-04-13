@@ -48,7 +48,7 @@
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
-#define REQ_INSTALLATION_METADATA "db_metadata"
+#define REQ_TELEMETRY_METADATA "db_metadata"
 #define REQ_LICENSE_INFO "license"
 #define REQ_LICENSE_EDITION "edition"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
@@ -287,10 +287,10 @@ build_version_body(void)
 		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 	}
 
-	/* Add additional content from installation_metadata */
+	/* Add additional content from telemetry_metadata */
 	ext_key.type = jbvString;
-	ext_key.val.string.val = REQ_INSTALLATION_METADATA;
-	ext_key.val.string.len = strlen(REQ_INSTALLATION_METADATA);
+	ext_key.val.string.val = REQ_TELEMETRY_METADATA;
+	ext_key.val.string.len = strlen(REQ_TELEMETRY_METADATA);
 	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
 	ts_metadata_add_values(parseState);
