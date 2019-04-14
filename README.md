@@ -12,7 +12,7 @@ SQL support.
 
 TimescaleDB is packaged as a PostgreSQL extension.  All code is licensed
 under the Apache-2 open-source license, with the exception of source code
-under the `\tsl` subdirectory, which is licensed under
+under the `tsl` subdirectory, which is licensed under
 the [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE).
 For clarity, all code files reference licensing in their header.  [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 

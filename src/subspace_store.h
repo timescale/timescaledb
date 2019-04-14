@@ -11,7 +11,7 @@
 
 /* A subspace store allows you to save data associated with
  * a multidimensional-subspace. Subspaces are defined conceptually
- * via a Hypercube (that is a collecton of slices -- one for each dimension).
+ * via a Hypercube (that is a collection of slices -- one for each dimension).
  * Thus, a subspace is a "rectangular" cutout in a multidimensional space.
  */
 

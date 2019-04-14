@@ -109,7 +109,7 @@ extern bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *i
 /*
  * Internal types and functions below.
  *
- * The below functions asnd types are really only exposed for the scan_iterator.
+ * The below functions and types are really only exposed for the scan_iterator.
  * The type definitions are needed for struct embedding and the functions are needed
  * for iteration.
  */

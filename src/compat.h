@@ -275,7 +275,7 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc)
  *
  * PG11 introduced a missing_ok boolean to the function signature. Given that
  * that seems like a useful check in many cases, we are going with forwards
- * compatbility here and have a small static inline function to replicate the
+ * compatibility here and have a small static inline function to replicate the
  * behavior on older versions.
  */
 #if PG96 || PG10
@@ -495,7 +495,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * PG11 introduced a new level of nodes inside of ResultRelInfo for dealing with
  * ON CONFLICT behavior in partitions (see:
  * https://github.com/postgres/postgres/commit/555ee77a9668e3f1b03307055b5027e13bf1a715).
- * Our compat functions act as an accessor/setter for these fields, wheverer they
+ * Our compat functions act as an accessor/setter for these fields, whenever they
  * are nested.
  */
 

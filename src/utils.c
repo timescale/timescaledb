@@ -212,7 +212,7 @@ ts_internal_to_time_value(int64 value, Oid type)
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
-			 * compatability */
+			 * compatibility */
 			res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
 			return TimestampTzGetDatum(res);
 		case DATEOID:

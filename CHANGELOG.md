@@ -15,6 +15,7 @@ accidentally triggering the load of a previous DB version.**
 * #1038 Infer time_bucket_gapfill arguments from WHERE clause
 * #1067 Add treat_null_as_missing option to locf
 * #1134 Add support for partitionwise aggregation
+* #1153 Add time_bucket support to chunk exclusion
 
 **Bugfixes**
 * #1115 Fix ordered append optimization for join queries
