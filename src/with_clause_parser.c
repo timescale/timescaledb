@@ -60,7 +60,7 @@ static Datum parse_arg(WithClauseDefinition arg, DefElem *def);
  * Deserialize and apply the values in a WITH clause based on the on_arg table.
  *
  * This function will go through every element in def_elems and search for a
- * corresponding argument in args, if one is found it will attemt to deserialize
+ * corresponding argument in args, if one is found it will attempt to deserialize
  * the argument, using that table elements deserialize function, then apply it
  * to state.
  *

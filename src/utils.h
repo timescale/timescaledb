@@ -34,7 +34,7 @@ extern TSDLLEXPORT int64 ts_time_value_to_internal(Datum time_val, Oid type);
 extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
 
 /*
- * Convert a column from the internal time representation into the specfied type
+ * Convert a column from the internal time representation into the specified type
  */
 extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
 extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);

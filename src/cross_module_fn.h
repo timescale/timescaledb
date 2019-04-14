@@ -23,7 +23,7 @@
 
 /*
  * To define a cross-module function add it to this struct, add a default
- * version in to ts_cm_functions_default cross_module_fn.c, and the overriden
+ * version in to ts_cm_functions_default cross_module_fn.c, and the overridden
  * version to tsl_cm_functions tsl/src/init.c.
  * This will allow the function to be called from this codebase as
  *     ts_cm_functions-><function name>

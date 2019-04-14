@@ -177,7 +177,7 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 							   VARSIZE_ANY_EXHDR(serialized_partial));
 		/*
 		 * Note that we may want to switch this to ReceiveFunctionCall at some
-		 * point in the future because OidRecieveFunctionCall puts a lot of
+		 * point in the future because OidReceiveFunctionCall puts a lot of
 		 * stuff into CurrentMemoryContext that we may eventually want to manage
 		 * ourselves.
 		 */
@@ -284,7 +284,7 @@ fa_transition_state_init(MemoryContext *fa_context, Oid inner_agg_fn_oid, Oid co
 	/* initialize combine specific state, both the deserialize function and combine function */
 	if (!OidIsValid(tstate->combine_meta->combinefnoid))
 		elog(ERROR,
-			 "no valid combine function for the aggregate specfied in Timescale finalize call");
+			 "no valid combine function for the aggregate specified in Timescale finalize call");
 
 	fmgr_info(tstate->combine_meta->combinefnoid, &tstate->combine_meta->combinefn);
 	InitFunctionCallInfoData(tstate->combine_meta->combfn_fcinfo,
@@ -424,7 +424,7 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 										  inner_agg_input_collid,
 										  fa_aggstate,
 										  input_types);
-		/* intial trans_value = the partial state of the inner agg from first invocation */
+		/* initial trans_value = the partial state of the inner agg from first invocation */
 		tstate->per_group_state->trans_value =
 			inner_agg_deserialize(tstate->combine_meta,
 								  inner_agg_serialized_state,

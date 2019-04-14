@@ -48,7 +48,7 @@ extern int ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexreli
 										const char *newname);
 extern int ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid,
 										 const char *tablespace);
-extern void ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constaint,
+extern void ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constraint,
 												  int32 chunk_id, Oid chunk_constraint);
 extern List *ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
 extern TSDLLEXPORT bool ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk,

@@ -1380,7 +1380,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	if (OidIsValid(info->extended_options.barrier_table))
 	{
 		/*
-		 * For insolation tests, and debugging, it's useful to be able to
+		 * For isolation tests, and debugging, it's useful to be able to
 		 * pause CREATE INDEX immediately before it starts working on chunks.
 		 * We acquire and immediately release a lock on a barrier table to do
 		 * this.
@@ -1406,7 +1406,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 *
 	 * We grab a ShareLock on the chunk, because that's what CREATE INDEX
 	 * does. For the hypertable's index, we are ok using the weaker
-	 * AccessShareLock, since we only need to prevent the index iteself from
+	 * AccessShareLock, since we only need to prevent the index itself from
 	 * being ALTERed or DROPed during this part of index creation.
 	 */
 	chunk_rel = relation_open(chunk_relid, ShareLock);
@@ -1417,7 +1417,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	/*
 	 * use ts_chunk_index_create instead of ts_chunk_index_create_from_stmt to
 	 * handle cases where the index is altered. Validation happens when
-	 * creating the hypertable's index, which goes through the ususal
+	 * creating the hypertable's index, which goes through the usual
 	 * DefineIndex mechanism.
 	 */
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
@@ -1583,7 +1583,7 @@ process_index_start(ProcessUtilityArgs *args)
 		return true;
 	}
 
-	/* create chunk indexes using a seperate transaction for each chunk */
+	/* create chunk indexes using a separate transaction for each chunk */
 
 	/* we're about to release the hcache so store the main_table_relid for later */
 	main_table_id = ht->main_table_relid;
