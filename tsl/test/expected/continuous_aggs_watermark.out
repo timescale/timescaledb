@@ -183,3 +183,113 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
              1 |                    -7 |                      -3
 (5 rows)
 
+DROP TABLE continuous_agg_test CASCADE;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- CREATE VIEW creates the invalidation trigger correctly
+CREATE TABLE ca_inval_test(time int);
+SELECT create_hypertable('ca_inval_test', 'time', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (2,public,ca_inval_test,t)
+(1 row)
+
+CREATE VIEW cit_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', time), COUNT(time)
+        FROM ca_inval_test
+        GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+INSERT INTO ca_inval_test SELECT generate_series(0, 5);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+(0 rows)
+
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+(0 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 10);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+INSERT INTO ca_inval_test SELECT generate_series(5, 10);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+             2 |        10
+(1 row)
+
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+             2 |                     5 |                      10
+(1 row)
+
+INSERT INTO ca_inval_test SELECT generate_series(11, 20);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+             2 |        10
+(1 row)
+
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+             2 |                     5 |                      10
+(1 row)
+
+DROP TABLE ca_inval_test CASCADE;
+NOTICE:  drop cascades to 2 other objects
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- invalidation trigger is created correctly on chunks that existed before
+-- the view was created
+CREATE TABLE ts_continuous_test(time INTEGER, location INTEGER);
+    SELECT create_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (4,public,ts_continuous_test,t)
+(1 row)
+
+INSERT INTO ts_continuous_test SELECT i, i FROM
+    (SELECT generate_series(0, 29) AS i) AS i;
+CREATE VIEW continuous_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', time), COUNT(location)
+        FROM ts_continuous_test
+        GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+(0 rows)
+
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+(0 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (4, 2);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+INSERT INTO ts_continuous_test VALUES (1, 1);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+             4 |         2
+(1 row)
+
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+             4 |                     1 |                       1
+(1 row)
+

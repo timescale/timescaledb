@@ -141,7 +141,6 @@ NOTICE:  test_ddl_command_start: 1 hypertables, query: CREATE TRIGGER htable_tri
 BEFORE INSERT ON htable
 FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 NOTICE:  test_ddl_command_start: public.htable
-NOTICE:  test_ddl_command_end: CREATE TRIGGER
 DROP TRIGGER htable_trigger_test on htable;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TRIGGER htable_trigger_test on htable;
 NOTICE:  test_sql_drop: trigger

@@ -363,28 +363,6 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 }
 
 static int
-foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
-{
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
-	int ret;
-
-	if (NULL == ht)
-	{
-		ts_cache_release(hcache);
-		return -1;
-	}
-
-	hcache->release_on_commit = false;
-	ret = foreach_chunk(ht, process_chunk, arg);
-	hcache->release_on_commit = true;
-
-	ts_cache_release(hcache);
-
-	return ret;
-}
-
-static int
 foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t process_chunk,
 							   void *arg)
 {
@@ -423,12 +401,6 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	list_free(chunks);
 
 	return num_chunks;
-}
-
-static int
-foreach_chunk_relation(RangeVar *rv, process_chunk_t process_chunk, void *arg)
-{
-	return foreach_chunk_relid(RangeVarGetRelid(rv, NoLock, true), process_chunk, arg);
 }
 
 /*
@@ -2610,41 +2582,31 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 	}
 }
 
-static void
-create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	CreateTrigStmt *stmt = arg;
-	Oid trigger_oid = get_trigger_oid(ht->main_table_relid, stmt->trigname, false);
-	char *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
-	char *relname = get_rel_name(chunk_relid);
-
-	ts_trigger_create_on_chunk(trigger_oid, relschema, relname);
-}
-
-static void
+static bool
 process_create_trigger_start(ProcessUtilityArgs *args)
 {
 	CreateTrigStmt *stmt = (CreateTrigStmt *) args->parsetree;
 	Cache *hcache;
 	Hypertable *ht;
+	ObjectAddress address;
 
 	if (!stmt->row)
-		return;
+		return false;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
-	if (ht != NULL)
+	if (ht == NULL)
 	{
-		process_add_hypertable(args, ht);
-#if !PG96
-		if (stmt->transitionRels != NIL)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support transition tables in triggers")));
-#endif
+		ts_cache_release(hcache);
+		return false;
 	}
 
+	process_add_hypertable(args, ht);
+	address = ts_hypertable_create_trigger(ht, stmt, args->query_string);
+	Assert(OidIsValid(address.objectId));
+
 	ts_cache_release(hcache);
+	return true;
 }
 
 static void
@@ -2657,17 +2619,6 @@ process_create_rule_start(ProcessUtilityArgs *args)
 
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
-}
-
-static void
-process_create_trigger_end(Node *parsetree)
-{
-	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
-
-	if (!stmt->row)
-		return;
-
-	foreach_chunk_relation(stmt->relation, create_trigger_chunk, stmt);
 }
 
 static bool
@@ -2784,7 +2735,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handled = process_index_start(args);
 			break;
 		case T_CreateTrigStmt:
-			process_create_trigger_start(args);
+			handled = process_create_trigger_start(args);
 			break;
 		case T_RuleStmt:
 			process_create_rule_start(args);
@@ -2846,9 +2797,6 @@ process_ddl_command_end(CollectedCommand *cmd)
 			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);
-			break;
-		case T_CreateTrigStmt:
-			process_create_trigger_end(cmd->parsetree);
 			break;
 		default:
 			break;
@@ -2959,19 +2907,6 @@ process_drop_schema(EventTriggerDropObject *obj)
 }
 
 static void
-process_drop_trigger_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	const char *trigger_name = arg;
-	ObjectAddress objaddr = {
-		.classId = TriggerRelationId,
-		.objectId = get_trigger_oid(chunk_relid, trigger_name, true),
-	};
-
-	if (OidIsValid(objaddr.objectId))
-		performDeletion(&objaddr, DROP_RESTRICT, 0);
-}
-
-static void
 process_drop_trigger(EventTriggerDropObject *obj)
 {
 	EventTriggerDropTrigger *trigger_event;
@@ -2986,7 +2921,7 @@ process_drop_trigger(EventTriggerDropObject *obj)
 	if (ht != NULL)
 	{
 		/* Recurse to each chunk and drop the corresponding trigger */
-		foreach_chunk(ht, process_drop_trigger_on_chunk, trigger_event->trigger_name);
+		ts_hypertable_drop_trigger(ht, trigger_event->trigger_name);
 	}
 }
 
