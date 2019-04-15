@@ -1,4 +1,5 @@
-set(TEST_FILES)
+set(TEST_FILES
+  continuous_aggs_insert.spec)
 
 set(TEST_TEMPLATES
  reorder_deadlock.spec.in
