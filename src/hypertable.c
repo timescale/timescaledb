@@ -398,6 +398,72 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 										  mctx);
 }
 
+TSDLLEXPORT ObjectAddress
+ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *query)
+{
+	ObjectAddress root_trigger_addr;
+	List *chunks;
+	ListCell *lc;
+	Assert(ht != NULL);
+#if !PG96
+	if (stmt->transitionRels != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertables do not support transition tables in triggers")));
+#endif
+	/* create the trigger on the root table */
+	root_trigger_addr =
+		CreateTriggerCompat(stmt, query, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
+
+	/* and forward it to the chunks */
+	CommandCounterIncrement();
+
+	if (!stmt->row)
+		return root_trigger_addr;
+
+	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+	foreach (lc, chunks)
+	{
+		Oid chunk_oid = lfirst_oid(lc);
+		char *relschema = get_namespace_name(get_rel_namespace(chunk_oid));
+		char *relname = get_rel_name(chunk_oid);
+
+		ts_trigger_create_on_chunk(root_trigger_addr.objectId, relschema, relname);
+	}
+
+	return root_trigger_addr;
+}
+
+/* based on RemoveObjects */
+TSDLLEXPORT void
+ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name)
+{
+	List *chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+	ListCell *lc;
+
+	if (OidIsValid(ht->main_table_relid))
+	{
+		ObjectAddress objaddr = {
+			.classId = TriggerRelationId,
+			.objectId = get_trigger_oid(ht->main_table_relid, trigger_name, true),
+		};
+		if (OidIsValid(objaddr.objectId))
+			performDeletion(&objaddr, DROP_RESTRICT, 0);
+	}
+
+	foreach (lc, chunks)
+	{
+		Oid chunk_oid = lfirst_oid(lc);
+		ObjectAddress objaddr = {
+			.classId = TriggerRelationId,
+			.objectId = get_trigger_oid(chunk_oid, trigger_name, true),
+		};
+
+		if (OidIsValid(objaddr.objectId))
+			performDeletion(&objaddr, DROP_RESTRICT, 0);
+	}
+}
+
 static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {

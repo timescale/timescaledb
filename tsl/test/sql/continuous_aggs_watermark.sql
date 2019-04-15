@@ -83,3 +83,67 @@ INSERT INTO continuous_agg_test VALUES (120, false), (200, true);
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+DROP TABLE continuous_agg_test CASCADE;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- CREATE VIEW creates the invalidation trigger correctly
+CREATE TABLE ca_inval_test(time int);
+SELECT create_hypertable('ca_inval_test', 'time', chunk_time_interval=> 10);
+CREATE VIEW cit_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', time), COUNT(time)
+        FROM ca_inval_test
+        GROUP BY 1;
+
+INSERT INTO ca_inval_test SELECT generate_series(0, 5);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 10);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+INSERT INTO ca_inval_test SELECT generate_series(5, 10);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+INSERT INTO ca_inval_test SELECT generate_series(11, 20);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+DROP TABLE ca_inval_test CASCADE;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- invalidation trigger is created correctly on chunks that existed before
+-- the view was created
+CREATE TABLE ts_continuous_test(time INTEGER, location INTEGER);
+    SELECT create_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10);
+INSERT INTO ts_continuous_test SELECT i, i FROM
+    (SELECT generate_series(0, 29) AS i) AS i;
+CREATE VIEW continuous_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', time), COUNT(location)
+        FROM ts_continuous_test
+        GROUP BY 1;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (4, 2);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+INSERT INTO ts_continuous_test VALUES (1, 1);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
