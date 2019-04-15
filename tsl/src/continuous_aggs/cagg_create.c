@@ -285,6 +285,8 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	char *relname = get_rel_name(relid);
 	Oid schemaid = get_rel_namespace(relid);
 	char *schema = get_namespace_name(schemaid);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	CreateTrigStmt stmt = {
 		.type = T_CreateTrigStmt,
@@ -297,12 +299,14 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		.args = list_make1(makeString(trigarg)),
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
-	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
+	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
 
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create continuous aggregate trigger")));
+
+	ts_cache_release(hcache);
 }
 
 /*

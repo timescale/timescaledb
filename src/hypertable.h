@@ -9,12 +9,18 @@
 #include <postgres.h>
 #include <nodes/primnodes.h>
 
+#include "compat.h"
+
 #include "catalog.h"
 #include "dimension.h"
 #include "export.h"
 #include "tablespace.h"
 #include "scanner.h"
 #include "chunk_adaptive.h"
+
+#if PG96
+#include <catalog/objectaddress.h>
+#endif
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
@@ -76,7 +82,11 @@ extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
+extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt,
+															  const char *query);
+extern TSDLLEXPORT void ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name);
 extern void ts_hypertable_drop(Hypertable *hypertable);
+
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
