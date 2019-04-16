@@ -15,6 +15,10 @@ SELECT _timescaledb_internal.enterprise_enabled();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+\set ON_ERROR_STOP 0
+SET timescaledb.license_key='ApacheOnly';
+\set ON_ERROR_STOP 1
+
 SELECT allow_downgrade_to_apache();
 SET timescaledb.license_key='ApacheOnly';
 select * from timescaledb_information.license;
