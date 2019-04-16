@@ -1,6 +1,6 @@
 /plan_gapfill-9.6.sql
 /plan_gapfill-10.sql
 /plan_gapfill-11.sql
-/contaggviews_ddl-9.6.sql
-/contaggviews_ddl-10.sql
-/contaggviews_ddl-11.sql
+/continuous_aggs_ddl-9.6.sql
+/continuous_aggs_ddl-10.sql
+/continuous_aggs_ddl-11.sql

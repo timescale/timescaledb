@@ -20,7 +20,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
-#include "continuous_aggs/cagg_create.h"
+#include "continuous_aggs/create.h"
 #include "continuous_aggs/drop.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
