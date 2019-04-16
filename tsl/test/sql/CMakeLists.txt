@@ -6,13 +6,13 @@ set(TEST_FILES
     reorder.sql
     partialize_finalize.sql
     ddl_hook.sql
-    contaggviews.sql
-    contaggviews_neg.sql
-    contaggviews_dump.sql
+    continuous_aggs.sql
+    continuous_aggs_errors.sql
+    continuous_aggs_dump.sql
 )
 
 set(TEST_FILES_DEBUG
-    bgw_continuous_aggs
+    continuous_aggs_bgw
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
     ddl_hook.sql
@@ -22,7 +22,7 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   plan_gapfill.sql.in
-  contaggviews_ddl.sql.in
+  continuous_aggs_ddl.sql.in
   )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

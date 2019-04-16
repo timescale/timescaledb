@@ -13,7 +13,7 @@
 
 #include <continuous_agg.h>
 
-#include "cagg_create.h"
+#include "create.h"
 
 void
 ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks, Size num_chunks)
