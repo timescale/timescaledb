@@ -105,7 +105,7 @@ ts_license_enable_module_loading(void)
 							   false);
 
 	if (result <= 0)
-		elog(ERROR, "invalid value for timescaledb.license_key");
+		elog(ERROR, "invalid value for timescaledb.license_key '%s'", ts_guc_license_key);
 }
 
 /*
@@ -116,6 +116,7 @@ bool
 ts_license_update_check(char **newval, void **extra, GucSource source)
 {
 	Datum module_can_start;
+	bool try_to_load_tsl = true;
 
 	if (*newval == NULL)
 		return false;
@@ -129,12 +130,14 @@ ts_license_update_check(char **newval, void **extra, GucSource source)
 	 */
 	if (TS_LICENSE_IS_APACHE_ONLY(*newval))
 	{
-		if (current_license_can_downgrade_to_apache())
-			return true;
+		if (!current_license_can_downgrade_to_apache())
+		{
+			GUC_check_errdetail("Cannot downgrade a running session to Apache Only.");
+			GUC_check_errhint("change the license in the configuration file");
+			return false;
+		}
 
-		GUC_check_errdetail("Cannot downgrade a running session to Apache Only.");
-		GUC_check_errhint("change the license in the configure file");
-		return false;
+		try_to_load_tsl = false;
 	}
 
 	if (!can_load)
@@ -142,6 +145,9 @@ ts_license_update_check(char **newval, void **extra, GucSource source)
 		load_source = source;
 		return true;
 	}
+
+	if (!try_to_load_tsl)
+		return true;
 
 	if (!load_tsl())
 	{

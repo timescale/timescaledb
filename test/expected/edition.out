@@ -20,6 +20,10 @@ SELECT _timescaledb_internal.enterprise_enabled();
 (1 row)
 
 \unset ECHO
+SET timescaledb.license_key='ApacheOnly';
+ERROR:  invalid value for parameter "timescaledb.license_key": "ApacheOnly"
+DETAIL:  Cannot downgrade a running session to Apache Only.
+HINT:  change the license in the configuration file
 SELECT allow_downgrade_to_apache();
  allow_downgrade_to_apache 
 ---------------------------
