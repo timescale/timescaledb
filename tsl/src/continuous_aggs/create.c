@@ -43,7 +43,7 @@
 #include <utils/syscache.h>
 #include <utils/int8.h>
 
-#include "cagg_create.h"
+#include "create.h"
 
 #include "catalog.h"
 #include "compat.h"
