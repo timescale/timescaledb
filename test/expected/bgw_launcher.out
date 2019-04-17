@@ -330,6 +330,32 @@ SELECT ((current_setting('server_version_num')::int < 100000) OR wait_greater(:'
  t
 (1 row)
 
+-- Make sure running pre_restore function stops background workers
+SELECT timescaledb_pre_restore();
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+SELECT wait_worker_counts(1,0,0,0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
+--And post_restore starts them
+SELECT timescaledb_post_restore();
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
+SELECT wait_worker_counts(1,0,1,0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
 -- Make sure dropping the extension means that the scheduler is stopped
 BEGIN;
 DROP EXTENSION timescaledb;

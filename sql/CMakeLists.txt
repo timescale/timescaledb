@@ -40,6 +40,7 @@ set(SOURCE_FILES
   gapfill.sql
   maintenance_utils.sql
   partialize_finalize.sql
+  restoring.sql
 )
 
 # These files should be pre-pended to update scripts so that they are
