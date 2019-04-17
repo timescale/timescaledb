@@ -37,3 +37,39 @@ select * from timescaledb_information.license;
  apache  | f       | infinity
 (1 row)
 
+SELECT _timescaledb_internal.current_db_set_license_key('CommunityLicense');
+ current_db_set_license_key 
+----------------------------
+ CommunityLicense
+(1 row)
+
+select * from timescaledb_information.license;
+  edition  | expired | expiration_time 
+-----------+---------+-----------------
+ community | f       | infinity
+(1 row)
+
+create or replace function get_sqlstate(in_text TEXT) RETURNS TEXT AS
+$$
+BEGIN
+    BEGIN
+        EXECUTE in_text;
+    EXCEPTION WHEN others THEN GET STACKED DIAGNOSTICS in_text = RETURNED_SQLSTATE;
+    END;
+    RETURN in_text;
+END;
+$$
+LANGUAGE PLPGSQL;
+SELECT get_sqlstate($$SELECT _timescaledb_internal.current_db_set_license_key('ApacheOnly')$$);
+ get_sqlstate 
+--------------
+ 42501
+(1 row)
+
+select * from timescaledb_information.license;
+  edition  | expired | expiration_time 
+-----------+---------+-----------------
+ community | f       | infinity
+(1 row)
+
+drop function get_sqlstate(TEXT);

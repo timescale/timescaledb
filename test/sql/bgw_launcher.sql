@@ -150,6 +150,13 @@ SELECT wait_worker_counts(1,0,1,0);
 
 SELECT ((current_setting('server_version_num')::int < 100000) OR wait_greater(:'orig_backend_start', :'TEST_DBNAME_2')) as wait_greater;
 
+-- Make sure running pre_restore function stops background workers
+SELECT timescaledb_pre_restore();
+SELECT wait_worker_counts(1,0,0,0);
+--And post_restore starts them
+SELECT timescaledb_post_restore();
+SELECT wait_worker_counts(1,0,1,0);
+
 
 -- Make sure dropping the extension means that the scheduler is stopped
 BEGIN;
