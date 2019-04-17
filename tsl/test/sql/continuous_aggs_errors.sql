@@ -443,3 +443,20 @@ as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by 1;
+
+-- custom time partition functions are not supported with invalidations
+CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
+    AS $$ SELECT length($1)::BIGINT $$
+    LANGUAGE SQL IMMUTABLE;
+
+CREATE TABLE text_time(time TEXT);
+    SELECT create_hypertable('text_time', 'time', chunk_time_interval => 10, time_partitioning_func => 'text_part_func');
+
+\set ON_ERROR_STOP 0
+CREATE VIEW text_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', text_part_func(time)), COUNT(time)
+        FROM text_time
+        GROUP BY 1;
+\set ON_ERROR_STOP 1
+DROP TABLE text_time CASCADE;
