@@ -240,6 +240,8 @@ select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, a
 
 with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
 select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'text'], array['pg_catalog', 'text']], part, null::text) from cte;
+
+select _timescaledb_internal.finalize_agg(NULL::text,NULL::name,NULL::name,NULL::_name,NULL::bytea,a) over () from foo;
 \set ON_ERROR_STOP 1
 
 --make sure right type in warning and is null returns true
