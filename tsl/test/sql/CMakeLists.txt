@@ -9,6 +9,7 @@ set(TEST_FILES
     continuous_aggs.sql
     continuous_aggs_errors.sql
     continuous_aggs_dump.sql
+    continuous_aggs_usage.sql
 )
 
 set(TEST_FILES_DEBUG
