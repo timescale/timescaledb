@@ -46,5 +46,7 @@ ORDER BY proname;
  show_tablespaces
  time_bucket
  time_bucket_gapfill
-(32 rows)
+ timescaledb_post_restore
+ timescaledb_pre_restore
+(34 rows)
 
