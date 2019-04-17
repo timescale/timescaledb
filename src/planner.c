@@ -296,11 +296,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				case T_MergeAppendPath:
 					if (rel->fdw_private != NULL &&
 						((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
-						*pathptr =
+					{
+						/*
+						 * for every MergeAppendPath we create an equivalent
+						 * ordered AppendPath
+						 */
+						Path *ordered_path =
 							ts_ordered_append_path_create(root,
 														  rel,
 														  ht,
 														  castNode(MergeAppendPath, *pathptr));
+						if (ordered_path != NULL)
+							add_path(rel, ordered_path);
+					}
 					if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
@@ -316,9 +324,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			switch (nodeTag(*pathptr))
 			{
 				case T_AppendPath:
-					if (should_optimize_append(*pathptr))
-						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
-					break;
 				case T_MergeAppendPath:
 					if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);

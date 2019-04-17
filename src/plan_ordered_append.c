@@ -92,8 +92,8 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 /*
  * we use an existing MergeAppendPath here as starting point for creating
  * our ordered AppendPath because it has all the required information we
- * need to create our path. If pathkeys does not match the ORDER BY then
- * we return the original MergeAppendPath
+ * need to create our path. If conditions for creating ordered AppendPath
+ * are not met we return NULL.
  */
 Path *
 ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
@@ -106,7 +106,7 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 	Cost total_cost = 0.0;
 
 	if (list_length(merge->subpaths) == 0)
-		return (Path *) merge;
+		return NULL;
 
 	/*
 	 * double check pathkeys of the MergeAppendPath actually is compatible
@@ -114,7 +114,7 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 	 * will be ordered by.
 	 */
 	if (!pathkeys_contained_in(root->sort_pathkeys, merge->path.pathkeys))
-		return (Path *) merge;
+		return NULL;
 
 	/* create subpaths for our append node */
 	foreach (lc, merge->subpaths)
@@ -139,15 +139,11 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 		 * this optimization for those cases for now.
 		 */
 		if (!pathkeys_contained_in(merge->path.pathkeys, child->pathkeys))
-			return (Path *) merge;
+			return NULL;
 
 		sorted = lappend(sorted, child);
 	}
 
-	/*
-	 * we use normal postgresql append cost calculation, which means
-	 * the cost estimate is rather pessimistic
-	 */
 #if PG96
 	append = create_append_path(rel, sorted, PATH_REQ_OUTER(&merge->path), 0);
 #elif PG10
