@@ -8,6 +8,7 @@ env:
   global:
     - secure: "TurskgAodG44RKCUPfoUb4JlT+UZwaPjUN73MS4+2ED2ayf46iUpcMODovDf7CPQRriMAvii/5xQ9UWTGYZejJy/Si3aE0fQeSKHIOPmuHqmmBkC3jgK9A5vOMpaAwljSNvIAMfwhIjVsq87nyvxHYWReDWl5SrdxTvh91RJvOiMRNdqwBbnj2j1cC30783ICGZUazrUyhDDnXispyBJYFxlHJmQJpfs6428dTRNJY/X8nVDXFwQkRjlIXarquTsrifCfzdq40Ykb8/1CS0295R8/kdKamQqXM0aS7iIkw3JFmZIz08OHKc7wcJuv6KSnCfNSftJqy2+nb1gkyIqkr3mrpYUa+2tKVwpA6OfET2S2kC5B3bOTcyBgihhnivAOS9zG8PTouLSUzqZzo+H893xdaMlX4kX3oOrOqzbj8YvTw6Dgw8PWERfnOngpKmKJFb8yboXPmGY7luSVxOplnPnYO0jaAXPU4ESsFYL3EBG5Zo4rVIuA5g7aJ0Ex+e5GQWiHDM1ubUo2vcuVVlurs/Aj8eSpNhqo0S5MjI05Jcz82X+9+asFcP+QV81UrueiXTlQ/7buAyMyVtKOgOhZwR4ImA1zzWkJjNNbZMJqeO9tPEgU7IxrqLhMgIpBB/pn0gzJZ8LN7C2oyznMYGzS5lrYaavojFUViv8vFyAQ24="
     - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
+    - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL
   # regression tests
@@ -30,14 +31,14 @@ install:
   # Ensure postgres user has permissions
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
 script:
-  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
+  - ${RETRY_PREFIX} docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
   # First run only telemetry test to see that it works without OpenSSL
-  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
   # Now run all tests
-  - docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
-  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 after_failure:
   - docker exec -u postgres -it pgbuild cat /build/debug/test/regression.diffs /build/debug/tsl/test/regression.diffs /build/debug/test/isolation/regression.diffs /build/debug/test/pgtest/regression.diffs
 after_success:
@@ -104,7 +105,7 @@ jobs:
       after_failure:
       after_script:
       script:
-        - bash -x ./scripts/test_updates_no_constraints.sh
+        - ${RETRY_PREFIX} bash -x ./scripts/test_updates_no_constraints.sh
 
     # This tests the ability to upgrade to the latest version from versions with constraint support
     - if: type = cron
@@ -116,7 +117,7 @@ jobs:
       after_failure:
       after_script:
       script:
-        - bash -x ./scripts/test_updates_with_constraints.sh
+        - ${RETRY_PREFIX} bash -x ./scripts/test_updates_with_constraints.sh
 
     # This tests the ability to upgrade to the latest version on pg 10
     - if: (type = pull_request) OR (type = cron)
@@ -128,7 +129,7 @@ jobs:
       after_failure:
       after_script:
       script:
-        - bash ./scripts/test_updates_pg10.sh
+        - ${RETRY_PREFIX} bash ./scripts/test_updates_pg10.sh
 
     - if: type = cron
       stage: test
