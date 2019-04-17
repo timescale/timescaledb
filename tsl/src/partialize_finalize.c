@@ -397,13 +397,17 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 	AggState *fa_aggstate;
 	MemoryContext fa_context, old_context;
 
-	Assert(IsA(fcinfo->context, AggState));
-	fa_aggstate = (AggState *) fcinfo->context;
-	if (!AggCheckCallContext(fcinfo, &fa_context))
+	/*
+	 * we check for AggState explicitly as well because AggCheckCallContext
+	 * will return true for window function contexts
+	 */
+	if (!AggCheckCallContext(fcinfo, &fa_context) || !IsA(fcinfo->context, AggState))
 	{
 		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "finalize_agg_sfunc called in non-aggregate context");
 	}
+	fa_aggstate = castNode(AggState, fcinfo->context);
+
 	if (PG_ARGISNULL(1))
 		elog(ERROR, "finalize_agg_sfunc called with NULL aggfn");
 	old_context = MemoryContextSwitchTo(fa_context);
