@@ -19,3 +19,19 @@ AS '@MODULE_PATHNAME@', 'ts_print_tsl_license_expiration_info' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.license_edition() RETURNS TEXT
 AS '@MODULE_PATHNAME@', 'ts_license_edition' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.current_db_set_license_key(new_key TEXT) RETURNS TEXT AS 
+$BODY$
+DECLARE 
+    db text; 
+BEGIN
+    SELECT current_database() INTO db;
+    EXECUTE format('ALTER DATABASE %I SET timescaledb.license_key = %L', db, new_key);
+    EXECUTE format('SET SESSION timescaledb.license_key = %L', new_key);
+    PERFORM _timescaledb_internal.restart_background_workers();
+    RETURN new_key;
+END
+$BODY$ 
+LANGUAGE PLPGSQL;
+
+
