@@ -110,15 +110,32 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 10);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 15);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-INSERT INTO ca_inval_test SELECT generate_series(5, 10);
+INSERT INTO ca_inval_test SELECT generate_series(5, 15);
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
-INSERT INTO ca_inval_test SELECT generate_series(11, 20);
+INSERT INTO ca_inval_test SELECT generate_series(16, 20);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- updates below the threshold update both the old and new values
+UPDATE ca_inval_test SET time = 5 WHERE time = 6;
+UPDATE ca_inval_test SET time = 7 WHERE time = 5;
+UPDATE ca_inval_test SET time = 17 WHERE time = 14;
+UPDATE ca_inval_test SET time = 12 WHERE time = 16;
+
+-- updates purely above the threshold are not logged
+UPDATE ca_inval_test SET time = 19 WHERE time = 18;
+UPDATE ca_inval_test SET time = 17 WHERE time = 19;
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -152,3 +169,17 @@ INSERT INTO ts_continuous_test VALUES (1, 1);
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+-- aborts don't get written
+BEGIN;
+    INSERT INTO ts_continuous_test VALUES (-20, -20);
+ABORT;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+DROP TABLE ts_continuous_test CASCADE;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

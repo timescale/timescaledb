@@ -453,3 +453,24 @@ select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(hum
 from conditions
 group by 1;
 NOTICE:  adding not-null constraint to column "time_partition_col"
+-- custom time partition functions are not supported with invalidations
+CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
+    AS $$ SELECT length($1)::BIGINT $$
+    LANGUAGE SQL IMMUTABLE;
+CREATE TABLE text_time(time TEXT);
+    SELECT create_hypertable('text_time', 'time', chunk_time_interval => 10, time_partitioning_func => 'text_part_func');
+NOTICE:  adding not-null constraint to column "time"
+   create_hypertable    
+------------------------
+ (8,public,text_time,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+CREATE VIEW text_view
+    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    AS SELECT time_bucket('5', text_part_func(time)), COUNT(time)
+        FROM text_time
+        GROUP BY 1;
+ERROR:  continuous aggregate do not support custom partitioning functions
+\set ON_ERROR_STOP 1
+DROP TABLE text_time CASCADE;

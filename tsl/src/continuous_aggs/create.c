@@ -707,6 +707,11 @@ cagg_validate_query(Query *query)
 		if (ht != NULL)
 		{
 			part_dimension = hyperspace_get_open_dimension(ht->space, 0);
+			if (part_dimension->partitioning != NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg(
+							 "continuous aggregate do not support custom partitioning functions")));
 			caggtimebucketinfo_init(&ret,
 									ht->fd.id,
 									ht->main_table_relid,
