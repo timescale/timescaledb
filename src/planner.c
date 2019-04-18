@@ -282,6 +282,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		0 == root->parse->resultRelation)
 	{
 		ListCell *lc;
+		List *merge = NIL;
 
 		foreach (lc, rel->pathlist)
 		{
@@ -296,24 +297,33 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				case T_MergeAppendPath:
 					if (rel->fdw_private != NULL &&
 						((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
-					{
-						/*
-						 * for every MergeAppendPath we create an equivalent
-						 * ordered AppendPath
-						 */
-						Path *ordered_path =
-							ts_ordered_append_path_create(root,
-														  rel,
-														  ht,
-														  castNode(MergeAppendPath, *pathptr));
-						if (ordered_path != NULL)
-							add_path(rel, ordered_path);
-					}
+						merge = lappend(merge, *pathptr);
 					if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
 					break;
+			}
+		}
+
+		/*
+		 * for every MergeAppendPath we create an equivalent ordered AppendPath
+		 *
+		 * we create the new pathes in a separate loop because add_path
+		 * will modify pathlist and remove pathes if a path is added
+		 * that is cheaper than the alternatives
+		 */
+		foreach (lc, merge)
+		{
+			Path *ordered_path =
+				ts_ordered_append_path_create(root, rel, ht, castNode(MergeAppendPath, lfirst(lc)));
+
+			if (ordered_path != NULL)
+			{
+				if (should_optimize_append(ordered_path))
+					ordered_path = ts_constraint_aware_append_path_create(root, ht, ordered_path);
+
+				add_path(rel, ordered_path);
 			}
 		}
 
