@@ -87,6 +87,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 h
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
+extern TSDLLEXPORT int32 ts_hypertable_get_id_by_name(const char *schema, const char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 
@@ -132,6 +133,7 @@ extern TSDLLEXPORT bool ts_hypertable_unset_compressed_id(Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
 																	  List *constraint_list);
 extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
+extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

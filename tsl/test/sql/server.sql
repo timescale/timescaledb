@@ -154,15 +154,6 @@ DROP TABLE disttable;
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 SELECT * FROM _timescaledb_catalog.chunk_server;
 
--- Need to distribute table drop
-\c server_1;
-DROP TABLE disttable;
-\c server_2;
-DROP TABLE disttable;
-\c server_4;
-DROP TABLE disttable;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
 \set ON_ERROR_STOP 0

@@ -96,6 +96,37 @@ ts_dist_cmd_invoke_on_servers(const char *sql, List *server_names)
 }
 
 DistCmdResult *
+ts_dist_cmd_invoke_on_servers_using_search_path(const char *sql, const char *search_path,
+												List *server_names)
+{
+	DistCmdResult *set_result;
+	DistCmdResult *results;
+	bool set_search_path = search_path != NULL;
+
+	if (set_search_path)
+	{
+		char *set_request = psprintf("SET search_path = %s, pg_catalog", search_path);
+
+		set_result = ts_dist_cmd_invoke_on_servers(set_request, server_names);
+		if (set_result)
+			ts_dist_cmd_close_response(set_result);
+
+		pfree(set_request);
+	}
+
+	results = ts_dist_cmd_invoke_on_servers(sql, server_names);
+
+	if (set_search_path)
+	{
+		set_result = ts_dist_cmd_invoke_on_servers("SET search_path = pg_catalog", server_names);
+		if (set_result)
+			ts_dist_cmd_close_response(set_result);
+	}
+
+	return results;
+}
+
+DistCmdResult *
 ts_dist_cmd_invoke_on_all_servers(const char *sql)
 {
 	return ts_dist_cmd_invoke_on_servers(sql, server_get_servername_list());

@@ -10,6 +10,7 @@ PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tes
 TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
+TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test (PG 10 and 11 only)
@@ -55,7 +56,7 @@ cd ${EXE_DIR}/sql
 # create database and install timescaledb
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb;"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${CURRENT_DIR}/sql/utils/testsupport.sql >/dev/null 2>&1
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
 
 export TEST_DBNAME
 
@@ -79,4 +80,5 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_DEFAULT_CLUSTER_USER=${TEST_ROLE_DEFAULT_CLUSTER_USER} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
+     -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
      $@ -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!'
