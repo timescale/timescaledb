@@ -13,6 +13,9 @@ typedef struct DistCmdResult DistCmdResult;
 typedef struct List PreparedDistCmd;
 
 extern DistCmdResult *ts_dist_cmd_invoke_on_servers(const char *sql, List *server_names);
+extern DistCmdResult *ts_dist_cmd_invoke_on_servers_using_search_path(const char *sql,
+																	  const char *search_path,
+																	  List *server_names);
 extern DistCmdResult *ts_dist_cmd_invoke_on_all_servers(const char *sql);
 
 extern PGresult *ts_dist_cmd_get_server_result(DistCmdResult *response, const char *server_name);

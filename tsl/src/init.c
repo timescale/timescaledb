@@ -39,6 +39,7 @@
 #include "remote/txn_resolve.h"
 #include "server_dispatch.h"
 #include "remote/dist_copy.h"
+#include "process_utility.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -194,6 +195,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_should_be_expanded = NULL,
 	.server_dispatch_path_create = error_server_dispatch_path_create_not_supported,
 	.distributed_copy = error_distributed_copy_not_supported,
+	.ddl_command_start = NULL,
+	.ddl_command_end = NULL,
+	.sql_drop = NULL,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -212,6 +216,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_should_be_expanded = tsl_hypertable_should_be_expanded,
 	.server_dispatch_path_create = server_dispatch_path_create,
 	.distributed_copy = remote_distributed_copy,
+	.ddl_command_start = tsl_ddl_command_start,
+	.ddl_command_end = tsl_ddl_command_end,
+	.sql_drop = tsl_sql_drop,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
@@ -229,6 +236,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 #if !PG96
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
+	_tsl_process_utility_init();
 #endif
 
 	PG_RETURN_BOOL(true);
@@ -250,6 +258,7 @@ module_shutdown(void)
 #if !PG96
 	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
+	_tsl_process_utility_fini();
 #endif
 
 	ts_cm_functions = &ts_cm_functions_default;

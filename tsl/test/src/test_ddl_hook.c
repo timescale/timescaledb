@@ -20,6 +20,10 @@ TS_FUNCTION_INFO_V1(ts_test_ddl_command_hook_unreg);
 
 static List *tsl_delayed_execution_list = NIL;
 
+static void (*ddl_command_start)(ProcessUtilityArgs *args);
+static void (*ddl_command_end)(EventTriggerData *command);
+static void (*sql_drop)(List *dropped_objects);
+
 static void
 test_ddl_command_start(ProcessUtilityArgs *args)
 {
@@ -170,10 +174,14 @@ test_sql_drop(List *dropped_objects)
 Datum
 ts_test_ddl_command_hook_reg(PG_FUNCTION_ARGS)
 {
-	Assert(ts_cm_functions->ddl_command_start == NULL);
+	ddl_command_start = ts_cm_functions->ddl_command_start;
+	ddl_command_end = ts_cm_functions->ddl_command_end;
+	sql_drop = ts_cm_functions->sql_drop;
+
 	ts_cm_functions->ddl_command_start = test_ddl_command_start;
 	ts_cm_functions->ddl_command_end = test_ddl_command_end;
 	ts_cm_functions->sql_drop = test_sql_drop;
+
 	PG_RETURN_VOID();
 }
 
@@ -181,8 +189,10 @@ Datum
 ts_test_ddl_command_hook_unreg(PG_FUNCTION_ARGS)
 {
 	Assert(ts_cm_functions->ddl_command_start == test_ddl_command_start);
-	ts_cm_functions->ddl_command_start = NULL;
-	ts_cm_functions->ddl_command_end = NULL;
-	ts_cm_functions->sql_drop = NULL;
+
+	ts_cm_functions->ddl_command_start = ddl_command_start;
+	ts_cm_functions->ddl_command_end = ddl_command_end;
+	ts_cm_functions->sql_drop = sql_drop;
+
 	PG_RETURN_VOID();
 }

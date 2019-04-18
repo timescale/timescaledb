@@ -223,7 +223,8 @@ DROP TABLE htable, non_htable;
 ERROR:  cannot drop a hypertable along with other objects
 \set ON_ERROR_STOP 1
 DROP INDEX htable_descr_idx;
-NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP INDEX htable_descr_idx;
+NOTICE:  test_ddl_command_start: 1 hypertables, query: DROP INDEX htable_descr_idx;
+NOTICE:  test_ddl_command_start: public.htable
 NOTICE:  test_sql_drop: index
 NOTICE:  test_ddl_command_end: DROP INDEX
 DROP TABLE htable;
@@ -261,6 +262,7 @@ NOTICE:  test_sql_drop: table: htable_schema.non_htable
 NOTICE:  test_sql_drop: table: htable_schema.htable
 NOTICE:  test_sql_drop: index
 NOTICE:  test_sql_drop: trigger
+NOTICE:  test_ddl_command_end: DROP SCHEMA
 -- DROP column cascades to index drop
 CREATE TABLE htable(time timestamptz, device int, color int, temp float);
 NOTICE:  test_ddl_command_start: 0 hypertables, query: CREATE TABLE htable(time timestamptz, device int, color int, temp float);

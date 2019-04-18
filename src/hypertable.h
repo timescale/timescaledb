@@ -80,6 +80,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	ChunkSizingInfo *chunk_sizing_info, int32 replication_factor, ArrayType *servers);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
+extern TSDLLEXPORT int32 ts_hypertable_get_id_by_name(const char *schema, const char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 
@@ -118,6 +119,7 @@ extern void ts_hypertables_rename_schema_name(const char *old_name, const char *
 extern List *ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx);
 extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
 extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
+extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
