@@ -129,16 +129,6 @@ SELECT * FROM test.show_triggers('disttable');
 -- a way to test that we properly handle attributed conversion between
 -- the root table and chunks
 ALTER TABLE disttable DROP COLUMN color;
--- Currently no distributed DDL support, so need to manually drop
--- column on datanodes
-\c server_1
-ALTER TABLE disttable DROP COLUMN color;
-\c server_2
-ALTER TABLE disttable DROP COLUMN color;
-\c server_3
-ALTER TABLE disttable DROP COLUMN color;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- EXPLAIN some inserts to see what plans and explain output for
 -- remote inserts look like
 EXPLAIN (COSTS FALSE)
@@ -430,16 +420,6 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 
 -- Check that creating columns work
 ALTER TABLE disttable ADD COLUMN "Color" int;
--- Currently no distributed DDL support, so need to manually add
--- column on datanodes
-\c server_1
-ALTER TABLE disttable ADD COLUMN "Color" int;
-\c server_2
-ALTER TABLE disttable ADD COLUMN "Color" int;
-\c server_3
-ALTER TABLE disttable ADD COLUMN "Color" int;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM test.show_columns('disttable');
  Column |           Type           | NotNull 
 --------+--------------------------+---------

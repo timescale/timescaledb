@@ -12,7 +12,7 @@ set(SOURCES
 )
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
-  list(APPEND SOURCES server_dispatch.c)
+  list(APPEND SOURCES server_dispatch.c process_utility.c)
 endif()
 
 # Add test source code in Debug builds

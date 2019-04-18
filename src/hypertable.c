@@ -65,6 +65,7 @@
 #include "interval.h"
 #include "license_guc.h"
 #include "cross_module_fn.h"
+#include "scan_iterator.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -981,6 +982,45 @@ ts_hypertable_get_by_name(const char *schema, const char *name)
 	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock, false);
 
 	return ht;
+}
+
+static void
+hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *name)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_NAME_INDEX);
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_hypertable_name_idx_schema,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(schema));
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_hypertable_name_idx_table,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(name));
+}
+
+int32
+ts_hypertable_get_id_by_name(const char *schema, const char *name)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
+	int32 hypertable_id = -1;
+
+	hypertable_scan_by_name(&iterator, schema, name);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
+
+		hypertable_id = form->id;
+		ts_scan_iterator_close(&iterator);
+		break;
+	}
+
+	return hypertable_id;
 }
 
 Hypertable *
@@ -2344,4 +2384,20 @@ ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube)
 	}
 
 	return chunk_servers;
+}
+
+List *
+ts_hypertable_get_servername_list(Hypertable *ht)
+{
+	List *list = NULL;
+	ListCell *cell;
+
+	foreach (cell, ht->servers)
+	{
+		HypertableServer *server = lfirst(cell);
+
+		list = lappend(list, pstrdup(NameStr(server->fd.server_name)));
+	}
+
+	return list;
 }
