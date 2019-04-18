@@ -24,6 +24,9 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
+--test that this all works under the community license
+ALTER DATABASE :TEST_DBNAME SET timescaledb.license_key='Community';
+
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
