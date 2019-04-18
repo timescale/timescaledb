@@ -214,10 +214,32 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 	return true;
 }
 
+static bool
+bgw_policy_job_requires_enterprise_license(BgwJob *job)
+{
+	license_print_expiration_warning_if_needed();
+
+	switch (job->bgw_type)
+	{
+		case JOB_TYPE_REORDER:
+			return true;
+		case JOB_TYPE_DROP_CHUNKS:
+			return true;
+		case JOB_TYPE_CONTINUOUS_AGGREGATE:
+			return false;
+		default:
+			elog(ERROR,
+				 "scheduler could not determine the license type for job type: \"%s\"",
+				 NameStr(job->fd.job_type));
+	}
+	pg_unreachable();
+}
+
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
-	license_enforce_enterprise_enabled();
+	if (bgw_policy_job_requires_enterprise_license(job))
+		license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
 
 	switch (job->bgw_type)
@@ -230,7 +252,7 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_materialize_continuous_aggregate(job);
 		default:
 			elog(ERROR,
-				 "scheduler tried to run an invalid enterprise job type: \"%s\"",
+				 "scheduler tried to run an invalid job type: \"%s\"",
 				 NameStr(job->fd.job_type));
 	}
 	pg_unreachable();
