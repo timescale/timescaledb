@@ -36,17 +36,6 @@
 /* Right now, there is an infinite number of retries for continuous aggregate jobs */
 #define DEFAULT_MAX_RETRIES -1
 
-/* Default retry period for continuous aggregate jobs is currently 1 day */
-#define DEFAULT_RETRY_PERIOD                                                                       \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(1),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
-
 /* Get the default schedule interval for a new continuous aggregate.
  *
  * Default scheduled interval for continuous aggregate jobs should be 1/2 of the default
@@ -103,7 +92,7 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refr
 										refresh_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
-										DEFAULT_RETRY_PERIOD);
+										refresh_interval);
 	return job_id;
 }
 

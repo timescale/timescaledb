@@ -52,7 +52,7 @@ NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT * FROM _timescaledb_config.bgw_job;
   id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
 ------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
 (1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
