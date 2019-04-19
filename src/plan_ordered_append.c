@@ -162,7 +162,7 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 								0,
 								false,
 								merge->partitioned_rels,
-								root->limit_tuples);
+								rows);
 #endif
 
 	append->path.pathkeys = merge->path.pathkeys;
@@ -170,6 +170,7 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 	append->path.parallel_safe = false;
 	append->path.startup_cost = ((Path *) linitial(merge->subpaths))->startup_cost;
 	append->path.total_cost = total_cost;
+	append->path.rows = rows;
 
 	return (Path *) append;
 }
