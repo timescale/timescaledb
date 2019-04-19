@@ -107,7 +107,7 @@ SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
   id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
 ------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
 (1 row)
 
 -- create 10 time buckets
@@ -145,7 +145,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
   id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
 ------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
 (1 row)
 
 -- job ran once, successfully
@@ -271,7 +271,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
   id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
 ------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1001 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 1 day
+ 1001 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
 (1 row)
 
 -- job ran again, fast restart
