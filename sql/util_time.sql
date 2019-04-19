@@ -9,6 +9,16 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTA
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
     AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_without_timezone(unixtime_us BIGINT)
+  RETURNS TIMESTAMP
+  AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp'
+  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_date(unixtime_us BIGINT)
+  RETURNS DATE
+  AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_date'
+  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_interval(unixtime_us BIGINT) RETURNS INTERVAL
     AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_interval' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 

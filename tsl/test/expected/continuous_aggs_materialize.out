@@ -1196,3 +1196,105 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
  2019-09-09 10:00:00+00 |     1
 (6 rows)
 
+-- regular timestamp
+CREATE TABLE continuous_agg_max_mat_timestamp(time TIMESTAMP);
+SELECT create_hypertable('continuous_agg_max_mat_timestamp', 'time');
+NOTICE:  adding not-null constraint to column "time"
+               create_hypertable                
+------------------------------------------------
+ (15,public,continuous_agg_max_mat_timestamp,t)
+(1 row)
+
+CREATE VIEW max_mat_view_timestamp
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='-2 hours')
+    AS SELECT time_bucket('2 hours', time)
+        FROM continuous_agg_max_mat_timestamp
+        GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+INSERT INTO continuous_agg_max_mat_timestamp
+    SELECT generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour');
+-- first materializes everything
+REFRESH MATERIALIZED VIEW max_mat_view_timestamp;
+INFO:  new materialization range for public.continuous_agg_max_mat_timestamp (time column time) (1568030400000000)
+INFO:  materializing continuous aggregate public.max_mat_view_timestamp: new range up to 1568030400000000
+SELECT * FROM max_mat_view_timestamp ORDER BY 1;
+     time_bucket     
+---------------------
+ 2019-09-09 00:00:00
+ 2019-09-09 02:00:00
+ 2019-09-09 04:00:00
+ 2019-09-09 06:00:00
+ 2019-09-09 08:00:00
+ 2019-09-09 10:00:00
+(6 rows)
+
+-- date
+CREATE TABLE continuous_agg_max_mat_date(time DATE);
+SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
+NOTICE:  adding not-null constraint to column "time"
+             create_hypertable             
+-------------------------------------------
+ (17,public,continuous_agg_max_mat_date,t)
+(1 row)
+
+CREATE VIEW max_mat_view_date
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='-7 days')
+    AS SELECT time_bucket('7 days', time)
+        FROM continuous_agg_max_mat_date
+        GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+INSERT INTO continuous_agg_max_mat_date
+    SELECT generate_series('2019-09-01'::DATE, '2019-09-010 10:00', '1 day');
+-- first materializes everything
+REFRESH MATERIALIZED VIEW max_mat_view_date;
+INFO:  new materialization range for public.continuous_agg_max_mat_date (time column time) (1568592000000000)
+INFO:  materializing continuous aggregate public.max_mat_view_date: new range up to 1568592000000000
+SELECT * FROM max_mat_view_date ORDER BY 1;
+ time_bucket 
+-------------
+ 2019-08-26
+ 2019-09-02
+ 2019-09-09
+(3 rows)
+
+SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
+       view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
+------------------------+------------------------+------------------------+--------+------------+-------------------
+ max_mat_view           | 12                     | 12                     |   1003 |            | 
+ max_mat_view_t         | 2019-09-09 12:00:00+00 | 2019-09-09 12:00:00+00 |   1004 |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1005 |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1006 |            | 
+(4 rows)
+
+SELECT view_name, refresh_lag, max_interval_per_job
+    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
+       view_name        |  refresh_lag  |          max_interval_per_job           
+------------------------+---------------+-----------------------------------------
+ max_mat_view           | -2            | 4
+ max_mat_view_t         | @ 2 hours ago | @ 4 hours
+ max_mat_view_timestamp | @ 2 hours ago | @ 106751991 days 4 hours 54.775807 secs
+ max_mat_view_date      | @ 7 days ago  | @ 106751991 days 4 hours 54.775807 secs
+(4 rows)
+
+SET SESSION timezone TO 'EST';
+SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
+       view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
+------------------------+------------------------+------------------------+--------+------------+-------------------
+ max_mat_view           | 12                     | 12                     |   1003 |            | 
+ max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |   1004 |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1005 |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1006 |            | 
+(4 rows)
+
+SELECT view_name, refresh_lag, max_interval_per_job
+    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
+       view_name        |  refresh_lag  |          max_interval_per_job           
+------------------------+---------------+-----------------------------------------
+ max_mat_view           | -2            | 4
+ max_mat_view_t         | @ 2 hours ago | @ 4 hours
+ max_mat_view_timestamp | @ 2 hours ago | @ 106751991 days 4 hours 54.775807 secs
+ max_mat_view_date      | @ 7 days ago  | @ 106751991 days 4 hours 54.775807 secs
+(4 rows)
+
