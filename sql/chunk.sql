@@ -49,4 +49,4 @@ AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
 -- returns the chunk id for the chunk that would contain a given tuple, or NULL if no such chunk
 -- currently exists in the hypertable. tuple must be of the hypertable's row type.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_for_tuple(hypertable_id INTEGER, tuple ANYELEMENT) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_chunk_for_tuple' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'ts_chunk_for_tuple' LANGUAGE C STABLE STRICT PARALLEL SAFE;

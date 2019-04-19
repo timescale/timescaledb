@@ -1571,7 +1571,7 @@ ts_chunk_for_tuple(PG_FUNCTION_ARGS)
 	row_data.t_data = row;
 
 	point = ts_hyperspace_calculate_point(ht->space, &row_data, rowdesc);
-	chunk = ts_chunk_find(ht->space, point);
+	chunk = ts_hypertable_find_chunk_if_exists(ht, point);
 
 	if (chunk == NULL)
 		elog(ERROR, "could not find chunk for tuple");
