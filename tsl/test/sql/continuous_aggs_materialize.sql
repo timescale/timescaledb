@@ -524,3 +524,51 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 
 REFRESH MATERIALIZED VIEW max_mat_view_t;
 SELECT * FROM max_mat_view_t ORDER BY 1;
+
+-- regular timestamp
+CREATE TABLE continuous_agg_max_mat_timestamp(time TIMESTAMP);
+SELECT create_hypertable('continuous_agg_max_mat_timestamp', 'time');
+
+CREATE VIEW max_mat_view_timestamp
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='-2 hours')
+    AS SELECT time_bucket('2 hours', time)
+        FROM continuous_agg_max_mat_timestamp
+        GROUP BY 1;
+
+INSERT INTO continuous_agg_max_mat_timestamp
+    SELECT generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour');
+
+-- first materializes everything
+REFRESH MATERIALIZED VIEW max_mat_view_timestamp;
+SELECT * FROM max_mat_view_timestamp ORDER BY 1;
+
+-- date
+CREATE TABLE continuous_agg_max_mat_date(time DATE);
+SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
+
+CREATE VIEW max_mat_view_date
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='-7 days')
+    AS SELECT time_bucket('7 days', time)
+        FROM continuous_agg_max_mat_date
+        GROUP BY 1;
+
+INSERT INTO continuous_agg_max_mat_date
+    SELECT generate_series('2019-09-01'::DATE, '2019-09-010 10:00', '1 day');
+
+-- first materializes everything
+REFRESH MATERIALIZED VIEW max_mat_view_date;
+SELECT * FROM max_mat_view_date ORDER BY 1;
+
+SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
+
+SELECT view_name, refresh_lag, max_interval_per_job
+    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
+
+SET SESSION timezone TO 'EST';
+
+SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
+
+SELECT view_name, refresh_lag, max_interval_per_job
+    FROM timescaledb_information.continuous_aggregates ORDER BY 1;

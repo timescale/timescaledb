@@ -69,6 +69,11 @@ CREATE VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
+
+-- even before running, stats shows something
+SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats;
+
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
@@ -161,7 +166,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x
 --check the information views --
-select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
+select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 

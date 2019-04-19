@@ -67,6 +67,8 @@ ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 }
 
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_timestamp);
+TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_timestamp_without_timezone);
+TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_date);
 
 /*
  * Convert BIGINT microseconds relative the UNIX epoch to a Postgres TIMESTAMP.
@@ -98,6 +100,16 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 		(float8) microseconds / USECS_PER_SEC;
 #endif
 	PG_RETURN_TIMESTAMPTZ(timestamp);
+}
+
+Datum
+ts_pg_unix_microseconds_to_date(PG_FUNCTION_ARGS)
+{
+	int64 microseconds = PG_GETARG_INT64(0);
+	Datum res =
+		DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(microseconds));
+	res = DirectFunctionCall1(timestamp_date, res);
+	PG_RETURN_DATUM(res);
 }
 
 static int64 ts_integer_to_internal(Datum time_val, Oid type_oid);
@@ -276,7 +288,6 @@ static Datum ts_integer_to_internal_value(int64 value, Oid type);
 TSDLLEXPORT Datum
 ts_internal_to_time_value(int64 value, Oid type)
 {
-	Datum res;
 	switch (type)
 	{
 		case INT2OID:
@@ -287,12 +298,9 @@ ts_internal_to_time_value(int64 value, Oid type)
 		case TIMESTAMPTZOID:
 			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
 			 * compatibility */
-			res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
-			return TimestampTzGetDatum(res);
+			return DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
 		case DATEOID:
-			res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
-			res = DirectFunctionCall1(timestamp_date, res);
-			return DateADTGetDatum(res);
+			return DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value));
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
