@@ -223,6 +223,17 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			subst = (Expr *)
 				makeFuncExpr(cast_func, tce->type_id, list_make1(subst), InvalidOid, InvalidOid, 0);
 		}
+		else if (exprType((Node *) value) != resulttype)
+		{
+			/*
+			 * if datatype of substitution operation is different from original Const expression
+			 * we need to adjust toplevel op
+			 */
+			opno = get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, resulttype);
+
+			if (!OidIsValid(opno))
+				return op;
+		}
 
 		if (tce->type_id == TIMESTAMPTZOID && width->consttype == INTERVALOID)
 		{
@@ -240,9 +251,9 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		op = copyObject(op);
 
 		/*
-		 * if we switched operator we need to adjust OpExpr as well
+		 * if we changed operator we need to adjust OpExpr as well
 		 */
-		if (IsA(right, FuncExpr))
+		if (op->opno != opno)
 		{
 			op->opno = opno;
 			op->opfuncid = InvalidOid;
@@ -272,6 +283,7 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 {
 	ListCell *lc;
 	ListCell *prev = NULL;
+	List *additional_quals = NIL;
 
 	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
 	{
@@ -302,6 +314,10 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			return quals;
 		}
 
+		/*
+		 * check for time_bucket comparisons
+		 * time_bucket(Const, time_colum) > Const
+		 */
 		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
 		{
 			OpExpr *op = castNode(OpExpr, qual);
@@ -316,6 +332,11 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 				 is_time_bucket_function(right)))
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
+				/*
+				 * we add the transformed expression to the list of
+				 * quals so it can be used as an index condition
+				 */
+				additional_quals = lappend(additional_quals, qual);
 			}
 		}
 
@@ -333,7 +354,7 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 #endif
 		ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 	}
-	return quals;
+	return (Node *) list_concat((List *) quals, additional_quals);
 }
 
 static bool
