@@ -29,25 +29,25 @@ CREATE OR REPLACE VIEW timescaledb_information.license AS
          _timescaledb_internal.license_expiration_time() <= now() AS expired,
          _timescaledb_internal.license_expiration_time() AS expiration_time;
 
-CREATE OR REPLACE VIEW timescaledb_information.drop_chunks_policies as 
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.older_than, p.cascade, p.job_id, j.schedule_interval,  
+CREATE OR REPLACE VIEW timescaledb_information.drop_chunks_policies as
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.older_than, p.cascade, p.job_id, j.schedule_interval,
     j.max_runtime, j.max_retries, j.retry_period
   FROM _timescaledb_config.bgw_policy_drop_chunks p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.reorder_policies as 
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.hypertable_index_name, p.job_id, j.schedule_interval,  
+CREATE OR REPLACE VIEW timescaledb_information.reorder_policies as
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.hypertable_index_name, p.job_id, j.schedule_interval,
     j.max_runtime, j.max_retries, j.retry_period
   FROM _timescaledb_config.bgw_policy_reorder p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.policy_stats as 
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_start, js.next_start, 
-    js.total_runs, js.total_failures 
-  FROM (SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_reorder 
-        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks) p  
+CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_start, js.next_start,
+    js.total_runs, js.total_failures
+  FROM (SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_reorder
+        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks) p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id
     INNER JOIN _timescaledb_internal.bgw_job_stat js on p.job_id = js.job_id
@@ -57,11 +57,28 @@ CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
   SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
     viewinfo.viewowner as view_owner,
-    cagg.refresh_lag,
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+      WHEN 'TIMESTAMP'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
+      WHEN 'TIMESTAMPTZ'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
+      WHEN 'DATE'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
+      ELSE cagg.refresh_lag::TEXT
+    END AS refresh_lag,
     bgwjob.schedule_interval as refresh_interval,
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+      WHEN 'TIMESTAMP'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
+      WHEN 'TIMESTAMPTZ'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
+      WHEN 'DATE'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
+      ELSE cagg.max_interval_per_job::TEXT
+    END AS max_interval_per_job,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition
-  FROM  _timescaledb_catalog.continuous_agg cagg, 
+  FROM  _timescaledb_catalog.continuous_agg cagg,
         _timescaledb_catalog.hypertable ht, LATERAL
         ( select C.oid, pg_get_userbyid( C.relowner) as viewowner
           FROM pg_class C LEFT JOIN pg_namespace N on (N.oid = C.relnamespace)
@@ -78,18 +95,35 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
 
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
   SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
-    ct.watermark as completed_threshold,
-    it.watermark as invalidation_threshold,
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+      WHEN 'TIMESTAMP'::regtype
+        THEN _timescaledb_internal.to_timestamp_without_timezone(ct.watermark)::TEXT
+      WHEN 'TIMESTAMPTZ'::regtype
+        THEN _timescaledb_internal.to_timestamp(ct.watermark)::TEXT
+      WHEN 'DATE'::regtype
+        THEN _timescaledb_internal.to_date(ct.watermark)::TEXT
+      ELSE ct.watermark::TEXT
+    END AS completed_threshold,
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+      WHEN 'TIMESTAMP'::regtype
+        THEN _timescaledb_internal.to_timestamp_without_timezone(it.watermark)::TEXT
+      WHEN 'TIMESTAMPTZ'::regtype
+        THEN _timescaledb_internal.to_timestamp(it.watermark)::TEXT
+      WHEN 'DATE'::regtype
+        THEN _timescaledb_internal.to_date(it.watermark)::TEXT
+      ELSE it.watermark::TEXT
+    END AS invalidation_threshold,
+    cagg.job_id as job_id,
     bgw_job_stat.last_start as last_run_started_at,
     case when bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' then 'running'
        when bgw_job_stat.next_start is not null then 'scheduled'
     end as job_status,
-    case when bgw_job_stat.last_finish > bgw_job_stat.last_start then (bgw_job_stat.last_finish - bgw_job_stat.last_start) 
+    case when bgw_job_stat.last_finish > bgw_job_stat.last_start then (bgw_job_stat.last_finish - bgw_job_stat.last_start)
     end as last_run_duration,
     bgw_job_stat.next_start as next_scheduled_run
   FROM
-    _timescaledb_catalog.continuous_agg as cagg JOIN
-    _timescaledb_internal.bgw_job_stat as bgw_job_stat
+    _timescaledb_catalog.continuous_agg as cagg
+    LEFT JOIN _timescaledb_internal.bgw_job_stat as bgw_job_stat
     ON  ( cagg.job_id = bgw_job_stat.job_id )
     LEFT JOIN _timescaledb_catalog.continuous_aggs_invalidation_threshold as it
     ON ( cagg.raw_hypertable_id = it.hypertable_id)
