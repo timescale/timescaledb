@@ -140,12 +140,11 @@ ORDER BY time ASC LIMIT 1;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(5 rows)
 
 -- test DESC for ordered chunks
 :PREFIX SELECT
@@ -155,12 +154,11 @@ ORDER BY time DESC LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 
 -- test ASC for reverse ordered chunks
 :PREFIX SELECT
@@ -170,12 +168,11 @@ ORDER BY time ASC LIMIT 1;
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_2_6_chunk."time"
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan Backward using _hyper_2_6_chunk_ordered_append_reverse_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_2_4_chunk_ordered_append_reverse_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan Backward using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (never executed)
+         ->  Index Scan Backward using _hyper_2_4_chunk_ordered_append_reverse_time_idx on _hyper_2_4_chunk (never executed)
+(5 rows)
 
 -- test DESC for reverse ordered chunks
 :PREFIX SELECT
@@ -185,12 +182,11 @@ ORDER BY time DESC LIMIT 1;
                                                         QUERY PLAN                                                         
 ---------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_2_4_chunk."time" DESC
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_2_4_chunk_ordered_append_reverse_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_2_6_chunk_ordered_append_reverse_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (never executed)
+         ->  Index Scan using _hyper_2_6_chunk_ordered_append_reverse_time_idx on _hyper_2_6_chunk (never executed)
+(5 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX SELECT
@@ -200,12 +196,11 @@ ORDER BY time ASC LIMIT 1;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(5 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX SELECT
@@ -215,12 +210,11 @@ ORDER BY time DESC, device_id LIMIT 1;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device_id
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX SELECT
@@ -291,13 +285,12 @@ ORDER BY time ASC LIMIT 1;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_2_chunk."time"
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(7 rows)
+(6 rows)
 
 :PREFIX SELECT
   time, device_id, value
@@ -307,13 +300,12 @@ ORDER BY time DESC LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(7 rows)
+(6 rows)
 
 -- test interaction with constraint aware append
 :PREFIX SELECT
@@ -468,14 +460,14 @@ ORDER BY time ASC LIMIT 1;
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY time ASC LIMIT 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
-         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+   ->  Result (actual rows=1 loops=1)
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
 (6 rows)
 
 -- test query with order by time_bucket (should not use ordered append)
@@ -568,12 +560,11 @@ SELECT * FROM i;
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
          ->  Limit (actual rows=2 loops=1)
-               ->  Merge Append (actual rows=2 loops=1)
-                     Sort Key: _hyper_1_3_chunk."time" DESC
+               ->  Append (actual rows=2 loops=1)
                      ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=2 loops=1)
-                     ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                     ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-(9 rows)
+                     ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+                     ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (never executed)
+(8 rows)
 
 -- test plan with best index is chosen
 -- this should use device_id, time index
@@ -581,15 +572,14 @@ SELECT * FROM i;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_ordered_append_device_id_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
                Index Cond: (device_id = 1)
-         ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: (device_id = 1)
-         ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: (device_id = 1)
-(9 rows)
+(8 rows)
 
 -- test plan with best index is chosen
 -- this should use time index
@@ -597,12 +587,11 @@ SELECT * FROM i;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
+   ->  Append (actual rows=1 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-(6 rows)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 
 -- test with table with only dimension column
 :PREFIX SELECT * FROM dimension_only ORDER BY time DESC LIMIT 1;
@@ -654,21 +643,22 @@ LIMIT 2;
 --------------------------------------------------------------------------------------------------------
  Limit
    ->  Nested Loop
+         ->  Merge Append
+               Sort Key: _hyper_4_11_chunk."time" DESC
+               ->  Index Only Scan using _hyper_4_11_chunk_dimension_only_time_idx on _hyper_4_11_chunk
+               ->  Index Only Scan using _hyper_4_12_chunk_dimension_only_time_idx on _hyper_4_12_chunk
+               ->  Index Only Scan using _hyper_4_13_chunk_dimension_only_time_idx on _hyper_4_13_chunk
+               ->  Index Only Scan using _hyper_4_14_chunk_dimension_only_time_idx on _hyper_4_14_chunk
          ->  Append
                ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk
+                     Index Cond: ("time" = _hyper_4_11_chunk."time")
                ->  Index Scan using _hyper_3_9_chunk_dimension_last_time_idx on _hyper_3_9_chunk
+                     Index Cond: ("time" = _hyper_4_11_chunk."time")
                ->  Index Scan using _hyper_3_8_chunk_dimension_last_time_idx on _hyper_3_8_chunk
+                     Index Cond: ("time" = _hyper_4_11_chunk."time")
                ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk
-         ->  Append
-               ->  Index Only Scan using _hyper_4_11_chunk_dimension_only_time_idx on _hyper_4_11_chunk
-                     Index Cond: ("time" = _hyper_3_10_chunk."time")
-               ->  Index Only Scan using _hyper_4_12_chunk_dimension_only_time_idx on _hyper_4_12_chunk
-                     Index Cond: ("time" = _hyper_3_10_chunk."time")
-               ->  Index Only Scan using _hyper_4_13_chunk_dimension_only_time_idx on _hyper_4_13_chunk
-                     Index Cond: ("time" = _hyper_3_10_chunk."time")
-               ->  Index Only Scan using _hyper_4_14_chunk_dimension_only_time_idx on _hyper_4_14_chunk
-                     Index Cond: ("time" = _hyper_3_10_chunk."time")
-(16 rows)
+                     Index Cond: ("time" = _hyper_4_11_chunk."time")
+(17 rows)
 
 -- test join against non-hypertable
 :PREFIX SELECT *
