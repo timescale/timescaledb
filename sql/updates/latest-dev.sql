@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     refresh_lag BIGINT NOT NULL,
     direct_view_schema NAME NOT NULL,
     direct_view_name NAME NOT NULL,
+    max_interval_per_job BIGINT NOT NULL,
     UNIQUE(user_view_schema, user_view_name),
     UNIQUE(partial_view_schema, partial_view_name)
 );

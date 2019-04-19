@@ -86,6 +86,14 @@ CREATE VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 NOTICE:  adding not-null constraint to column "time_partition_col"
+-- even before running, stats shows something
+SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
+    FROM timescaledb_information.continuous_aggregate_stats;
+        view_name         | completed_threshold | invalidation_threshold | job_status | last_run_duration 
+--------------------------+---------------------+------------------------+------------+-------------------
+ test_continuous_agg_view |                     |                        |            | 
+(1 row)
+
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 -- min distance from end should be 1
 SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
@@ -286,7 +294,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x
 --check the information views --
-select view_name, view_owner, refresh_lag, refresh_interval, materialization_hypertable
+select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 -[ RECORD 1 ]--------------+-------------------------------------------------
@@ -294,6 +302,7 @@ view_name                  | test_continuous_agg_view
 view_owner                 | default_perm_user
 refresh_lag                | -2
 refresh_interval           | @ 12 hours
+max_interval_per_job       | 2
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
 
 select view_name, view_definition from timescaledb_information.continuous_aggregates
