@@ -724,39 +724,54 @@ hypertable_chunk_store_add(Hypertable *h, Chunk *chunk)
 	return cse;
 }
 
-Chunk *
-ts_hypertable_get_chunk(Hypertable *h, Point *point)
+static inline Chunk *
+hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 {
+	Chunk *chunk;
 	ChunkStoreEntry *cse = ts_subspace_store_get(h->chunk_cache, point);
-
-	if (NULL == cse)
+	if (cse != NULL)
 	{
-		Chunk *chunk;
-
-		/*
-		 * ts_chunk_find() must execute on a per-tuple memory context since it
-		 * allocates a lot of transient data. We don't want this allocated on
-		 * the cache's memory context.
-		 */
-		chunk = ts_chunk_find(h->space, point);
-
-		if (NULL == chunk)
-			chunk = ts_chunk_create(h,
-									point,
-									NameStr(h->fd.associated_schema_name),
-									NameStr(h->fd.associated_table_prefix));
-
-		Assert(chunk != NULL);
-
-		/* Also add the chunk to the hypertable's chunk store */
-		cse = hypertable_chunk_store_add(h, chunk);
+		Assert(NULL != cse->chunk);
+		return cse->chunk;
 	}
 
-	Assert(NULL != cse);
-	Assert(NULL != cse->chunk);
-	Assert(MemoryContextContains(cse->mcxt, cse));
+	/*
+	 * ts_chunk_find() must execute on a per-tuple memory context since it
+	 * allocates a lot of transient data. We don't want this allocated on
+	 * the cache's memory context.
+	 */
+	chunk = ts_chunk_find(h->space, point);
 
-	return cse->chunk;
+	if (NULL == chunk)
+	{
+		if (!create_if_not_exists)
+			return NULL;
+
+		chunk = ts_chunk_create(h,
+								point,
+								NameStr(h->fd.associated_schema_name),
+								NameStr(h->fd.associated_table_prefix));
+	}
+
+	Assert(chunk != NULL);
+
+	/* Also add the chunk to the hypertable's chunk store */
+	cse = hypertable_chunk_store_add(h, chunk);
+	return chunk;
+}
+
+/* finds the chunk for a given point, returning NULL if none exists */
+Chunk *
+ts_hypertable_find_chunk_if_exists(Hypertable *h, Point *point)
+{
+	return hypertable_get_chunk(h, point, false);
+}
+
+/* gets the chunk for a given point, creating it if it does not exist */
+Chunk *
+ts_hypertable_get_or_create_chunk(Hypertable *h, Point *point)
+{
+	return hypertable_get_chunk(h, point, true);
 }
 
 bool
