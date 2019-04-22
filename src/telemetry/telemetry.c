@@ -47,6 +47,7 @@
 #define REQ_BUILD_OS_VERSION "build_os_version"
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
+#define REQ_NUM_CONTINUOUS_AGGS "num_continuous_aggs"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_TELEMETRY_METADATA "db_metadata"
 #define REQ_LICENSE_INFO "license"
@@ -164,6 +165,15 @@ get_num_hypertables()
 }
 
 static char *
+get_num_continuous_aggs()
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%d", ts_number_of_continuous_aggs());
+	return buf->data;
+}
+
+static char *
 get_database_size()
 {
 	StringInfo buf = makeStringInfo();
@@ -252,6 +262,7 @@ build_version_body(void)
 	ts_jsonb_add_str(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
 	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
 	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
+	ts_jsonb_add_str(parseState, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
 
 	/* Add related extensions, which is a nested JSON */
 	ext_key.type = jbvString;
