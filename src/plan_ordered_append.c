@@ -38,11 +38,9 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 
 	/*
 	 * only do this optimization for hypertables with 1 dimension and queries
-	 * with an ORDER BY and LIMIT clause, caller checked this, so only
-	 * asserting
+	 * with an ORDER BY clause, caller checked this, so only asserting
 	 */
-	Assert(ht->space->num_dimensions == 1 || root->parse->sortClause != NIL ||
-		   root->limit_tuples != -1.0);
+	Assert(ht->space->num_dimensions == 1 || root->parse->sortClause != NIL);
 
 	/*
 	 * check that the first element of the ORDER BY clause actually matches
@@ -122,10 +120,12 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 		Path *child = lfirst(lc);
 
 		/*
-		 * we only include cost of children until the limit is satisfied.
-		 * Cost of children past the limit will not be added to the cost
+		 * If there is a LIMIT clause we only include as many chunks as
+		 * planner thinks are needed to satisfy LIMIT clause.
+		 * We do this to prevent planner choosing parallel plan which might
+		 * otherwise look preferable cost wise.
 		 */
-		if (rows < root->limit_tuples)
+		if (root->limit_tuples == -1.0 || rows < root->limit_tuples)
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;
