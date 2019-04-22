@@ -66,6 +66,9 @@
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
 
+#define DEFAULT_MAX_INTERVAL_MULTIPLIER 20
+#define DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH (PG_INT64_MAX / DEFAULT_MAX_INTERVAL_MULTIPLIER)
+
 /*switch to ts user for _timescaledb_internal access */
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
 	do                                                                                             \
@@ -561,7 +564,11 @@ static int64
 get_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options, int64 bucket_width)
 {
 	if (with_clause_options[ContinuousViewOptionMaxIntervalPerRun].is_default)
-		return PG_INT64_MAX;
+	{
+		return (bucket_width < DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH) ?
+				   DEFAULT_MAX_INTERVAL_MULTIPLIER * bucket_width :
+				   PG_INT64_MAX;
+	}
 	return continuous_agg_parse_max_interval_per_job(column_type,
 													 with_clause_options,
 													 bucket_width);

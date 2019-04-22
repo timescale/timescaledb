@@ -52,6 +52,8 @@ SELECT * FROM device_summary;
 (0 rows)
 
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
+--We alter max_interval_per_job too since we are not using background workers
+ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings (time column observation_time) (1546236000000000)
 INFO:  materializing continuous aggregate public.device_summary: new range up to 1546236000000000
@@ -79,7 +81,7 @@ view_name                  | device_summary
 view_owner                 | default_perm_user
 refresh_lag                | @ 2 hours
 refresh_interval           | @ 2 hours
-max_interval_per_job       | @ 106751991 days 4 hours 54.775807 secs
+max_interval_per_job       | @ 60 days
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_2
 view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS time_partition_col,          +
                            |     device_readings.device_id,                                                                              +
@@ -254,8 +256,9 @@ FROM
 GROUP BY bucket, device_id;
 NOTICE:  adding not-null constraint to column "time_partition_col"
 REFRESH MATERIALIZED VIEW device_summary;
-INFO:  new materialization range for public.device_readings (time column observation_time) (1546236000000000)
-INFO:  materializing continuous aggregate public.device_summary: new range up to 1546236000000000
+INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546236000000000)
+INFO:  new materialization range for public.device_readings (time column observation_time) (1543723200000000)
+INFO:  materializing continuous aggregate public.device_summary: new range up to 1543723200000000
 SELECT min(min_time)::timestamp FROM device_summary;
            min            
 --------------------------
