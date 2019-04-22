@@ -305,8 +305,15 @@ WHERE key != 'os_name_pretty';
  last_tuned_version
  postgresql_version
  related_extensions
+ num_continuous_aggs
  timescaledb_version
-(19 rows)
+(20 rows)
+
+SELECT json_object_field(get_telemetry_report()::json,'num_continuous_aggs');
+ json_object_field 
+-------------------
+ "0"
+(1 row)
 
 -- check telemetry picks up content from telemetry_metadata
 SELECT json_object_field(get_telemetry_report()::json,'db_metadata');
@@ -320,5 +327,36 @@ SELECT json_object_field(get_telemetry_report()::json,'instance_metadata');
  json_object_field 
 -------------------
  {"cloud": "ci"}
+(1 row)
+
+--create a continuous agg
+CREATE TABLE device_readings (
+      observation_time  TIMESTAMPTZ       NOT NULL
+);
+SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
+   table_name    
+-----------------
+ device_readings
+(1 row)
+
+CREATE VIEW device_summary
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', observation_time) as bucket,
+  min(observation_time)
+FROM
+  device_readings
+GROUP BY bucket;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT json_object_field(get_telemetry_report()::json,'num_continuous_aggs');
+ json_object_field 
+-------------------
+ "1"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report()::json,'num_hypertables');
+ json_object_field 
+-------------------
+ "2"
 (1 row)
 
