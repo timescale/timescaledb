@@ -595,3 +595,14 @@ ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, ch
 	}
 	return;
 }
+
+TSDLLEXPORT int32
+ts_number_of_continuous_aggs()
+{
+	int32 count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator) { count++; }
+
+	return count;
+}
