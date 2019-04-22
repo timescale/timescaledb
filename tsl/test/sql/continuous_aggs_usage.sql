@@ -45,6 +45,8 @@ SELECT ts, 'device_2', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01
 SELECT * FROM device_summary;
 
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
+--We alter max_interval_per_job too since we are not using background workers
+ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
 REFRESH MATERIALIZED VIEW device_summary;
 
 --Now you can run selects over your view as normal
