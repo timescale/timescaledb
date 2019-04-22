@@ -409,10 +409,9 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *re
 
 	/*
 	 * only do this optimization for hypertables with 1 dimension and queries
-	 * with an ORDER BY and LIMIT clause
+	 * with an ORDER BY clause
 	 */
-	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL ||
-		root->limit_tuples == -1.0)
+	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL)
 		return false;
 
 	return ts_ordered_append_should_optimize(root, rel, ht, reverse);

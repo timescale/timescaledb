@@ -254,12 +254,11 @@ FROM ordered_append
 ORDER BY time ASC;
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_1_1_chunk."time"
+ Append
    ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk
    ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk
    ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk
-(5 rows)
+(4 rows)
 
 -- queries without ORDER BY shouldnt use ordered append (still uses append though)
 :PREFIX SELECT

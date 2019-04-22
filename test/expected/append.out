@@ -188,11 +188,10 @@ psql:include/append_query.sql:33: NOTICE:  Immutable function now_i() called!
  Custom Scan (ConstraintAwareAppend)
    Hypertable: append_test
    Chunks left after exclusion: 1
-   ->  Merge Append
-         Sort Key: _hyper_1_3_chunk."time"
+   ->  Append
          ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                Index Cond: ("time" > ('Tue Aug 22 10:00:00 2017 PDT'::timestamp with time zone - '@ 2 mons'::interval))
-(7 rows)
+(6 rows)
 
 -- currently, we cannot distinguish between stable and volatile
 -- functions as far as applying our modified plan. However, volatile
@@ -206,15 +205,14 @@ ORDER BY time;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: append_test
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_1_1_chunk."time"
+   ->  Append
          ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
          ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
          ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-(11 rows)
+(10 rows)
 
 -- prepared statement output should be the same regardless of
 -- optimizations
@@ -233,11 +231,10 @@ psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
  Custom Scan (ConstraintAwareAppend)
    Hypertable: append_test
    Chunks left after exclusion: 1
-   ->  Merge Append
-         Sort Key: _hyper_1_3_chunk."time"
+   ->  Append
          ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-(7 rows)
+(6 rows)
 
 DEALLOCATE query_opt;
 -- aggregates should produce same output
@@ -298,11 +295,10 @@ EXECUTE query_param(now_s() - interval '2 months');
 psql:include/append_query.sql:78: NOTICE:  Stable function now_s() called!
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_1_3_chunk."time"
+ Append
    ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
          Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
-(4 rows)
+(3 rows)
 
 DEALLOCATE query_param;
 --test with cte
@@ -441,28 +437,26 @@ reset enable_material;
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
+ Append
+   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
+         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
          Index Cond: ("time" > '01-15-2000'::date)
-   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
-         Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
+ Append
+   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz ORDER BY time;
                                                QUERY PLAN                                                
@@ -470,43 +464,40 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_date
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_3_9_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(11 rows)
+(10 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::date < time ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
+ Append
+   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
+         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
          Index Cond: ("time" > '01-15-2000'::date)
-   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
-         Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamp < time ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
+ Append
+   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-   ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamptz < time ORDER BY time;
                                                QUERY PLAN                                                
@@ -514,39 +505,36 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_date
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_3_9_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(11 rows)
+(10 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
-   ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
-         Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
+ Append
    ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(6 rows)
+   ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
+         Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
+(5 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
                                                                            QUERY PLAN                                                                            
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_3_10_chunk."time"
-   ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
-         Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
+ Append
    ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(6 rows)
+   ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
+         Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
+(5 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
                                                                                QUERY PLAN                                                                                
@@ -554,41 +542,38 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_date
    Chunks left after exclusion: 2
-   ->  Merge Append
-         Sort Key: _hyper_3_9_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(9 rows)
+(8 rows)
 
 -- test constraint_exclusion with timestamp time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz ORDER BY time;
                                                   QUERY PLAN                                                  
@@ -596,43 +581,40 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamp
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_4_14_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(11 rows)
+(10 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::date < time ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamp < time ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamptz < time ORDER BY time;
                                                   QUERY PLAN                                                  
@@ -640,39 +622,36 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamp
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_4_14_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(11 rows)
+(10 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(6 rows)
+(5 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
                                                                            QUERY PLAN                                                                            
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_4_14_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
    ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(6 rows)
+(5 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
                                                                                QUERY PLAN                                                                                
@@ -680,13 +659,12 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamp
    Chunks left after exclusion: 2
-   ->  Merge Append
-         Sort Key: _hyper_4_14_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(9 rows)
+(8 rows)
 
 -- test constraint_exclusion with timestamptz time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
@@ -696,15 +674,14 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: ("time" > '01-15-2000'::date)
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: ("time" > '01-15-2000'::date)
          ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
                Index Cond: ("time" > '01-15-2000'::date)
-(11 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
                                                    QUERY PLAN                                                   
@@ -712,28 +689,26 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(11 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_5_19_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-   ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(8 rows)
+   ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
+(7 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
@@ -743,15 +718,14 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: ("time" > '01-15-2000'::date)
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: ("time" > '01-15-2000'::date)
          ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
                Index Cond: ("time" > '01-15-2000'::date)
-(11 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
                                                    QUERY PLAN                                                   
@@ -759,28 +733,26 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 3
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
                Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(11 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_5_19_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-   ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(8 rows)
+   ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
+(7 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
@@ -790,13 +762,12 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 2
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(9 rows)
+(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
                                                                               QUERY PLAN                                                                               
@@ -804,24 +775,22 @@ reset enable_material;
  Custom Scan (ConstraintAwareAppend)
    Hypertable: metrics_timestamptz
    Chunks left after exclusion: 2
-   ->  Merge Append
-         Sort Key: _hyper_5_19_chunk."time"
+   ->  Append
          ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
          ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
                Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(9 rows)
+(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
                                                                             QUERY PLAN                                                                             
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_5_19_chunk."time"
+ Append
    ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(6 rows)
+(5 rows)
 
 -- test CURRENT_DATE
 -- should be 0 chunks
