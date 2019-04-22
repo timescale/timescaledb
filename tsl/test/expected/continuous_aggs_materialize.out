@@ -1269,12 +1269,12 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
 
 SELECT view_name, refresh_lag, max_interval_per_job
     FROM timescaledb_information.continuous_aggregates ORDER BY 1;
-       view_name        |  refresh_lag  |          max_interval_per_job           
-------------------------+---------------+-----------------------------------------
+       view_name        |  refresh_lag  | max_interval_per_job 
+------------------------+---------------+----------------------
  max_mat_view           | -2            | 4
  max_mat_view_t         | @ 2 hours ago | @ 4 hours
- max_mat_view_timestamp | @ 2 hours ago | @ 106751991 days 4 hours 54.775807 secs
- max_mat_view_date      | @ 7 days ago  | @ 106751991 days 4 hours 54.775807 secs
+ max_mat_view_timestamp | @ 2 hours ago | @ 1 day 16 hours
+ max_mat_view_date      | @ 7 days ago  | @ 140 days
 (4 rows)
 
 SET SESSION timezone TO 'EST';
@@ -1290,11 +1290,11 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
 
 SELECT view_name, refresh_lag, max_interval_per_job
     FROM timescaledb_information.continuous_aggregates ORDER BY 1;
-       view_name        |  refresh_lag  |          max_interval_per_job           
-------------------------+---------------+-----------------------------------------
+       view_name        |  refresh_lag  | max_interval_per_job 
+------------------------+---------------+----------------------
  max_mat_view           | -2            | 4
  max_mat_view_t         | @ 2 hours ago | @ 4 hours
- max_mat_view_timestamp | @ 2 hours ago | @ 106751991 days 4 hours 54.775807 secs
- max_mat_view_date      | @ 7 days ago  | @ 106751991 days 4 hours 54.775807 secs
+ max_mat_view_timestamp | @ 2 hours ago | @ 1 day 16 hours
+ max_mat_view_date      | @ 7 days ago  | @ 140 days
 (4 rows)
 

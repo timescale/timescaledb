@@ -657,8 +657,9 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 REFRESH MATERIALIZED VIEW mat_drop_test;
-INFO:  new materialization range for public.conditions (time column timec) (1546041600000000)
-INFO:  materializing continuous aggregate public.mat_drop_test: new range up to 1546041600000000
+INFO:  new materialization range for public.conditions larger than allowed in one run, truncating (time column timec) (1546041600000000)
+INFO:  new materialization range for public.conditions (time column timec) (1542758400000000)
+INFO:  materializing continuous aggregate public.mat_drop_test: new range up to 1542758400000000
 --force invalidation
 insert into conditions
 select generate_series('2017-11-01 00:00'::timestamp, '2017-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
