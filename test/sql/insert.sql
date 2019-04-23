@@ -36,20 +36,6 @@ SELECT create_hypertable ('tick_character', 'time', 'symbol', 2);
 INSERT INTO tick_character ( symbol, mid, spread, time ) VALUES ( 'GBPJPY', 142.639000, 5.80, 'Mon Mar 20 09:18:22.3 2017') RETURNING time, symbol, mid;
 SELECT * FROM tick_character;
 
-
-CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
-SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
---NOTE: how much slower the first two queries are -- they are creating chunks
-INSERT INTO many_partitions_test
-    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(1,100) ser;
-INSERT INTO many_partitions_test
-    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(101,200) ser;
-INSERT INTO many_partitions_test
-    SELECT to_timestamp(ser), ser, (ser-201)::text FROM generate_series(201,300) ser;
-
-SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;
-SELECT count(*) FROM  many_partitions_test;
-
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
 SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
 INSERT INTO date_col_test
@@ -57,20 +43,6 @@ VALUES ('2001-02-01', 98, 'dev1'),
 ('2001-03-02', 98, 'dev1');
 
 SELECT * FROM date_col_test WHERE time > '2001-01-01';
-
-CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
-SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
-
-EXPLAIN (verbose on, costs off)
-INSERT INTO many_partitions_test_1m(time, temp, device)
-SELECT time_bucket('1 minute', time) AS period, avg(temp), device
-FROM many_partitions_test
-GROUP BY period, device;
-
-INSERT INTO many_partitions_test_1m(time, temp, device)
-SELECT time_bucket('1 minute', time) AS period, avg(temp), device
-FROM many_partitions_test
-GROUP BY period, device;
 
 -- Out-of-order insertion regression test.
 -- this used to trip an assert in subspace_store.c checking that
@@ -81,11 +53,6 @@ CREATE TABLE chunk_assert_fail(i bigint, j bigint);
 SELECT create_hypertable('chunk_assert_fail', 'i', 'j', 1000, chunk_time_interval=>1);
 insert into chunk_assert_fail values (1, 1), (1, 2), (2,1);
 select * from chunk_assert_fail;
-
-set timescaledb.max_open_chunks_per_insert=default;
-
-
-SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
 
 CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('one_space_test', 'time', 'device', 1);
@@ -107,3 +74,47 @@ WITH insert_cte as (
 		('2001-01-01 01:03:01', 1.0, 'device')
 	)
 SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
+
+-- INSERTs can exclude chunks based on constraints
+EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
+EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
+EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
+EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+
+EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+
+CREATE TABLE timestamp_inf(time TIMESTAMP);
+SELECT create_hypertable('timestamp_inf', 'time');
+
+INSERT INTO timestamp_inf VALUES ('2018/01/02'), ('2019/01/02');
+
+EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+    WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+    WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+    WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+    WHERE time > '-infinity' LIMIT 1;
+
+CREATE TABLE date_inf(time DATE);
+SELECT create_hypertable('date_inf', 'time');
+
+INSERT INTO date_inf VALUES ('2018/01/02'), ('2019/01/02');
+
+EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+    WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+    WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+    WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+    WHERE time > '-infinity' LIMIT 1;
