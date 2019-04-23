@@ -3598,8 +3598,6 @@ EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append
-                     ->  Seq Scan on t1 t1_1
-                           Filter: ((a % 2) = 0)
                      ->  Seq Scan on _hyper_15_66_chunk
                            Filter: ((a % 2) = 0)
                      ->  Seq Scan on _hyper_15_67_chunk
@@ -3622,7 +3620,7 @@ EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                            Filter: ((a % 2) = 0)
                      ->  Seq Scan on _hyper_15_76_chunk
                            Filter: ((a % 2) = 0)
-(28 rows)
+(26 rows)
 
 SELECT * FROM t2;
  a  |                b                 

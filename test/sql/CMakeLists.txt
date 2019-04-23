@@ -127,6 +127,7 @@ set(TEST_TEMPLATES
   #some error messages changed in PG11 from "relation" to "table" so alternate_users has different output
   agg_bookends_optimized.sql.in
   alternate_users.sql.in
+  insert_many.sql.in
   parallel.sql.in
   partitioning.sql.in
   plan_expand_hypertable.sql.in

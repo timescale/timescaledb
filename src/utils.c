@@ -182,6 +182,80 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 	}
 }
 
+int64
+ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
+									  TimevalInfinity *is_infinite_out)
+{
+	switch (type_oid)
+	{
+		case TIMESTAMPOID:
+		{
+			Timestamp ts = DatumGetTimestamp(time_val);
+			if (TIMESTAMP_NOT_FINITE(ts))
+			{
+				if (TIMESTAMP_IS_NOBEGIN(ts))
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalNegInfinity;
+					return PG_INT64_MIN;
+				}
+				else
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalPosInfinity;
+					return PG_INT64_MAX;
+				}
+			}
+
+			return ts_time_value_to_internal(time_val, type_oid);
+		}
+		case TIMESTAMPTZOID:
+		{
+			TimestampTz ts = DatumGetTimestampTz(time_val);
+			if (TIMESTAMP_NOT_FINITE(ts))
+			{
+				if (TIMESTAMP_IS_NOBEGIN(ts))
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalNegInfinity;
+					return PG_INT64_MIN;
+				}
+				else
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalPosInfinity;
+					return PG_INT64_MAX;
+				}
+			}
+
+			return ts_time_value_to_internal(time_val, type_oid);
+		}
+		case DATEOID:
+		{
+			DateADT d = DatumGetTimestamp(time_val);
+			if (DATE_NOT_FINITE(d))
+			{
+				if (DATE_IS_NOBEGIN(d))
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalNegInfinity;
+					return PG_INT64_MIN;
+				}
+				else
+				{
+					if (is_infinite_out != NULL)
+						*is_infinite_out = TimevalPosInfinity;
+					return PG_INT64_MAX;
+				}
+			}
+
+			return ts_time_value_to_internal(time_val, type_oid);
+		}
+	}
+
+	return ts_time_value_to_internal(time_val, type_oid);
+}
+
 TS_FUNCTION_INFO_V1(ts_time_to_internal);
 Datum
 ts_time_to_internal(PG_FUNCTION_ARGS)
