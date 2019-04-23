@@ -1,0 +1,433 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
+NOTICE:  adding not-null constraint to column "time"
+         create_hypertable         
+-----------------------------------
+ (1,public,many_partitions_test,t)
+(1 row)
+
+--NOTE: how much slower the first two queries are -- they are creating chunks
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(1,100) ser;
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(101,200) ser;
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, (ser-201)::text FROM generate_series(201,300) ser;
+SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;
+           time           | temp | device 
+--------------------------+------+--------
+ Wed Dec 31 16:05:00 1969 |  300 | 99
+ Wed Dec 31 16:04:59 1969 |  299 | 98
+(2 rows)
+
+SELECT count(*) FROM  many_partitions_test;
+ count 
+-------
+   300
+(1 row)
+
+CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable           
+--------------------------------------
+ (2,public,many_partitions_test_1m,t)
+(1 row)
+
+EXPLAIN (verbose on, costs off)
+INSERT INTO many_partitions_test_1m(time, temp, device)
+SELECT time_bucket('1 minute', time) AS period, avg(temp), device
+FROM many_partitions_test
+GROUP BY period, device;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+   ->  Insert on public.many_partitions_test_1m
+         ->  Custom Scan (ChunkDispatch)
+               Output: "*SELECT*".period, "*SELECT*".avg, "*SELECT*".device
+               ->  HashAggregate
+                     Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")), avg(_hyper_1_1_chunk.temp), _hyper_1_1_chunk.device
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+                     ->  Result
+                           Output: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+                           ->  Append
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                       Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.temp, _hyper_1_1_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.temp, _hyper_1_2_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                                       Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.temp, _hyper_1_3_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                                       Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.temp, _hyper_1_4_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk
+                                       Output: _hyper_1_5_chunk."time", _hyper_1_5_chunk.temp, _hyper_1_5_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk
+                                       Output: _hyper_1_6_chunk."time", _hyper_1_6_chunk.temp, _hyper_1_6_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk
+                                       Output: _hyper_1_7_chunk."time", _hyper_1_7_chunk.temp, _hyper_1_7_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk
+                                       Output: _hyper_1_8_chunk."time", _hyper_1_8_chunk.temp, _hyper_1_8_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_9_chunk
+                                       Output: _hyper_1_9_chunk."time", _hyper_1_9_chunk.temp, _hyper_1_9_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
+                                       Output: _hyper_1_10_chunk."time", _hyper_1_10_chunk.temp, _hyper_1_10_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_11_chunk
+                                       Output: _hyper_1_11_chunk."time", _hyper_1_11_chunk.temp, _hyper_1_11_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_12_chunk
+                                       Output: _hyper_1_12_chunk."time", _hyper_1_12_chunk.temp, _hyper_1_12_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_13_chunk
+                                       Output: _hyper_1_13_chunk."time", _hyper_1_13_chunk.temp, _hyper_1_13_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_14_chunk
+                                       Output: _hyper_1_14_chunk."time", _hyper_1_14_chunk.temp, _hyper_1_14_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_15_chunk
+                                       Output: _hyper_1_15_chunk."time", _hyper_1_15_chunk.temp, _hyper_1_15_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_16_chunk
+                                       Output: _hyper_1_16_chunk."time", _hyper_1_16_chunk.temp, _hyper_1_16_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_17_chunk
+                                       Output: _hyper_1_17_chunk."time", _hyper_1_17_chunk.temp, _hyper_1_17_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_18_chunk
+                                       Output: _hyper_1_18_chunk."time", _hyper_1_18_chunk.temp, _hyper_1_18_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_19_chunk
+                                       Output: _hyper_1_19_chunk."time", _hyper_1_19_chunk.temp, _hyper_1_19_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_20_chunk
+                                       Output: _hyper_1_20_chunk."time", _hyper_1_20_chunk.temp, _hyper_1_20_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_21_chunk
+                                       Output: _hyper_1_21_chunk."time", _hyper_1_21_chunk.temp, _hyper_1_21_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_22_chunk
+                                       Output: _hyper_1_22_chunk."time", _hyper_1_22_chunk.temp, _hyper_1_22_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_23_chunk
+                                       Output: _hyper_1_23_chunk."time", _hyper_1_23_chunk.temp, _hyper_1_23_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_24_chunk
+                                       Output: _hyper_1_24_chunk."time", _hyper_1_24_chunk.temp, _hyper_1_24_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_25_chunk
+                                       Output: _hyper_1_25_chunk."time", _hyper_1_25_chunk.temp, _hyper_1_25_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_26_chunk
+                                       Output: _hyper_1_26_chunk."time", _hyper_1_26_chunk.temp, _hyper_1_26_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_27_chunk
+                                       Output: _hyper_1_27_chunk."time", _hyper_1_27_chunk.temp, _hyper_1_27_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_28_chunk
+                                       Output: _hyper_1_28_chunk."time", _hyper_1_28_chunk.temp, _hyper_1_28_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_29_chunk
+                                       Output: _hyper_1_29_chunk."time", _hyper_1_29_chunk.temp, _hyper_1_29_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_30_chunk
+                                       Output: _hyper_1_30_chunk."time", _hyper_1_30_chunk.temp, _hyper_1_30_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_31_chunk
+                                       Output: _hyper_1_31_chunk."time", _hyper_1_31_chunk.temp, _hyper_1_31_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_32_chunk
+                                       Output: _hyper_1_32_chunk."time", _hyper_1_32_chunk.temp, _hyper_1_32_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_33_chunk
+                                       Output: _hyper_1_33_chunk."time", _hyper_1_33_chunk.temp, _hyper_1_33_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_34_chunk
+                                       Output: _hyper_1_34_chunk."time", _hyper_1_34_chunk.temp, _hyper_1_34_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_35_chunk
+                                       Output: _hyper_1_35_chunk."time", _hyper_1_35_chunk.temp, _hyper_1_35_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_36_chunk
+                                       Output: _hyper_1_36_chunk."time", _hyper_1_36_chunk.temp, _hyper_1_36_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_37_chunk
+                                       Output: _hyper_1_37_chunk."time", _hyper_1_37_chunk.temp, _hyper_1_37_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_38_chunk
+                                       Output: _hyper_1_38_chunk."time", _hyper_1_38_chunk.temp, _hyper_1_38_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_39_chunk
+                                       Output: _hyper_1_39_chunk."time", _hyper_1_39_chunk.temp, _hyper_1_39_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_40_chunk
+                                       Output: _hyper_1_40_chunk."time", _hyper_1_40_chunk.temp, _hyper_1_40_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_41_chunk
+                                       Output: _hyper_1_41_chunk."time", _hyper_1_41_chunk.temp, _hyper_1_41_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_42_chunk
+                                       Output: _hyper_1_42_chunk."time", _hyper_1_42_chunk.temp, _hyper_1_42_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_43_chunk
+                                       Output: _hyper_1_43_chunk."time", _hyper_1_43_chunk.temp, _hyper_1_43_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_44_chunk
+                                       Output: _hyper_1_44_chunk."time", _hyper_1_44_chunk.temp, _hyper_1_44_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_45_chunk
+                                       Output: _hyper_1_45_chunk."time", _hyper_1_45_chunk.temp, _hyper_1_45_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_46_chunk
+                                       Output: _hyper_1_46_chunk."time", _hyper_1_46_chunk.temp, _hyper_1_46_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_47_chunk
+                                       Output: _hyper_1_47_chunk."time", _hyper_1_47_chunk.temp, _hyper_1_47_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_48_chunk
+                                       Output: _hyper_1_48_chunk."time", _hyper_1_48_chunk.temp, _hyper_1_48_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_49_chunk
+                                       Output: _hyper_1_49_chunk."time", _hyper_1_49_chunk.temp, _hyper_1_49_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_50_chunk
+                                       Output: _hyper_1_50_chunk."time", _hyper_1_50_chunk.temp, _hyper_1_50_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_51_chunk
+                                       Output: _hyper_1_51_chunk."time", _hyper_1_51_chunk.temp, _hyper_1_51_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_52_chunk
+                                       Output: _hyper_1_52_chunk."time", _hyper_1_52_chunk.temp, _hyper_1_52_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_53_chunk
+                                       Output: _hyper_1_53_chunk."time", _hyper_1_53_chunk.temp, _hyper_1_53_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_54_chunk
+                                       Output: _hyper_1_54_chunk."time", _hyper_1_54_chunk.temp, _hyper_1_54_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_55_chunk
+                                       Output: _hyper_1_55_chunk."time", _hyper_1_55_chunk.temp, _hyper_1_55_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_56_chunk
+                                       Output: _hyper_1_56_chunk."time", _hyper_1_56_chunk.temp, _hyper_1_56_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_57_chunk
+                                       Output: _hyper_1_57_chunk."time", _hyper_1_57_chunk.temp, _hyper_1_57_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_58_chunk
+                                       Output: _hyper_1_58_chunk."time", _hyper_1_58_chunk.temp, _hyper_1_58_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_59_chunk
+                                       Output: _hyper_1_59_chunk."time", _hyper_1_59_chunk.temp, _hyper_1_59_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_60_chunk
+                                       Output: _hyper_1_60_chunk."time", _hyper_1_60_chunk.temp, _hyper_1_60_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_61_chunk
+                                       Output: _hyper_1_61_chunk."time", _hyper_1_61_chunk.temp, _hyper_1_61_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_62_chunk
+                                       Output: _hyper_1_62_chunk."time", _hyper_1_62_chunk.temp, _hyper_1_62_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_63_chunk
+                                       Output: _hyper_1_63_chunk."time", _hyper_1_63_chunk.temp, _hyper_1_63_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_64_chunk
+                                       Output: _hyper_1_64_chunk."time", _hyper_1_64_chunk.temp, _hyper_1_64_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_65_chunk
+                                       Output: _hyper_1_65_chunk."time", _hyper_1_65_chunk.temp, _hyper_1_65_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_66_chunk
+                                       Output: _hyper_1_66_chunk."time", _hyper_1_66_chunk.temp, _hyper_1_66_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_67_chunk
+                                       Output: _hyper_1_67_chunk."time", _hyper_1_67_chunk.temp, _hyper_1_67_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_68_chunk
+                                       Output: _hyper_1_68_chunk."time", _hyper_1_68_chunk.temp, _hyper_1_68_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_69_chunk
+                                       Output: _hyper_1_69_chunk."time", _hyper_1_69_chunk.temp, _hyper_1_69_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_70_chunk
+                                       Output: _hyper_1_70_chunk."time", _hyper_1_70_chunk.temp, _hyper_1_70_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_71_chunk
+                                       Output: _hyper_1_71_chunk."time", _hyper_1_71_chunk.temp, _hyper_1_71_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_72_chunk
+                                       Output: _hyper_1_72_chunk."time", _hyper_1_72_chunk.temp, _hyper_1_72_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_73_chunk
+                                       Output: _hyper_1_73_chunk."time", _hyper_1_73_chunk.temp, _hyper_1_73_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_74_chunk
+                                       Output: _hyper_1_74_chunk."time", _hyper_1_74_chunk.temp, _hyper_1_74_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_75_chunk
+                                       Output: _hyper_1_75_chunk."time", _hyper_1_75_chunk.temp, _hyper_1_75_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_76_chunk
+                                       Output: _hyper_1_76_chunk."time", _hyper_1_76_chunk.temp, _hyper_1_76_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_77_chunk
+                                       Output: _hyper_1_77_chunk."time", _hyper_1_77_chunk.temp, _hyper_1_77_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_78_chunk
+                                       Output: _hyper_1_78_chunk."time", _hyper_1_78_chunk.temp, _hyper_1_78_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_79_chunk
+                                       Output: _hyper_1_79_chunk."time", _hyper_1_79_chunk.temp, _hyper_1_79_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_80_chunk
+                                       Output: _hyper_1_80_chunk."time", _hyper_1_80_chunk.temp, _hyper_1_80_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_81_chunk
+                                       Output: _hyper_1_81_chunk."time", _hyper_1_81_chunk.temp, _hyper_1_81_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_82_chunk
+                                       Output: _hyper_1_82_chunk."time", _hyper_1_82_chunk.temp, _hyper_1_82_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_83_chunk
+                                       Output: _hyper_1_83_chunk."time", _hyper_1_83_chunk.temp, _hyper_1_83_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_84_chunk
+                                       Output: _hyper_1_84_chunk."time", _hyper_1_84_chunk.temp, _hyper_1_84_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_85_chunk
+                                       Output: _hyper_1_85_chunk."time", _hyper_1_85_chunk.temp, _hyper_1_85_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_86_chunk
+                                       Output: _hyper_1_86_chunk."time", _hyper_1_86_chunk.temp, _hyper_1_86_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_87_chunk
+                                       Output: _hyper_1_87_chunk."time", _hyper_1_87_chunk.temp, _hyper_1_87_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_88_chunk
+                                       Output: _hyper_1_88_chunk."time", _hyper_1_88_chunk.temp, _hyper_1_88_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_89_chunk
+                                       Output: _hyper_1_89_chunk."time", _hyper_1_89_chunk.temp, _hyper_1_89_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_90_chunk
+                                       Output: _hyper_1_90_chunk."time", _hyper_1_90_chunk.temp, _hyper_1_90_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_91_chunk
+                                       Output: _hyper_1_91_chunk."time", _hyper_1_91_chunk.temp, _hyper_1_91_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_92_chunk
+                                       Output: _hyper_1_92_chunk."time", _hyper_1_92_chunk.temp, _hyper_1_92_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_93_chunk
+                                       Output: _hyper_1_93_chunk."time", _hyper_1_93_chunk.temp, _hyper_1_93_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_94_chunk
+                                       Output: _hyper_1_94_chunk."time", _hyper_1_94_chunk.temp, _hyper_1_94_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_95_chunk
+                                       Output: _hyper_1_95_chunk."time", _hyper_1_95_chunk.temp, _hyper_1_95_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_96_chunk
+                                       Output: _hyper_1_96_chunk."time", _hyper_1_96_chunk.temp, _hyper_1_96_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_97_chunk
+                                       Output: _hyper_1_97_chunk."time", _hyper_1_97_chunk.temp, _hyper_1_97_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_98_chunk
+                                       Output: _hyper_1_98_chunk."time", _hyper_1_98_chunk.temp, _hyper_1_98_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_99_chunk
+                                       Output: _hyper_1_99_chunk."time", _hyper_1_99_chunk.temp, _hyper_1_99_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_100_chunk
+                                       Output: _hyper_1_100_chunk."time", _hyper_1_100_chunk.temp, _hyper_1_100_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_101_chunk
+                                       Output: _hyper_1_101_chunk."time", _hyper_1_101_chunk.temp, _hyper_1_101_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_102_chunk
+                                       Output: _hyper_1_102_chunk."time", _hyper_1_102_chunk.temp, _hyper_1_102_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_103_chunk
+                                       Output: _hyper_1_103_chunk."time", _hyper_1_103_chunk.temp, _hyper_1_103_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_104_chunk
+                                       Output: _hyper_1_104_chunk."time", _hyper_1_104_chunk.temp, _hyper_1_104_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_105_chunk
+                                       Output: _hyper_1_105_chunk."time", _hyper_1_105_chunk.temp, _hyper_1_105_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_106_chunk
+                                       Output: _hyper_1_106_chunk."time", _hyper_1_106_chunk.temp, _hyper_1_106_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_107_chunk
+                                       Output: _hyper_1_107_chunk."time", _hyper_1_107_chunk.temp, _hyper_1_107_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_108_chunk
+                                       Output: _hyper_1_108_chunk."time", _hyper_1_108_chunk.temp, _hyper_1_108_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_109_chunk
+                                       Output: _hyper_1_109_chunk."time", _hyper_1_109_chunk.temp, _hyper_1_109_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_110_chunk
+                                       Output: _hyper_1_110_chunk."time", _hyper_1_110_chunk.temp, _hyper_1_110_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_111_chunk
+                                       Output: _hyper_1_111_chunk."time", _hyper_1_111_chunk.temp, _hyper_1_111_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_112_chunk
+                                       Output: _hyper_1_112_chunk."time", _hyper_1_112_chunk.temp, _hyper_1_112_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_113_chunk
+                                       Output: _hyper_1_113_chunk."time", _hyper_1_113_chunk.temp, _hyper_1_113_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_114_chunk
+                                       Output: _hyper_1_114_chunk."time", _hyper_1_114_chunk.temp, _hyper_1_114_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_115_chunk
+                                       Output: _hyper_1_115_chunk."time", _hyper_1_115_chunk.temp, _hyper_1_115_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_116_chunk
+                                       Output: _hyper_1_116_chunk."time", _hyper_1_116_chunk.temp, _hyper_1_116_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_117_chunk
+                                       Output: _hyper_1_117_chunk."time", _hyper_1_117_chunk.temp, _hyper_1_117_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_118_chunk
+                                       Output: _hyper_1_118_chunk."time", _hyper_1_118_chunk.temp, _hyper_1_118_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_119_chunk
+                                       Output: _hyper_1_119_chunk."time", _hyper_1_119_chunk.temp, _hyper_1_119_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_120_chunk
+                                       Output: _hyper_1_120_chunk."time", _hyper_1_120_chunk.temp, _hyper_1_120_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_121_chunk
+                                       Output: _hyper_1_121_chunk."time", _hyper_1_121_chunk.temp, _hyper_1_121_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_122_chunk
+                                       Output: _hyper_1_122_chunk."time", _hyper_1_122_chunk.temp, _hyper_1_122_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_123_chunk
+                                       Output: _hyper_1_123_chunk."time", _hyper_1_123_chunk.temp, _hyper_1_123_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_124_chunk
+                                       Output: _hyper_1_124_chunk."time", _hyper_1_124_chunk.temp, _hyper_1_124_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_125_chunk
+                                       Output: _hyper_1_125_chunk."time", _hyper_1_125_chunk.temp, _hyper_1_125_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_126_chunk
+                                       Output: _hyper_1_126_chunk."time", _hyper_1_126_chunk.temp, _hyper_1_126_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_127_chunk
+                                       Output: _hyper_1_127_chunk."time", _hyper_1_127_chunk.temp, _hyper_1_127_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_128_chunk
+                                       Output: _hyper_1_128_chunk."time", _hyper_1_128_chunk.temp, _hyper_1_128_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_129_chunk
+                                       Output: _hyper_1_129_chunk."time", _hyper_1_129_chunk.temp, _hyper_1_129_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_130_chunk
+                                       Output: _hyper_1_130_chunk."time", _hyper_1_130_chunk.temp, _hyper_1_130_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_131_chunk
+                                       Output: _hyper_1_131_chunk."time", _hyper_1_131_chunk.temp, _hyper_1_131_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_132_chunk
+                                       Output: _hyper_1_132_chunk."time", _hyper_1_132_chunk.temp, _hyper_1_132_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_133_chunk
+                                       Output: _hyper_1_133_chunk."time", _hyper_1_133_chunk.temp, _hyper_1_133_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_134_chunk
+                                       Output: _hyper_1_134_chunk."time", _hyper_1_134_chunk.temp, _hyper_1_134_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_135_chunk
+                                       Output: _hyper_1_135_chunk."time", _hyper_1_135_chunk.temp, _hyper_1_135_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_136_chunk
+                                       Output: _hyper_1_136_chunk."time", _hyper_1_136_chunk.temp, _hyper_1_136_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_137_chunk
+                                       Output: _hyper_1_137_chunk."time", _hyper_1_137_chunk.temp, _hyper_1_137_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_138_chunk
+                                       Output: _hyper_1_138_chunk."time", _hyper_1_138_chunk.temp, _hyper_1_138_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_139_chunk
+                                       Output: _hyper_1_139_chunk."time", _hyper_1_139_chunk.temp, _hyper_1_139_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_140_chunk
+                                       Output: _hyper_1_140_chunk."time", _hyper_1_140_chunk.temp, _hyper_1_140_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_141_chunk
+                                       Output: _hyper_1_141_chunk."time", _hyper_1_141_chunk.temp, _hyper_1_141_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_142_chunk
+                                       Output: _hyper_1_142_chunk."time", _hyper_1_142_chunk.temp, _hyper_1_142_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_143_chunk
+                                       Output: _hyper_1_143_chunk."time", _hyper_1_143_chunk.temp, _hyper_1_143_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_144_chunk
+                                       Output: _hyper_1_144_chunk."time", _hyper_1_144_chunk.temp, _hyper_1_144_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_145_chunk
+                                       Output: _hyper_1_145_chunk."time", _hyper_1_145_chunk.temp, _hyper_1_145_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_146_chunk
+                                       Output: _hyper_1_146_chunk."time", _hyper_1_146_chunk.temp, _hyper_1_146_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_147_chunk
+                                       Output: _hyper_1_147_chunk."time", _hyper_1_147_chunk.temp, _hyper_1_147_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_148_chunk
+                                       Output: _hyper_1_148_chunk."time", _hyper_1_148_chunk.temp, _hyper_1_148_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_149_chunk
+                                       Output: _hyper_1_149_chunk."time", _hyper_1_149_chunk.temp, _hyper_1_149_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_150_chunk
+                                       Output: _hyper_1_150_chunk."time", _hyper_1_150_chunk.temp, _hyper_1_150_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_151_chunk
+                                       Output: _hyper_1_151_chunk."time", _hyper_1_151_chunk.temp, _hyper_1_151_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_152_chunk
+                                       Output: _hyper_1_152_chunk."time", _hyper_1_152_chunk.temp, _hyper_1_152_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_153_chunk
+                                       Output: _hyper_1_153_chunk."time", _hyper_1_153_chunk.temp, _hyper_1_153_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_154_chunk
+                                       Output: _hyper_1_154_chunk."time", _hyper_1_154_chunk.temp, _hyper_1_154_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_155_chunk
+                                       Output: _hyper_1_155_chunk."time", _hyper_1_155_chunk.temp, _hyper_1_155_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_156_chunk
+                                       Output: _hyper_1_156_chunk."time", _hyper_1_156_chunk.temp, _hyper_1_156_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_157_chunk
+                                       Output: _hyper_1_157_chunk."time", _hyper_1_157_chunk.temp, _hyper_1_157_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_158_chunk
+                                       Output: _hyper_1_158_chunk."time", _hyper_1_158_chunk.temp, _hyper_1_158_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_159_chunk
+                                       Output: _hyper_1_159_chunk."time", _hyper_1_159_chunk.temp, _hyper_1_159_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_160_chunk
+                                       Output: _hyper_1_160_chunk."time", _hyper_1_160_chunk.temp, _hyper_1_160_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_161_chunk
+                                       Output: _hyper_1_161_chunk."time", _hyper_1_161_chunk.temp, _hyper_1_161_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_162_chunk
+                                       Output: _hyper_1_162_chunk."time", _hyper_1_162_chunk.temp, _hyper_1_162_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_163_chunk
+                                       Output: _hyper_1_163_chunk."time", _hyper_1_163_chunk.temp, _hyper_1_163_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_164_chunk
+                                       Output: _hyper_1_164_chunk."time", _hyper_1_164_chunk.temp, _hyper_1_164_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_165_chunk
+                                       Output: _hyper_1_165_chunk."time", _hyper_1_165_chunk.temp, _hyper_1_165_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_166_chunk
+                                       Output: _hyper_1_166_chunk."time", _hyper_1_166_chunk.temp, _hyper_1_166_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_167_chunk
+                                       Output: _hyper_1_167_chunk."time", _hyper_1_167_chunk.temp, _hyper_1_167_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_168_chunk
+                                       Output: _hyper_1_168_chunk."time", _hyper_1_168_chunk.temp, _hyper_1_168_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_169_chunk
+                                       Output: _hyper_1_169_chunk."time", _hyper_1_169_chunk.temp, _hyper_1_169_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_170_chunk
+                                       Output: _hyper_1_170_chunk."time", _hyper_1_170_chunk.temp, _hyper_1_170_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_171_chunk
+                                       Output: _hyper_1_171_chunk."time", _hyper_1_171_chunk.temp, _hyper_1_171_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_172_chunk
+                                       Output: _hyper_1_172_chunk."time", _hyper_1_172_chunk.temp, _hyper_1_172_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_173_chunk
+                                       Output: _hyper_1_173_chunk."time", _hyper_1_173_chunk.temp, _hyper_1_173_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_174_chunk
+                                       Output: _hyper_1_174_chunk."time", _hyper_1_174_chunk.temp, _hyper_1_174_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_175_chunk
+                                       Output: _hyper_1_175_chunk."time", _hyper_1_175_chunk.temp, _hyper_1_175_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_176_chunk
+                                       Output: _hyper_1_176_chunk."time", _hyper_1_176_chunk.temp, _hyper_1_176_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_177_chunk
+                                       Output: _hyper_1_177_chunk."time", _hyper_1_177_chunk.temp, _hyper_1_177_chunk.device
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_178_chunk
+                                       Output: _hyper_1_178_chunk."time", _hyper_1_178_chunk.temp, _hyper_1_178_chunk.device
+(366 rows)
+
+INSERT INTO many_partitions_test_1m(time, temp, device)
+SELECT time_bucket('1 minute', time) AS period, avg(temp), device
+FROM many_partitions_test
+GROUP BY period, device;
+SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
+           time           | temp | device 
+--------------------------+------+--------
+ Wed Dec 31 16:00:00 1969 |    1 | 1
+ Wed Dec 31 16:00:00 1969 |   10 | 10
+ Wed Dec 31 16:00:00 1969 |   11 | 11
+ Wed Dec 31 16:00:00 1969 |   12 | 12
+ Wed Dec 31 16:00:00 1969 |   13 | 13
+ Wed Dec 31 16:00:00 1969 |   14 | 14
+ Wed Dec 31 16:00:00 1969 |   15 | 15
+ Wed Dec 31 16:00:00 1969 |   16 | 16
+ Wed Dec 31 16:00:00 1969 |   17 | 17
+ Wed Dec 31 16:00:00 1969 |   18 | 18
+(10 rows)
+

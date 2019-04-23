@@ -129,7 +129,8 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	ListCell *lc;
 
 	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations &&
-		ts_guc_enable_constraint_exclusion && parse->resultRelation == 0)
+		ts_guc_enable_constraint_exclusion &&
+		(parse->commandType == CMD_INSERT || parse->commandType == CMD_SELECT))
 	{
 		Cache *hc = ts_hypertable_cache_pin();
 
