@@ -264,11 +264,6 @@ CREATE VIEW test_t_mat_view
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
         GROUP BY 1;
---TODO this should be created as part of CREATE VIEW
-SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='continuous_agg_test_t' \gset
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON continuous_agg_test_t
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 
 SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        partial_view_schema, partial_view_name,
