@@ -146,6 +146,30 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE 10::bigint > time_bucket(10, time) ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time) ORDER BY time;
 
+-- test overflow behaviour of time_bucket exclusion
+SET client_min_messages TO error;
+:PREFIX SELECT * FROM hyper WHERE time > 950 AND time_bucket(10, time) < '9223372036854775807'::bigint ORDER BY time;
+
+-- test timestamp upper boundary
+-- this will error because even though the transformation results in a valid timestamp
+-- our supported range of values for time is smaller then postgres
+\set ON_ERROR_STOP 0
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
+\set ON_ERROR_STOP 1
+-- transformation would be out of range
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1000d',time) < '294276-01-01'::timestamp ORDER BY time;
+
+-- test timestamptz upper boundary
+-- this will error because even though the transformation results in a valid timestamp
+-- our supported range of values for time is smaller then postgres
+\set ON_ERROR_STOP 0
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+\set ON_ERROR_STOP 1
+-- transformation would be out of range
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
+
+RESET client_min_messages;
+
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(1, time) > 11 AND time_bucket(1, time) < 19 ORDER BY time;
