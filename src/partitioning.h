@@ -55,7 +55,7 @@ extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Dat
 
 /* NOTE: assume the tuple belongs to the root table, use ts_partitioning_func_apply for chunk tuples
  */
-extern Datum ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple,
-											  TupleDesc desc, bool *isnull);
+extern TSDLLEXPORT Datum ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple,
+														  TupleDesc desc, bool *isnull);
 
 #endif /* TIMESCALEDB_PARTITIONING_H */
