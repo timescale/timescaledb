@@ -978,6 +978,79 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time")))
 (9 rows)
 
+-- test overflow behaviour of time_bucket exclusion
+SET client_min_messages TO error;
+:PREFIX SELECT * FROM hyper WHERE time > 950 AND time_bucket(10, time) < '9223372036854775807'::bigint ORDER BY time;
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_96_chunk."time"
+   ->  Append
+         ->  Seq Scan on _hyper_1_96_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_97_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_98_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_99_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_100_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_101_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+         ->  Seq Scan on _hyper_1_102_chunk
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+(17 rows)
+
+-- test timestamp upper boundary
+-- this will error because even though the transformation results in a valid timestamp
+-- our supported range of values for time is smaller then postgres
+\set ON_ERROR_STOP 0
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
+psql:include/plan_expand_hypertable_query.sql:157: ERROR:  timestamp out of range
+\set ON_ERROR_STOP 1
+-- transformation would be out of range
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1000d',time) < '294276-01-01'::timestamp ORDER BY time;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
+(11 rows)
+
+-- test timestamptz upper boundary
+-- this will error because even though the transformation results in a valid timestamp
+-- our supported range of values for time is smaller then postgres
+\set ON_ERROR_STOP 0
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+psql:include/plan_expand_hypertable_query.sql:166: ERROR:  timestamp out of range
+\set ON_ERROR_STOP 1
+-- transformation would be out of range
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
+(11 rows)
+
+RESET client_min_messages;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1509,3 +1582,80 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:40: ERROR:  chunk id can't be NULL
 \set ECHO errors
+psql:include/plan_expand_hypertable_query.sql:157: ERROR:  timestamp out of range
+psql:include/plan_expand_hypertable_query.sql:157: STATEMENT:  SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
+psql:include/plan_expand_hypertable_query.sql:166: ERROR:  timestamp out of range
+psql:include/plan_expand_hypertable_query.sql:166: STATEMENT:  SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+682a683,754
+>            time           
+> --------------------------
+>  Sat Jan 01 00:00:00 2000
+>  Sun Jan 02 00:00:00 2000
+>  Mon Jan 03 00:00:00 2000
+>  Tue Jan 04 00:00:00 2000
+>  Wed Jan 05 00:00:00 2000
+>  Thu Jan 06 00:00:00 2000
+>  Fri Jan 07 00:00:00 2000
+>  Sat Jan 08 00:00:00 2000
+>  Sun Jan 09 00:00:00 2000
+>  Mon Jan 10 00:00:00 2000
+>  Tue Jan 11 00:00:00 2000
+>  Wed Jan 12 00:00:00 2000
+>  Thu Jan 13 00:00:00 2000
+>  Fri Jan 14 00:00:00 2000
+>  Sat Jan 15 00:00:00 2000
+>  Sun Jan 16 00:00:00 2000
+>  Mon Jan 17 00:00:00 2000
+>  Tue Jan 18 00:00:00 2000
+>  Wed Jan 19 00:00:00 2000
+>  Thu Jan 20 00:00:00 2000
+>  Fri Jan 21 00:00:00 2000
+>  Sat Jan 22 00:00:00 2000
+>  Sun Jan 23 00:00:00 2000
+>  Mon Jan 24 00:00:00 2000
+>  Tue Jan 25 00:00:00 2000
+>  Wed Jan 26 00:00:00 2000
+>  Thu Jan 27 00:00:00 2000
+>  Fri Jan 28 00:00:00 2000
+>  Sat Jan 29 00:00:00 2000
+>  Sun Jan 30 00:00:00 2000
+>  Mon Jan 31 00:00:00 2000
+>  Tue Feb 01 00:00:00 2000
+> (32 rows)
+> 
+>              time             
+> ------------------------------
+>  Sat Jan 01 00:00:00 2000 PST
+>  Sun Jan 02 00:00:00 2000 PST
+>  Mon Jan 03 00:00:00 2000 PST
+>  Tue Jan 04 00:00:00 2000 PST
+>  Wed Jan 05 00:00:00 2000 PST
+>  Thu Jan 06 00:00:00 2000 PST
+>  Fri Jan 07 00:00:00 2000 PST
+>  Sat Jan 08 00:00:00 2000 PST
+>  Sun Jan 09 00:00:00 2000 PST
+>  Mon Jan 10 00:00:00 2000 PST
+>  Tue Jan 11 00:00:00 2000 PST
+>  Wed Jan 12 00:00:00 2000 PST
+>  Thu Jan 13 00:00:00 2000 PST
+>  Fri Jan 14 00:00:00 2000 PST
+>  Sat Jan 15 00:00:00 2000 PST
+>  Sun Jan 16 00:00:00 2000 PST
+>  Mon Jan 17 00:00:00 2000 PST
+>  Tue Jan 18 00:00:00 2000 PST
+>  Wed Jan 19 00:00:00 2000 PST
+>  Thu Jan 20 00:00:00 2000 PST
+>  Fri Jan 21 00:00:00 2000 PST
+>  Sat Jan 22 00:00:00 2000 PST
+>  Sun Jan 23 00:00:00 2000 PST
+>  Mon Jan 24 00:00:00 2000 PST
+>  Tue Jan 25 00:00:00 2000 PST
+>  Wed Jan 26 00:00:00 2000 PST
+>  Thu Jan 27 00:00:00 2000 PST
+>  Fri Jan 28 00:00:00 2000 PST
+>  Sat Jan 29 00:00:00 2000 PST
+>  Sun Jan 30 00:00:00 2000 PST
+>  Mon Jan 31 00:00:00 2000 PST
+>  Tue Feb 01 00:00:00 2000 PST
+> (32 rows)
+> 
