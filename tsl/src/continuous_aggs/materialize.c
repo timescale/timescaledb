@@ -151,7 +151,7 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	{
 		if (materializing_new_range)
 			elog(INFO,
-				 "materializing continuous aggregate %s.%s: new range up to %ld",
+				 "materializing continuous aggregate %s.%s: new range up to " INT64_FORMAT,
 				 NameStr(cagg_data.user_view_schema),
 				 NameStr(cagg_data.user_view_name),
 				 new_invalidation_threshold);
@@ -298,7 +298,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (verbose)
 			elog(INFO,
 				 "new materialization range not found for %s.%s (time column %s): not enough data "
-				 "in table (%ld)",
+				 "in table (" INT64_FORMAT ")",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
@@ -323,7 +323,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (verbose)
 			elog(INFO,
 				 "new materialization range not found for %s.%s (time column %s): "
-				 "not enough new data past completion threshold (%ld)",
+				 "not enough new data past completion threshold (" INT64_FORMAT ")",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
@@ -340,7 +340,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (verbose)
 			elog(INFO,
 				 "new materialization range for %s.%s larger than allowed in one run, truncating "
-				 "(time column %s) (%ld)",
+				 "(time column %s) (" INT64_FORMAT ")",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
@@ -356,7 +356,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 
 	if (verbose)
 		elog(INFO,
-			 "new materialization range for %s.%s (time column %s) (%ld)",
+			 "new materialization range for %s.%s (time column %s) (" INT64_FORMAT ")",
 			 NameStr(*hypertable.schema),
 			 NameStr(*hypertable.name),
 			 NameStr(time_column_name),
