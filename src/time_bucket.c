@@ -54,7 +54,7 @@
 	} while (0)
 
 TS_FUNCTION_INFO_V1(ts_int16_bucket);
-Datum
+TSDLLEXPORT Datum
 ts_int16_bucket(PG_FUNCTION_ARGS)
 {
 	int16 result;
@@ -68,7 +68,7 @@ ts_int16_bucket(PG_FUNCTION_ARGS)
 }
 
 TS_FUNCTION_INFO_V1(ts_int32_bucket);
-Datum
+TSDLLEXPORT Datum
 ts_int32_bucket(PG_FUNCTION_ARGS)
 {
 	int32 result;
@@ -82,7 +82,7 @@ ts_int32_bucket(PG_FUNCTION_ARGS)
 }
 
 TS_FUNCTION_INFO_V1(ts_int64_bucket);
-Datum
+TSDLLEXPORT Datum
 ts_int64_bucket(PG_FUNCTION_ARGS)
 {
 	int64 result;
@@ -170,7 +170,7 @@ get_interval_period_timestamp_units(Interval *interval)
 
 TS_FUNCTION_INFO_V1(ts_timestamp_bucket);
 
-Datum
+TSDLLEXPORT Datum
 ts_timestamp_bucket(PG_FUNCTION_ARGS)
 {
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
@@ -194,7 +194,7 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_timestamptz_bucket);
 
-Datum
+TSDLLEXPORT Datum
 ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 {
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
@@ -240,7 +240,7 @@ check_period_is_daily(int64 period)
 
 TS_FUNCTION_INFO_V1(ts_date_bucket);
 
-Datum
+TSDLLEXPORT Datum
 ts_date_bucket(PG_FUNCTION_ARGS)
 {
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
