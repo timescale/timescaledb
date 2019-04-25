@@ -169,6 +169,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	{
 		/* column < value + width */
 		Expr *subst;
+		volatile Expr *estimate;
 		Oid resulttype;
 		Oid subst_opno = get_operator("+",
 									  PG_CATALOG_NAMESPACE,
@@ -194,6 +195,13 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 			width = copyObject(width);
 			interval = DatumGetIntervalP(width->constvalue);
+
+			/*
+			 * if our transformed restriction would overflow we skip adding it
+			 */
+			if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
+				return op;
+
 			interval->time += interval->day * USECS_PER_DAY;
 			interval->day = 0;
 		}
@@ -245,7 +253,50 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			Interval *interval = DatumGetIntervalP(width->constvalue);
 
 			if (interval->day == 0 && interval->month == 0)
-				subst = (Expr *) estimate_expression_value(root, (Node *) subst);
+			{
+				/*
+				 * wrap estimation in try/catch in case it overflows
+				 */
+				PG_TRY();
+				{
+					estimate = (Expr *) estimate_expression_value(root, (Node *) subst);
+				}
+				PG_CATCH();
+				{
+					estimate = NULL;
+					FlushErrorState();
+				}
+				PG_END_TRY();
+
+				if (estimate == NULL)
+					return op;
+
+				subst = (Expr *) estimate;
+			}
+		}
+		else
+		{
+			/*
+			 * our transformation can potentially overflow for queries
+			 * where the expression without the transformation does
+			 * not overflow, so we try to constify expression here
+			 * and skip transformation when an error is thrown.
+			 */
+			PG_TRY();
+			{
+				estimate = (Expr *) eval_const_expressions(root, (Node *) subst);
+			}
+			PG_CATCH();
+			{
+				estimate = NULL;
+				FlushErrorState();
+			}
+			PG_END_TRY();
+
+			if (estimate == NULL)
+				return op;
+
+			subst = (Expr *) estimate;
 		}
 
 		op = copyObject(op);
@@ -256,7 +307,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		if (op->opno != opno)
 		{
 			op->opno = opno;
-			op->opfuncid = InvalidOid;
+			op->opfuncid = get_opcode(opno);
 		}
 
 		op->args = list_make2(lsecond(time_bucket->args), subst);
@@ -333,10 +384,11 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			{
 				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
-				 * we add the transformed expression to the list of
+				 * if we could transform the expression we add it to the list of
 				 * quals so it can be used as an index condition
 				 */
-				additional_quals = lappend(additional_quals, qual);
+				if (qual != (Expr *) op)
+					additional_quals = lappend(additional_quals, qual);
 			}
 		}
 
