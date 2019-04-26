@@ -174,3 +174,36 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 
 	return metadata_value;
 }
+
+static ScanTupleResult
+metadata_tuple_delete(TupleInfo *ti, void *data)
+{
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+
+	return SCAN_CONTINUE;
+}
+
+void
+ts_metadata_drop(Datum metadata_key, Oid key_type)
+{
+	ScanKeyData scankey[1];
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, METADATA),
+		.index = catalog_get_index(catalog, METADATA, METADATA_PKEY_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.tuple_found = metadata_tuple_delete,
+		.data = NULL,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ScanKeyInit(&scankey[0],
+				Anum_metadata_key,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				convert_type_to_name(metadata_key, key_type));
+
+	ts_scanner_scan(&scanctx);
+}
