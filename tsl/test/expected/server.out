@@ -123,7 +123,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- Cannot delete if not owner
 SELECT * FROM delete_server('server_3');
-ERROR:  must be owner of foreign server server_3
+ERROR:  password is required
 -- Must use cascade because of user mappings
 RESET ROLE;
 SELECT * FROM delete_server('server_3');

@@ -48,6 +48,7 @@ set(SOURCE_FILES
   partialize_finalize.sql
   restoring.sql
   timescaledb_fdw.sql
+  dist_internal.sql
 )
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")

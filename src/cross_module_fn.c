@@ -53,6 +53,8 @@ TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 TS_FUNCTION_INFO_V1(ts_remote_txn_heal_server);
+TS_FUNCTION_INFO_V1(ts_dist_set_id);
+TS_FUNCTION_INFO_V1(ts_dist_remove_id);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -160,6 +162,18 @@ Datum
 ts_remote_txn_heal_server(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_server(fcinfo));
+}
+
+Datum
+ts_dist_set_id(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(ts_cm_functions->set_distributed_id(PG_GETARG_DATUM(0)));
+}
+
+Datum
+ts_dist_remove_id(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(ts_cm_functions->remove_from_distributed_db());
 }
 
 /*
@@ -459,6 +473,12 @@ distributed_copy_default(const CopyStmt *stmt, uint64 *processed, CopyChunkState
 	error_no_default_fn_community();
 }
 
+static bool
+set_distributed_id_default(Datum d)
+{
+	return error_no_default_fn_bool_void_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -538,6 +558,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_heal_server = error_no_default_fn_pg_community,
 	.server_dispatch_path_create = server_dispatch_path_create_default,
 	.distributed_copy = distributed_copy_default,
+	.set_distributed_id = set_distributed_id_default,
+	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
