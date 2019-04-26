@@ -49,6 +49,7 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a;
 NOTICE:  adding not-null constraint to column "time_partition_col"
+NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 SELECT * FROM _timescaledb_config.bgw_job;
   id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
 ------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
@@ -514,6 +515,7 @@ SELECT
 \set ECHO errors
 psql:include/cont_agg_equal.sql:8: NOTICE:  drop cascades to 2 other objects
 psql:include/cont_agg_equal.sql:13: NOTICE:  adding not-null constraint to column "time_partition_col"
+psql:include/cont_agg_equal.sql:13: NOTICE:  adding index _materialized_hypertable_13_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_13 USING BTREE(location, time_partition_col)
                            ?column?                            | count 
 ---------------------------------------------------------------+-------
  Number of rows different between view and original (expect 0) |     0
@@ -756,8 +758,11 @@ WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec);
+group by time_bucket('1day', timec), location, humidity, temperature;
 NOTICE:  adding not-null constraint to column "time_partition_col"
+NOTICE:  adding index _materialized_hypertable_17_grp_5_5_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_5_5, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_17_grp_6_6_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_6_6, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_17_grp_7_7_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_7_7, time_partition_col)
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  schedule_interval 
 -------------------
@@ -781,6 +786,39 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  schedule_interval 
 -------------------
  @ 2 hours
+(1 row)
+
+select indexname, indexdef from pg_indexes where tablename = 
+(SELECT h.table_name
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_with_test')
+order by indexname;
+                         indexname                          |                                                                                  indexdef                                                                                   
+------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _materialized_hypertable_17_grp_5_5_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_5_5_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_5_5, time_partition_col DESC)
+ _materialized_hypertable_17_grp_6_6_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_6_6_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_6_6, time_partition_col DESC)
+ _materialized_hypertable_17_grp_7_7_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_7_7_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_7_7, time_partition_col DESC)
+ _materialized_hypertable_17_time_partition_col_idx         | CREATE INDEX _materialized_hypertable_17_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (time_partition_col DESC)
+(4 rows)
+
+drop view mat_with_test cascade;
+--no additional indexes
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec), location, humidity, temperature;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+select indexname, indexdef from pg_indexes where tablename = 
+(SELECT h.table_name
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_with_test');
+                     indexname                      |                                                                          indexdef                                                                          
+----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _materialized_hypertable_18_time_partition_col_idx | CREATE INDEX _materialized_hypertable_18_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_18 USING btree (time_partition_col DESC)
 (1 row)
 
 DROP TABLE conditions CASCADE;
@@ -903,7 +941,7 @@ WARNING:  type integer text
 (3 rows)
 
 DROP view mat_ffunc_test cascade;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_61_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_61_chunk
 create or replace view mat_ffunc_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as

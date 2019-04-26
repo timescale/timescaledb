@@ -19,12 +19,15 @@
 #include <nodes/parsenodes.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <catalog/index.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_aggregate.h>
 #include <catalog/toasting.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_trigger.h>
+#include <commands/defrem.h>
 #include <commands/tablecmds.h>
+#include <commands/tablespace.h>
 #include <commands/trigger.h>
 #include <commands/view.h>
 #include <access/xact.h>
@@ -135,8 +138,12 @@ typedef struct MatTableColumnInfo
 	List *matcollist;		 /* column defns for materialization tbl*/
 	List *partial_seltlist;  /* tlist entries for populating the materialization table columns */
 	List *partial_grouplist; /* group clauses used for populating the materialization table */
-	int matpartcolno;		 /*index of partitioning column in matcollist */
-	char *matpartcolname;	/*name of the partition column */
+	List *mat_groupcolname_list; /* names of columns that are populated by the group-by clause
+									correspond to the partial_grouplist.
+									time_bucket column is not included here: it is the
+									matpartcolname */
+	int matpartcolno;			 /*index of partitioning column in matcollist */
+	char *matpartcolname;		 /*name of the partition column */
 } MatTableColumnInfo;
 
 typedef struct FinalizeQueryInfo
@@ -178,6 +185,7 @@ static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo,
 static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo,
 															 int32 hypertable_id, RangeVar *mat_rel,
 															 CAggTimebucketInfo *origquery_tblinfo,
+															 bool create_addl_index,
 															 ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
 														  Query *userview_query);
@@ -317,6 +325,58 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	ts_cache_release(hcache);
 }
 
+/* add additional indexes to materialization table for the columns derived from
+ * the group-by column list of the partial select query
+ * if partial select query has:
+ * GROUP BY timebucket_expr, <grpcol1, grpcol2, grpcol3 ...>
+ * index on mattable is <grpcol1, timebucketcol>, <grpcol2, timebucketcol> ... and so on.
+ * i.e. #indexes =(  #grp-cols - 1)
+ */
+static void
+mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht)
+{
+	IndexStmt stmt = {
+		.type = T_IndexStmt,
+		.accessMethod = DEFAULT_INDEX_TYPE,
+		.idxname = NULL,
+		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+		.tableSpace = get_tablespace_name(get_rel_tablespace(ht->main_table_relid)),
+	};
+	IndexElem timeelem = { .type = T_IndexElem,
+						   .name = matcolinfo->matpartcolname,
+						   .ordering = SORTBY_DESC };
+	ListCell *le = NULL;
+	foreach (le, matcolinfo->mat_groupcolname_list)
+	{
+		NameData indxname;
+		ObjectAddress indxaddr;
+		HeapTuple indxtuple;
+		char *grpcolname = (char *) lfirst(le);
+		IndexElem grpelem = { .type = T_IndexElem, .name = grpcolname };
+		stmt.indexParams = list_make2(&grpelem, &timeelem);
+		indxaddr = DefineIndexCompat(ht->main_table_relid,
+									 &stmt,
+									 InvalidOid,
+									 false,  /* is alter table */
+									 false,  /* check rights */
+									 false,  /* skip_build */
+									 false); /* quiet */
+		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
+
+		if (!HeapTupleIsValid(indxtuple))
+			elog(ERROR, "cache lookup failed for index relid %d", indxaddr.objectId);
+		indxname = ((Form_pg_class) GETSTRUCT(indxtuple))->relname;
+		elog(NOTICE,
+			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
+			 NameStr(indxname),
+			 NameStr(ht->fd.schema_name),
+			 NameStr(ht->fd.table_name),
+			 grpcolname,
+			 matcolinfo->matpartcolname);
+		ReleaseSysCache(indxtuple);
+	}
+}
+
 /*
  * Create the materialization hypertable root by faking up a
  * CREATE TABLE parsetree and passing it to DefineRelation.
@@ -333,7 +393,7 @@ static int32
 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
 												RangeVar *mat_rel,
 												CAggTimebucketInfo *origquery_tblinfo,
-												ObjectAddress *mataddress)
+												bool create_addl_index, ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -379,6 +439,10 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, mat_relid);
 	mat_htid = ht->fd.id;
+
+	/* create additional index on the group-by columns for the materialization table */
+	if (create_addl_index)
+		mattablecolumninfo_add_mattable_index(matcolinfo, ht);
 	ts_cache_release(hcache);
 	return mat_htid;
 }
@@ -999,6 +1063,7 @@ mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tli
 	matcolinfo->matcollist = collist;
 	matcolinfo->partial_seltlist = tlist;
 	matcolinfo->partial_grouplist = grouplist;
+	matcolinfo->mat_groupcolname_list = NIL;
 	matcolinfo->matpartcolno = -1;
 	matcolinfo->matpartcolname = NULL;
 }
@@ -1048,6 +1113,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 		case T_TargetEntry:
 		{
 			TargetEntry *tle = (TargetEntry *) input;
+			bool timebkt_chk = false;
 			if (tle->resname)
 				colname = pstrdup(tle->resname);
 			else
@@ -1058,14 +1124,18 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			/* is this the time_bucket column */
 			if (IsA(tle->expr, FuncExpr))
 			{
-				bool chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
-				if (chk)
+				timebkt_chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
+				if (timebkt_chk)
 				{
 					colname = MATPARTCOLNM;
 					tle->resname = pstrdup(colname);
 					out->matpartcolno = matcolno - 1;
 					out->matpartcolname = pstrdup(colname);
 				}
+			}
+			if (!timebkt_chk) /* add the names to the gorupcolname list */
+			{
+				out->mat_groupcolname_list = lappend(out->mat_groupcolname_list, pstrdup(colname));
 			}
 			coltype = exprType((Node *) tle->expr);
 			coltypmod = exprTypmod((Node *) tle->expr);
@@ -1518,6 +1588,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	MatTableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 	CatalogSecurityContext sec_ctx;
+	bool is_create_mattbl_index;
 
 	Query *final_selquery;
 	Query *partial_selquery;	/* query to populate the mattable*/
@@ -1558,10 +1629,12 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	ts_catalog_restore_user(&sec_ctx);
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
+	is_create_mattbl_index = with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default;
 	mattablecolumninfo_create_materialization_table(&mattblinfo,
 													materialize_hypertable_id,
 													mat_rel,
 													origquery_ht,
+													is_create_mattbl_index,
 													&mataddress);
 	/* Step 2: create view with select finalize from materialization
 	 * table

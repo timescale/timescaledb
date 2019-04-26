@@ -50,6 +50,11 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.arg_name = "max_interval_per_job",
 			.type_id = TEXTOID,
 		},
+		[ContinuousViewOptionCreateGroupIndex] = {
+			.arg_name = "create_group_indexes",
+			.type_id = BOOLOID,
+			.default_val = BoolGetDatum(true),
+		},
 };
 
 WithClauseResult *

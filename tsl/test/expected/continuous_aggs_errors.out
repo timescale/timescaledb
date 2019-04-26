@@ -370,6 +370,10 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test'
 \gset
 \set ON_ERROR_STOP 0
+ALTER VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
+ERROR:  cannot alter create_group_indexes option for continuous aggregates
+ALTER VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
+ERROR:  cannot alter create_group_indexes option for continuous aggregates
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '1 joule');
 ERROR:  invalid input syntax for type interval: "1 joule"
 ALTER VIEW mat_with_test RESET(timescaledb.refresh_lag);
