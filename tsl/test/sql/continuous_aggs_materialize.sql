@@ -120,20 +120,26 @@ INSERT INTO continuous_agg_test VALUES
     (:big_int_max - 4, 1), (:big_int_max - 3, 5), (:big_int_max - 2, 7), (:big_int_max - 1, 9), (:big_int_max, 11),
     (:big_int_min, 22), (:big_int_min + 1, 23);
 
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 10, 12, 2);
+RESET client_min_messages;
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 -- test invalidations
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', :big_int_max-6, :big_int_max, 2);
+RESET client_min_messages;
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', :big_int_min, :big_int_max, 2);
+RESET client_min_messages;
 
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -144,14 +150,18 @@ TRUNCATE materialization;
 -- test dropping columns
 ALTER TABLE continuous_agg_test DROP COLUMN dummy;
 
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 13, 2);
+RESET client_min_messages;
 
 SELECT * FROM materialization;
 
 ALTER TABLE continuous_agg_test ADD COLUMN d2 int;
 TRUNCATE materialization;
 
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 13, 2);
+RESET client_min_messages;
 
 SELECT * FROM materialization;
 
@@ -165,7 +175,9 @@ CREATE VIEW "view with spaces"(time_bucket, value) AS
 
 CREATE TABLE "table with spaces"(time_bucket BIGINT, value BIGINT);
 select create_hypertable('"table with spaces"'::REGCLASS, 'time_bucket', chunk_time_interval => 100);
+SET client_min_messages TO error;
 SELECT run_continuous_agg_materialization('continuous_agg_test', '"table with spaces"', 'view with spaces', 9, 21, 2);
+RESET client_min_messages;
 SELECT * FROM "view with spaces" ORDER BY 1;
 SELECT * FROM materialization ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -453,13 +465,17 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 
 -- we can handle values near max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
+SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
+RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
 
 -- even when the subrtraction would make a completion time greater than max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-1, 201);
+SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
+RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
 DROP TABLE continuous_agg_negative CASCADE;
