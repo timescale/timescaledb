@@ -558,7 +558,7 @@ WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec);
+group by time_bucket('1day', timec), location, humidity, temperature;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
@@ -566,6 +566,28 @@ SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+
+select indexname, indexdef from pg_indexes where tablename = 
+(SELECT h.table_name
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_with_test')
+order by indexname;
+
+drop view mat_with_test cascade;
+--no additional indexes
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec), location, humidity, temperature;
+
+select indexname, indexdef from pg_indexes where tablename = 
+(SELECT h.table_name
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_with_test');
 
 DROP TABLE conditions CASCADE;
 
