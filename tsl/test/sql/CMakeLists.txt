@@ -67,6 +67,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_txn_resolve.sql
     remote_stmt_params.sql
     remote_copy.sql
+    dist_util.sql
   )
 endif ()
 

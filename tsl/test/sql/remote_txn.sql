@@ -20,8 +20,24 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_persistent_record'
 LANGUAGE C;
 
-SELECT * FROM add_server('loopback', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
-SELECT * FROM add_server('loopback2', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
+CREATE OR REPLACE FUNCTION add_loopback_server(
+    server_name            NAME,
+    host                   TEXT = 'localhost',
+    database               NAME = current_database(),
+    port                   INTEGER = inet_server_port(),
+    local_user             REGROLE = NULL,
+    remote_user            NAME = NULL,
+    password               TEXT = NULL,
+    if_not_exists          BOOLEAN = FALSE,
+    bootstrap_database     NAME = 'postgres',
+    bootstrap_user         NAME = NULL,
+    bootstrap_password     TEXT = NULL
+) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
+AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_server'
+LANGUAGE C;
+
+SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
+SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
 
 -- ===================================================================
 -- create objects used through FDW loopback server

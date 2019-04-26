@@ -40,6 +40,7 @@
 #include "server_dispatch.h"
 #include "remote/dist_copy.h"
 #include "process_utility.h"
+#include "dist_util.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -198,6 +199,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
 	.sql_drop = NULL,
+	.set_distributed_id = NULL,
+	.remove_from_distributed_db = NULL,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -219,6 +222,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.sql_drop = tsl_sql_drop,
+	.set_distributed_id = dist_util_set_id,
+	.remove_from_distributed_db = dist_util_remove_from_db,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

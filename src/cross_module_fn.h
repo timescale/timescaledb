@@ -98,6 +98,8 @@ typedef struct CrossModuleFunctions
 										 Index hypertable_rti, int subpath_index);
 	void (*distributed_copy)(const CopyStmt *stmt, uint64 *processed, Hypertable *ht,
 							 CopyState cstate, List *attnums);
+	bool (*set_distributed_id)(Datum id);
+	bool (*remove_from_distributed_db)();
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

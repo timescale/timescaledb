@@ -34,6 +34,8 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "errors.h"
+#include "dist_util.h"
+#include "utils/uuid.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
@@ -356,10 +358,83 @@ server_bootstrap(const char *servername, const char *host, int32 port, const cha
 							   bootstrap_password);
 }
 
+static void
+add_distributed_id_to_backend(const char *servername, const char *host, int32 port,
+							  const char *dbname, bool if_not_exists, const char *user,
+							  const char *user_password)
+{
+	PGconn *conn;
+	List *server_options;
+
+	server_options = create_server_options(host, port, dbname, user, user_password);
+	conn = remote_connection_open((char *) servername, server_options, NULL);
+
+	PG_TRY();
+	{
+		PGresult *res;
+		char *request;
+		Datum id_string = DirectFunctionCall1(uuid_out, dist_util_get_id());
+
+		request = psprintf("SELECT * FROM _timescaledb_internal.set_dist_id('%s')",
+						   DatumGetCString(id_string));
+		res = remote_connection_query_ok_result(conn, request);
+		remote_connection_result_close(res);
+	}
+	PG_CATCH();
+	{
+		remote_connection_close(conn);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	remote_connection_close(conn);
+}
+
+static void
+remove_distributed_id_from_backend(const char *servername)
+{
+	ForeignServer *fs = GetForeignServerByName(servername, false);
+	UserMapping *um;
+	PGconn *conn;
+
+	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
+	 * user mapping isn't found.  The catch block allows superusers to perform this operation
+	 * without a user mapping. */
+	PG_TRY();
+	{
+		um = GetUserMapping(GetUserId(), fs->serverid);
+	}
+	PG_CATCH();
+	{
+		um = NULL;
+	}
+	PG_END_TRY();
+	conn = remote_connection_open((char *) servername, fs->options, um ? um->options : NULL);
+
+	PG_TRY();
+	{
+		PGresult *res =
+			remote_connection_query_ok_result(conn,
+											  "SELECT * FROM "
+											  "_timescaledb_internal.remove_from_dist_db();");
+		remote_connection_result_close(res);
+	}
+	PG_CATCH();
+	{
+		remote_connection_close(conn);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	remote_connection_close(conn);
+}
+
 #endif /* !PG96 */
 
-Datum
-server_add(PG_FUNCTION_ARGS)
+/* set_distid may need to be false for some otherwise invalid configurations that are useful for
+ * testing */
+static Datum
+server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 {
 	const char *servername = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	const char *host =
@@ -391,6 +466,13 @@ server_add(PG_FUNCTION_ARGS)
 		bootstrap_user = PG_GETARG_CSTRING(9);
 		bootstrap_password = PG_ARGISNULL(10) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(10));
 	}
+
+#if !PG96
+	if (set_distid && dist_util_membership() == DIST_MEMBER_BACKEND)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_SERVERS_ASSIGNMENT_ALREADY_EXISTS),
+				 (errmsg("unable to assign backends to an existing backend database"))));
+#endif
 
 	if (NULL == bootstrap_database)
 		ereport(ERROR,
@@ -472,6 +554,21 @@ server_add(PG_FUNCTION_ARGS)
 					 bootstrap_database,
 					 bootstrap_user,
 					 bootstrap_password);
+
+	if (set_distid)
+	{
+		if (dist_util_membership() != DIST_MEMBER_FRONTEND)
+			dist_util_set_as_frontend();
+
+		add_distributed_id_to_backend(servername,
+									  host,
+									  port,
+									  dbname,
+									  if_not_exists,
+									  bootstrap_user,
+									  bootstrap_password);
+	}
+
 #else
 	/* Those arguments are unused in 9.6, disable compiler warning */
 	(void) bootstrap_database;
@@ -490,6 +587,18 @@ server_add(PG_FUNCTION_ARGS)
 										username,
 										server_username,
 										created));
+}
+
+Datum
+server_add(PG_FUNCTION_ARGS)
+{
+	return server_add_internal(fcinfo, true);
+}
+
+Datum
+server_add_without_dist_id(PG_FUNCTION_ARGS)
+{
+	return server_add_internal(fcinfo, false);
 }
 
 Datum
@@ -523,6 +632,10 @@ server_delete(PG_FUNCTION_ARGS)
 		 * objects get cleaned up. */
 		EventTriggerBeginCompleteQuery();
 
+#if !PG96
+		remove_distributed_id_from_backend(servername);
+#endif
+
 		PG_TRY();
 		{
 			EventTriggerDDLCommandStart(parsetree);
@@ -537,6 +650,12 @@ server_delete(PG_FUNCTION_ARGS)
 			PG_RE_THROW();
 		}
 		PG_END_TRY();
+
+#if !PG96
+		/* Remove self from dist db if no longer have backends */
+		if (server_get_servername_list() == NIL)
+			dist_util_remove_from_db();
+#endif
 
 		EventTriggerEndCompleteQuery();
 		deleted = true;

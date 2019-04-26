@@ -14,6 +14,7 @@
 #include "export.h"
 
 TS_FUNCTION_INFO_V1(test_server_show);
+TS_FUNCTION_INFO_V1(tsl_unchecked_add_server);
 
 /*
  * Tests the ts_server_get_servername_list() function.
@@ -95,4 +96,13 @@ test_server_show(PG_FUNCTION_ARGS)
 	}
 
 	SRF_RETURN_DONE(funcctx);
+}
+
+/*
+ * Performs a server add without setting distributed id or enforcing topolgy constraints.
+ */
+Datum
+tsl_unchecked_add_server(PG_FUNCTION_ARGS)
+{
+	return server_add_without_dist_id(fcinfo);
 }
