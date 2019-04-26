@@ -22,6 +22,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionRefreshLag,
 	ContinuousViewOptionRefreshInterval,
 	ContinuousViewOptionMaxIntervalPerRun,
+	ContinuousViewOptionCreateGroupIndex,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType

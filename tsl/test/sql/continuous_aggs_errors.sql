@@ -367,6 +367,8 @@ WHERE user_view_name = 'mat_with_test'
 \gset
 
 \set ON_ERROR_STOP 0
+ALTER VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
+ALTER VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '1 joule');
 ALTER VIEW mat_with_test RESET(timescaledb.refresh_lag);
 ALTER VIEW mat_with_test ALTER timec DROP default;
