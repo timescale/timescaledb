@@ -659,6 +659,28 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'test_t_mat_view'
 \gset
+INSERT INTO continuous_agg_test_t VALUES
+    ('2029-02-02 2:00 UTC', 1);
+--shows the explain plan for materialization.
+--make sure that chunk_for_tuple gets turned into a constant.
+EXPLAIN (VERBOSE ON, COSTS OFF) INSERT INTO :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" SELECT * FROM :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+   ->  Insert on _timescaledb_internal._materialized_hypertable_6
+         ->  Custom Scan (ChunkDispatch)
+               Output: _partial_view_6.time_partition_col, _partial_view_6.agg_2_2, _partial_view_6.chunk_id
+               ->  Partial HashAggregate
+                     Output: (time_bucket('@ 2 hours'::interval, _hyper_5_14_chunk."time")), _timescaledb_internal.partialize_agg(PARTIAL count(_hyper_5_14_chunk.data)), (14)
+                     Group Key: (time_bucket('@ 2 hours'::interval, _hyper_5_14_chunk."time")), (14)
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_5_14_chunk
+                                 Output: time_bucket('@ 2 hours'::interval, _hyper_5_14_chunk."time"), 14, _hyper_5_14_chunk.data
+                           ->  Seq Scan on _timescaledb_internal._hyper_5_16_chunk
+                                 Output: time_bucket('@ 2 hours'::interval, _hyper_5_16_chunk."time"), 16, _hyper_5_16_chunk.data
+(12 rows)
+
+DELETE from continuous_agg_test_t where time > '2029-01-01';
 SELECT * FROM test_t_mat_view;
  time_bucket | value 
 -------------+-------
@@ -967,7 +989,7 @@ SELECT hypertable_id, watermark
 
 --cleanup of continuous agg views --
 DROP view test_t_mat_view CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_16_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_17_chunk
 DROP view extreme_view CASCADE;
 NOTICE:  drop cascades to 4 other objects
 -- negative lag test

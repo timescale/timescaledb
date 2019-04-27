@@ -31,6 +31,7 @@
 #include <nodes/execnodes.h>
 #include <executor/executor.h>
 #include <access/tupdesc.h>
+#include <parser/parsetree.h>
 
 #include "export.h"
 #include "chunk.h"
@@ -1534,6 +1535,150 @@ ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 	schema = get_namespace_name(get_rel_namespace(relid));
 	table = get_rel_name(relid);
 	return chunk_get_by_name(schema, table, num_constraints, fail_if_not_found);
+}
+
+/* Process all the target entries to find the optimization.
+ *  Return whether or not the optimization was performed */
+bool static chunk_for_tuple_opt_check_target_entries(PlannedStmt *stmt, List *target_list,
+													 Oid *func_oid)
+{
+	ListCell *lc;
+	foreach (lc, target_list)
+	{
+		TargetEntry *te = lfirst(lc);
+		FuncExpr *fe;
+		ConvertRowtypeExpr *crte;
+		Var *var;
+		RangeTblEntry *rte;
+		Chunk *chunk;
+
+		/* Careful here to bail out as soon as is practical. This is performance critical. */
+
+		Assert(IsA((Node *) te, TargetEntry));
+
+		if (!IsA(te->expr, FuncExpr))
+			continue;
+
+		fe = (FuncExpr *) te->expr;
+		if (fe->funcresulttype != INT4OID || list_length(fe->args) != 2 ||
+			!IsA(linitial(fe->args), Const) || !IsA(lsecond(fe->args), ConvertRowtypeExpr))
+			continue;
+
+		if (*func_oid == InvalidOid)
+		{
+			Oid params[] = { INT4OID, ANYELEMENTOID };
+			*func_oid = get_function_oid("chunk_for_tuple", INTERNAL_SCHEMA_NAME, 2, params);
+			Assert(*func_oid != InvalidOid);
+		}
+
+		if (fe->funcid != *func_oid)
+			continue;
+
+		crte = (ConvertRowtypeExpr *) lsecond(fe->args);
+
+		if (!IsA(crte->arg, Var))
+			continue;
+
+		var = (Var *) crte->arg;
+		rte = rt_fetch(var->varno, stmt->rtable);
+		chunk = ts_chunk_get_by_relid(rte->relid, 0, false);
+		if (chunk == NULL)
+			continue;
+
+		/* sanity check */
+		if (chunk->fd.hypertable_id != DatumGetInt32(((Const *) linitial(fe->args))->constvalue))
+			continue;
+
+		te->expr = (Expr *)
+			makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(chunk->fd.id), false, true);
+
+		/* we only expect one such entry so it's ok to return here */
+		return true;
+	}
+	return false;
+}
+
+/* Recurse throughout the plan to do this optimization */
+void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
+{
+	switch (nodeTag(plan))
+	{
+		case T_Append:
+		{
+			Append *append = (Append *) plan;
+			ListCell *lc;
+			foreach (lc, append->appendplans)
+			{
+				Plan *child_plan = lfirst(lc);
+				/* If one child doesn't have this, the other's wont either so break out */
+				if (!chunk_for_tuple_opt_check_target_entries(stmt,
+															  child_plan->targetlist,
+															  func_oid))
+					break;
+			}
+		}
+		break;
+		case T_MergeAppend:
+		{
+			MergeAppend *append = (MergeAppend *) plan;
+			ListCell *lc;
+			/* If one child doesn't have this, the other's wont either so break out */
+			foreach (lc, append->mergeplans)
+			{
+				Plan *child_plan = lfirst(lc);
+				if (!chunk_for_tuple_opt_check_target_entries(stmt,
+															  child_plan->targetlist,
+															  func_oid))
+					break;
+			}
+		}
+		break;
+		case T_ModifyTable:
+		{
+			ModifyTable *mt = (ModifyTable *) plan;
+			ListCell *lc;
+			foreach (lc, mt->plans)
+			{
+				Plan *subplan = (Plan *) lfirst(lc);
+				chunk_for_tuple_opt(stmt, subplan, func_oid);
+			}
+		}
+		break;
+		case T_CustomScan:
+		{
+			CustomScan *cs = (CustomScan *) plan;
+			ListCell *lc;
+			foreach (lc, cs->custom_plans)
+			{
+				Plan *subplan = (Plan *) lfirst(lc);
+				chunk_for_tuple_opt(stmt, subplan, func_oid);
+			}
+		}
+		break;
+		default:
+			break;
+	}
+
+	if (plan->lefttree != NULL)
+		chunk_for_tuple_opt(stmt, plan->lefttree, func_oid);
+	if (plan->righttree != NULL)
+		chunk_for_tuple_opt(stmt, plan->righttree, func_oid);
+}
+
+/* Try to optimize chunk_for_tuple calls by replacing
+ *  the function calls with a constant int for the chunk id
+ *  when the function is called as part of a chunk scan.
+ *
+ * Note this is purely a performance optimization so it's okay to be
+ * conservative here.
+ */
+void
+ts_chunk_for_tuple_optimization(PlannedStmt *stmt)
+{
+	/* since looking up the function isn't free, lazy load this value
+	 * and keep it around throughout the plan processing */
+	Oid func_oid = InvalidOid;
+	chunk_for_tuple_opt(stmt, stmt->planTree, &func_oid);
 }
 
 TSDLLEXPORT Datum

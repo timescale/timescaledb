@@ -150,6 +150,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		/* Call the standard planner */
 		stmt = standard_planner(parse, cursor_opts, bound_params);
 
+	ts_chunk_for_tuple_optimization(stmt);
 	/*
 	 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
 	 * to have a final target list that is the same as the ModifyTable plan

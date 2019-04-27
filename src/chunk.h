@@ -91,6 +91,8 @@ extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
+
+void ts_chunk_for_tuple_optimization(PlannedStmt *stmt);
 extern TSDLLEXPORT void ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
 												Datum newer_than_datum, Oid older_than_type,
 												Oid newer_than_type, bool cascade,

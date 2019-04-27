@@ -1119,6 +1119,38 @@ SELECT hypertable_id FROM  create_hypertable('chunk_for_tuple_test',
     number_partitions => 3) \gset
 NOTICE:  adding not-null constraint to column "time"
 INSERT INTO chunk_for_tuple_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
+--chunk_for tuple should be optimized in certain cases so that it is converted to a const when evaluated on a chunk.
+--test that this works for both the select and insert into select case;
+create table for_insert (res int);
+EXPLAIN (VERBOSE on, costs off) SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Append
+   ->  Seq Scan on _timescaledb_internal._hyper_8_26_chunk
+         Output: 26
+   ->  Seq Scan on _timescaledb_internal._hyper_8_27_chunk
+         Output: 27
+   ->  Seq Scan on _timescaledb_internal._hyper_8_28_chunk
+         Output: 28
+   ->  Seq Scan on _timescaledb_internal._hyper_8_29_chunk
+         Output: 29
+(9 rows)
+
+EXPLAIN (VERBOSE on, costs off) INSERT INTO for_insert SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Insert on public.for_insert
+   ->  Append
+         ->  Seq Scan on _timescaledb_internal._hyper_8_26_chunk
+               Output: 26
+         ->  Seq Scan on _timescaledb_internal._hyper_8_27_chunk
+               Output: 27
+         ->  Seq Scan on _timescaledb_internal._hyper_8_28_chunk
+               Output: 28
+         ->  Seq Scan on _timescaledb_internal._hyper_8_29_chunk
+               Output: 29
+(10 rows)
+
 SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
  chunk_for_tuple 
 -----------------
@@ -1126,6 +1158,16 @@ SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_tes
               27
               28
               29
+(4 rows)
+
+INSERT INTO for_insert SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+SELECT * from for_insert;
+ res 
+-----
+  26
+  27
+  28
+  29
 (4 rows)
 
 SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, _timescaledb_internal._hyper_8_28_chunk.*::chunk_for_tuple_test) FROM _timescaledb_internal._hyper_8_28_chunk;

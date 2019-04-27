@@ -304,6 +304,14 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'test_t_mat_view'
 \gset
 
+
+INSERT INTO continuous_agg_test_t VALUES
+    ('2029-02-02 2:00 UTC', 1);
+--shows the explain plan for materialization.
+--make sure that chunk_for_tuple gets turned into a constant.
+EXPLAIN (VERBOSE ON, COSTS OFF) INSERT INTO :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" SELECT * FROM :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
+DELETE from continuous_agg_test_t where time > '2029-01-01';
+
 SELECT * FROM test_t_mat_view;
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
 

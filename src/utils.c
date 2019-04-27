@@ -538,6 +538,12 @@ ts_function_types_equal(Oid left[], Oid right[], int nargs)
 	return true;
 }
 
+/* Get a function oid, throwing an error if not found.
+ *
+ * Note: This uses the same cached lookup as the parser, so should
+ * be pretty effecient.
+ */
+
 Oid
 get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
 {

@@ -364,7 +364,14 @@ SELECT hypertable_id FROM  create_hypertable('chunk_for_tuple_test',
 
 INSERT INTO chunk_for_tuple_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
 
+--chunk_for tuple should be optimized in certain cases so that it is converted to a const when evaluated on a chunk.
+--test that this works for both the select and insert into select case;
+create table for_insert (res int);
+EXPLAIN (VERBOSE on, costs off) SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+EXPLAIN (VERBOSE on, costs off) INSERT INTO for_insert SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
 SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+INSERT INTO for_insert SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, chunk_for_tuple_test.*) FROM chunk_for_tuple_test;
+SELECT * from for_insert;
 
 SELECT _timescaledb_internal.chunk_for_tuple(:hypertable_id, _timescaledb_internal._hyper_8_28_chunk.*::chunk_for_tuple_test) FROM _timescaledb_internal._hyper_8_28_chunk;
 
