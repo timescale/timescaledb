@@ -13,6 +13,7 @@
 #include <optimizer/prep.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/makefuncs.h>
+#include <utils/date.h>
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
@@ -169,134 +170,195 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	{
 		/* column < value + width */
 		Expr *subst;
-		volatile Expr *estimate;
-		Oid resulttype;
-		Oid subst_opno = get_operator("+",
-									  PG_CATALOG_NAMESPACE,
-									  exprType((Node *) value),
-									  exprType((Node *) width));
-
-		if (!OidIsValid(subst_opno))
-			return op;
-
-		if (tce->type_id == TIMESTAMPTZOID && width->consttype == INTERVALOID &&
-			DatumGetIntervalP(width)->month == 0 && DatumGetIntervalP(width)->day != 0)
-		{
-			/*
-			 * If width interval has day component we merge it with
-			 * time component because estimating the day component
-			 * depends on the session timezone and that would be
-			 * unsafe during planning time.
-			 * But since time_bucket calculation always is relative
-			 * to UTC it is safe to do this transformation and assume
-			 * day to always be 24 hours.
-			 */
-			Interval *interval;
-
-			width = copyObject(width);
-			interval = DatumGetIntervalP(width->constvalue);
-
-			/*
-			 * if our transformed restriction would overflow we skip adding it
-			 */
-			if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
-				return op;
-
-			interval->time += interval->day * USECS_PER_DAY;
-			interval->day = 0;
-		}
-
-		resulttype = get_op_rettype(subst_opno);
-		subst = make_opclause(subst_opno,
-							  tce->type_id,
-							  false,
-							  value,
-							  (Expr *) width,
-							  InvalidOid,
-							  InvalidOid);
+		Datum datum;
 
 		/*
-		 * check if resulttype of operation returns correct datatype
-		 *
-		 * date OP interval returns timestamp so we need to insert
-		 * a cast to keep toplevel expr intact when datatypes don't match
+		 * caller should make sure value and width are Const
 		 */
-		if (tce->type_id != resulttype)
-		{
-			Oid cast_func = get_cast_func(resulttype, tce->type_id);
+		Assert(IsA(value, Const) && IsA(width, Const));
 
-			if (!OidIsValid(cast_func))
+		if (castNode(Const, value)->constisnull || width->constisnull)
+			return op;
+
+		switch (tce->type_id)
+		{
+			case INT2OID:
+				if (DatumGetInt16(castNode(Const, value)->constvalue) >=
+					PG_INT16_MAX - DatumGetInt16(width->constvalue))
+					return op;
+
+				datum = Int16GetDatum(DatumGetInt16(castNode(Const, value)->constvalue) +
+									  DatumGetInt16(width->constvalue));
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+				break;
+
+			case INT4OID:
+				if (DatumGetInt32(castNode(Const, value)->constvalue) >=
+					PG_INT32_MAX - DatumGetInt32(width->constvalue))
+					return op;
+
+				datum = Int32GetDatum(DatumGetInt32(castNode(Const, value)->constvalue) +
+									  DatumGetInt32(width->constvalue));
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+				break;
+			case INT8OID:
+				if (DatumGetInt64(castNode(Const, value)->constvalue) >=
+					PG_INT64_MAX - DatumGetInt64(width->constvalue))
+					return op;
+
+				datum = Int64GetDatum(DatumGetInt64(castNode(Const, value)->constvalue) +
+									  DatumGetInt64(width->constvalue));
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+
+				break;
+			case DATEOID:
+			{
+				Interval *interval = DatumGetIntervalP(width->constvalue);
+
+				if (interval->month != 0)
+					return op;
+				if (DatumGetDateADT(castNode(Const, value)->constvalue) >=
+					DATEVAL_NOEND - interval->day + ceil(interval->time / USECS_PER_DAY))
+					return op;
+
+				datum = DateADTGetDatum(DatumGetDateADT(castNode(Const, value)->constvalue) +
+										interval->day + ceil(interval->time / USECS_PER_DAY));
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+
+				break;
+			}
+			case TIMESTAMPTZOID:
+			{
+				Interval *interval = DatumGetIntervalP(width->constvalue);
+
+				Assert(width->consttype == INTERVALOID);
+
+				/*
+				 * intervals with month component are not supported by time_bucket
+				 */
+				if (interval->month != 0)
+					return op;
+
+				/*
+				 * If width interval has day component we merge it with time component
+				 */
+				if (interval->day != 0)
+				{
+					width = copyObject(width);
+					interval = DatumGetIntervalP(width->constvalue);
+
+					/*
+					 * if our transformed restriction would overflow we skip adding it
+					 */
+					if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
+						return op;
+
+					interval->time += interval->day * USECS_PER_DAY;
+					interval->day = 0;
+				}
+
+				if (DatumGetTimestampTz(castNode(Const, value)->constvalue) >=
+					DT_NOEND - interval->time)
+					return op;
+
+				datum = TimestampTzGetDatum(
+					DatumGetTimestampTz(castNode(Const, value)->constvalue) + interval->time);
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+
+				break;
+			}
+
+			case TIMESTAMPOID:
+			{
+				Interval *interval = DatumGetIntervalP(width->constvalue);
+
+				Assert(width->consttype == INTERVALOID);
+
+				/*
+				 * intervals with month component are not supported by time_bucket
+				 */
+				if (interval->month != 0)
+					return op;
+
+				/*
+				 * If width interval has day component we merge it with time component
+				 */
+				if (interval->day != 0)
+				{
+					width = copyObject(width);
+					interval = DatumGetIntervalP(width->constvalue);
+
+					/*
+					 * if our merged value overflows we skip adding it
+					 */
+					if (interval->time >= PG_INT64_MAX - interval->day * USECS_PER_DAY)
+						return op;
+
+					interval->time += interval->day * USECS_PER_DAY;
+					interval->day = 0;
+				}
+
+				if (DatumGetTimestamp(castNode(Const, value)->constvalue) >=
+					DT_NOEND - interval->time)
+					return op;
+
+				datum = TimestampGetDatum(DatumGetTimestamp(castNode(Const, value)->constvalue) +
+										  interval->time);
+				subst = (Expr *) makeConst(tce->type_id,
+										   -1,
+										   InvalidOid,
+										   tce->typlen,
+										   datum,
+										   false,
+										   tce->typbyval);
+
+				break;
+			}
+			default:
 				return op;
-
-			subst = (Expr *)
-				makeFuncExpr(cast_func, tce->type_id, list_make1(subst), InvalidOid, InvalidOid, 0);
+				break;
 		}
-		else if (exprType((Node *) value) != resulttype)
+
+		/*
+		 * adjust toplevel expression if datatypes changed
+		 * this can happen when comparing int4 values against int8 time_bucket
+		 */
+		if (tce->type_id != castNode(Const, value)->consttype)
 		{
-			/*
-			 * if datatype of substitution operation is different from original Const expression
-			 * we need to adjust toplevel op
-			 */
-			opno = get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, resulttype);
+			opno = get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
 
 			if (!OidIsValid(opno))
 				return op;
-		}
-
-		if (tce->type_id == TIMESTAMPTZOID && width->consttype == INTERVALOID)
-		{
-			/*
-			 * TIMESTAMPTZ OP INTERVAL is marked stable and unsafe
-			 * to evaluate at plan time unless it only has a time
-			 * component
-			 */
-			Interval *interval = DatumGetIntervalP(width->constvalue);
-
-			if (interval->day == 0 && interval->month == 0)
-			{
-				/*
-				 * wrap estimation in try/catch in case it overflows
-				 */
-				PG_TRY();
-				{
-					estimate = (Expr *) estimate_expression_value(root, (Node *) subst);
-				}
-				PG_CATCH();
-				{
-					estimate = NULL;
-					FlushErrorState();
-				}
-				PG_END_TRY();
-
-				if (estimate == NULL)
-					return op;
-
-				subst = (Expr *) estimate;
-			}
-		}
-		else
-		{
-			/*
-			 * our transformation can potentially overflow for queries
-			 * where the expression without the transformation does
-			 * not overflow, so we try to constify expression here
-			 * and skip transformation when an error is thrown.
-			 */
-			PG_TRY();
-			{
-				estimate = (Expr *) eval_const_expressions(root, (Node *) subst);
-			}
-			PG_CATCH();
-			{
-				estimate = NULL;
-				FlushErrorState();
-			}
-			PG_END_TRY();
-
-			if (estimate == NULL)
-				return op;
-
-			subst = (Expr *) estimate;
 		}
 
 		op = copyObject(op);
