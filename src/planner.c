@@ -87,8 +87,16 @@ is_rte_hypertable(RangeTblEntry *rte)
 /* This turns off inheritance on hypertables where we will do chunk
  * expansion ourselves. This prevents postgres from expanding the inheritance
  * tree itself. We will expand the chunks in timescaledb_get_relation_info_hook. */
+
+typedef struct WalkerData
+{
+	Cache *hypertable_cache;
+	CmdType top_level_cmd_type;
+	bool optimize_chunk_for_tuple;
+} WalkerData;
+
 static bool
-turn_off_inheritance_walker(Node *node, Cache *hc)
+turn_off_inheritance_and_get_info_walker(Node *node, WalkerData *wd)
 {
 	if (node == NULL)
 		return false;
@@ -105,7 +113,19 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 
 			if (rte->inh)
 			{
-				Hypertable *ht = ts_hypertable_cache_get_entry(hc, rte->relid);
+				Hypertable *ht = ts_hypertable_cache_get_entry(wd->hypertable_cache, rte->relid);
+
+				/* Only optimize chunk_for_tuple on top-level inserts where the select is over a
+				 * hypertable */
+				if (ht != NULL && wd->top_level_cmd_type == CMD_INSERT)
+				{
+					ListCell *lc;
+					foreach (lc, query->targetList)
+					{
+						if (ts_is_chunk_for_tuple_target_entry(lfirst(lc)))
+							wd->optimize_chunk_for_tuple = true;
+					}
+				}
 
 				if (NULL != ht && ts_plan_expand_hypertable_valid_hypertable(ht, query, rti, rte))
 				{
@@ -116,10 +136,10 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 			rti++;
 		}
 
-		return query_tree_walker(query, turn_off_inheritance_walker, hc, 0);
+		return query_tree_walker(query, turn_off_inheritance_and_get_info_walker, wd, 0);
 	}
 
-	return expression_tree_walker(node, turn_off_inheritance_walker, hc);
+	return expression_tree_walker(node, turn_off_inheritance_and_get_info_walker, wd);
 }
 
 static PlannedStmt *
@@ -127,20 +147,25 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
+	WalkerData wd = {
+		.top_level_cmd_type = parse->commandType,
+		.optimize_chunk_for_tuple = false,
+	};
 
 	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations &&
 		ts_guc_enable_constraint_exclusion &&
 		(parse->commandType == CMD_INSERT || parse->commandType == CMD_SELECT))
 	{
-		Cache *hc = ts_hypertable_cache_pin();
+		wd.hypertable_cache = ts_hypertable_cache_pin();
 
 		/*
 		 * turn of inheritance on hypertables we will expand ourselves in
 		 * timescaledb_get_relation_info_hook
 		 */
-		turn_off_inheritance_walker((Node *) parse, hc);
+		turn_off_inheritance_and_get_info_walker((Node *) parse, &wd);
 
-		ts_cache_release(hc);
+		ts_cache_release(wd.hypertable_cache);
+		wd.hypertable_cache = NULL;
 	}
 
 	if (prev_planner_hook != NULL)
@@ -150,7 +175,8 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		/* Call the standard planner */
 		stmt = standard_planner(parse, cursor_opts, bound_params);
 
-	ts_chunk_for_tuple_optimization(stmt);
+	if (wd.optimize_chunk_for_tuple)
+		ts_chunk_for_tuple_optimization(stmt);
 	/*
 	 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
 	 * to have a final target list that is the same as the ModifyTable plan

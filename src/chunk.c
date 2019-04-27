@@ -1537,10 +1537,40 @@ ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 	return chunk_get_by_name(schema, table, num_constraints, fail_if_not_found);
 }
 
+static Oid chunk_for_tuple_oid = InvalidOid;
+static inline Oid
+get_chunk_for_tuple_oid()
+{
+	if (chunk_for_tuple_oid == InvalidOid)
+	{
+		Oid params[] = { INT4OID, ANYELEMENTOID };
+		chunk_for_tuple_oid = get_function_oid("chunk_for_tuple", INTERNAL_SCHEMA_NAME, 2, params);
+		Assert(chunk_for_tuple_oid != InvalidOid);
+	}
+	return chunk_for_tuple_oid;
+}
+
+bool
+ts_is_chunk_for_tuple_target_entry(TargetEntry *te)
+{
+	FuncExpr *fe;
+
+	if (!IsA(te->expr, FuncExpr))
+		return false;
+
+	fe = (FuncExpr *) te->expr;
+	if (fe->funcresulttype != INT4OID || list_length(fe->args) != 2)
+		return false;
+
+	if (fe->funcid != get_chunk_for_tuple_oid())
+		return false;
+
+	return true;
+}
+
 /* Process all the target entries to find the optimization.
  *  Return whether or not the optimization was performed */
-bool static chunk_for_tuple_opt_check_target_entries(PlannedStmt *stmt, List *target_list,
-													 Oid *func_oid)
+bool static chunk_for_tuple_opt_check_target_entries(PlannedStmt *stmt, List *target_list)
 {
 	ListCell *lc;
 	foreach (lc, target_list)
@@ -1552,26 +1582,13 @@ bool static chunk_for_tuple_opt_check_target_entries(PlannedStmt *stmt, List *ta
 		RangeTblEntry *rte;
 		Chunk *chunk;
 
-		/* Careful here to bail out as soon as is practical. This is performance critical. */
-
 		Assert(IsA((Node *) te, TargetEntry));
 
-		if (!IsA(te->expr, FuncExpr))
+		if (!ts_is_chunk_for_tuple_target_entry(te))
 			continue;
 
 		fe = (FuncExpr *) te->expr;
-		if (fe->funcresulttype != INT4OID || list_length(fe->args) != 2 ||
-			!IsA(linitial(fe->args), Const) || !IsA(lsecond(fe->args), ConvertRowtypeExpr))
-			continue;
-
-		if (*func_oid == InvalidOid)
-		{
-			Oid params[] = { INT4OID, ANYELEMENTOID };
-			*func_oid = get_function_oid("chunk_for_tuple", INTERNAL_SCHEMA_NAME, 2, params);
-			Assert(*func_oid != InvalidOid);
-		}
-
-		if (fe->funcid != *func_oid)
+		if (!IsA(lsecond(fe->args), ConvertRowtypeExpr) || !IsA(linitial(fe->args), Const))
 			continue;
 
 		crte = (ConvertRowtypeExpr *) lsecond(fe->args);
@@ -1599,7 +1616,7 @@ bool static chunk_for_tuple_opt_check_target_entries(PlannedStmt *stmt, List *ta
 }
 
 /* Recurse throughout the plan to do this optimization */
-void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
+void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan)
 {
 	switch (nodeTag(plan))
 	{
@@ -1611,9 +1628,7 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 			{
 				Plan *child_plan = lfirst(lc);
 				/* If one child doesn't have this, the other's wont either so break out */
-				if (!chunk_for_tuple_opt_check_target_entries(stmt,
-															  child_plan->targetlist,
-															  func_oid))
+				if (!chunk_for_tuple_opt_check_target_entries(stmt, child_plan->targetlist))
 					break;
 			}
 		}
@@ -1626,9 +1641,7 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 			foreach (lc, append->mergeplans)
 			{
 				Plan *child_plan = lfirst(lc);
-				if (!chunk_for_tuple_opt_check_target_entries(stmt,
-															  child_plan->targetlist,
-															  func_oid))
+				if (!chunk_for_tuple_opt_check_target_entries(stmt, child_plan->targetlist))
 					break;
 			}
 		}
@@ -1640,7 +1653,7 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 			foreach (lc, mt->plans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
-				chunk_for_tuple_opt(stmt, subplan, func_oid);
+				chunk_for_tuple_opt(stmt, subplan);
 			}
 		}
 		break;
@@ -1651,7 +1664,7 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 			foreach (lc, cs->custom_plans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
-				chunk_for_tuple_opt(stmt, subplan, func_oid);
+				chunk_for_tuple_opt(stmt, subplan);
 			}
 		}
 		break;
@@ -1660,9 +1673,9 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 	}
 
 	if (plan->lefttree != NULL)
-		chunk_for_tuple_opt(stmt, plan->lefttree, func_oid);
+		chunk_for_tuple_opt(stmt, plan->lefttree);
 	if (plan->righttree != NULL)
-		chunk_for_tuple_opt(stmt, plan->righttree, func_oid);
+		chunk_for_tuple_opt(stmt, plan->righttree);
 }
 
 /* Try to optimize chunk_for_tuple calls by replacing
@@ -1675,10 +1688,7 @@ void static chunk_for_tuple_opt(PlannedStmt *stmt, Plan *plan, Oid *func_oid)
 void
 ts_chunk_for_tuple_optimization(PlannedStmt *stmt)
 {
-	/* since looking up the function isn't free, lazy load this value
-	 * and keep it around throughout the plan processing */
-	Oid func_oid = InvalidOid;
-	chunk_for_tuple_opt(stmt, stmt->planTree, &func_oid);
+	chunk_for_tuple_opt(stmt, stmt->planTree);
 }
 
 TSDLLEXPORT Datum
