@@ -29,6 +29,7 @@
 #include <commands/view.h>
 #include <access/xact.h>
 #include <access/reloptions.h>
+#include <access/sysattr.h>
 #include <miscadmin.h>
 #include <parser/parse_func.h>
 #include <parser/parse_type.h>
@@ -60,7 +61,7 @@
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
 #define TIMEBUCKETFN "time_bucket"
-#define CHUNKTUPFN "chunk_for_tuple"
+#define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define MATPARTCOLNM "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
@@ -1094,11 +1095,10 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *us
 	Index maxRef;
 	int colno = list_length(matcolinfo->partial_seltlist) + 1;
 	ColumnDef *col;
-	Const *chunkfn_arg1;
-	Var *chunkfn_arg2;
+	Var *chunkfn_arg1;
 	FuncExpr *chunk_fnexpr;
 	Oid chunkfnoid;
-	Oid argtype[] = { INT4OID, ANYELEMENTOID };
+	Oid argtype[] = { OIDOID };
 	Oid rettype = INT4OID;
 	TargetEntry *chunk_te;
 	Oid sortop, eqop;
@@ -1118,16 +1118,15 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *us
 	: chunk_for_tuple( htid, table.*)
 	*/
 	chunkfnoid =
-		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKTUPFN)),
+		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
 					   sizeof(argtype) / sizeof(argtype[0]),
 					   argtype,
 					   false);
-	chunkfn_arg1 = makeConst(INT4OID, -1, InvalidOid, sizeof(int32), usertbl_htid, false, true);
-	chunkfn_arg2 = makeWholeRowVar(usertbl_rte, 1, 0, false);
+	chunkfn_arg1 = makeVar(1, TableOidAttributeNumber, OIDOID, -1, 0, 0);
 
 	chunk_fnexpr = makeFuncExpr(chunkfnoid,
 								rettype,
-								list_make2(chunkfn_arg1, chunkfn_arg2),
+								list_make1(chunkfn_arg1),
 								InvalidOid,
 								InvalidOid,
 								COERCE_EXPLICIT_CALL);
