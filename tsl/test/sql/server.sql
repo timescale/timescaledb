@@ -286,3 +286,95 @@ SELECT * FROM _timescaledb_internal.server_ping('server_3');
 DROP DATABASE server_1;
 DROP DATABASE server_2;
 DROP DATABASE server_4;
+
+DROP SERVER server_3 CASCADE;
+
+-- there should be no servers
+SELECT * FROM show_servers();
+
+-- let's add some
+SELECT * FROM add_server('server_1', database => 'server_1');
+SELECT * FROM add_server('server_2', database => 'server_2');
+SELECT * FROM add_server('server_3', database => 'server_3');
+
+DROP TABLE disttable;
+
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
+
+-- Create some chunks on all the servers
+INSERT INTO disttable VALUES
+       ('2019-02-02 10:45', 1, 23.4),
+       ('2019-05-23 10:45', 4, 14.9),
+       ('2019-07-23 10:45', 8, 7.6);
+
+SELECT * FROM test.show_subtables('disttable');
+SELECT * FROM _timescaledb_catalog.chunk;
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
+-- Add additional hypertable 
+CREATE TABLE disttable_2(time timestamptz, device int, temp float);
+
+SELECT * FROM create_distributed_hypertable('disttable_2', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
+
+CREATE TABLE devices(device int, name text);
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- Detach should work b/c disttable_2 has no data
+SELECT * FROM detach_server('server_2', 'disttable_2');
+
+\set ON_ERROR_STOP 0
+-- can't detach non-existing server
+SELECT * FROM detach_server('server_12345', 'disttable');
+-- NULL server
+SELECT * FROM detach_server(NULL, 'disttable');
+-- Can't detach server_1 b/c it contains data for disttable
+SELECT * FROM detach_server('server_1');
+-- can't detach already detached server
+SELECT * FROM detach_server('server_2', 'disttable_2');
+-- can't detach b/c of replication factor for disttable_2
+SELECT * FROM detach_server('server_3', 'disttable_2');
+-- can't detach non hypertable
+SELECT * FROM detach_server('server_3', 'devices');
+\set ON_ERROR_STOP 1
+
+-- Need explicit password for non-super users to connect
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+
+-- Let's add more servers
+SELECT * FROM add_server('server_4', database => 'server_4', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+SELECT * FROM add_server('server_5', database => 'server_5', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_5 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+
+CREATE TABLE disttable_3(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, servers => '{"server_4", "server_5"}');
+
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE TABLE disttable_4(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_factor => 1, servers => '{"server_4", "server_5"}');
+
+\set ON_ERROR_STOP 0
+-- error due to missing permissions
+SELECT * FROM detach_server('server_4', 'disttable_3');
+\set ON_ERROR_STOP 1
+
+-- detach table(s) where user has permissions, otherwise show NOTICE
+SELECT * FROM detach_server('server_4');
+
+-- Cleanup
+RESET ROLE;
+SELECT * FROM delete_server('server_1', cascade => true);
+SELECT * FROM delete_server('server_2', cascade => true);
+SELECT * FROM delete_server('server_3', cascade => true);
+SELECT * FROM delete_server('server_4', cascade => true);
+SELECT * FROM delete_server('server_5', cascade => true);
+DROP DATABASE server_1;
+DROP DATABASE server_2;
+DROP DATABASE server_3;
+DROP DATABASE server_4;
+DROP DATABASE server_5;

@@ -244,6 +244,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.delete_server = server_delete,
 	.attach_server = server_attach,
 	.server_ping = server_ping,
+	.detach_server = server_detach,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
 	.create_chunk_on_servers = chunk_api_create_on_servers,
