@@ -82,13 +82,13 @@ endif()
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
-    dist_ddl.sql
     timescaledb_fdw.sql
   )
   list(APPEND TEST_FILES_DEBUG
     deparse.sql
     deparse_fail.sql
     dist_commands.sql
+    dist_ddl.sql
     remote_connection.sql
     remote_connection_cache.sql
     remote_copy.sql
