@@ -168,6 +168,12 @@ WARNING:  could not add drop_chunks policy due to existing policy on hypertable 
                      -1
 (1 row)
 
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+ job_id | hypertable_id | older_than | cascade 
+--------+---------------+------------+---------
+   1002 |             1 | @ 3 mons   | t
+(1 row)
+
 \set ON_ERROR_STOP 0
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', false);
 ERROR:  drop chunks policy already exists for hypertable "test_table"
@@ -231,7 +237,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '3 month');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
  job_id | hypertable_id | older_than | cascade 
 --------+---------------+------------+---------
-   1003 |             1 | @ 3 mons   | t
+   1003 |             1 | @ 3 mons   | f
 (1 row)
 
 select remove_drop_chunks_policy('test_table');
@@ -470,8 +476,8 @@ select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
  job_id | hypertable_id | older_than | cascade 
 --------+---------------+------------+---------
-   1008 |             3 | @ 2 days   | t
-   1009 |             4 | @ 1 day    | t
+   1008 |             3 | @ 2 days   | f
+   1009 |             4 | @ 1 day    | f
 (2 rows)
 
 DROP TABLE test_table;
@@ -484,7 +490,7 @@ select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
  job_id | hypertable_id | older_than | cascade 
 --------+---------------+------------+---------
-   1009 |             4 | @ 1 day    | t
+   1009 |             4 | @ 1 day    | f
 (1 row)
 
 DROP TABLE test_table2;

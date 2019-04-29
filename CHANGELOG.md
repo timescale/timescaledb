@@ -21,6 +21,7 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #1115 Fix ordered append optimization for join queries
 * #1132 Adjust ordered append path cost
+* #1195 Fix cascade in scheduled drop chunks
 
 **Thanks**
 * @spickman for reporting a segfault with ordered append and JOINs

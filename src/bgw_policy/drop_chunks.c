@@ -122,7 +122,7 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)] =
 		IntervalPGetDatum(&policy->fd.older_than);
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)] =
-		BoolGetDatum(&policy->fd.cascade);
+		BoolGetDatum(policy->fd.cascade);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);

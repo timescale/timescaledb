@@ -73,6 +73,8 @@ select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => 
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', true, if_not_exists => true);
 
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+
 \set ON_ERROR_STOP 0
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', false);
 select add_drop_chunks_policy('test_table', INTERVAL '1 year');
