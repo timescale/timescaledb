@@ -3,7 +3,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/connection.c
   ${CMAKE_CURRENT_SOURCE_DIR}/connection_cache.c
   ${CMAKE_CURRENT_SOURCE_DIR}/async.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/command_exec.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/remote_exec.c
   ${CMAKE_CURRENT_SOURCE_DIR}/test_utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_id.c
   ${CMAKE_CURRENT_SOURCE_DIR}/dist_commands.c

@@ -168,12 +168,11 @@ check_conn_params(const char **keywords, const char **values)
  * you admit the possibility of a malicious view definition, there are any
  * number of ways to break things.
  */
-static void
-configure_remote_session(PGconn *conn)
+void
+remote_connection_configure(PGconn *conn)
 {
 	/* Force the search path to contain only pg_catalog (see deparse.c) */
 	remote_connection_exec_ok_command(conn, "SET search_path = pg_catalog");
-
 	/*
 	 * Set remote timezone; this is basically just cosmetic, since all
 	 * transmitted and returned timestamptzs should specify a zone explicitly
@@ -269,7 +268,7 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
-		configure_remote_session(conn);
+		remote_connection_configure(conn);
 
 		pfree(keywords);
 		pfree(values);

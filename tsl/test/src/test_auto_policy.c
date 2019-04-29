@@ -10,6 +10,7 @@
 #include <utils/timestamp.h>
 #include <access/htup_details.h>
 
+#include <hypertable.h>
 #include "bgw_policy/job.h"
 #include "chunk.h"
 #include "reorder.h"

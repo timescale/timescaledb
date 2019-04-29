@@ -116,25 +116,6 @@ hypertable_assign_servers(int32 hypertable_id, List *servers)
 	return assigned_servers;
 }
 
-static List *
-hypertable_server_array_to_list(ArrayType *serverarr)
-{
-	ArrayIterator it = array_create_iterator(serverarr, 0, NULL);
-	Datum server_datum;
-	bool isnull;
-	List *servers = NIL;
-
-	while (array_iterate(it, &server_datum, &isnull))
-	{
-		if (!isnull)
-			servers = lappend(servers, NameStr(*DatumGetName(server_datum)));
-	}
-
-	array_free_iterator(it);
-
-	return servers;
-}
-
 void
 hypertable_make_distributed(Hypertable *ht, ArrayType *servers)
 {
@@ -152,4 +133,23 @@ hypertable_make_distributed(Hypertable *ht, ArrayType *servers)
 				 errhint("Add servers using the add_server() function.")));
 
 	hypertable_assign_servers(ht->fd.id, serverlist);
+}
+
+List *
+hypertable_server_array_to_list(ArrayType *serverarr)
+{
+	ArrayIterator it = array_create_iterator(serverarr, 0, NULL);
+	Datum server_datum;
+	bool isnull;
+	List *servers = NIL;
+
+	while (array_iterate(it, &server_datum, &isnull))
+	{
+		if (!isnull)
+			servers = lappend(servers, NameStr(*DatumGetName(server_datum)));
+	}
+
+	array_free_iterator(it);
+
+	return servers;
 }
