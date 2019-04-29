@@ -163,7 +163,7 @@ SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
 
---check that views work correctly 
+--check that views work correctly
 SELECT * FROM timescaledb_information.reorder_policies;
 SELECT * FROM timescaledb_information.policy_stats;
 
@@ -284,3 +284,27 @@ SELECT show_chunks('test_drop_chunks_table');
 --test that views work
 SELECT * FROM timescaledb_information.drop_chunks_policies;
 SELECT * FROM timescaledb_information.policy_stats;
+
+-- continuous aggregate blocks drop_chunks
+INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '12 months', 0);
+
+CREATE VIEW tdc_view
+  WITH (timescaledb.continuous)
+  AS SELECT time_bucket('1 hour', time), count(drop_order)
+     FROM test_drop_chunks_table
+     GROUP BY 1;
+
+SELECT show_chunks('test_drop_chunks_table');
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 10000);
+
+SELECT * FROM sorted_bgw_log;
+
+SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
+
+-- should now have a failure
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:drop_chunks_job_id;
+
+SELECT show_chunks('test_drop_chunks_table');

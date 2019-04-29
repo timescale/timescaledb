@@ -683,17 +683,21 @@ typedef struct FormData_bgw_policy_reorder_hypertable_id_idx
 	int32 hypertable_id;
 } FormData_bgw_policy_reorder_hypertable_id_idx;
 
-/****** BGW_POLICY_DROP_CHUNKS TABLE definitions */
+/******************************************
+ *
+ * bgw_policy_drop_chunks table definitions
+ *
+ ******************************************/
 #define BGW_POLICY_DROP_CHUNKS_TABLE_NAME "bgw_policy_drop_chunks"
-
-enum Anum_bgw_policy_drop_chunks
+typedef enum Anum_bgw_policy_drop_chunks
 {
 	Anum_bgw_policy_drop_chunks_job_id = 1,
 	Anum_bgw_policy_drop_chunks_hypertable_id,
 	Anum_bgw_policy_drop_chunks_older_than,
 	Anum_bgw_policy_drop_chunks_cascade,
+	Anum_bgw_policy_drop_chunks_cascade_to_materializations,
 	_Anum_bgw_policy_drop_chunks_max,
-};
+} Anum_bgw_policy_drop_chunks;
 
 #define Natts_bgw_policy_drop_chunks (_Anum_bgw_policy_drop_chunks_max - 1)
 
@@ -703,38 +707,33 @@ typedef struct FormData_bgw_policy_drop_chunks
 	int32 hypertable_id;
 	Interval older_than;
 	bool cascade;
+	bool cascade_to_materializations;
 } FormData_bgw_policy_drop_chunks;
 
 typedef FormData_bgw_policy_drop_chunks *Form_bgw_policy_drop_chunks;
 
 enum
 {
-	BGW_POLICY_DROP_CHUNKS_PKEY_IDX = 0,
-	BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX,
+	BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_KEY = 0,
+	BGW_POLICY_DROP_CHUNKS_PKEY,
 	_MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
 };
-
-enum Anum_bgw_policy_drop_chunks_pkey_idx
+typedef enum Anum_bgw_policy_drop_chunks_hypertable_id_key
 {
-	Anum_bgw_policy_drop_chunks_pkey_idx_job_id = 1,
-	_Anum_bgw_policy_drop_chunks_pkey_idx_max,
-};
+	Anum_bgw_policy_drop_chunks_hypertable_id_key_hypertable_id = 1,
+	_Anum_bgw_policy_drop_chunks_hypertable_id_key_max,
+} Anum_bgw_policy_drop_chunks_hypertable_id_key;
 
-typedef struct FormData_bgw_policy_drop_chunks_pkey_idx
-{
-	int32 job_id;
-} FormData_bgw_policy_drop_chunks_pkey_idx;
+#define Natts_bgw_policy_drop_chunks_hypertable_id_key                                             \
+	(_Anum_bgw_policy_drop_chunks_hypertable_id_key_max - 1)
 
-enum Anum_bgw_policy_drop_chunks_hypertable_id_idx
+typedef enum Anum_bgw_policy_drop_chunks_pkey
 {
-	Anum_bgw_policy_drop_chunks_hypertable_id_idx_hypertable_id = 1,
-	_Anum_bgw_policy_drop_chunks_hypertable_id_idx_max,
-};
+	Anum_bgw_policy_drop_chunks_pkey_job_id = 1,
+	_Anum_bgw_policy_drop_chunks_pkey_max,
+} Anum_bgw_policy_drop_chunks_pkey;
 
-typedef struct FormData_bgw_policy_drop_chunks_hypertable_id_idx
-{
-	int32 hypertable_id;
-} FormData_bgw_policy_drop_chunks_hypertable_id_idx;
+#define Natts_bgw_policy_drop_chunks_pkey (_Anum_bgw_policy_drop_chunks_pkey_max - 1)
 
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"

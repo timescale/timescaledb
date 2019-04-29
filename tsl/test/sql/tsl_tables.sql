@@ -72,6 +72,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '3 month', false, true);
 select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', true, if_not_exists => true);
+select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
@@ -80,6 +81,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '3 month', false);
 select add_drop_chunks_policy('test_table', INTERVAL '1 year');
 select add_drop_chunks_policy('test_table', INTERVAL '3 days');
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', true);
+select add_drop_chunks_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
 \set ON_ERROR_STOP 1
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
