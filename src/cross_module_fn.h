@@ -114,6 +114,7 @@ typedef struct CrossModuleFunctions
 	PGFunction delete_server;
 	PGFunction attach_server;
 	PGFunction server_ping;
+	PGFunction detach_server;
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 	List *(*get_servername_list)(void);

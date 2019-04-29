@@ -188,3 +188,7 @@ CREATE OR REPLACE FUNCTION attach_server(
     if_not_attached        BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INTEGER, server_hypertable_id INTEGER, server_name NAME)
 AS '@MODULE_PATHNAME@', 'ts_server_attach' LANGUAGE C VOLATILE;
+
+-- Detach a server from a hypertable. NULL hypertable means it will do detach for all
+CREATE OR REPLACE FUNCTION detach_server(server_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_server_detach' LANGUAGE C VOLATILE;

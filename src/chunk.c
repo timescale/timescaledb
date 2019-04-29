@@ -2737,6 +2737,27 @@ ts_chunk_contains_compressed_data(Chunk *chunk)
 	return found;
 }
 
+List *
+ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
+{
+	List *chunkids = NIL;
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum id = heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
+								Anum_chunk_id,
+								ts_scan_iterator_tuple_info(&iterator)->desc,
+								&isnull);
+		if (!isnull)
+			chunkids = lappend_int(chunkids, DatumGetInt32(id));
+	}
+
+	return chunkids;
+}
+
 static ChunkResult
 chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {

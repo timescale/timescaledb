@@ -29,6 +29,7 @@ ORDER BY proname;
  create_hypertable
  decompress_chunk
  delete_server
+ detach_server
  detach_tablespace
  detach_tablespaces
  drop_chunks
@@ -60,5 +61,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(46 rows)
+(47 rows)
 

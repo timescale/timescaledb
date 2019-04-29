@@ -29,6 +29,7 @@
 --TS160 - duplicate dimension
 --TS170 - no servers
 --TS180 - server assignment already exists
+--TS190 - server not attached
 */
 #define ERRCODE_TS_DDL_ERRORS MAKE_SQLSTATE('T', 'S', '1', '0', '0')
 #define ERRCODE_TS_OPERATION_NOT_SUPPORTED MAKE_SQLSTATE('T', 'S', '1', '0', '1')
@@ -42,6 +43,7 @@
 #define ERRCODE_TS_DUPLICATE_DIMENSION MAKE_SQLSTATE('T', 'S', '1', '6', '0')
 #define ERRCODE_TS_NO_SERVERS MAKE_SQLSTATE('T', 'S', '1', '7', '0')
 #define ERRCODE_TS_SERVERS_ASSIGNMENT_ALREADY_EXISTS MAKE_SQLSTATE('T', 'S', '1', '8', '0')
+#define ERRCODE_TS_SERVER_NOT_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '9', '0')
 
 /*
 --IO500 - GROUP: internal error

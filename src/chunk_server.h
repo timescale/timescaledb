@@ -23,5 +23,8 @@ extern TSDLLEXPORT void ts_chunk_server_insert(ChunkServer *server);
 extern void ts_chunk_server_insert_multi(List *chunk_servers);
 extern int ts_chunk_server_delete_by_chunk_id(int32 chunk_id);
 extern int ts_chunk_server_delete_by_servername(const char *servername);
+extern TSDLLEXPORT List *
+ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, int32 hypertable_id,
+													 MemoryContext mctx);
 
 #endif /* TIMESCALEDB_CHUNK_SERVER_H */
