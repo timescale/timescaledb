@@ -5,13 +5,20 @@
 -- create FDW objects
 -- ===================================================================
 \c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/remote_exec.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE SCHEMA IF NOT EXISTS test;
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+GRANT USAGE ON SCHEMA test TO PUBLIC;
+CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
+LANGUAGE C;
 CREATE OR REPLACE FUNCTION remote_node_killer_set_event(text, text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_node_killer_set_event'
-LANGUAGE C;
-CREATE OR REPLACE FUNCTION remote_exec(srv_name name, sql_code text)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
 CREATE OR REPLACE FUNCTION test_remote_txn_persistent_record(srv_name name)
 RETURNS VOID
@@ -68,7 +75,8 @@ SELECT test_remote_txn_persistent_record('loopback');
 --successfull transaction
 SET timescaledb.enable_2pc = false;
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -83,7 +91,8 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20001;
 
 --aborted transaction
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -98,7 +107,8 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20002;
 
 --constraint violation
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --the next few statements inject faults before the commit. They should all fail
@@ -110,7 +120,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -139,7 +150,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -167,7 +179,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -194,7 +207,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --block preparing transactions on the frontend
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -210,7 +224,8 @@ DELETE FROM  "S 1"."T 1" where "C 1" >= 20000;
 SET timescaledb.enable_2pc = true;
 --simple commit
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -231,7 +246,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --simple abort
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -252,7 +268,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --constraint violation should fail the txn
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --the next few statements inject faults before the commit. They should all fail
@@ -264,7 +281,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -295,7 +313,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -342,7 +361,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -412,7 +432,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -470,7 +491,8 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -513,27 +535,32 @@ select count(*) from _timescaledb_catalog.remote_txn;
 --test prepare transactions. Note that leaked prepared stmts should be detected by `remote_txn_check_for_leaked_prepared_statements`
 --so we should be fine if we don't see any WARNINGS.
 BEGIN;
-    SELECT remote_exec('loopback', $$ PREPARE prep_1 AS SELECT 1 $$);
+    SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
+NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 BEGIN;
     SAVEPOINT save_1;
-        SELECT remote_exec('loopback', $$ PREPARE prep_1 AS SELECT 1 $$);
+        SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
+NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1 
  remote_exec 
 -------------
  
 (1 row)
 
-        SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+        SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
     ROLLBACK TO SAVEPOINT save_1;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
@@ -550,7 +577,8 @@ ALTER TABLE "S 1"."T 1" DROP CONSTRAINT t1_pkey,
 ADD CONSTRAINT t1_pkey PRIMARY KEY ("C 1") DEFERRABLE INITIALLY DEFERRED;
 --test ABORT TRANSACTION on failure in PREPARE TRANSACTION.
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -569,13 +597,15 @@ SELECT count(*) FROM pg_prepared_xacts;
 --ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK TRANSACTION.
 --conn2 would do a ABORT TRANSACTION.
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -604,13 +634,15 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -656,33 +688,38 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --test simple subtrans abort.
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
 	SAVEPOINT save_1;
-    	SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    	SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
 	ROLLBACK TO SAVEPOINT save_1;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -709,20 +746,23 @@ BEGIN;
  
 (1 row)
 
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
 	SAVEPOINT save_1;
-    	SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    	SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
@@ -734,9 +774,9 @@ WARNING:  remote connection error: terminating connection due to administrator c
 WARNING:  remote connection error: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  connection to server "loopback" was lost
-    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10016;
@@ -753,7 +793,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --block preparing transactions on the frontend
 BEGIN;
-    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
