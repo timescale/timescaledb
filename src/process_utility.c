@@ -2588,7 +2588,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	CreateTrigStmt *stmt = (CreateTrigStmt *) args->parsetree;
 	Cache *hcache;
 	Hypertable *ht;
-	ObjectAddress address;
+	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
 
 	if (!stmt->row)
 		return false;
