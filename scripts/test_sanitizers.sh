@@ -90,11 +90,10 @@ docker exec timescaledb-san /bin/bash -c "mkdir /tsdb_build && chown postgres /t
 docker exec -u postgres timescaledb-san /bin/bash -c "cp -R /timescaledb tsdb_build"
 
 docker exec -u postgres \
-    -e CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
-    -e CMAKE_BUILD_TYPE="Debug" \
+    -e CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O2" \
     -e PG_SOURCE_DIR="/usr/src/postgresql/" \
     timescaledb-san /bin/bash -c \
-    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DTEST_GROUP_SIZE=1 && cd build && make"
+    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1 && cd build && make"
 
 wait_for_pg timescaledb-san
 
@@ -107,4 +106,5 @@ echo "Testing"
 docker exec -u postgres \
     timescaledb-san /bin/bash -c \
     "cd /tsdb_build/timescaledb/build \
-        && PATH=\$PATH make -k regresscheck regresscheck-t"
+        && PATH=\$PATH make -k regresscheck regresscheck-t \
+            IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'"

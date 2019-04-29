@@ -1,21 +1,20 @@
 set(TEST_FILES
-    continuous_aggs_materialize.sql
+    continuous_aggs_dump.sql
+    continuous_aggs_errors.sql
+    continuous_aggs_usage.sql
     continuous_aggs_watermark.sql
     edition.sql
     gapfill.sql
     reorder.sql
     partialize_finalize.sql
-    ddl_hook.sql
-    continuous_aggs.sql
-    continuous_aggs_errors.sql
-    continuous_aggs_dump.sql
-    continuous_aggs_usage.sql
 )
 
 set(TEST_FILES_DEBUG
-    continuous_aggs_bgw
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
+    continuous_aggs.sql
+    continuous_aggs_bgw.sql
+    continuous_aggs_materialize.sql
     ddl_hook.sql
     tsl_tables.sql
 )
