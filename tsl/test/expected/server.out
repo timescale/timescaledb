@@ -589,3 +589,216 @@ SELECT * FROM _timescaledb_internal.server_ping('server_3');
 DROP DATABASE server_1;
 DROP DATABASE server_2;
 DROP DATABASE server_4;
+DROP SERVER server_3 CASCADE;
+NOTICE:  drop cascades to user mapping for super_user on server server_3
+-- there should be no servers
+SELECT * FROM show_servers();
+ server_name | host | port | dbname 
+-------------+------+------+--------
+(0 rows)
+
+-- let's add some
+SELECT * FROM add_server('server_1', database => 'server_1');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_1    | localhost | 15432 | server_1 | super_user | super_user      | t
+(1 row)
+
+SELECT * FROM add_server('server_2', database => 'server_2');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_2    | localhost | 15432 | server_2 | super_user | super_user      | t
+(1 row)
+
+SELECT * FROM add_server('server_3', database => 'server_3');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_3    | localhost | 15432 | server_3 | super_user | super_user      | t
+(1 row)
+
+DROP TABLE disttable;
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             6 | public      | disttable  | t
+(1 row)
+
+-- Create some chunks on all the servers
+INSERT INTO disttable VALUES
+       ('2019-02-02 10:45', 1, 23.4),
+       ('2019-05-23 10:45', 4, 14.9),
+       ('2019-07-23 10:45', 8, 7.6);
+SELECT * FROM test.show_subtables('disttable');
+                    Child                    | Tablespace 
+---------------------------------------------+------------
+ _timescaledb_internal._hyper_6_5_dist_chunk | 
+ _timescaledb_internal._hyper_6_6_dist_chunk | 
+ _timescaledb_internal._hyper_6_7_dist_chunk | 
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |      table_name       
+----+---------------+-----------------------+-----------------------
+  5 |             6 | _timescaledb_internal | _hyper_6_5_dist_chunk
+  6 |             6 | _timescaledb_internal | _hyper_6_6_dist_chunk
+  7 |             6 | _timescaledb_internal | _hyper_6_7_dist_chunk
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             6 |                    1 | server_1
+             6 |                    1 | server_2
+             6 |                    1 | server_3
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_server;
+ chunk_id | server_chunk_id | server_name 
+----------+-----------------+-------------
+        5 |               1 | server_1
+        5 |               1 | server_2
+        6 |               2 | server_2
+        6 |               1 | server_3
+        7 |               2 | server_3
+        7 |               2 | server_1
+(6 rows)
+
+-- Add additional hypertable 
+CREATE TABLE disttable_2(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_2', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+             7 | public      | disttable_2 | t
+(1 row)
+
+CREATE TABLE devices(device int, name text);
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             6 |                    1 | server_1
+             6 |                    1 | server_2
+             6 |                    1 | server_3
+             7 |                    2 | server_1
+             7 |                    2 | server_2
+             7 |                    2 | server_3
+(6 rows)
+
+-- Detach should work b/c disttable_2 has no data
+SELECT * FROM detach_server('server_2', 'disttable_2');
+ detach_server 
+---------------
+             1
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- can't detach non-existing server
+SELECT * FROM detach_server('server_12345', 'disttable');
+ERROR:  server "server_12345" is not attached to hypertable "disttable"
+-- NULL server
+SELECT * FROM detach_server(NULL, 'disttable');
+ERROR:  invalid server_name: cannot be NULL
+-- Can't detach server_1 b/c it contains data for disttable
+SELECT * FROM detach_server('server_1');
+ERROR:  server "server_1" cannot be detached because it contains chunks
+-- can't detach already detached server
+SELECT * FROM detach_server('server_2', 'disttable_2');
+ERROR:  server "server_2" is not attached to hypertable "disttable_2"
+-- can't detach b/c of replication factor for disttable_2
+SELECT * FROM detach_server('server_3', 'disttable_2');
+ERROR:  detaching server "server_3" risks making hypertable "disttable_2" under-replicated
+-- can't detach non hypertable
+SELECT * FROM detach_server('server_3', 'devices');
+ERROR:  relation "devices" is not a hypertable
+\set ON_ERROR_STOP 1
+-- Need explicit password for non-super users to connect
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+-- Let's add more servers
+SELECT * FROM add_server('server_4', database => 'server_4', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_4    | localhost | 15432 | server_4 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+SELECT * FROM add_server('server_5', database => 'server_5', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_5    | localhost | 15432 | server_5 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_5 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+CREATE TABLE disttable_3(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, servers => '{"server_4", "server_5"}');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+             8 | public      | disttable_3 | t
+(1 row)
+
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE TABLE disttable_4(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_factor => 1, servers => '{"server_4", "server_5"}');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+             9 | public      | disttable_4 | t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- error due to missing permissions
+SELECT * FROM detach_server('server_4', 'disttable_3');
+ERROR:  permission denied for hypertable "disttable_3"
+\set ON_ERROR_STOP 1
+-- detach table(s) where user has permissions, otherwise show NOTICE
+SELECT * FROM detach_server('server_4');
+NOTICE:  skipping hypertable "disttable_3" due to missing permissions
+ detach_server 
+---------------
+             1
+(1 row)
+
+-- Cleanup
+RESET ROLE;
+SELECT * FROM delete_server('server_1', cascade => true);
+NOTICE:  drop cascades to 2 other objects
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_2', cascade => true);
+NOTICE:  drop cascades to 2 other objects
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_3', cascade => true);
+NOTICE:  drop cascades to 2 other objects
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_4', cascade => true);
+NOTICE:  drop cascades to 2 other objects
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_5', cascade => true);
+NOTICE:  drop cascades to 2 other objects
+ delete_server 
+---------------
+ t
+(1 row)
+
+DROP DATABASE server_1;
+DROP DATABASE server_2;
+DROP DATABASE server_3;
+DROP DATABASE server_4;
+DROP DATABASE server_5;

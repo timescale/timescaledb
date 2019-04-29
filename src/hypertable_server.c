@@ -93,10 +93,9 @@ hypertable_server_tuple_delete(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
-static ScanTupleResult
-hypertable_server_tuple_found(TupleInfo *ti, void *data)
+static HypertableServer *
+hypertable_server_create_from_tuple(TupleInfo *ti)
 {
-	List **servers = data;
 	const char *servername;
 	HypertableServer *hypertable_server;
 	ForeignServer *foreign_server;
@@ -128,6 +127,19 @@ hypertable_server_tuple_found(TupleInfo *ti, void *data)
 			values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_hypertable_id)]);
 
 	hypertable_server->foreign_server_oid = foreign_server->serverid;
+	MemoryContextSwitchTo(old);
+
+	return hypertable_server;
+}
+
+static ScanTupleResult
+hypertable_server_tuples_found(TupleInfo *ti, void *data)
+{
+	List **servers = data;
+	MemoryContext old;
+	HypertableServer *hypertable_server = hypertable_server_create_from_tuple(ti);
+
+	old = MemoryContextSwitchTo(ti->mctx);
 	*servers = lappend(*servers, hypertable_server);
 	MemoryContextSwitchTo(old);
 
@@ -178,13 +190,42 @@ hypertable_server_scan_by_servername(const char *servername, tuple_found_func tu
 												 mctx);
 }
 
+static int
+hypertable_server_scan_by_hypertable_id_and_servername(int hypertable_id, const char *servername,
+													   tuple_found_func tuple_found, void *data,
+													   LOCKMODE lockmode, MemoryContext mctx)
+{
+	ScanKeyData scankey[2];
+
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_server_hypertable_id_server_name_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	ScanKeyInit(&scankey[1],
+				Anum_hypertable_server_hypertable_id_server_name_idx_server_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(servername)));
+
+	return hypertable_server_scan_limit_internal(scankey,
+												 2,
+												 HYPERTABLE_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX,
+												 tuple_found,
+												 data,
+												 0,
+												 lockmode,
+												 mctx);
+}
+
 TSDLLEXPORT List *
 ts_hypertable_server_scan(int32 hypertable_id, MemoryContext mctx)
 {
 	List *hypertable_servers = NIL;
 
 	hypertable_server_scan_by_hypertable_id(hypertable_id,
-											hypertable_server_tuple_found,
+											hypertable_server_tuples_found,
 											&hypertable_servers,
 											AccessShareLock,
 											mctx);
@@ -210,4 +251,29 @@ ts_hypertable_server_delete_by_servername(const char *servername)
 												NULL,
 												RowExclusiveLock,
 												CurrentMemoryContext);
+}
+
+TSDLLEXPORT int
+ts_hypertable_server_delete_by_servername_and_hypertable_id(const char *servername,
+															int32 hypertable_id)
+{
+	return hypertable_server_scan_by_hypertable_id_and_servername(hypertable_id,
+																  servername,
+																  hypertable_server_tuple_delete,
+																  NULL,
+																  RowExclusiveLock,
+																  CurrentMemoryContext);
+}
+
+List *
+ts_hypertable_server_scan_by_server_name(const char *server_name, MemoryContext mctx)
+{
+	List *hypertable_servers = NIL;
+
+	hypertable_server_scan_by_servername(server_name,
+										 hypertable_server_tuples_found,
+										 &hypertable_servers,
+										 AccessShareLock,
+										 mctx);
+	return hypertable_servers;
 }

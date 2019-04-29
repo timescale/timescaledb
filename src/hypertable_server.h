@@ -16,8 +16,13 @@ typedef struct HypertableServer
 } HypertableServer;
 
 extern TSDLLEXPORT List *ts_hypertable_server_scan(int32 hypertable_id, MemoryContext mctx);
+extern TSDLLEXPORT List *ts_hypertable_server_scan_by_server_name(const char *server_name,
+																  MemoryContext mctx);
 extern TSDLLEXPORT int ts_hypertable_server_delete_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT int ts_hypertable_server_delete_by_servername(const char *servername);
 extern TSDLLEXPORT void ts_hypertable_server_insert_multi(List *hypertable_servers);
+extern TSDLLEXPORT int
+ts_hypertable_server_delete_by_servername_and_hypertable_id(const char *servername,
+															int32 hypertable_id);
 
 #endif /* TIMESCALEDB_HYPERTABLE_SERVER_H */

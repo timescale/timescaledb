@@ -82,7 +82,7 @@ ts_rel_get_owner(Oid relid)
 	return ownerid;
 }
 
-bool
+TSDLLEXPORT bool
 ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid)
 {
 	return has_privs_of_role(userid, ts_rel_get_owner(hypertable_oid));
@@ -95,7 +95,7 @@ ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid)
  * versions so that tests need not change due to one word changes in error
  * messages and because it is more clear this way.
  */
-Oid
+TSDLLEXPORT Oid
 ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 {
 	Oid ownerid = ts_rel_get_owner(hypertable_oid);

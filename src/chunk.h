@@ -128,6 +128,8 @@ extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, H
 															   bool *created);
 extern List *ts_chunk_servers_copy(Chunk *chunk);
 
+extern TSDLLEXPORT List *ts_chunk_find_chunk_ids_by_hypertable_id(int32 hypertable_id);
+
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
 											 table_name,                                           \

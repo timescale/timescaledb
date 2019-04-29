@@ -1923,6 +1923,18 @@ chunk_form_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+static ScanTupleResult
+chunk_form_tuples_found(TupleInfo *ti, void *arg)
+{
+	List **chunkids = arg;
+	FormData_chunk *form = palloc(sizeof(FormData_chunk));
+
+	chunk_form_tuple_found(ti, form);
+
+	*chunkids = lappend_int(*chunkids, form->id);
+	return SCAN_CONTINUE;
+}
+
 static bool
 chunk_get_form(int32 chunk_id, FormData_chunk *form, bool missing_ok)
 {
@@ -2138,6 +2150,30 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
+}
+
+TSDLLEXPORT List *
+ts_chunk_find_chunk_ids_by_hypertable_id(int32 hypertable_id)
+{
+	List *chunkids = NIL;
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_hypertable_id_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	chunk_scan_internal(CHUNK_HYPERTABLE_ID_INDEX,
+						scankey,
+						1,
+						chunk_form_tuples_found,
+						&chunkids,
+						0,
+						ForwardScanDirection,
+						AccessShareLock,
+						CurrentMemoryContext);
+	return chunkids;
 }
 
 static ChunkResult

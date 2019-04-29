@@ -9,6 +9,7 @@
 
 #include "chunk_server.h"
 #include "scanner.h"
+#include "chunk.h"
 
 static void
 chunk_server_insert_relation(Relation rel, int32 chunk_id, int32 server_chunk_id, Name server_name)
@@ -192,8 +193,10 @@ ts_chunk_server_scan_by_chunk_id_and_servername(int32 chunk_id, const char *serv
 														 &chunk_servers,
 														 AccessShareLock,
 														 mctx);
-	Assert(list_length(chunk_servers) == 1);
+	Assert(list_length(chunk_servers) <= 1);
 
+	if (chunk_servers == NIL)
+		return NULL;
 	return linitial(chunk_servers);
 }
 
@@ -228,4 +231,28 @@ ts_chunk_server_delete_by_servername(const char *servername)
 												   NULL,
 												   RowExclusiveLock,
 												   CurrentMemoryContext);
+}
+
+TSDLLEXPORT List *
+ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, int32 hypertable_id,
+													 MemoryContext mctx)
+{
+	List *results = NIL;
+	ListCell *lc;
+	MemoryContext old;
+	List *chunk_ids = NIL;
+
+	old = MemoryContextSwitchTo(mctx);
+	chunk_ids = ts_chunk_find_chunk_ids_by_hypertable_id(hypertable_id);
+
+	foreach (lc, chunk_ids)
+	{
+		int32 chunk_id = lfirst_int(lc);
+		ChunkServer *cs =
+			ts_chunk_server_scan_by_chunk_id_and_servername(chunk_id, server_name, mctx);
+		results = lappend(results, cs);
+	}
+
+	MemoryContextSwitchTo(old);
+	return results;
 }
