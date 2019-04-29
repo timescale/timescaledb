@@ -67,11 +67,13 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	Interval *older_than = PG_GETARG_INTERVAL_P(1);
 	bool cascade = PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_GETARG_BOOL(3);
+	bool cascade_to_materializations = PG_GETARG_BOOL(4);
 
 	BgwPolicyDropChunks policy = { .fd = {
 									   .hypertable_id = ts_hypertable_relid_to_id(ht_oid),
 									   .older_than = *older_than,
 									   .cascade = cascade,
+									   .cascade_to_materializations = cascade_to_materializations,
 								   } };
 
 	license_enforce_enterprise_enabled();
@@ -103,7 +105,8 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 		if (!DatumGetBool(DirectFunctionCall2(interval_eq,
 											  IntervalPGetDatum(&existing->fd.older_than),
 											  IntervalPGetDatum(older_than))) ||
-			(existing->fd.cascade != cascade))
+			(existing->fd.cascade != cascade) ||
+			(existing->fd.cascade_to_materializations != cascade_to_materializations))
 		{
 			elog(WARNING,
 				 "could not add drop_chunks policy due to existing policy on hypertable with "
