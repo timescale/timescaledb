@@ -172,7 +172,7 @@ execute_drop_chunks_policy(int32 job_id)
 							INTERVALOID,
 							InvalidOid,
 							args->fd.cascade,
-							false,
+							args->fd.cascade_to_materializations,
 							LOG);
 	elog(LOG, "completed dropping chunks");
 

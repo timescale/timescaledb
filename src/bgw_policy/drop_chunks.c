@@ -42,13 +42,13 @@ ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(int32 job_id)
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
-				Anum_bgw_policy_drop_chunks_pkey_idx_job_id,
+				Anum_bgw_policy_drop_chunks_pkey_job_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(job_id));
 
 	return ts_catalog_scan_one(BGW_POLICY_DROP_CHUNKS,
-							   BGW_POLICY_DROP_CHUNKS_PKEY_IDX,
+							   BGW_POLICY_DROP_CHUNKS_PKEY,
 							   scankey,
 							   1,
 							   ts_bgw_policy_delete_row_only_tuple_found,
@@ -64,13 +64,13 @@ ts_bgw_policy_drop_chunks_find_by_job(int32 job_id)
 	BgwPolicyDropChunks *ret = NULL;
 
 	ScanKeyInit(&scankey[0],
-				Anum_bgw_policy_drop_chunks_pkey_idx_job_id,
+				Anum_bgw_policy_drop_chunks_pkey_job_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(job_id));
 
 	ts_catalog_scan_one(BGW_POLICY_DROP_CHUNKS,
-						BGW_POLICY_DROP_CHUNKS_PKEY_IDX,
+						BGW_POLICY_DROP_CHUNKS_PKEY,
 						scankey,
 						1,
 						bgw_policy_drop_chunks_tuple_found,
@@ -88,13 +88,13 @@ ts_bgw_policy_drop_chunks_find_by_hypertable(int32 hypertable_id)
 	BgwPolicyDropChunks *ret = NULL;
 
 	ScanKeyInit(&scankey[0],
-				Anum_bgw_policy_drop_chunks_hypertable_id_idx_hypertable_id,
+				Anum_bgw_policy_drop_chunks_hypertable_id_key_hypertable_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
 	ts_catalog_scan_one(BGW_POLICY_DROP_CHUNKS,
-						BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX,
+						BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_KEY,
 						scankey,
 						1,
 						bgw_policy_drop_chunks_tuple_found,
@@ -123,6 +123,8 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 		IntervalPGetDatum(&policy->fd.older_than);
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)] =
 		BoolGetDatum(policy->fd.cascade);
+	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
+		BoolGetDatum(policy->fd.cascade_to_materializations);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);

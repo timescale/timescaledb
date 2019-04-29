@@ -179,8 +179,8 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 	[BGW_POLICY_DROP_CHUNKS] = {
 		.length = _MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
 		.names = (char *[]) {
-			[BGW_POLICY_DROP_CHUNKS_PKEY_IDX] = "bgw_policy_drop_chunks_pkey",
-			[BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX] = "bgw_policy_drop_chunks_hypertable_id_key",
+			[BGW_POLICY_DROP_CHUNKS_PKEY] = "bgw_policy_drop_chunks_pkey",
+			[BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_KEY] = "bgw_policy_drop_chunks_hypertable_id_key",
 		},
 	},
 	[BGW_POLICY_CHUNK_STATS] = {

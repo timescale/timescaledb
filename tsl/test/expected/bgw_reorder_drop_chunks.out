@@ -60,8 +60,8 @@ SELECT * FROM _timescaledb_config.bgw_job;
 (0 rows)
 
 SELECT * FROM timescaledb_information.drop_chunks_policies;
- hypertable | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period 
-------------+------------+---------+--------+-------------------+-------------+-------------+--------------
+ hypertable | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period | cascade_to_materializations 
+------------+------------+---------+--------+-------------------+-------------+-------------+--------------+-----------------------------
 (0 rows)
 
 SELECT * FROM timescaledb_information.reorder_policies;
@@ -297,7 +297,7 @@ SELECT indexrelid::regclass, indisclustered
  _timescaledb_internal._hyper_1_3_chunk_test_reorder_table_time_idx | t
 (3 rows)
 
---check that views work correctly 
+--check that views work correctly
 SELECT * FROM timescaledb_information.reorder_policies;
      hypertable     |    hypertable_index_name    | job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------------------+-----------------------------+--------+-------------------+-------------+-------------+--------------
@@ -422,9 +422,9 @@ SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;
- job_id | hypertable_id | older_than | cascade 
---------+---------------+------------+---------
-   1001 |             2 | @ 4 mons   | f
+ job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
+--------+---------------+------------+---------+-----------------------------
+   1001 |             2 | @ 4 mons   | f       | f
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
@@ -582,9 +582,9 @@ SELECT show_chunks('test_drop_chunks_table');
 
 --test that views work
 SELECT * FROM timescaledb_information.drop_chunks_policies;
-       hypertable       | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period 
-------------------------+------------+---------+--------+-------------------+-------------+-------------+--------------
- test_drop_chunks_table | @ 4 mons   | f       |   1001 | @ 1 sec           | @ 5 mins    |          -1 | @ 12 hours
+       hypertable       | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period | cascade_to_materializations 
+------------------------+------------+---------+--------+-------------------+-------------+-------------+--------------+-----------------------------
+ test_drop_chunks_table | @ 4 mons   | f       |   1001 | @ 1 sec           | @ 5 mins    |          -1 | @ 12 hours   | f
 (1 row)
 
 SELECT * FROM timescaledb_information.policy_stats;
@@ -592,4 +592,65 @@ SELECT * FROM timescaledb_information.policy_stats;
 ------------------------+--------+-------------+------------------+------------------------------+------------------------------+------------------------------+------------+----------------
  test_drop_chunks_table |   1001 | drop_chunks | t                | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:02 1999 PST |          2 |              0
 (1 row)
+
+-- continuous aggregate blocks drop_chunks
+INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '12 months', 0);
+CREATE VIEW tdc_view
+  WITH (timescaledb.continuous)
+  AS SELECT time_bucket('1 hour', time), count(drop_order)
+     FROM test_drop_chunks_table
+     GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+SELECT show_chunks('test_drop_chunks_table');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_2_6_chunk
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+ _timescaledb_internal._hyper_2_12_chunk
+(4 rows)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 10000);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time | application_name |                        msg                         
+--------+-----------+------------------+----------------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      0 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
+      0 |     50000 | DB Scheduler     | [TESTING] Wait until 1000000, started at 50000
+      1 |   1000000 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |   1000000 | DB Scheduler     | [TESTING] Wait until 10050000, started at 1000000
+      0 |  10050000 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |  10050000 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |  10050000 | DB Scheduler     | [TESTING] Wait until 20050000, started at 10050000
+(9 rows)
+
+SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
+  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
+------+----------------------------+-------------+-------------------+-------------+-------------+--------------
+ 1001 | Drop Chunks Background Job | drop_chunks | @ 1 sec           | @ 5 mins    |          -1 | @ 12 hours
+(1 row)
+
+-- should now have a failure
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:drop_chunks_job_id;
+ job_id |           next_start            |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+---------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:15.05 1999 PST | Fri Dec 31 16:00:10.05 1999 PST | f                |          3 |               2 |              1 |             0
+(1 row)
+
+SELECT show_chunks('test_drop_chunks_table');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_2_6_chunk
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+ _timescaledb_internal._hyper_2_12_chunk
+(4 rows)
 
