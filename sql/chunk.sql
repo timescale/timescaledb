@@ -46,7 +46,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
 
--- returns the chunk id for the chunk that would contain a given tuple, or NULL if no such chunk
--- currently exists in the hypertable. tuple must be of the hypertable's row type.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_for_tuple(hypertable_id INTEGER, tuple ANYELEMENT) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_chunk_for_tuple' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+--given a chunk's relid, return the id. Error out if not a chunk relid.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_id_from_relid(relid OID) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
