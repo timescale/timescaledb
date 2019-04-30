@@ -567,7 +567,7 @@ ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refres
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 
-select indexname, indexdef from pg_indexes where tablename = 
+select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
@@ -583,7 +583,7 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
 
-select indexname, indexdef from pg_indexes where tablename = 
+select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
@@ -622,6 +622,65 @@ ALTER VIEW mat_with_test SET (timescaledb.refresh_lag = '100', timescaledb.max_i
 SELECT refresh_lag, max_interval_per_job FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
 DROP TABLE conditions CASCADE;
+
+
+--test space partitions
+CREATE TABLE space_table (
+    time BIGINT,
+    dev  BIGINT,
+    data BIGINT
+);
+
+SELECT create_hypertable(
+    'space_table',
+    'time',
+    chunk_time_interval => 10,
+    partitioning_column => 'dev',
+    number_partitions => 3);
+
+CREATE VIEW space_view
+WITH (timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
+AS SELECT time_bucket('4', time), COUNT(data)
+   FROM space_table
+   GROUP BY 1;
+
+INSERT INTO space_table VALUES
+  (0, 1, 1), (0, 2, 1), (1, 1, 1), (1, 2, 1),
+  (10, 1, 1), (10, 2, 1), (11, 1, 1), (11, 2, 1);
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+
+
+REFRESH MATERIALIZED VIEW space_view;
+
+SELECT * FROM space_view ORDER BY 1;
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+
+
+INSERT INTO space_table VALUES (3, 2, 1);
+
+REFRESH MATERIALIZED VIEW space_view;
+
+SELECT * FROM space_view ORDER BY 1;
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+
+
+INSERT INTO space_table VALUES (2, 3, 1);
+
+REFRESH MATERIALIZED VIEW space_view;
+
+SELECT * FROM space_view ORDER BY 1;
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+
+
+DROP TABLE space_table CASCADE;
 
 --
 -- TEST FINALIZEFUNC_EXTRA
