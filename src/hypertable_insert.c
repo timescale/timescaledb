@@ -104,6 +104,13 @@ hypertable_insert_state_create(CustomScan *cscan)
 	state->cscan_state.methods = &hypertable_insert_state_methods;
 	state->mt = (ModifyTable *) linitial(cscan->custom_plans);
 
+	/*
+	 * Restore ModifyTable arbiterIndexes to the original value
+	 * this is necessary in case this plan gets executed multiple
+	 * times in a prepared statement.
+	 */
+	state->mt->arbiterIndexes = linitial(cscan->custom_private);
+
 	return (Node *) state;
 }
 
@@ -171,6 +178,14 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomP
 
 	/* Set the custom scan target list for, e.g., explains */
 	cscan->custom_scan_tlist = copyObject(cscan->scan.plan.targetlist);
+
+	/*
+	 * we save the original list of arbiter indexes here
+	 * because we modify that list during execution and
+	 * we still need the original list in case that plan
+	 * gets reused
+	 */
+	cscan->custom_private = list_make1(mt->arbiterIndexes);
 
 	return &cscan->scan.plan;
 }
