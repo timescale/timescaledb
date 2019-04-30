@@ -211,8 +211,35 @@ RETURNING *)
 select * from cte;
 
 -- test ON CONFLICT with prepared statements
-CREATE TABLE prepared_test(time timestamptz PRIMARY KEY, value float);
+CREATE TABLE prepared_test(time timestamptz PRIMARY KEY, value float CHECK(value > 0));
 SELECT create_hypertable('prepared_test','time');
+
+CREATE TABLE source_data(time timestamptz PRIMARY KEY, value float);
+INSERT INTO source_data VALUES('2000-01-01',0.5), ('2001-01-01',0.5);
+
+-- at some point PostgreSQL will turn the plan into a generic plan
+-- so we execute the prepared statement 10 times
+-- check that an error in the prepared statement does not lead to the plan becoming unusable
+PREPARE prep_insert_select AS INSERT INTO prepared_test select * from source_data ON CONFLICT (time) DO UPDATE SET value = EXCLUDED.value;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+--this insert will create an invalid tuple in source_data
+--so that future calls to prep_insert_select will fail
+INSERT INTO source_data VALUES('2000-01-02',-0.5);
+\set ON_ERROR_STOP 0
+EXECUTE prep_insert_select;
+EXECUTE prep_insert_select;
+\set ON_ERROR_STOP 1
+DELETE FROM source_data WHERE value <= 0;
+EXECUTE prep_insert_select;
 
 PREPARE prep_insert AS INSERT INTO prepared_test VALUES('2000-01-01',0.5) ON CONFLICT (time) DO UPDATE SET value = EXCLUDED.value;
 
