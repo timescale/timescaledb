@@ -788,7 +788,7 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  @ 2 hours
 (1 row)
 
-select indexname, indexdef from pg_indexes where tablename = 
+select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
@@ -811,7 +811,7 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
 NOTICE:  adding not-null constraint to column "time_partition_col"
-select indexname, indexdef from pg_indexes where tablename = 
+select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
@@ -875,6 +875,105 @@ SELECT refresh_lag, max_interval_per_job FROM _timescaledb_catalog.continuous_ag
 
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
+--test space partitions
+CREATE TABLE space_table (
+    time BIGINT,
+    dev  BIGINT,
+    data BIGINT
+);
+SELECT create_hypertable(
+    'space_table',
+    'time',
+    chunk_time_interval => 10,
+    partitioning_column => 'dev',
+    number_partitions => 3);
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable     
+---------------------------
+ (21,public,space_table,t)
+(1 row)
+
+CREATE VIEW space_view
+WITH (timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
+AS SELECT time_bucket('4', time), COUNT(data)
+   FROM space_table
+   GROUP BY 1;
+NOTICE:  adding not-null constraint to column "time_partition_col"
+INSERT INTO space_table VALUES
+  (0, 1, 1), (0, 2, 1), (1, 1, 1), (1, 2, 1),
+  (10, 1, 1), (10, 2, 1), (11, 1, 1), (11, 2, 1);
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+ time_partition_col | agg_2_2 | chunk_id 
+--------------------+---------+----------
+(0 rows)
+
+REFRESH MATERIALIZED VIEW space_view;
+INFO:  new materialization range for public.space_table (time column time) (12)
+INFO:  materializing continuous aggregate public.space_view: new range up to 12
+SELECT * FROM space_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     4
+           8 |     4
+(2 rows)
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+ time_partition_col |      agg_2_2       | chunk_id 
+--------------------+--------------------+----------
+                  0 | \x0000000000000002 |       58
+                  0 | \x0000000000000002 |       59
+                  8 | \x0000000000000002 |       60
+                  8 | \x0000000000000002 |       61
+(4 rows)
+
+INSERT INTO space_table VALUES (3, 2, 1);
+REFRESH MATERIALIZED VIEW space_view;
+INFO:  new materialization range not found for public.space_table (time column time): no new data
+INFO:  materializing continuous aggregate public.space_view: no new range to materialize
+SELECT * FROM space_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     5
+           8 |     4
+(2 rows)
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+ time_partition_col |      agg_2_2       | chunk_id 
+--------------------+--------------------+----------
+                  0 | \x0000000000000002 |       58
+                  0 | \x0000000000000003 |       59
+                  8 | \x0000000000000002 |       60
+                  8 | \x0000000000000002 |       61
+(4 rows)
+
+INSERT INTO space_table VALUES (2, 3, 1);
+REFRESH MATERIALIZED VIEW space_view;
+INFO:  new materialization range not found for public.space_table (time column time): no new data
+INFO:  materializing continuous aggregate public.space_view: no new range to materialize
+SELECT * FROM space_view ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |     6
+           8 |     4
+(2 rows)
+
+SELECT * FROM _timescaledb_internal._materialized_hypertable_22
+  ORDER BY time_partition_col, chunk_id;
+ time_partition_col |      agg_2_2       | chunk_id 
+--------------------+--------------------+----------
+                  0 | \x0000000000000002 |       58
+                  0 | \x0000000000000003 |       59
+                  0 | \x0000000000000001 |       63
+                  8 | \x0000000000000002 |       60
+                  8 | \x0000000000000002 |       61
+(5 rows)
+
+DROP TABLE space_table CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_62_chunk
 --
 -- TEST FINALIZEFUNC_EXTRA
 --
@@ -941,7 +1040,7 @@ WARNING:  type integer text
 (3 rows)
 
 DROP view mat_ffunc_test cascade;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_61_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_67_chunk
 create or replace view mat_ffunc_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
