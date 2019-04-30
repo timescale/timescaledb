@@ -21,10 +21,13 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #1115 Fix ordered append optimization for join queries
 * #1132 Adjust ordered append path cost
+* #1195 Fix cascade in scheduled drop chunks
+* #1196 Fix UPSERT with prepared statements
 
 **Thanks**
 * @spickman for reporting a segfault with ordered append and JOINs
 * @comicfans for reporting a performance regression with ordered append
+* @Specter-Y for reporting a segfault with UPSERT and prepared statements
 
 ## 1.2.2 (2019-03-14)
 
