@@ -360,7 +360,6 @@ as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec);
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
@@ -439,7 +438,6 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
-NOTICE:  adding not-null constraint to column "time_partition_col"
 \set ON_ERROR_STOP 0
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '1h');
 ERROR:  parameter timescaledb.refresh_lag must be an integer for hypertables with integer time values
@@ -456,7 +454,6 @@ as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 -- custom time partition functions are not supported with invalidations
 CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
     AS $$ SELECT length($1)::BIGINT $$

@@ -98,7 +98,6 @@ NOTICE:  view "mat_test" does not exist, skipping
 CREATE VIEW mat_before
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_BEFORE;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 NOTICE:  adding index _materialized_hypertable_3_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, time_partition_col)
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
@@ -106,7 +105,6 @@ NOTICE:  adding index _materialized_hypertable_3_location_time_partition_col_idx
 CREATE VIEW mat_after
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_AFTER;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 NOTICE:  adding index _materialized_hypertable_4_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(location, time_partition_col)
 --materialize mat_before
 REFRESH MATERIALIZED VIEW mat_before;

@@ -24,7 +24,6 @@ AS
 Select sum( temperature ), min(location)
 from conditions
 group by time_bucket('1week', timec);
-NOTICE:  adding not-null constraint to column "time_partition_col"
 GRANT select on mat_m1 to :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select count(*) from mat_m1;
@@ -54,7 +53,6 @@ CREATE VIEW rename_test WITH ( timescaledb.continuous)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
@@ -214,7 +212,6 @@ CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
     GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_name
@@ -359,7 +356,6 @@ CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
     GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_u_name
