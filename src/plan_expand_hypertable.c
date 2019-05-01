@@ -235,12 +235,19 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 				if (interval->month != 0)
 					return op;
+
+				/* bail out if interval->time can't be exactly represented as a double */
+				if (interval->time >= 0x3FFFFFFFFFFFFFll)
+					return op;
+
 				if (DatumGetDateADT(castNode(Const, value)->constvalue) >=
-					DATEVAL_NOEND - interval->day + ceil(interval->time / USECS_PER_DAY))
+					DATEVAL_NOEND - interval->day +
+						ceil((double) interval->time / (double) USECS_PER_DAY))
 					return op;
 
 				datum = DateADTGetDatum(DatumGetDateADT(castNode(Const, value)->constvalue) +
-										interval->day + ceil(interval->time / USECS_PER_DAY));
+										interval->day +
+										ceil((double) interval->time / (double) USECS_PER_DAY));
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,

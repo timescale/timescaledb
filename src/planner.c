@@ -535,12 +535,15 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
 		ts_cm_functions->create_upper_paths_hook(root, stage, input_rel, output_rel);
 
-	/* Modify for INSERTs on a hypertable */
-	if (output_rel != NULL && output_rel->pathlist != NIL)
-		output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
+	if (output_rel != NULL)
+	{
+		/* Modify for INSERTs on a hypertable */
+		if (output_rel->pathlist != NIL)
+			output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
 
-	/* modify aggregates that need to be partialized */
-	plan_process_partialize_agg(root, input_rel, output_rel);
+		/* modify aggregates that need to be partialized */
+		plan_process_partialize_agg(root, input_rel, output_rel);
+	}
 
 	if (ts_guc_disable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
 		return;

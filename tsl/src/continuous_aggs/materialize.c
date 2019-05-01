@@ -118,9 +118,10 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	relation_close(raw_table_relation, NoLock);
 
 	materialization_table = ts_hypertable_get_by_id(cagg_data.mat_hypertable_id);
-	materialization_table_oid = materialization_table->main_table_relid;
 	if (materialization_table == NULL)
 		elog(ERROR, "materialization table dropped before materialization could start");
+
+	materialization_table_oid = materialization_table->main_table_relid;
 
 	materialization_table_relation =
 		relation_open(materialization_table_oid, ShareRowExclusiveLock);
