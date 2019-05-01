@@ -305,11 +305,11 @@ materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
 
 select view_name, view_definition from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
--[ RECORD 1 ]---+--------------------------------------------------------------------------------
+-[ RECORD 1 ]---+-------------------------------------------------------------------------
 view_name       | test_continuous_agg_view
-view_definition |  SELECT time_bucket(2, test_continuous_agg_table."time") AS time_partition_col,+
-                |     sum(test_continuous_agg_table.data) AS value                               +
-                |    FROM test_continuous_agg_table                                              +
+view_definition |  SELECT time_bucket(2, test_continuous_agg_table."time") AS time_bucket,+
+                |     sum(test_continuous_agg_table.data) AS value                        +
+                |    FROM test_continuous_agg_table                                       +
                 |   GROUP BY (time_bucket(2, test_continuous_agg_table."time"));
 
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';

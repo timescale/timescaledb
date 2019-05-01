@@ -311,6 +311,84 @@ insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, 71, 28;
 
 --drop view mat_m1 cascade;
+--naming with AS clauses
+create or replace view mat_naming
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec) as bucket, location as loc, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by bucket, loc
+having min(location) >= 'NYC' and avg(temperature) > 20;
+
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+
+DROP VIEW mat_naming CASCADE;
+
+--naming with default names
+create or replace view mat_naming
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by 1,2
+having min(location) >= 'NYC' and avg(temperature) > 20;
+
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+
+DROP VIEW mat_naming CASCADE;
+
+--naming with view col names
+create or replace view mat_naming (bucket, loc, sum_t_h, stdd)
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by 1,2
+having min(location) >= 'NYC' and avg(temperature) > 20;
+
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+
+DROP VIEW mat_naming CASCADE;
+
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous)
 as
@@ -318,8 +396,8 @@ select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by  time_bucket('1week', timec)
-having min(location) >= 'NYC' and avg(temperature) > 20
-;
+having min(location) >= 'NYC' and avg(temperature) > 20;
+
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -648,16 +726,27 @@ INSERT INTO space_table VALUES
   (0, 1, 1), (0, 2, 1), (1, 1, 1), (1, 2, 1),
   (10, 1, 1), (10, 2, 1), (11, 1, 1), (11, 2, 1);
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'space_view'
+\gset
+
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
 
 
 REFRESH MATERIALIZED VIEW space_view;
 
 SELECT * FROM space_view ORDER BY 1;
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
 
 
 INSERT INTO space_table VALUES (3, 2, 1);
@@ -666,8 +755,8 @@ REFRESH MATERIALIZED VIEW space_view;
 
 SELECT * FROM space_view ORDER BY 1;
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
 
 
 INSERT INTO space_table VALUES (2, 3, 1);
@@ -676,8 +765,8 @@ REFRESH MATERIALIZED VIEW space_view;
 
 SELECT * FROM space_view ORDER BY 1;
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
 
 
 DROP TABLE space_table CASCADE;

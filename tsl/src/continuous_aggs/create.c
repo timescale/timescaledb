@@ -65,7 +65,7 @@
 #define PARTIALFN "partialize_agg"
 #define TIMEBUCKETFN "time_bucket"
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
-#define MATPARTCOLNM "time_partition_col"
+#define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
@@ -148,10 +148,9 @@ typedef struct MatTableColumnInfo
 
 typedef struct FinalizeQueryInfo
 {
-	List *final_seltlist;		  /*select target list for finalize query */
-	List *final_seltlist_aliases; /* select target list aliases for finalize query */
-	Node *final_havingqual;		  /*having qual for finalize query */
-	Query *final_userquery;		  /* user query used to compute the finalize_query */
+	List *final_seltlist;   /*select target list for finalize query */
+	Node *final_havingqual; /*having qual for finalize query */
+	Query *final_userquery; /* user query used to compute the finalize_query */
 } FinalizeQueryInfo;
 
 typedef struct CAggTimebucketInfo
@@ -194,7 +193,7 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 									int64 hypertable_partition_col_interval);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
 									List *targetList);
-static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliases,
+static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 							   MatTableColumnInfo *mattblinfo);
 static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											 ObjectAddress *mattbladdress);
@@ -1112,26 +1111,30 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 		{
 			TargetEntry *tle = (TargetEntry *) input;
 			bool timebkt_chk = false;
+
+			if (IsA(tle->expr, FuncExpr))
+				timebkt_chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
+
 			if (tle->resname)
 				colname = pstrdup(tle->resname);
 			else
 			{
-				PRINT_MATCOLNAME(colbuf, "grp", original_query_resno, matcolno);
-				colname = colbuf;
-			}
-			/* is this the time_bucket column */
-			if (IsA(tle->expr, FuncExpr))
-			{
-				timebkt_chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
 				if (timebkt_chk)
+					colname = DEFAULT_MATPARTCOLUMN_NAME;
+				else
 				{
-					colname = MATPARTCOLNM;
-					tle->resname = pstrdup(colname);
-					out->matpartcolno = matcolno - 1;
-					out->matpartcolname = pstrdup(colname);
+					PRINT_MATCOLNAME(colbuf, "grp", original_query_resno, matcolno);
+					colname = colbuf;
 				}
 			}
-			if (!timebkt_chk) /* add the names to the gorupcolname list */
+
+			if (timebkt_chk)
+			{
+				tle->resname = pstrdup(colname);
+				out->matpartcolno = matcolno - 1;
+				out->matpartcolname = pstrdup(colname);
+			}
+			else
 			{
 				out->mat_groupcolname_list = lappend(out->mat_groupcolname_list, pstrdup(colname));
 			}
@@ -1352,8 +1355,7 @@ SIDE_EFFCT: the data structure in mattblinfo is modified as a side effect by add
 table columns and partialize exprs.
 */
 static void
-finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliases,
-				   MatTableColumnInfo *mattblinfo)
+finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
 {
 	AggPartCxt cxt;
 	ListCell *lc;
@@ -1362,7 +1364,6 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, List *tlist_aliase
 
 	inp->final_userquery = copyObject(orig_query);
 	inp->final_seltlist = NIL;
-	inp->final_seltlist_aliases = tlist_aliases;
 	inp->final_havingqual = NULL;
 
 	/* Set up the final_seltlist and final_havingqual entries */
@@ -1477,28 +1478,6 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 			tle->resorigcol = ((Var *) tle->expr)->varattno;
 		}
 	}
-	/* fixup correct resname as well */
-	if (inp->final_seltlist_aliases != NIL)
-	{
-		ListCell *alist_item = list_head(inp->final_seltlist_aliases);
-		foreach (lc, inp->final_seltlist)
-		{
-			TargetEntry *tle = (TargetEntry *) lfirst(lc);
-
-			/* junk columns don't get aliases */
-			if (tle->resjunk)
-				continue;
-			tle->resname = pstrdup(strVal(lfirst(alist_item)));
-			alist_item = lnext(alist_item);
-			if (alist_item == NULL)
-				break; /* done assigning aliases */
-		}
-
-		if (alist_item != NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("too many column names were specified")));
-	}
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
 	final_selquery->rtable = inp->final_userquery->rtable; /*fixed up above */
@@ -1517,19 +1496,17 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	return final_selquery;
 }
 
-/* assign aliases to the targetlist for the view query provided by the user
- * we shoudl not reply on the default resnames say the query has : sum(temp), sum(humidity)
- * the default resname is "sum" this would cause a conflict and create view will fail.
+/* Assign aliases to the targetlist in the query according to the column_names provided
+ * in the CREATE VIEW statement.
  */
-static Query *
+static void
 fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 {
-	Query *ret_query = copyObject(userquery);
 	if (tlist_aliases != NIL)
 	{
 		ListCell *lc;
 		ListCell *alist_item = list_head(tlist_aliases);
-		foreach (lc, ret_query->targetList)
+		foreach (lc, userquery->targetList)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lc);
 
@@ -1541,8 +1518,12 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 			if (alist_item == NULL)
 				break; /* done assigning aliases */
 		}
+
+		if (alist_item != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("too many column names were specified")));
 	}
-	return ret_query;
 }
 
 /* Modifies the passed in ViewStmt to do the following
@@ -1609,8 +1590,11 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 														  with_clause_options,
 														  origquery_ht->bucket_width);
 
+	/* assign the column_name aliases in CREATE VIEW to the query. No other modifications to
+	 * panquery */
+	fixup_userview_query_tlist(panquery, stmt->aliases);
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(panquery->groupClause));
-	finalizequery_init(&finalqinfo, panquery, stmt->aliases, &mattblinfo);
+	finalizequery_init(&finalqinfo, panquery, &mattblinfo);
 
 	/* invalidate all options on the stmt before using it
 	 * The options are valid only for internal use (ts_continuous)
@@ -1655,7 +1639,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	/* create a dummy view to store the user supplied view query. This is to get PG
 	 * to display the view correctly without having to replicate the PG source code for make_viewdef
 	 */
-	orig_userview_query = fixup_userview_query_tlist(panquery, stmt->aliases);
+	orig_userview_query = copyObject(panquery);
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);

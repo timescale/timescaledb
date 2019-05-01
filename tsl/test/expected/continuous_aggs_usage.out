@@ -39,7 +39,7 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id; --We have to group by the bucket column, but can also add other group-by columns
-NOTICE:  adding index _materialized_hypertable_2_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_2_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, bucket)
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
@@ -83,7 +83,7 @@ refresh_lag                | @ 2 hours
 refresh_interval           | @ 2 hours
 max_interval_per_job       | @ 60 days
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_2
-view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS time_partition_col,          +
+view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
                            |     device_readings.device_id,                                                                              +
                            |     avg(device_readings.metric) AS metric_avg,                                                              +
                            |     (max(device_readings.metric) - min(device_readings.metric)) AS metric_spread                            +
@@ -236,7 +236,7 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-NOTICE:  adding index _materialized_hypertable_3_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_3_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, bucket)
 DROP VIEW device_summary CASCADE;
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
@@ -254,7 +254,7 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-NOTICE:  adding index _materialized_hypertable_4_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546236000000000)
 INFO:  new materialization range for public.device_readings (time column observation_time) (1543723200000000)
