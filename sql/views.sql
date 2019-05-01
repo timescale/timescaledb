@@ -229,7 +229,7 @@ AS
  group by srcht.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.server AS
-  SELECT srvname AS server_name, srvowner::regrole::name AS owner, srvoptions AS options
+  SELECT srvname AS server_name, srvowner::regrole::name AS owner, srvoptions AS options, _timescaledb_internal.server_ping(srvname) AS server_up
   FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
   WHERE srv.srvfdw = fdw.oid
   AND fdw.fdwname = 'timescaledb_fdw';

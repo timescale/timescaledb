@@ -26,6 +26,7 @@ typedef enum ConnOptionType
  * `remote_connection_cache_get_connection` instead. Must be closed with `remote_connection_close`
  */
 PGconn *remote_connection_open(char *server_name, List *server_options, List *user_options);
+PGconn *remote_connection_open_default(char *server_name);
 void remote_connection_close(PGconn *conn);
 
 extern void remote_connection_report_error(int elevel, PGresult *res, PGconn *conn, bool clear,

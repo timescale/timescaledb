@@ -285,6 +285,38 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 	return conn;
 }
 
+/*
+ * Open a connection using current user UserMapping. If UserMapping is not found,
+ * it might succeed opening a connection if a current user is a superuser.
+ */
+PGconn *
+remote_connection_open_default(char *server_name)
+{
+	ForeignServer *fs = GetForeignServerByName(server_name, false);
+	volatile UserMapping *um = NULL;
+
+	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
+	 * user mapping isn't found.  The catch block allows superusers to perform this operation
+	 * without a user mapping. */
+	PG_TRY();
+	{
+		um = GetUserMapping(GetUserId(), fs->serverid);
+	}
+	PG_CATCH();
+	{
+		elog(DEBUG1,
+			 "UserMapping not found for user id `%u` and server `%s`. Trying to open remote "
+			 "connection as superuser",
+			 GetUserId(),
+			 fs->servername);
+		um = NULL;
+		FlushErrorState();
+	}
+	PG_END_TRY();
+
+	return remote_connection_open(server_name, fs->options, um ? um->options : NULL);
+}
+
 void
 remote_connection_close(PGconn *conn)
 {
