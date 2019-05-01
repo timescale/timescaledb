@@ -64,7 +64,7 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
 
-static void append_invalidation_entry(ContinuousAggsCacheInvalEntry entry);
+static void append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry);
 static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
 
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
@@ -251,13 +251,13 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		append_invalidation_entry(*entry);
+		append_invalidation_entry(entry);
 		return;
 	}
 
 	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
 	if (entry->lowest_modified_value < liv)
-		append_invalidation_entry(*entry);
+		append_invalidation_entry(entry);
 };
 
 static void
@@ -368,7 +368,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 }
 
 static void
-append_invalidation_entry(ContinuousAggsCacheInvalEntry entry)
+append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -376,9 +376,9 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry entry)
 	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
-	int32 hypertable_id = ts_hypertable_relid_to_id(entry.hypertable_relid);
+	int32 hypertable_id = ts_hypertable_relid_to_id(entry->hypertable_relid);
 
-	Assert(entry.lowest_modified_value <= entry.greatest_modified_value);
+	Assert(entry->lowest_modified_value <= entry->greatest_modified_value);
 
 	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
 					RowExclusiveLock);
@@ -389,10 +389,10 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry entry)
 		ObjectIdGetDatum(hypertable_id);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)] =
-		Int64GetDatum(entry.lowest_modified_value);
+		Int64GetDatum(entry->lowest_modified_value);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)] =
-		Int64GetDatum(entry.greatest_modified_value);
+		Int64GetDatum(entry->greatest_modified_value);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
