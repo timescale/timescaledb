@@ -40,6 +40,10 @@
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
+#if !PG96
+static const char *ping_query = "SELECT 1";
+#endif
+
 /*
  * Create a user mapping.
  *
@@ -755,4 +759,58 @@ server_get_servername_list(void)
 	heap_close(rel, AccessShareLock);
 
 	return servers;
+}
+
+Datum
+server_ping(PG_FUNCTION_ARGS)
+{
+#if !PG96
+	char *server_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	volatile PGconn *conn = NULL;
+	volatile PGresult *res = NULL;
+	ForeignServer *foregin_server;
+	bool success = false;
+	Oid timescale_fdw_oid;
+
+	if (server_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid server_name: cannot be NULL")));
+
+	/* Make sure server is defined, throw ERROR if not */
+	foregin_server = GetForeignServerByName(server_name, false);
+	timescale_fdw_oid = get_foreign_data_wrapper_oid(TIMESCALEDB_FDW_NAME, false);
+	if (foregin_server->fdwid != timescale_fdw_oid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid server_name: server `%s` is not a TimescaleDB server",
+						server_name)));
+
+	PG_TRY();
+	{
+		conn = remote_connection_open_default(server_name);
+		res = remote_connection_query_ok_result((PGconn *) conn, ping_query);
+		success = true;
+	}
+	PG_CATCH();
+	{
+		if (conn == NULL)
+			elog(DEBUG1, "failed to open connection to server `%s`", server_name);
+		else if (res == NULL)
+			elog(DEBUG1, "query `%s` failed on server `%s`", ping_query, server_name);
+		FlushErrorState();
+	}
+	PG_END_TRY();
+
+	if (conn)
+		remote_connection_close((PGconn *) conn);
+
+	if (res)
+		remote_connection_result_close((PGresult *) res);
+	PG_RETURN_DATUM(BoolGetDatum(success));
+#else
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 (errmsg("server ping is only supported on PG10 and above"))));
+#endif
 }

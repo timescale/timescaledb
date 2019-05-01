@@ -81,15 +81,17 @@ SELECT * FROM show_servers();
  server_4    | localhost | 15432 | server_4
 (4 rows)
 
--- Should show up in view
-SELECT server_name, options FROM timescaledb_information.server
+-- Need super user permissions to run server_ping where UserMapping doesn't exist
+RESET ROLE;
+-- Should show up in view. Note: `server_1` should be down since it's database is not created
+SELECT * FROM timescaledb_information.server
 ORDER BY server_name;
- server_name |                   options                   
--------------+---------------------------------------------
- server_1    | {host=localhost,port=15432,dbname=server_1}
- server_2    | {host=localhost,port=15432,dbname=server_2}
- server_3    | {host=localhost,port=15432,dbname=server_3}
- server_4    | {host=localhost,port=15432,dbname=server_4}
+ server_name | owner |                   options                   | server_up 
+-------------+-------+---------------------------------------------+-----------
+ server_1    | 16386 | {host=localhost,port=15432,dbname=server_1} | f
+ server_2    | 16385 | {host=localhost,port=15432,dbname=server_2} | t
+ server_3    | 16385 | {host=localhost,port=15432,dbname=server_3} | t
+ server_4    | 16386 | {host=localhost,port=15432,dbname=server_4} | t
 (4 rows)
 
 -- List foreign servers and user mappings
@@ -104,8 +106,6 @@ ORDER BY srvname;
  server_4 | {host=localhost,port=15432,dbname=server_4}
 (4 rows)
 
--- Need super user permissions to list user mappings
-RESET ROLE;
 SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
 WHERE a.oid = um.umuser AND fs.oid = um.umserver
@@ -415,6 +415,26 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 ----------+-----------------+-------------
 (0 rows)
 
+SELECT * FROM _timescaledb_internal.server_ping('server_1');
+ server_ping 
+-------------
+ t
+(1 row)
+
+-- Create server referencing postgres_fdw
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER pg_server_1 FOREIGN DATA WRAPPER postgres_fdw;
+\set ON_ERROR_STOP 0
+-- Throw ERROR for non-existing server
+SELECT * FROM _timescaledb_internal.server_ping('server_123456789');
+ERROR:  server "server_123456789" does not exist
+-- ERROR on NULL
+SELECT * FROM _timescaledb_internal.server_ping(NULL);
+ERROR:  invalid server_name: cannot be NULL
+-- ERROR when not passing TimescaleDB server
+SELECT * FROM _timescaledb_internal.server_ping('pg_server_1');
+ERROR:  invalid server_name: server `pg_server_1` is not a TimescaleDB server
+\set ON_ERROR_STOP 1
 -- Some attach server error cases
 \set ON_ERROR_STOP 0
 -- Invalid arguments
@@ -482,6 +502,22 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  no servers can be assigned to "disttable"
 \set ON_ERROR_STOP 1
+DROP DATABASE IF EXISTS server_3;
+SELECT * FROM add_server('server_3', database => 'server_3');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_3    | localhost | 15432 | server_3 | super_user | super_user      | t
+(1 row)
+
+-- Bring down the database but UserMapping should still be there
+DROP DATABASE IF EXISTS server_3;
+-- Return false if server is down
+SELECT * FROM _timescaledb_internal.server_ping('server_3');
+ server_ping 
+-------------
+ f
+(1 row)
+
 DROP DATABASE server_1;
 DROP DATABASE server_2;
 DROP DATABASE server_4;

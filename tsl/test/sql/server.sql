@@ -62,17 +62,16 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT * FROM show_servers();
 
--- Should show up in view
-SELECT server_name, options FROM timescaledb_information.server
+-- Need super user permissions to run server_ping where UserMapping doesn't exist
+RESET ROLE;
+-- Should show up in view. Note: `server_1` should be down since it's database is not created
+SELECT * FROM timescaledb_information.server
 ORDER BY server_name;
 
 -- List foreign servers and user mappings
 SELECT srvname, srvoptions
 FROM pg_foreign_server
 ORDER BY srvname;
-
--- Need super user permissions to list user mappings
-RESET ROLE;
 
 SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
@@ -219,6 +218,21 @@ SELECT * FROM attach_server('disttable', 'server_1');
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 SELECT * FROM _timescaledb_catalog.chunk_server;
 
+SELECT * FROM _timescaledb_internal.server_ping('server_1');
+
+-- Create server referencing postgres_fdw
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER pg_server_1 FOREIGN DATA WRAPPER postgres_fdw;
+
+\set ON_ERROR_STOP 0
+-- Throw ERROR for non-existing server
+SELECT * FROM _timescaledb_internal.server_ping('server_123456789');
+-- ERROR on NULL
+SELECT * FROM _timescaledb_internal.server_ping(NULL);
+-- ERROR when not passing TimescaleDB server
+SELECT * FROM _timescaledb_internal.server_ping('pg_server_1');
+\set ON_ERROR_STOP 1
+
 -- Some attach server error cases
 \set ON_ERROR_STOP 0
 -- Invalid arguments
@@ -254,6 +268,14 @@ SELECT * FROM _timescaledb_catalog.chunk;
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 \set ON_ERROR_STOP 1
+
+DROP DATABASE IF EXISTS server_3;
+SELECT * FROM add_server('server_3', database => 'server_3');
+
+-- Bring down the database but UserMapping should still be there
+DROP DATABASE IF EXISTS server_3;
+-- Return false if server is down
+SELECT * FROM _timescaledb_internal.server_ping('server_3');
 
 DROP DATABASE server_1;
 DROP DATABASE server_2;

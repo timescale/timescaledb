@@ -131,7 +131,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     ON ( cagg.mat_hypertable_id = ct.materialization_id);
 
 CREATE OR REPLACE VIEW timescaledb_information.server AS
-  SELECT srvname AS server_name, srvowner AS owner, srvoptions AS options
+  SELECT srvname AS server_name, srvowner AS owner, srvoptions AS options, _timescaledb_internal.server_ping(srvname) AS server_up
   FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
   WHERE srv.srvfdw = fdw.oid
   AND fdw.fdwname = 'timescaledb_fdw';
