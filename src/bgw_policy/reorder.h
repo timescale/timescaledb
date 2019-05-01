@@ -19,5 +19,6 @@ extern TSDLLEXPORT BgwPolicyReorder *ts_bgw_policy_reorder_find_by_job(int32 job
 extern TSDLLEXPORT BgwPolicyReorder *ts_bgw_policy_reorder_find_by_hypertable(int32 hypertable_id);
 extern TSDLLEXPORT void ts_bgw_policy_reorder_insert(BgwPolicyReorder *policy);
 extern TSDLLEXPORT bool ts_bgw_policy_reorder_delete_row_only_by_job_id(int32 job_id);
+extern TSDLLEXPORT int32 ts_bgw_policy_reorder_count(void);
 
 #endif /* TIMESCALEDB_BGW_POLICY_REORDER_H */

@@ -98,8 +98,20 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
      5
 (1 row)
 
+SELECT json_object_field(get_telemetry_report()::json,'num_reorder_policies');
+ json_object_field 
+-------------------
+ "0"
+(1 row)
+
 select add_reorder_policy('test_reorder_table', 'test_reorder_table_time_idx') as reorder_job_id \gset
 WARNING:  Timescale License expired
+SELECT json_object_field(get_telemetry_report()::json,'num_reorder_policies');
+ json_object_field 
+-------------------
+ "1"
+(1 row)
+
 -- policy was created
 select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
  job_id | hypertable_id |    hypertable_index_name    
@@ -413,8 +425,20 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
      5
 (1 row)
 
+SELECT json_object_field(get_telemetry_report()::json,'num_drop_chunks_policies');
+ json_object_field 
+-------------------
+ "0"
+(1 row)
+
 SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
 WARNING:  Timescale License expired
+SELECT json_object_field(get_telemetry_report()::json,'num_drop_chunks_policies');
+ json_object_field 
+-------------------
+ "1"
+(1 row)
+
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
              alter_job_schedule              
 ---------------------------------------------
