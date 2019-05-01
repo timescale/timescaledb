@@ -17,6 +17,7 @@
 #include "utils.h"
 #include "hypertable.h"
 #include "bgw/job.h"
+#include "scan_iterator.h"
 
 static ScanTupleResult
 bgw_policy_reorder_tuple_found(TupleInfo *ti, void *const data)
@@ -132,4 +133,15 @@ ts_bgw_policy_reorder_insert(BgwPolicyReorder *policy)
 
 	ts_bgw_policy_reorder_insert_with_relation(rel, policy);
 	heap_close(rel, RowExclusiveLock);
+}
+
+TSDLLEXPORT int32
+ts_bgw_policy_reorder_count()
+{
+	int32 count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(BGW_POLICY_REORDER, AccessShareLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator) { count++; }
+
+	return count;
 }

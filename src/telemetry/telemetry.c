@@ -23,6 +23,8 @@
 #include "net/http.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
+#include "bgw_policy/drop_chunks.h"
+#include "bgw_policy/reorder.h"
 
 #include "cross_module_fn.h"
 
@@ -48,6 +50,8 @@
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
 #define REQ_NUM_CONTINUOUS_AGGS "num_continuous_aggs"
+#define REQ_NUM_REORDER_POLICIES "num_reorder_policies"
+#define REQ_NUM_DROP_CHUNKS_POLICIES "num_drop_chunks_policies"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_TELEMETRY_METADATA "db_metadata"
 #define REQ_LICENSE_INFO "license"
@@ -174,6 +178,24 @@ get_num_continuous_aggs()
 }
 
 static char *
+get_num_drop_chunks_policies()
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%d", ts_bgw_policy_drop_chunks_count());
+	return buf->data;
+}
+
+static char *
+get_num_reorder_policies()
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%d", ts_bgw_policy_reorder_count());
+	return buf->data;
+}
+
+static char *
 get_database_size()
 {
 	StringInfo buf = makeStringInfo();
@@ -263,6 +285,8 @@ build_version_body(void)
 	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
 	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
 	ts_jsonb_add_str(parseState, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
+	ts_jsonb_add_str(parseState, REQ_NUM_REORDER_POLICIES, get_num_reorder_policies());
+	ts_jsonb_add_str(parseState, REQ_NUM_DROP_CHUNKS_POLICIES, get_num_drop_chunks_policies());
 
 	/* Add related extensions, which is a nested JSON */
 	ext_key.type = jbvString;
