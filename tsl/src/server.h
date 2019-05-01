@@ -12,6 +12,7 @@ extern Datum server_add(PG_FUNCTION_ARGS);
 extern Datum server_delete(PG_FUNCTION_ARGS);
 extern Datum server_attach(PG_FUNCTION_ARGS);
 extern List *server_get_servername_list(void);
+extern Datum server_ping(PG_FUNCTION_ARGS);
 
 /* This should only be used for testing */
 extern Datum server_add_without_dist_id(PG_FUNCTION_ARGS);
