@@ -664,8 +664,8 @@ SELECT * FROM test_t_mat_view;
 (0 rows)
 
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
- time_partition_col | agg_2_2 | chunk_id 
---------------------+---------+----------
+ time_bucket | agg_2_2 | chunk_id 
+-------------+---------+----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -684,8 +684,8 @@ REFRESH MATERIALIZED VIEW test_t_mat_view;
 INFO:  new materialization range for public.continuous_agg_test_t (time column time) (1549072800000000)
 INFO:  materializing continuous aggregate public.test_t_mat_view: new range up to 1549072800000000
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
- time_partition_col | agg_2_2 | chunk_id 
---------------------+---------+----------
+ time_bucket | agg_2_2 | chunk_id 
+-------------+---------+----------
 (0 rows)
 
 SELECT * FROM test_t_mat_view ORDER BY 1;
@@ -718,8 +718,8 @@ INFO:  new materialization range not found for public.continuous_agg_test_t (tim
 INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize
 INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
- time_partition_col | agg_2_2 | chunk_id 
---------------------+---------+----------
+ time_bucket | agg_2_2 | chunk_id 
+-------------+---------+----------
 (0 rows)
 
 SELECT * FROM test_t_mat_view ORDER BY 1;

@@ -371,6 +371,111 @@ select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, 71, 28;
 --drop view mat_m1 cascade;
+--naming with AS clauses
+create or replace view mat_naming
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec) as bucket, location as loc, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by bucket, loc
+having min(location) >= 'NYC' and avg(temperature) > 20;
+NOTICE:  adding index _materialized_hypertable_10_loc_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(loc, bucket)
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+ attnum | attname  
+--------+----------
+      1 | bucket
+      2 | loc
+      3 | agg_3_3
+      4 | agg_3_4
+      5 | agg_4_5
+      6 | agg_0_6
+      7 | agg_0_7
+      8 | chunk_id
+(8 rows)
+
+DROP VIEW mat_naming CASCADE;
+--naming with default names
+create or replace view mat_naming
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by 1,2
+having min(location) >= 'NYC' and avg(temperature) > 20;
+NOTICE:  adding index _materialized_hypertable_11_location_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_11 USING BTREE(location, time_bucket)
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+ attnum |   attname   
+--------+-------------
+      1 | time_bucket
+      2 | location
+      3 | agg_3_3
+      4 | agg_3_4
+      5 | agg_4_5
+      6 | agg_0_6
+      7 | agg_0_7
+      8 | chunk_id
+(8 rows)
+
+DROP VIEW mat_naming CASCADE;
+--naming with view col names
+create or replace view mat_naming (bucket, loc, sum_t_h, stdd)
+WITH ( timescaledb.continuous)
+as
+select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
+from conditions
+group by 1,2
+having min(location) >= 'NYC' and avg(temperature) > 20;
+NOTICE:  adding index _materialized_hypertable_12_loc_bucket_idx ON _timescaledb_internal._materialized_hypertable_12 USING BTREE(loc, bucket)
+SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
+       h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'mat_naming'
+\gset
+select attnum , attname from pg_attribute
+where attnum > 0 and attrelid =
+(Select oid from pg_class where relname like :'MAT_TABLE_NAME')
+order by attnum, attname;
+ attnum | attname  
+--------+----------
+      1 | bucket
+      2 | loc
+      3 | agg_3_3
+      4 | agg_3_4
+      5 | agg_4_5
+      6 | agg_0_6
+      7 | agg_0_7
+      8 | chunk_id
+(8 rows)
+
+DROP VIEW mat_naming CASCADE;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH ( timescaledb.continuous)
 as
@@ -378,8 +483,7 @@ select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by  time_bucket('1week', timec)
-having min(location) >= 'NYC' and avg(temperature) > 20
-;
+having min(location) >= 'NYC' and avg(temperature) > 20;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -393,9 +497,9 @@ select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
- attnum |      attname       
---------+--------------------
-      1 | time_partition_col
+ attnum | attname  
+--------+----------
+      1 | timec
       2 | agg_2_2
       3 | agg_3_3
       4 | agg_3_4
@@ -507,7 +611,7 @@ SELECT
 \gset
 \set ECHO errors
 psql:include/cont_agg_equal.sql:8: NOTICE:  drop cascades to 2 other objects
-psql:include/cont_agg_equal.sql:13: NOTICE:  adding index _materialized_hypertable_13_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_13 USING BTREE(location, time_partition_col)
+psql:include/cont_agg_equal.sql:13: NOTICE:  adding index _materialized_hypertable_16_location_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_16 USING BTREE(location, time_bucket)
                            ?column?                            | count 
 ---------------------------------------------------------------+-------
  Number of rows different between view and original (expect 0) |     0
@@ -527,7 +631,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_test'
 \gset
 DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
-ERROR:  cannot drop table _timescaledb_internal._materialized_hypertable_13 because other objects depend on it
+ERROR:  cannot drop table _timescaledb_internal._materialized_hypertable_16 because other objects depend on it
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
@@ -750,9 +854,9 @@ as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
-NOTICE:  adding index _materialized_hypertable_17_grp_5_5_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_5_5, time_partition_col)
-NOTICE:  adding index _materialized_hypertable_17_grp_6_6_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_6_6, time_partition_col)
-NOTICE:  adding index _materialized_hypertable_17_grp_7_7_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING BTREE(grp_7_7, time_partition_col)
+NOTICE:  adding index _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_5_5, timec)
+NOTICE:  adding index _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_6_6, timec)
+NOTICE:  adding index _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_7_7, timec)
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  schedule_interval 
 -------------------
@@ -784,12 +888,12 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test')
 order by indexname;
-                         indexname                          |                                                                                  indexdef                                                                                   
-------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _materialized_hypertable_17_grp_5_5_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_5_5_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_5_5, time_partition_col DESC)
- _materialized_hypertable_17_grp_6_6_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_6_6_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_6_6, time_partition_col DESC)
- _materialized_hypertable_17_grp_7_7_time_partition_col_idx | CREATE INDEX _materialized_hypertable_17_grp_7_7_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (grp_7_7, time_partition_col DESC)
- _materialized_hypertable_17_time_partition_col_idx         | CREATE INDEX _materialized_hypertable_17_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_17 USING btree (time_partition_col DESC)
+                   indexname                   |                                                                     indexdef                                                                      
+-----------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------
+ _materialized_hypertable_20_grp_5_5_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_5_5, timec DESC)
+ _materialized_hypertable_20_grp_6_6_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_6_6, timec DESC)
+ _materialized_hypertable_20_grp_7_7_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_7_7, timec DESC)
+ _materialized_hypertable_20_timec_idx         | CREATE INDEX _materialized_hypertable_20_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (timec DESC)
 (4 rows)
 
 drop view mat_with_test cascade;
@@ -805,9 +909,9 @@ select indexname, indexdef from pg_indexes where tablename =
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test');
-                     indexname                      |                                                                          indexdef                                                                          
-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------
- _materialized_hypertable_18_time_partition_col_idx | CREATE INDEX _materialized_hypertable_18_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_18 USING btree (time_partition_col DESC)
+               indexname               |                                                             indexdef                                                             
+---------------------------------------+----------------------------------------------------------------------------------------------------------------------------------
+ _materialized_hypertable_21_timec_idx | CREATE INDEX _materialized_hypertable_21_timec_idx ON _timescaledb_internal._materialized_hypertable_21 USING btree (timec DESC)
 (1 row)
 
 DROP TABLE conditions CASCADE;
@@ -878,7 +982,7 @@ SELECT create_hypertable(
 NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
- (21,public,space_table,t)
+ (24,public,space_table,t)
 (1 row)
 
 CREATE VIEW space_view
@@ -889,10 +993,20 @@ AS SELECT time_bucket('4', time), COUNT(data)
 INSERT INTO space_table VALUES
   (0, 1, 1), (0, 2, 1), (1, 1, 1), (1, 2, 1),
   (10, 1, 1), (10, 2, 1), (11, 1, 1), (11, 2, 1);
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
- time_partition_col | agg_2_2 | chunk_id 
---------------------+---------+----------
+SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema as "PART_VIEW_SCHEMA",
+       direct_view_name as "DIR_VIEW_NAME",
+       direct_view_schema as "DIR_VIEW_SCHEMA"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'space_view'
+\gset
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
+ time_bucket | agg_2_2 | chunk_id 
+-------------+---------+----------
 (0 rows)
 
 REFRESH MATERIALIZED VIEW space_view;
@@ -905,14 +1019,14 @@ SELECT * FROM space_view ORDER BY 1;
            8 |     4
 (2 rows)
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
- time_partition_col |      agg_2_2       | chunk_id 
---------------------+--------------------+----------
-                  0 | \x0000000000000002 |       58
-                  0 | \x0000000000000002 |       59
-                  8 | \x0000000000000002 |       60
-                  8 | \x0000000000000002 |       61
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
+ time_bucket |      agg_2_2       | chunk_id 
+-------------+--------------------+----------
+           0 | \x0000000000000002 |       58
+           0 | \x0000000000000002 |       59
+           8 | \x0000000000000002 |       60
+           8 | \x0000000000000002 |       61
 (4 rows)
 
 INSERT INTO space_table VALUES (3, 2, 1);
@@ -926,14 +1040,14 @@ SELECT * FROM space_view ORDER BY 1;
            8 |     4
 (2 rows)
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
- time_partition_col |      agg_2_2       | chunk_id 
---------------------+--------------------+----------
-                  0 | \x0000000000000002 |       58
-                  0 | \x0000000000000003 |       59
-                  8 | \x0000000000000002 |       60
-                  8 | \x0000000000000002 |       61
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
+ time_bucket |      agg_2_2       | chunk_id 
+-------------+--------------------+----------
+           0 | \x0000000000000002 |       58
+           0 | \x0000000000000003 |       59
+           8 | \x0000000000000002 |       60
+           8 | \x0000000000000002 |       61
 (4 rows)
 
 INSERT INTO space_table VALUES (2, 3, 1);
@@ -947,20 +1061,20 @@ SELECT * FROM space_view ORDER BY 1;
            8 |     4
 (2 rows)
 
-SELECT * FROM _timescaledb_internal._materialized_hypertable_22
-  ORDER BY time_partition_col, chunk_id;
- time_partition_col |      agg_2_2       | chunk_id 
---------------------+--------------------+----------
-                  0 | \x0000000000000002 |       58
-                  0 | \x0000000000000003 |       59
-                  0 | \x0000000000000001 |       63
-                  8 | \x0000000000000002 |       60
-                  8 | \x0000000000000002 |       61
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
+  ORDER BY time_bucket, chunk_id;
+ time_bucket |      agg_2_2       | chunk_id 
+-------------+--------------------+----------
+           0 | \x0000000000000002 |       58
+           0 | \x0000000000000003 |       59
+           0 | \x0000000000000001 |       63
+           8 | \x0000000000000002 |       60
+           8 | \x0000000000000002 |       61
 (5 rows)
 
 DROP TABLE space_table CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_62_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_25_62_chunk
 --
 -- TEST FINALIZEFUNC_EXTRA
 --
@@ -1026,7 +1140,7 @@ WARNING:  type integer text
 (3 rows)
 
 DROP view mat_ffunc_test cascade;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_67_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_67_chunk
 create or replace view mat_ffunc_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
