@@ -85,7 +85,6 @@ CREATE VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 -- even before running, stats shows something
 SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
     FROM timescaledb_information.continuous_aggregate_stats;
@@ -182,7 +181,6 @@ CREATE VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 

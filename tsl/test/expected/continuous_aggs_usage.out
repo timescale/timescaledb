@@ -39,7 +39,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id; --We have to group by the bucket column, but can also add other group-by columns
-NOTICE:  adding not-null constraint to column "time_partition_col"
 NOTICE:  adding index _materialized_hypertable_2_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, time_partition_col)
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
@@ -237,7 +236,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 NOTICE:  adding index _materialized_hypertable_3_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, time_partition_col)
 DROP VIEW device_summary CASCADE;
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
@@ -256,7 +254,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 NOTICE:  adding index _materialized_hypertable_4_device_id_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, time_partition_col)
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546236000000000)

@@ -600,7 +600,6 @@ CREATE VIEW tdc_view
   AS SELECT time_bucket('1 hour', time), count(drop_order)
      FROM test_drop_chunks_table
      GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT show_chunks('test_drop_chunks_table');
                show_chunks               
 -----------------------------------------
