@@ -211,7 +211,6 @@ CREATE VIEW cit_view
     AS SELECT time_bucket('5', time), COUNT(time)
         FROM ca_inval_test
         GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 INSERT INTO ca_inval_test SELECT generate_series(0, 5);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
@@ -301,7 +300,6 @@ CREATE VIEW continuous_view
     AS SELECT time_bucket('5', time), COUNT(location)
         FROM ts_continuous_test
         GROUP BY 1;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------

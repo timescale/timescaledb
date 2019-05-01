@@ -347,7 +347,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket;
-NOTICE:  adding not-null constraint to column "time_partition_col"
 SELECT json_object_field(get_telemetry_report()::json,'num_continuous_aggs');
  json_object_field 
 -------------------
