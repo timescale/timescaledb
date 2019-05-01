@@ -163,8 +163,6 @@ typedef struct CAggTimebucketInfo
 	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
 	int64 bucket_width;			  /*bucket_width of time_bucket */
-	Index sortref;				  /*sortref index of the group by clause for
-									   time_bucket expr in the query */
 } CAggTimebucketInfo;
 
 typedef struct AggPartCxt
@@ -519,8 +517,9 @@ get_timebucketfnoid()
 	Oid funcoid;
 	const char *funcname = TIMEBUCKETFN;
 	CatCList *catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
+	int i;
 
-	for (int i = 0; i < catlist->n_members; i++)
+	for (i = 0; i < catlist->n_members; i++)
 	{
 		HeapTuple proctup = &catlist->members[i]->tuple;
 		funcoid = ObjectIdGetDatum(HeapTupleGetOid(proctup));
@@ -605,7 +604,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 								"continuous aggregate query")));
 			}
 			width_arg = (Const *) linitial(fe->args);
-			tbinfo->sortref = sgc->tleSortGroupRef;
 			tbinfo->bucket_width =
 				ts_interval_value_to_internal(width_arg->constvalue, width_arg->consttype);
 		}
