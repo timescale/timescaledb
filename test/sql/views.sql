@@ -14,7 +14,7 @@ CREATE TABLE ht2(time TIMESTAMPTZ NOT NULL, data TEXT);
 SELECT create_hypertable('ht2','time');
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 

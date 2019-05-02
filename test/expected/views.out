@@ -24,7 +24,7 @@ SELECT create_hypertable('ht2','time');
 (1 row)
 
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
  table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
 --------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
  public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
