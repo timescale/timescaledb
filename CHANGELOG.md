@@ -6,21 +6,60 @@ accidentally triggering the load of a previous DB version.**
 
 ## 1.3.0 (unreleased)
 
+This release contains major new functionality that we call continuous aggregates.
+
+Aggregate queries which touch large swathes of time-series data can take a long
+time to compute because the system needs to scan large amounts of data on every
+query execution. Our continuous aggregates continuously calculate the
+results of a query in the background and materialize the results. Queries to the
+continuous aggregate view are then significantly faster as they do not need to
+touch the raw data in the hypertable, instead using the pre-computed aggregates
+in the view.
+
+Continuous aggregates are somewhat similar to PostgreSQL materialized
+views, but unlike a materialized view, continuous
+aggregates do not need to be refreshed manually; the view will be refreshed
+automatically in the background as new data is added, or old data is
+modified. Additionally, it does not need to re-calculate all of the data on
+every refresh. Only new and/or invalidated data will be calculated.  Since this
+re-aggregation is automatic, it doesn’t add any maintenance burden to your
+database.
+
+Our continuous aggregate approach supports high-ingest rates by avoiding the
+high-write amplification associated with trigger based approaches. Instead,
+we use invalidation techniques to track what data has changed and correct it
+the next time materialization is run.
+
+More information can be found on [our docs overview](http://docs.timescale.com/using-timescaledb/continuous-aggregates)
+or in this [tutorial](http://docs.timescale.com//tutorials/continuous-aggs-tutorial).
+
+**Major Features**
+* #1184 Add continuous aggregate functionality
+
 **Minor Features**
-* #1193 Optimize getting the chunk_id in continuous aggs
-* #1130 Add support for cross datatype chunk exclusion for time types
-* #1112 Add support for window functions to gapfill
-* #1062 Make constraint aware append parallel safe
 * #1005 Enable creating indexes with one transaction per chunk
-* #1007 Remove parent oid from find_children_oids result
+* #1007 Remove hypertable parent from query plans
 * #1038 Infer time_bucket_gapfill arguments from WHERE clause
+* #1062 Make constraint aware append parallel safe
 * #1067 Add treat_null_as_missing option to locf
+* #1112 Add support for window functions to gapfill
+* #1130 Add support for cross datatype chunk exclusion for time types
 * #1134 Add support for partitionwise aggregation
 * #1153 Add time_bucket support to chunk exclusion
+* #1170 Add functions for turning restoring on/off and setting license key
+* #1177 Add transformed time_bucket comparison to quals
+* #1182 Enable optimizing SELECTs within INSERTs
+* #1201 Add telemetry for policies: drop_chunk & reorder
 
 **Bugfixes**
+* #1010 Add session locks to CLUSTER
 * #1115 Fix ordered append optimization for join queries
+* #1123 Fix gapfill with prepared statements
+* #1125 Fix column handling for columns derived from GROUP BY columns
 * #1132 Adjust ordered append path cost
+* #1155 Limit initial max_open_chunks_per_insert to PG_INT16_MAX
+* #1167 Fix postgres.conf ApacheOnly license
+* #1183 Handle NULL in a check constraint name
 * #1195 Fix cascade in scheduled drop chunks
 * #1196 Fix UPSERT with prepared statements
 
@@ -28,6 +67,7 @@ accidentally triggering the load of a previous DB version.**
 * @spickman for reporting a segfault with ordered append and JOINs
 * @comicfans for reporting a performance regression with ordered append
 * @Specter-Y for reporting a segfault with UPSERT and prepared statements
+* @erthalion submitting a bugfix for a segfault with validating check constraints
 
 ## 1.2.2 (2019-03-14)
 
