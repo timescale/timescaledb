@@ -204,8 +204,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | dimension                                   | table | super_user
  _timescaledb_catalog | dimension_slice                             | table | super_user
  _timescaledb_catalog | hypertable                                  | table | super_user
+ _timescaledb_catalog | metadata                                    | table | super_user
  _timescaledb_catalog | tablespace                                  | table | super_user
- _timescaledb_catalog | telemetry_metadata                          | table | super_user
 (12 rows)
 
 \dt "_timescaledb_internal".*

@@ -215,11 +215,12 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
 	UNIQUE(job_id,chunk_id)
 );
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.telemetry_metadata (
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.metadata (
     key     NAME NOT NULL PRIMARY KEY,
-    value   TEXT NOT NULL
+    value   TEXT NOT NULL,
+    include_in_telemetry BOOLEAN NOT NULL
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.telemetry_metadata', $$WHERE key='exported_uuid'$$);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$WHERE key='exported_uuid'$$);
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,

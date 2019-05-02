@@ -15,11 +15,11 @@
 #include <utils/datum.h>
 
 #include "catalog.h"
-#include "telemetry_metadata.h"
+#include "metadata.h"
 #include "scanner.h"
 
 #define TYPE_ERROR(inout, typeid)                                                                  \
-	elog(ERROR, "ts::telemetry_metadata: no %s function for type %u", inout, typeid);
+	elog(ERROR, "ts_metadata: no %s function for type %u", inout, typeid);
 
 static Datum
 convert_type(PGFunction func, Datum value, Oid from_type)
@@ -64,18 +64,18 @@ typedef struct DatumValue
 	 * that pgindent works. It can be removed from this struct in case we
 	 * actually use the form type in code
 	 */
-	FormData_telemetry_metadata *form;
+	FormData_metadata *form;
 	Datum value;
 	Oid typeid;
 	bool isnull;
 } DatumValue;
 
 static ScanTupleResult
-telemetry_metadata_tuple_get_value(TupleInfo *ti, void *data)
+metadata_tuple_get_value(TupleInfo *ti, void *data)
 {
 	DatumValue *dv = data;
 
-	dv->value = heap_getattr(ti->tuple, Anum_telemetry_metadata_value, ti->desc, &dv->isnull);
+	dv->value = heap_getattr(ti->tuple, Anum_metadata_value, ti->desc, &dv->isnull);
 
 	if (!dv->isnull)
 		dv->value = convert_text_to_type(dv->value, dv->typeid);
@@ -84,8 +84,8 @@ telemetry_metadata_tuple_get_value(TupleInfo *ti, void *data)
 }
 
 static Datum
-telemetry_metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid value_type,
-									  bool *isnull, LOCKMODE lockmode)
+metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull,
+							LOCKMODE lockmode)
 {
 	ScanKeyData scankey[1];
 	DatumValue dv = {
@@ -94,18 +94,18 @@ telemetry_metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid valu
 	};
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, TELEMETRY_METADATA),
-		.index = catalog_get_index(catalog, TELEMETRY_METADATA, TELEMETRY_METADATA_PKEY_IDX),
+		.table = catalog_get_table_id(catalog, METADATA),
+		.index = catalog_get_index(catalog, METADATA, METADATA_PKEY_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
-		.tuple_found = telemetry_metadata_tuple_get_value,
+		.tuple_found = metadata_tuple_get_value,
 		.data = &dv,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
 
 	ScanKeyInit(&scankey[0],
-				Anum_telemetry_metadata_key,
+				Anum_metadata_key,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				convert_type_to_name(metadata_key, key_type));
@@ -119,17 +119,13 @@ telemetry_metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid valu
 }
 
 Datum
-ts_telemetry_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull)
+ts_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull)
 {
-	return telemetry_metadata_get_value_internal(metadata_key,
-												 key_type,
-												 value_type,
-												 isnull,
-												 AccessShareLock);
+	return metadata_get_value_internal(metadata_key, key_type, value_type, isnull, AccessShareLock);
 }
 
 /*
- *  Insert a row into the telemetry_metadata table. Acquires a lock in
+ *  Insert a row into the metadata table. Acquires a lock in
  *  SHARE ROW EXCLUSIVE mode to conflict with itself, and then verifies that
  *  the desired metadata KV pair still does not exist. Otherwise, exits
  *  without inserting to avoid underlying database error on PK conflict.
@@ -137,23 +133,24 @@ ts_telemetry_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type
  *  the existing value if nothing was inserted.
  */
 Datum
-ts_telemetry_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type)
+ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type,
+				   bool include_in_telemetry)
 {
 	Datum existing_value;
-	Datum values[Natts_telemetry_metadata];
-	bool nulls[Natts_telemetry_metadata] = { false };
+	Datum values[Natts_metadata];
+	bool nulls[Natts_metadata] = { false };
 	bool isnull = false;
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
-	rel = heap_open(catalog_get_table_id(catalog, TELEMETRY_METADATA), ShareRowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, METADATA), ShareRowExclusiveLock);
 
 	/* Check for row existence while we have the lock */
-	existing_value = telemetry_metadata_get_value_internal(metadata_key,
-														   key_type,
-														   value_type,
-														   &isnull,
-														   ShareRowExclusiveLock);
+	existing_value = metadata_get_value_internal(metadata_key,
+												 key_type,
+												 value_type,
+												 &isnull,
+												 ShareRowExclusiveLock);
 
 	if (!isnull)
 	{
@@ -162,10 +159,12 @@ ts_telemetry_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_va
 	}
 
 	/* Insert into the catalog table for persistence */
-	values[AttrNumberGetAttrOffset(Anum_telemetry_metadata_key)] =
+	values[AttrNumberGetAttrOffset(Anum_metadata_key)] =
 		convert_type_to_name(metadata_key, key_type);
-	values[AttrNumberGetAttrOffset(Anum_telemetry_metadata_value)] =
+	values[AttrNumberGetAttrOffset(Anum_metadata_value)] =
 		convert_type_to_text(metadata_value, value_type);
+	values[AttrNumberGetAttrOffset(Anum_metadata_include_in_telemetry)] =
+		BoolGetDatum(include_in_telemetry);
 
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 

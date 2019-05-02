@@ -62,9 +62,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.table_name = BGW_JOB_STAT_TABLE_NAME,
 	},
-	[TELEMETRY_METADATA] = {
+	[METADATA] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = TELEMETRY_METADATA_TABLE_NAME,
+		.table_name = METADATA_TABLE_NAME,
 	},
 	[BGW_POLICY_REORDER] = {
 		.schema_name = CONFIG_SCHEMA_NAME,
@@ -163,10 +163,10 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey",
 		},
 	},
-	[TELEMETRY_METADATA] = {
-		.length = _MAX_TELEMETRY_METADATA_INDEX,
+	[METADATA] = {
+		.length = _MAX_METADATA_INDEX,
 		.names = (char *[]) {
-			[TELEMETRY_METADATA_PKEY_IDX] = "telemetry_metadata_pkey",
+			[METADATA_PKEY_IDX] = "metadata_pkey",
 		},
 	},
 	[BGW_POLICY_REORDER] = {
