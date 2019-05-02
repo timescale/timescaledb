@@ -1161,3 +1161,27 @@ WARNING:  type integer bigint
          100 |                              
 (3 rows)
 
+--refresh mat view test when time_bucket is not projected --
+drop view mat_ffunc_test cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_68_chunk
+create or replace view mat_refresh_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity) 
+from conditions
+group by time_bucket(100, timec), location;
+NOTICE:  adding index _materialized_hypertable_29_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_29 USING BTREE(location, time_partition_col)
+insert into conditions
+select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
+REFRESH MATERIALIZED VIEW mat_refresh_test;
+INFO:  new materialization range for public.conditions (time column timec) (400)
+INFO:  materializing continuous aggregate public.mat_refresh_test: new range up to 400
+SELECT * FROM mat_refresh_test order by 1,2 ;
+ location | max 
+----------+-----
+ NYC      |  75
+ POR      |  75
+ POR      |  75
+ POR      |  75
+(4 rows)
+

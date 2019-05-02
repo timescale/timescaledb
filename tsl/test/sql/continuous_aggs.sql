@@ -842,3 +842,19 @@ group by time_bucket(100, timec);
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
 
 SELECT * FROM mat_ffunc_test;
+
+--refresh mat view test when time_bucket is not projected --
+drop view mat_ffunc_test cascade;
+create or replace view mat_refresh_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity) 
+from conditions
+group by time_bucket(100, timec), location;
+
+insert into conditions
+select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
+
+REFRESH MATERIALIZED VIEW mat_refresh_test;
+SELECT * FROM mat_refresh_test order by 1,2 ;
+
