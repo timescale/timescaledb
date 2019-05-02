@@ -1142,9 +1142,12 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			coltypmod = exprTypmod((Node *) tle->expr);
 			colcollation = exprCollation((Node *) tle->expr);
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
-			if (timebkt_chk)
-				col->is_not_null = true;
 			part_te = (TargetEntry *) copyObject(input);
+			if (timebkt_chk)
+			{
+				col->is_not_null = true;
+				part_te->resjunk = false; /* always project time_bucket column*/
+			}
 		}
 		break;
 		default:
