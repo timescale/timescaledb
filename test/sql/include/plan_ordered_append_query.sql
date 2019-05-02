@@ -188,3 +188,31 @@ INNER JOIN devices USING(device_id)
 ORDER BY dimension_last.time DESC
 LIMIT 2;
 
+-- test hypertable with index missing on one chunk
+-- does not yet use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_missing_indexes
+ORDER BY time ASC LIMIT 1;
+
+-- test hypertable with index missing on one chunk
+-- does not yet use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_missing_indexes
+WHERE device_id = 2
+ORDER BY time DESC LIMIT 1;
+
+-- test hypertable with dropped columns
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_dropped_columns
+ORDER BY time ASC LIMIT 1;
+
+-- test hypertable with dropped columns
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_dropped_columns
+WHERE device_id = 1
+ORDER BY time DESC;
+
