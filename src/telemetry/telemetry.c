@@ -17,7 +17,7 @@
 #include "version.h"
 #include "guc.h"
 #include "telemetry.h"
-#include "metadata.h"
+#include "telemetry_metadata.h"
 #include "hypertable.h"
 #include "extension.h"
 #include "net/http.h"
@@ -53,7 +53,7 @@
 #define REQ_NUM_REORDER_POLICIES "num_reorder_policies"
 #define REQ_NUM_DROP_CHUNKS_POLICIES "num_drop_chunks_policies"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
-#define REQ_TELEMETRY_METADATA "db_metadata"
+#define REQ_METADATA "db_metadata"
 #define REQ_LICENSE_INFO "license"
 #define REQ_LICENSE_EDITION "edition"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
@@ -251,15 +251,17 @@ build_version_body(void)
 
 	ts_jsonb_add_str(parseState,
 					 REQ_DB_UUID,
-					 DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_uuid())));
+					 DatumGetCString(
+						 DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_uuid())));
 	ts_jsonb_add_str(parseState,
 					 REQ_EXPORTED_DB_UUID,
 					 DatumGetCString(
-						 DirectFunctionCall1(uuid_out, ts_metadata_get_exported_uuid())));
+						 DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_exported_uuid())));
 	ts_jsonb_add_str(parseState,
 					 REQ_INSTALL_TIME,
-					 DatumGetCString(DirectFunctionCall1(timestamptz_out,
-														 ts_metadata_get_install_timestamp())));
+					 DatumGetCString(
+						 DirectFunctionCall1(timestamptz_out,
+											 ts_telemetry_metadata_get_install_timestamp())));
 
 	ts_jsonb_add_str(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
@@ -322,13 +324,13 @@ build_version_body(void)
 		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 	}
 
-	/* Add additional content from telemetry_metadata */
+	/* Add additional content from metadata */
 	ext_key.type = jbvString;
-	ext_key.val.string.val = REQ_TELEMETRY_METADATA;
-	ext_key.val.string.len = strlen(REQ_TELEMETRY_METADATA);
+	ext_key.val.string.val = REQ_METADATA;
+	ext_key.val.string.len = strlen(REQ_METADATA);
 	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-	ts_metadata_add_values(parseState);
+	ts_telemetry_metadata_add_values(parseState);
 	pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 
 	/* end of telemetry object */

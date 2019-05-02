@@ -35,7 +35,7 @@ set(SOURCE_FILES
   histogram.sql
   cache.sql
   bgw_scheduler.sql
-  telemetry_metadata.sql
+  metadata.sql
   views.sql
   gapfill.sql
   maintenance_utils.sql

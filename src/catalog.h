@@ -43,7 +43,7 @@ typedef enum CatalogTable
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
-	TELEMETRY_METADATA,
+	METADATA,
 	BGW_POLICY_REORDER,
 	BGW_POLICY_DROP_CHUNKS,
 	BGW_POLICY_CHUNK_STATS,
@@ -594,42 +594,43 @@ enum Anum_bgw_job_stat_pkey_idx
 
 /******************************
  *
- * telemetry_metadata table definitions
+ * metadata table definitions
  *
  ******************************/
 
-#define TELEMETRY_METADATA_TABLE_NAME "telemetry_metadata"
+#define METADATA_TABLE_NAME "metadata"
 
-enum Anum_telemetry_metadata
+enum Anum_metadata
 {
-	Anum_telemetry_metadata_key = 1,
-	Anum_telemetry_metadata_value,
-	_Anum_telemetry_metadata_max,
+	Anum_metadata_key = 1,
+	Anum_metadata_value,
+	Anum_metadata_include_in_telemetry,
+	_Anum_metadata_max,
 };
 
-#define Natts_telemetry_metadata (_Anum_telemetry_metadata_max - 1)
+#define Natts_metadata (_Anum_metadata_max - 1)
 
-typedef struct FormData_telemetry_metadata
+typedef struct FormData_metadata
 {
 	NameData key;
 	text *value;
-} FormData_telemetry_metadata;
+} FormData_metadata;
 
-typedef FormData_telemetry_metadata *Form_telemetry_metadata;
+typedef FormData_metadata *Form_metadata;
 
-/* telemetry_metadata primary index attribute numbers */
-enum Anum_telemetry_metadata_pkey_idx
+/* metadata primary index attribute numbers */
+enum Anum_metadata_pkey_idx
 {
-	Anum_telemetry_metadata_pkey_idx_id = 1,
-	_Anum_telemetry_metadata_pkey_max,
+	Anum_metadata_pkey_idx_id = 1,
+	_Anum_metadata_pkey_max,
 };
 
-#define Natts_telemetry_metadata_pkey_idx (_Anum_telemetry_metadata_pkey_max - 1)
+#define Natts_metadata_pkey_idx (_Anum_metadata_pkey_max - 1)
 
 enum
 {
-	TELEMETRY_METADATA_PKEY_IDX = 0,
-	_MAX_TELEMETRY_METADATA_INDEX,
+	METADATA_PKEY_IDX = 0,
+	_MAX_METADATA_INDEX,
 };
 
 /****** BGW_POLICY_REORDER TABLE definitions */

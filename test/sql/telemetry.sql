@@ -16,7 +16,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, 
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-INSERT INTO _timescaledb_catalog.telemetry_metadata VALUES ('foo','bar');
+INSERT INTO _timescaledb_catalog.metadata VALUES ('foo','bar',TRUE);
+INSERT INTO _timescaledb_catalog.metadata VALUES ('bar','baz',FALSE);
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT _timescaledb_internal.test_status_ssl(200);
@@ -128,7 +129,7 @@ WHERE key != 'os_name_pretty';
 
 SELECT json_object_field(get_telemetry_report()::json,'num_continuous_aggs');
 
--- check telemetry picks up content from telemetry_metadata
+-- check telemetry picks up flagged content from metadata
 SELECT json_object_field(get_telemetry_report()::json,'db_metadata');
 
 -- check timescaledb_telemetry.cloud
