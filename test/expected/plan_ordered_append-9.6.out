@@ -98,6 +98,45 @@ ANALYZE ordered_append;
 ANALYZE ordered_append_reverse;
 ANALYZE dimension_last;
 ANALYZE dimension_only;
+-- create hypertable with indexes not on all chunks
+CREATE TABLE ht_missing_indexes(time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_missing_indexes','time');
+        create_hypertable        
+---------------------------------
+ (5,public,ht_missing_indexes,t)
+(1 row)
+
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 1, 0.5;
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 2, 1.5;
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 3, 2.5;
+-- drop index from 2nd chunk of ht_missing_indexes
+SELECT format('%I.%I',i.schemaname,i.indexname) AS "INDEX_NAME"
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
+INNER JOIN pg_indexes i ON i.schemaname = c.schema_name AND i.tablename=c.table_name
+WHERE ht.table_name = 'ht_missing_indexes'
+ORDER BY c.id LIMIT 1 OFFSET 1 \gset
+DROP INDEX :INDEX_NAME;
+ANALYZE ht_missing_indexes;
+-- create hypertable with with dropped columns
+CREATE TABLE ht_dropped_columns(c1 int, c2 int, c3 int, c4 int, c5 int, time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_dropped_columns','time');
+        create_hypertable        
+---------------------------------
+ (6,public,ht_dropped_columns,t)
+(1 row)
+
+ALTER TABLE ht_dropped_columns DROP COLUMN c1;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-01'::timestamptz,'2000-01-02'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c2;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-08'::timestamptz,'2000-01-09'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c3;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-15'::timestamptz,'2000-01-16'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c4;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-22'::timestamptz,'2000-01-23'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c5;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-29'::timestamptz,'2000-01-30'::timestamptz,'1m'::interval), 1, 0.5;
+ANALYZE ht_dropped_columns;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -124,13 +163,21 @@ ORDER BY ht.table_name, range_start;
  dimension_only         | _hyper_4_12_chunk | 946857600000000
  dimension_only         | _hyper_4_13_chunk | 947030400000000
  dimension_only         | _hyper_4_14_chunk | 947203200000000
+ ht_dropped_columns     | _hyper_6_18_chunk | 946512000000000
+ ht_dropped_columns     | _hyper_6_19_chunk | 947116800000000
+ ht_dropped_columns     | _hyper_6_20_chunk | 947721600000000
+ ht_dropped_columns     | _hyper_6_21_chunk | 948326400000000
+ ht_dropped_columns     | _hyper_6_22_chunk | 948931200000000
+ ht_missing_indexes     | _hyper_5_15_chunk | 946512000000000
+ ht_missing_indexes     | _hyper_5_16_chunk | 947116800000000
+ ht_missing_indexes     | _hyper_5_17_chunk | 947721600000000
  ordered_append         | _hyper_1_1_chunk  | 946512000000000
  ordered_append         | _hyper_1_2_chunk  | 947116800000000
  ordered_append         | _hyper_1_3_chunk  | 947721600000000
  ordered_append_reverse | _hyper_2_6_chunk  | 946512000000000
  ordered_append_reverse | _hyper_2_5_chunk  | 947116800000000
  ordered_append_reverse | _hyper_2_4_chunk  | 947721600000000
-(14 rows)
+(22 rows)
 
 -- test ASC for ordered chunks
 :PREFIX SELECT
@@ -663,6 +710,83 @@ LIMIT 2;
          ->  Materialize
                ->  Seq Scan on devices
 (10 rows)
+
+-- test hypertable with index missing on one chunk
+-- does not yet use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_missing_indexes
+ORDER BY time ASC LIMIT 1;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Append
+         Sort Key: _hyper_5_15_chunk."time"
+         ->  Index Scan Backward using _hyper_5_15_chunk_ht_missing_indexes_time_idx on _hyper_5_15_chunk
+         ->  Sort
+               Sort Key: _hyper_5_16_chunk."time"
+               ->  Seq Scan on _hyper_5_16_chunk
+         ->  Index Scan Backward using _hyper_5_17_chunk_ht_missing_indexes_time_idx on _hyper_5_17_chunk
+(8 rows)
+
+-- test hypertable with index missing on one chunk
+-- does not yet use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_missing_indexes
+WHERE device_id = 2
+ORDER BY time DESC LIMIT 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk."time" DESC
+         ->  Index Scan using _hyper_5_17_chunk_ht_missing_indexes_time_idx on _hyper_5_17_chunk
+               Filter: (device_id = 2)
+         ->  Sort
+               Sort Key: _hyper_5_16_chunk."time" DESC
+               ->  Seq Scan on _hyper_5_16_chunk
+                     Filter: (device_id = 2)
+         ->  Index Scan using _hyper_5_15_chunk_ht_missing_indexes_time_idx on _hyper_5_15_chunk
+               Filter: (device_id = 2)
+(11 rows)
+
+-- test hypertable with dropped columns
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_dropped_columns
+ORDER BY time ASC LIMIT 1;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Append
+         ->  Index Scan Backward using _hyper_6_18_chunk_ht_dropped_columns_time_idx on _hyper_6_18_chunk
+         ->  Index Scan Backward using _hyper_6_19_chunk_ht_dropped_columns_time_idx on _hyper_6_19_chunk
+         ->  Index Scan Backward using _hyper_6_20_chunk_ht_dropped_columns_time_idx on _hyper_6_20_chunk
+         ->  Index Scan Backward using _hyper_6_21_chunk_ht_dropped_columns_time_idx on _hyper_6_21_chunk
+         ->  Index Scan Backward using _hyper_6_22_chunk_ht_dropped_columns_time_idx on _hyper_6_22_chunk
+(7 rows)
+
+-- test hypertable with dropped columns
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_dropped_columns
+WHERE device_id = 1
+ORDER BY time DESC;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_6_22_chunk_ht_dropped_columns_time_idx on _hyper_6_22_chunk
+         Filter: (device_id = 1)
+   ->  Index Scan using _hyper_6_21_chunk_ht_dropped_columns_time_idx on _hyper_6_21_chunk
+         Filter: (device_id = 1)
+   ->  Index Scan using _hyper_6_20_chunk_ht_dropped_columns_time_idx on _hyper_6_20_chunk
+         Filter: (device_id = 1)
+   ->  Index Scan using _hyper_6_19_chunk_ht_dropped_columns_time_idx on _hyper_6_19_chunk
+         Filter: (device_id = 1)
+   ->  Index Scan using _hyper_6_18_chunk_ht_dropped_columns_time_idx on _hyper_6_18_chunk
+         Filter: (device_id = 1)
+(11 rows)
 
 --generate the results into two different files
 \set ECHO errors
