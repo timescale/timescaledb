@@ -65,3 +65,42 @@ ANALYZE ordered_append_reverse;
 ANALYZE dimension_last;
 ANALYZE dimension_only;
 
+-- create hypertable with indexes not on all chunks
+CREATE TABLE ht_missing_indexes(time timestamptz NOT NULL, device_id int, value float);
+
+SELECT create_hypertable('ht_missing_indexes','time');
+
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 1, 0.5;
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 2, 1.5;
+INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 3, 2.5;
+
+-- drop index from 2nd chunk of ht_missing_indexes
+SELECT format('%I.%I',i.schemaname,i.indexname) AS "INDEX_NAME"
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
+INNER JOIN pg_indexes i ON i.schemaname = c.schema_name AND i.tablename=c.table_name
+WHERE ht.table_name = 'ht_missing_indexes'
+ORDER BY c.id LIMIT 1 OFFSET 1 \gset
+
+DROP INDEX :INDEX_NAME;
+
+ANALYZE ht_missing_indexes;
+
+-- create hypertable with with dropped columns
+CREATE TABLE ht_dropped_columns(c1 int, c2 int, c3 int, c4 int, c5 int, time timestamptz NOT NULL, device_id int, value float);
+
+SELECT create_hypertable('ht_dropped_columns','time');
+
+ALTER TABLE ht_dropped_columns DROP COLUMN c1;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-01'::timestamptz,'2000-01-02'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c2;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-08'::timestamptz,'2000-01-09'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c3;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-15'::timestamptz,'2000-01-16'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c4;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-22'::timestamptz,'2000-01-23'::timestamptz,'1m'::interval), 1, 0.5;
+ALTER TABLE ht_dropped_columns DROP COLUMN c5;
+INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-29'::timestamptz,'2000-01-30'::timestamptz,'1m'::interval), 1, 0.5;
+
+ANALYZE ht_dropped_columns;
+
