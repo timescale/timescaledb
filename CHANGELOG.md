@@ -26,12 +26,12 @@ re-aggregation is automatic, it doesn’t add any maintenance burden to your
 database.
 
 Our continuous aggregate approach supports high-ingest rates by avoiding the
-high-write amplification associated with trigger based approaches. Instead,
-we use invalidation techniques to track what data has changed and correct it
-the next time materialization is run.
+high-write amplification associated with trigger-based approaches. Instead,
+we use invalidation techniques to track what data has changed, and then correct
+the materialized aggregate the next time that the automated process executes.
 
 More information can be found on [our docs overview](http://docs.timescale.com/using-timescaledb/continuous-aggregates)
-or in this [tutorial](http://docs.timescale.com//tutorials/continuous-aggs-tutorial).
+or in this [tutorial](http://docs.timescale.com/tutorials/continuous-aggs-tutorial).
 
 **Major Features**
 * #1184 Add continuous aggregate functionality
