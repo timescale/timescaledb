@@ -248,12 +248,11 @@ ERROR:  table "disttable" is not a hypertable
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
-NOTICE:  adding not-null constraint to column "time"
-ERROR:  invalid replication_factor for non-empty server list
+ERROR:  invalid replication_factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
 ERROR:  invalid replication factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
-ERROR:  invalid replication factor
+ERROR:  invalid replication_factor
 -- Non-existing server
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, servers => '{ "server_3" }');
 NOTICE:  adding not-null constraint to column "time"
@@ -265,7 +264,7 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, se
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             4 | public      | disttable  | t
+             3 | public      | disttable  | t
 (1 row)
 
 -- Create some chunks
@@ -276,24 +275,24 @@ INSERT INTO disttable VALUES
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_2_dist_chunk | 
- _timescaledb_internal._hyper_4_3_dist_chunk | 
- _timescaledb_internal._hyper_4_4_dist_chunk | 
+ _timescaledb_internal._hyper_3_2_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  2 |             4 | _timescaledb_internal | _hyper_4_2_dist_chunk
-  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
-  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk
+  2 |             3 | _timescaledb_internal | _hyper_3_2_dist_chunk
+  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
+  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                    2 | server_2
-             4 |                    2 | server_4
+             3 |                    2 | server_2
+             3 |                    2 | server_4
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -317,15 +316,15 @@ SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_3_dist_chunk | 
- _timescaledb_internal._hyper_4_4_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
-  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk
+  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
+  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -353,19 +352,19 @@ NOTICE:  drop cascades to 3 other objects
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
+  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                    2 | server_4
+             3 |                    2 | server_4
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -401,13 +400,13 @@ SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM attach_server('disttable', 'server_1');
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                    2 | server_1
+             3 |                    2 | server_1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                    2 | server_1
+             3 |                    2 | server_1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -454,7 +453,7 @@ SELECT * FROM attach_server('disttable', 'server_1', true);
 NOTICE:  server "server_1" is already attached to hypertable "disttable", skipping
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                    2 | server_1
+             3 |                    2 | server_1
 (1 row)
 
 -- Creating a distributed hypertable without any servers should fail

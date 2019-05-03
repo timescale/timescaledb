@@ -40,7 +40,7 @@ SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+SELECT * FROM create_distributed_hypertable('disttable', 'time');
 
 -- An underreplicated table that will has a replication_factor > num_servers
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
@@ -354,6 +354,10 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set ON_ERROR_STOP 0
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('remotetable', 'time', replication_factor => 1);
+
+-- Test distributed_hypertable creation fails with replication factor 0
+CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
 \set ON_ERROR_STOP 1
 
 SELECT * FROM timescaledb_information.hypertable;

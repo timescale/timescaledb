@@ -23,6 +23,7 @@ ORDER BY proname;
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
+ create_distributed_hypertable
  create_hypertable
  delete_server
  detach_tablespace
@@ -53,5 +54,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(39 rows)
+(40 rows)
 
