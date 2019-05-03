@@ -1647,6 +1647,7 @@ create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 }
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
+TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 
 /*
  * Create a hypertable from an existing table.
@@ -1669,8 +1670,8 @@ TS_FUNCTION_INFO_V1(ts_hypertable_create);
  * replication_factor      INTEGER = NULL
  * servers                 NAME[] = NULL
  */
-Datum
-ts_hypertable_create(PG_FUNCTION_ARGS)
+static Datum
+ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 {
 	Oid table_relid = PG_GETARG_OID(0);
 	Name time_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
@@ -1737,6 +1738,17 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_column_name: cannot be NULL")));
 
+	/* Replication factor cannot be explicitly 0 for non-dist call, or explicitly null for dist call
+	 */
+	if (replication_factor < 1 && (is_dist_call || !PG_ARGISNULL(14)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid replication_factor"),
+				 errhint("%s",
+						 is_dist_call ? "must be > 0 to create a distributed_hypertable" :
+										"omit this parameter or set to NULL to create a "
+										"non-distributed hypertable")));
+
 	created = ts_hypertable_create_from_info(table_relid,
 											 INVALID_HYPERTABLE_ID,
 											 flags,
@@ -1753,6 +1765,18 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_DATUM(retval);
+}
+
+Datum
+ts_hypertable_create(PG_FUNCTION_ARGS)
+{
+	return ts_hypertable_create_internal(fcinfo, false);
+}
+
+Datum
+ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
+{
+	return ts_hypertable_create_internal(fcinfo, true);
 }
 
 /* Creates a new hypertable.
