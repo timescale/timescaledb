@@ -1141,6 +1141,9 @@ validate_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk_cmd->name =
 		ts_chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, cmd->name);
 
+	if (chunk_cmd->name == NULL)
+		return;
+
 	/* do not pass down the VALIDATE RECURSE subtype */
 	chunk_cmd->subtype = AT_ValidateConstraint;
 	AlterTableInternal(chunk_relid, list_make1(chunk_cmd), false);
