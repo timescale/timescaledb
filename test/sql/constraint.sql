@@ -581,3 +581,19 @@ INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES (1257987700000000000, 
 ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 
 ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;
+
+-- test for constraint validation crash, see #1183
+CREATE TABLE test_validate(time timestamp NOT NULL, a TEXT, b TEXT);
+SELECT * FROM create_hypertable('test_validate', 'time');
+INSERT INTO test_validate values(now(), 'a', 'b');
+
+ALTER TABLE test_validate
+ADD COLUMN c TEXT,
+ADD CONSTRAINT c_not_null CHECK (c IS NOT NULL) NOT VALID;
+
+UPDATE test_validate SET c = '';
+
+ALTER TABLE test_validate
+VALIDATE CONSTRAINT c_not_null;
+
+DROP TABLE test_validate;
