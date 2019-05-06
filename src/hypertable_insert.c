@@ -147,7 +147,7 @@ ts_hypertable_insert_fixup_tlist(Plan *plan)
 }
 
 static Plan *
-hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);

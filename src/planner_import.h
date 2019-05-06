@@ -18,6 +18,7 @@
 #define TIMESCALEDB_PLANNER_IMPORT_H
 
 #include <postgres.h>
+#include <nodes/execnodes.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/selfuncs.h>
@@ -33,5 +34,15 @@ extern struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *ro
 
 extern bool ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 								  Datum *min, Datum *max);
+
+extern Plan *ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
+										   const AttrNumber *reqColIdx, bool adjust_tlist_in_place,
+										   int *p_numsortkeys, AttrNumber **p_sortColIdx,
+										   Oid **p_sortOperators, Oid **p_collations,
+										   bool **p_nullsFirst);
+
+extern List *ts_build_path_tlist(PlannerInfo *root, Path *path);
+
+extern void ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);
 
 #endif /* TIMESCALEDB_PLANNER_IMPORT_H */

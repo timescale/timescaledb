@@ -201,3 +201,9 @@ reset enable_material;
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > now() ORDER BY time;
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > now() ORDER BY time;
 
+-- query with tablesample
+:PREFIX
+SELECT * FROM append_test TABLESAMPLE SYSTEM(1)
+WHERE TIME > now_s() - INTERVAL '400 day'
+ORDER BY time DESC;
+

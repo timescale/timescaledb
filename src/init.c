@@ -56,6 +56,8 @@ extern void _conn_mock_init();
 extern void _conn_mock_fini();
 #endif
 
+extern void _chunk_append_init();
+
 extern void TSDLLEXPORT _PG_init(void);
 extern void TSDLLEXPORT _PG_fini(void);
 
@@ -77,6 +79,7 @@ _PG_init(void)
 	_cache_invalidate_init();
 	_planner_init();
 	_constraint_aware_append_init();
+	_chunk_append_init();
 	_event_trigger_init();
 	_process_utility_init();
 	_guc_init();

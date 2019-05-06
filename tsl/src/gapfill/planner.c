@@ -161,7 +161,7 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
  * Agg node. During execution, the gapfill node will produce the new tuples.
  */
 static Plan *
-gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path, List *tlist,
+gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 					List *clauses, List *custom_plans)
 {
 	GapFillPath *gfpath = (GapFillPath *) path;

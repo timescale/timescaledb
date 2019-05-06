@@ -333,21 +333,25 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
 EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_3_4_chunk."time"
-   ->  Sort
-         Output: _hyper_3_4_chunk."time"
-         Sort Key: _hyper_3_4_chunk."time"
-         ->  Append
-               ->  Index Only Scan using _hyper_3_4_chunk_partial_index_test_time_idx on _timescaledb_internal._hyper_3_4_chunk
-                     Output: _hyper_3_4_chunk."time"
-                     Index Cond: (_hyper_3_4_chunk."time" < 2)
+   Output: partial_index_test."time"
+   ->  Custom Scan (ChunkAppend)
+         Output: partial_index_test."time"
+         Hypertable: partial_index_test
+         Startup Exclusion: false
+         Runtime Exclusion: false
+         ->  Index Only Scan using _hyper_3_4_chunk_partial_index_test_time_idx on _timescaledb_internal._hyper_3_4_chunk
+               Output: _hyper_3_4_chunk."time"
+               Index Cond: (_hyper_3_4_chunk."time" < 2)
+         ->  Sort
+               Output: _hyper_3_5_chunk."time"
+               Sort Key: _hyper_3_5_chunk."time"
                ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk
                      Output: _hyper_3_5_chunk."time"
                      Filter: (_hyper_3_5_chunk."time" < 2)
-(12 rows)
+(16 rows)
 
 SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
  time 

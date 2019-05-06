@@ -9,11 +9,11 @@ SELECT
   ds.range_start
 FROM
   _timescaledb_catalog.chunk c
-  INNER JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+  INNER JOIN LATERAL(SELECT * FROM _timescaledb_catalog.chunk_constraint cc WHERE c.id = cc.chunk_id ORDER BY cc.dimension_slice_id LIMIT 1) cc ON true
   INNER JOIN _timescaledb_catalog.dimension_slice ds ON ds.id=cc.dimension_slice_id
   INNER JOIN _timescaledb_catalog.dimension d ON ds.dimension_id = d.id
   INNER JOIN _timescaledb_catalog.hypertable ht ON d.hypertable_id = ht.id
-ORDER BY ht.table_name, range_start;
+ORDER BY ht.table_name, range_start, chunk;
 
 -- test ASC for ordered chunks
 :PREFIX SELECT
@@ -48,6 +48,12 @@ ORDER BY time ASC LIMIT 1;
 -- ORDER BY may include other columns after time column
 :PREFIX SELECT
   time, device_id, value
+FROM ordered_append
+ORDER BY time DESC, device_id LIMIT 1;
+
+-- test RECORD in targetlist
+:PREFIX SELECT
+  (time, device_id, value)
 FROM ordered_append
 ORDER BY time DESC, device_id LIMIT 1;
 
@@ -101,7 +107,7 @@ FROM ordered_append
 WHERE time < now_s()
 ORDER BY time ASC LIMIT 1;
 
--- test interaction withi constraint exclusion and constraint aware append
+-- test constraint exclusion
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
@@ -189,19 +195,26 @@ ORDER BY dimension_last.time DESC
 LIMIT 2;
 
 -- test hypertable with index missing on one chunk
--- does not yet use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM ht_missing_indexes
 ORDER BY time ASC LIMIT 1;
 
 -- test hypertable with index missing on one chunk
--- does not yet use ordered append
+-- and no data
 :PREFIX SELECT
   time, device_id, value
 FROM ht_missing_indexes
 WHERE device_id = 2
 ORDER BY time DESC LIMIT 1;
+
+-- test hypertable with index missing on one chunk
+-- and no data
+:PREFIX SELECT
+  time, device_id, value
+FROM ht_missing_indexes
+WHERE time > '2000-01-07'
+ORDER BY time LIMIT 10;
 
 -- test hypertable with dropped columns
 :PREFIX SELECT
@@ -215,4 +228,146 @@ ORDER BY time ASC LIMIT 1;
 FROM ht_dropped_columns
 WHERE device_id = 1
 ORDER BY time DESC;
+
+-- test hypertable with space partitioning
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+ORDER BY time;
+
+-- test hypertable with space partitioning and reverse order
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+ORDER BY time DESC;
+
+-- test hypertable with space partitioning ORDER BY multiple columns
+-- does not use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+ORDER BY time, device_id LIMIT 1;
+
+-- test hypertable with space partitioning ORDER BY non-time column
+-- does not use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+ORDER BY device_id, time LIMIT 1;
+
+-- test hypertable with 2 space dimensions
+-- does not use ordered append
+:PREFIX SELECT
+  time, device_id, value
+FROM space2
+ORDER BY time DESC;
+
+-- test LATERAL with correlated query
+-- only last chunk should be executed
+:PREFIX SELECT *
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM ordered_append o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval ORDER BY time DESC LIMIT 1
+) l ON true;
+
+-- test LATERAL with correlated query
+-- only 2nd chunk should be executed
+:PREFIX SELECT *
+FROM generate_series('2000-01-10'::timestamptz,'2000-01-11','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM ordered_append o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval ORDER BY time LIMIT 1
+) l ON true;
+
+-- test startup and runtime exclusion together
+:PREFIX SELECT *
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM ordered_append o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval AND o.time < now() ORDER BY time DESC LIMIT 1
+) l ON true;
+
+-- test startup and runtime exclusion together
+-- all chunks should be filtered
+:PREFIX SELECT *
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM ordered_append o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval AND o.time > now() ORDER BY time DESC LIMIT 1
+) l ON true;
+
+-- test CTE
+-- no chunk exclusion for CTE because cte query is not pulled up
+:PREFIX WITH cte AS (SELECT * FROM ordered_append ORDER BY time)
+SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
+
+-- test JOIN
+-- no exclusion on joined table because its not ChunkAppend node
+:PREFIX SELECT *
+FROM ordered_append o1
+INNER JOIN ordered_append o2 ON o1.time = o2.time
+WHERE o1.time < '2000-02-01'
+ORDER BY o1.time;
+
+-- test JOIN
+-- last chunk of o2 should not be executed
+:PREFIX SELECT *
+FROM ordered_append o1
+INNER JOIN (SELECT * FROM ordered_append o2 ORDER BY time) o2 ON o1.time = o2.time
+WHERE o1.time < '2000-01-08'
+ORDER BY o1.time;
+
+-- test subquery
+-- not ChunkAppend so no chunk exclusion
+:PREFIX SELECT *
+FROM ordered_append WHERE time = (SELECT max(time) FROM ordered_append) ORDER BY time;
+
+-- test join against max query
+-- not ChunkAppend so no chunk exclusion
+:PREFIX SELECT *
+FROM ordered_append o1 INNER JOIN (SELECT max(time) AS max_time FROM ordered_append) o2 ON o1.time = o2.max_time ORDER BY time;
+
+-- test ordered append with limit expression
+:PREFIX SELECT *
+FROM ordered_append ORDER BY time LIMIT (SELECT length('four'));
+
+-- test with ordered guc disabled
+SET timescaledb.enable_ordered_append TO off;
+:PREFIX SELECT *
+FROM ordered_append ORDER BY time LIMIT 3;
+
+RESET timescaledb.enable_ordered_append;
+:PREFIX SELECT *
+FROM ordered_append ORDER BY time LIMIT 3;
+
+-- test with chunk append disabled
+SET timescaledb.enable_chunk_append TO off;
+:PREFIX SELECT *
+FROM ordered_append ORDER BY time LIMIT 3;
+
+RESET timescaledb.enable_chunk_append;
+:PREFIX SELECT *
+FROM ordered_append ORDER BY time LIMIT 3;
+
+-- test space partitioning with startup exclusion
+:PREFIX SELECT *
+FROM space WHERE time < now() ORDER BY time;
+
+-- test runtime exclusion together with space partitioning
+:PREFIX SELECT *
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM space o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval ORDER BY time DESC LIMIT 1
+) l ON true;
+
+-- test startup and runtime exclusion together with space partitioning
+:PREFIX SELECT *
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03','1d') AS g(time)
+LEFT OUTER JOIN LATERAL(
+  SELECT * FROM space o
+    WHERE o.time >= g.time AND o.time < g.time + '1d'::interval AND o.time < now() ORDER BY time DESC LIMIT 1
+) l ON true;
+
 

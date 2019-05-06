@@ -15,23 +15,35 @@
  * our manipulations.
  */
 #include <postgres.h>
-#include <utils/rel.h>
-#include <nodes/makefuncs.h>
-#include <optimizer/clauses.h>
-#include <utils/lsyscache.h>
-#include <catalog/pg_statistic.h>
+#include <access/htup_details.h>
 #include <catalog/pg_collation.h>
-#include <utils/datum.h>
+#include <catalog/pg_statistic.h>
 #include <executor/nodeAgg.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
+#include <optimizer/cost.h>
+#if PG_VERSION_NUM >= 110003
+#include <optimizer/paramassign.h>
+#endif
+#include <optimizer/placeholder.h>
+#include <optimizer/planner.h>
+#include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
 #include <optimizer/var.h>
-#include <optimizer/planner.h>
-#include <optimizer/cost.h>
-#include <access/htup_details.h>
+#include <parser/parsetree.h>
+#include <utils/datum.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
 #include <utils/selfuncs.h>
 
 #include "planner_import.h"
 #include "compat.h"
+
+static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
+												 Relids relids);
+static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
+static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 
 /* copied verbatim from prepunion.c */
 void
@@ -520,5 +532,583 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, 
 	*min = tmin;
 	*max = tmax;
 	return have_data;
+}
+#endif
+
+/*
+ * find_ec_member_for_tle
+ *		Locate an EquivalenceClass member matching the given TLE, if any
+ *
+ * Child EC members are ignored unless they belong to given 'relids'.
+ *
+ * copied verbatim from createplan.c
+ */
+static EquivalenceMember *
+find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
+{
+	Expr *tlexpr;
+	ListCell *lc;
+
+	/* We ignore binary-compatible relabeling on both ends */
+	tlexpr = tle->expr;
+	while (tlexpr && IsA(tlexpr, RelabelType))
+		tlexpr = ((RelabelType *) tlexpr)->arg;
+
+	foreach (lc, ec->ec_members)
+	{
+		EquivalenceMember *em = (EquivalenceMember *) lfirst(lc);
+		Expr *emexpr;
+
+		/*
+		 * We shouldn't be trying to sort by an equivalence class that
+		 * contains a constant, so no need to consider such cases any further.
+		 */
+		if (em->em_is_const)
+			continue;
+
+		/*
+		 * Ignore child members unless they belong to the rel being sorted.
+		 */
+		if (em->em_is_child && !bms_is_subset(em->em_relids, relids))
+			continue;
+
+		/* Match if same expression (after stripping relabel) */
+		emexpr = em->em_expr;
+		while (emexpr && IsA(emexpr, RelabelType))
+			emexpr = ((RelabelType *) emexpr)->arg;
+
+		if (equal(emexpr, tlexpr))
+			return em;
+	}
+
+	return NULL;
+}
+
+/*
+ * prepare_sort_from_pathkeys
+ *	  Prepare to sort according to given pathkeys
+ *
+ * This is used to set up for Sort, MergeAppend, and Gather Merge nodes.  It
+ * calculates the executor's representation of the sort key information, and
+ * adjusts the plan targetlist if needed to add resjunk sort columns.
+ *
+ * Input parameters:
+ *	  'lefttree' is the plan node which yields input tuples
+ *	  'pathkeys' is the list of pathkeys by which the result is to be sorted
+ *	  'relids' identifies the child relation being sorted, if any
+ *	  'reqColIdx' is NULL or an array of required sort key column numbers
+ *	  'adjust_tlist_in_place' is true if lefttree must be modified in-place
+ *
+ * We must convert the pathkey information into arrays of sort key column
+ * numbers, sort operator OIDs, collation OIDs, and nulls-first flags,
+ * which is the representation the executor wants.  These are returned into
+ * the output parameters *p_numsortkeys etc.
+ *
+ * When looking for matches to an EquivalenceClass's members, we will only
+ * consider child EC members if they belong to given 'relids'.  This protects
+ * against possible incorrect matches to child expressions that contain no
+ * Vars.
+ *
+ * If reqColIdx isn't NULL then it contains sort key column numbers that
+ * we should match.  This is used when making child plans for a MergeAppend;
+ * it's an error if we can't match the columns.
+ *
+ * If the pathkeys include expressions that aren't simple Vars, we will
+ * usually need to add resjunk items to the input plan's targetlist to
+ * compute these expressions, since a Sort or MergeAppend node itself won't
+ * do any such calculations.  If the input plan type isn't one that can do
+ * projections, this means adding a Result node just to do the projection.
+ * However, the caller can pass adjust_tlist_in_place = true to force the
+ * lefttree tlist to be modified in-place regardless of whether the node type
+ * can project --- we use this for fixing the tlist of MergeAppend itself.
+ *
+ * Returns the node which is to be the input to the Sort (either lefttree,
+ * or a Result stacked atop lefttree).
+ *
+ * static function copied from createplan.c
+ */
+Plan *
+ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
+							  const AttrNumber *reqColIdx, bool adjust_tlist_in_place,
+							  int *p_numsortkeys, AttrNumber **p_sortColIdx, Oid **p_sortOperators,
+							  Oid **p_collations, bool **p_nullsFirst)
+{
+	List *tlist = lefttree->targetlist;
+	ListCell *i;
+	int numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid *sortOperators;
+	Oid *collations;
+	bool *nullsFirst;
+
+	/*
+	 * We will need at most list_length(pathkeys) sort columns; possibly less
+	 */
+	numsortkeys = list_length(pathkeys);
+	sortColIdx = (AttrNumber *) palloc(numsortkeys * sizeof(AttrNumber));
+	sortOperators = (Oid *) palloc(numsortkeys * sizeof(Oid));
+	collations = (Oid *) palloc(numsortkeys * sizeof(Oid));
+	nullsFirst = (bool *) palloc(numsortkeys * sizeof(bool));
+
+	numsortkeys = 0;
+
+	foreach (i, pathkeys)
+	{
+		PathKey *pathkey = (PathKey *) lfirst(i);
+		EquivalenceClass *ec = pathkey->pk_eclass;
+		EquivalenceMember *em;
+		TargetEntry *tle = NULL;
+		Oid pk_datatype = InvalidOid;
+		Oid sortop;
+		ListCell *j;
+
+		if (ec->ec_has_volatile)
+		{
+			/*
+			 * If the pathkey's EquivalenceClass is volatile, then it must
+			 * have come from an ORDER BY clause, and we have to match it to
+			 * that same targetlist entry.
+			 */
+			if (ec->ec_sortref == 0) /* can't happen */
+				elog(ERROR, "volatile EquivalenceClass has no sortref");
+			tle = get_sortgroupref_tle(ec->ec_sortref, tlist);
+			Assert(tle);
+			Assert(list_length(ec->ec_members) == 1);
+			pk_datatype = ((EquivalenceMember *) linitial(ec->ec_members))->em_datatype;
+		}
+		else if (reqColIdx != NULL)
+		{
+			/*
+			 * If we are given a sort column number to match, only consider
+			 * the single TLE at that position.  It's possible that there is
+			 * no such TLE, in which case fall through and generate a resjunk
+			 * targetentry (we assume this must have happened in the parent
+			 * plan as well).  If there is a TLE but it doesn't match the
+			 * pathkey's EC, we do the same, which is probably the wrong thing
+			 * but we'll leave it to caller to complain about the mismatch.
+			 */
+			tle = get_tle_by_resno(tlist, reqColIdx[numsortkeys]);
+			if (tle)
+			{
+				em = find_ec_member_for_tle(ec, tle, relids);
+				if (em)
+				{
+					/* found expr at right place in tlist */
+					pk_datatype = em->em_datatype;
+				}
+				else
+					tle = NULL;
+			}
+		}
+		else
+		{
+			/*
+			 * Otherwise, we can sort by any non-constant expression listed in
+			 * the pathkey's EquivalenceClass.  For now, we take the first
+			 * tlist item found in the EC. If there's no match, we'll generate
+			 * a resjunk entry using the first EC member that is an expression
+			 * in the input's vars.  (The non-const restriction only matters
+			 * if the EC is below_outer_join; but if it isn't, it won't
+			 * contain consts anyway, else we'd have discarded the pathkey as
+			 * redundant.)
+			 *
+			 * XXX if we have a choice, is there any way of figuring out which
+			 * might be cheapest to execute?  (For example, int4lt is likely
+			 * much cheaper to execute than numericlt, but both might appear
+			 * in the same equivalence class...)  Not clear that we ever will
+			 * have an interesting choice in practice, so it may not matter.
+			 */
+			foreach (j, tlist)
+			{
+				tle = (TargetEntry *) lfirst(j);
+				em = find_ec_member_for_tle(ec, tle, relids);
+				if (em)
+				{
+					/* found expr already in tlist */
+					pk_datatype = em->em_datatype;
+					break;
+				}
+				tle = NULL;
+			}
+		}
+
+		if (!tle)
+		{
+			/*
+			 * No matching tlist item; look for a computable expression. Note
+			 * that we treat Aggrefs as if they were variables; this is
+			 * necessary when attempting to sort the output from an Agg node
+			 * for use in a WindowFunc (since grouping_planner will have
+			 * treated the Aggrefs as variables, too).  Likewise, if we find a
+			 * WindowFunc in a sort expression, treat it as a variable.
+			 */
+			Expr *sortexpr = NULL;
+
+			foreach (j, ec->ec_members)
+			{
+				EquivalenceMember *em = (EquivalenceMember *) lfirst(j);
+				List *exprvars;
+				ListCell *k;
+
+				/*
+				 * We shouldn't be trying to sort by an equivalence class that
+				 * contains a constant, so no need to consider such cases any
+				 * further.
+				 */
+				if (em->em_is_const)
+					continue;
+
+				/*
+				 * Ignore child members unless they belong to the rel being
+				 * sorted.
+				 */
+				if (em->em_is_child && !bms_is_subset(em->em_relids, relids))
+					continue;
+
+				sortexpr = em->em_expr;
+				exprvars = pull_var_clause((Node *) sortexpr,
+										   PVC_INCLUDE_AGGREGATES | PVC_INCLUDE_WINDOWFUNCS |
+											   PVC_INCLUDE_PLACEHOLDERS);
+				foreach (k, exprvars)
+				{
+					if (!tlist_member_ignore_relabel(lfirst(k), tlist))
+						break;
+				}
+				list_free(exprvars);
+				if (!k)
+				{
+					pk_datatype = em->em_datatype;
+					break; /* found usable expression */
+				}
+			}
+			if (!j)
+				elog(ERROR, "could not find pathkey item to sort");
+
+			/*
+			 * Add resjunk entry to input's tlist
+			 */
+			tle = makeTargetEntry(sortexpr, list_length(tlist) + 1, NULL, true);
+			tlist = lappend(tlist, tle);
+			lefttree->targetlist = tlist; /* just in case NIL before */
+		}
+
+		/*
+		 * Look up the correct sort operator from the PathKey's slightly
+		 * abstracted representation.
+		 */
+		sortop = get_opfamily_member(pathkey->pk_opfamily,
+									 pk_datatype,
+									 pk_datatype,
+									 pathkey->pk_strategy);
+		if (!OidIsValid(sortop)) /* should not happen */
+			elog(ERROR,
+				 "missing operator %d(%u,%u) in opfamily %u",
+				 pathkey->pk_strategy,
+				 pk_datatype,
+				 pk_datatype,
+				 pathkey->pk_opfamily);
+
+		/* Add the column to the sort arrays */
+		sortColIdx[numsortkeys] = tle->resno;
+		sortOperators[numsortkeys] = sortop;
+		collations[numsortkeys] = ec->ec_collation;
+		nullsFirst[numsortkeys] = pathkey->pk_nulls_first;
+		numsortkeys++;
+	}
+
+	/* Return results */
+	*p_numsortkeys = numsortkeys;
+	*p_sortColIdx = sortColIdx;
+	*p_sortOperators = sortOperators;
+	*p_collations = collations;
+	*p_nullsFirst = nullsFirst;
+
+	return lefttree;
+}
+
+/*
+ * copied verbatim from createplan.c
+ */
+List *
+ts_build_path_tlist(PlannerInfo *root, Path *path)
+{
+	List *tlist = NIL;
+	Index *sortgrouprefs = path->pathtarget->sortgrouprefs;
+	int resno = 1;
+	ListCell *v;
+
+	foreach (v, path->pathtarget->exprs)
+	{
+		Node *node = (Node *) lfirst(v);
+		TargetEntry *tle;
+
+		/*
+		 * If it's a parameterized path, there might be lateral references in
+		 * the tlist, which need to be replaced with Params.  There's no need
+		 * to remake the TargetEntry nodes, so apply this to each list item
+		 * separately.
+		 */
+		if (path->param_info)
+			node = replace_nestloop_params(root, node);
+
+		tle = makeTargetEntry((Expr *) node, resno, NULL, false);
+		if (sortgrouprefs)
+			tle->ressortgroupref = sortgrouprefs[resno - 1];
+
+		tlist = lappend(tlist, tle);
+		resno++;
+	}
+	return tlist;
+}
+
+/*
+ * replace_nestloop_params
+ *    Replace outer-relation Vars and PlaceHolderVars in the given expression
+ *    with nestloop Params
+ *
+ * All Vars and PlaceHolderVars belonging to the relation(s) identified by
+ * root->curOuterRels are replaced by Params, and entries are added to
+ * root->curOuterParams if not already present.
+ */
+static Node *
+replace_nestloop_params(PlannerInfo *root, Node *expr)
+{
+	/* No setup needed for tree walk, so away we go */
+	return replace_nestloop_params_mutator(expr, root);
+}
+
+static Node *
+replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
+{
+	if (node == NULL)
+		return NULL;
+	if (IsA(node, Var))
+	{
+		Var *var = (Var *) node;
+#if PG_VERSION_NUM < 110003
+		Param *param;
+		NestLoopParam *nlp;
+		ListCell *lc;
+#endif
+		/* Upper-level Vars should be long gone at this point */
+		Assert(var->varlevelsup == 0);
+		/* If not to be replaced, we can just return the Var unmodified */
+		if (!bms_is_member(var->varno, root->curOuterRels))
+			return node;
+#if PG_VERSION_NUM < 110003
+		/* Create a Param representing the Var */
+		param = assign_nestloop_param_var(root, var);
+		/* Is this param already listed in root->curOuterParams? */
+		foreach (lc, root->curOuterParams)
+		{
+			nlp = (NestLoopParam *) lfirst(lc);
+			if (nlp->paramno == param->paramid)
+			{
+				Assert(equal(var, nlp->paramval));
+				/* Present, so we can just return the Param */
+				return (Node *) param;
+			}
+		}
+		/* No, so add it */
+		nlp = makeNode(NestLoopParam);
+		nlp->paramno = param->paramid;
+		nlp->paramval = var;
+		root->curOuterParams = lappend(root->curOuterParams, nlp);
+		/* And return the replacement Param */
+		return (Node *) param;
+#else
+		/* Replace the Var with a nestloop Param */
+		return (Node *) replace_nestloop_param_var(root, var);
+#endif
+	}
+	if (IsA(node, PlaceHolderVar))
+	{
+		PlaceHolderVar *phv = (PlaceHolderVar *) node;
+#if PG_VERSION_NUM < 110003
+		Param *param;
+		NestLoopParam *nlp;
+		ListCell *lc;
+#endif
+
+		/* Upper-level PlaceHolderVars should be long gone at this point */
+		Assert(phv->phlevelsup == 0);
+
+		/*
+		 * Check whether we need to replace the PHV.  We use bms_overlap as a
+		 * cheap/quick test to see if the PHV might be evaluated in the outer
+		 * rels, and then grab its PlaceHolderInfo to tell for sure.
+		 */
+		if (!bms_overlap(phv->phrels, root->curOuterRels) ||
+			!bms_is_subset(find_placeholder_info(root, phv, false)->ph_eval_at, root->curOuterRels))
+		{
+			/*
+			 * We can't replace the whole PHV, but we might still need to
+			 * replace Vars or PHVs within its expression, in case it ends up
+			 * actually getting evaluated here.  (It might get evaluated in
+			 * this plan node, or some child node; in the latter case we don't
+			 * really need to process the expression here, but we haven't got
+			 * enough info to tell if that's the case.)  Flat-copy the PHV
+			 * node and then recurse on its expression.
+			 *
+			 * Note that after doing this, we might have different
+			 * representations of the contents of the same PHV in different
+			 * parts of the plan tree.  This is OK because equal() will just
+			 * match on phid/phlevelsup, so setrefs.c will still recognize an
+			 * upper-level reference to a lower-level copy of the same PHV.
+			 */
+			PlaceHolderVar *newphv = makeNode(PlaceHolderVar);
+
+			memcpy(newphv, phv, sizeof(PlaceHolderVar));
+			newphv->phexpr = (Expr *) replace_nestloop_params_mutator((Node *) phv->phexpr, root);
+			return (Node *) newphv;
+		}
+#if PG_VERSION_NUM < 110003
+		/* Create a Param representing the PlaceHolderVar */
+		param = assign_nestloop_param_placeholdervar(root, phv);
+		/* Is this param already listed in root->curOuterParams? */
+		foreach (lc, root->curOuterParams)
+		{
+			nlp = (NestLoopParam *) lfirst(lc);
+			if (nlp->paramno == param->paramid)
+			{
+				Assert(equal(phv, nlp->paramval));
+				/* Present, so we can just return the Param */
+				return (Node *) param;
+			}
+		}
+		/* No, so add it */
+		nlp = makeNode(NestLoopParam);
+		nlp->paramno = param->paramid;
+		nlp->paramval = (Var *) phv;
+		root->curOuterParams = lappend(root->curOuterParams, nlp);
+		/* And return the replacement Param */
+		return (Node *) param;
+#else
+		/* Replace the PlaceHolderVar with a nestloop Param */
+		return (Node *) replace_nestloop_param_placeholdervar(root, phv);
+#endif
+	}
+	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
+}
+
+#if PG96 || PG10
+/*
+ * ExecSetTupleBound
+ *
+ * Set a tuple bound for a planstate node.  This lets child plan nodes
+ * optimize based on the knowledge that the maximum number of tuples that
+ * their parent will demand is limited.  The tuple bound for a node may
+ * only be changed between scans (i.e., after node initialization or just
+ * before an ExecReScan call).
+ *
+ * Any negative tuples_needed value means "no limit", which should be the
+ * default assumption when this is not called at all for a particular node.
+ *
+ * Note: if this is called repeatedly on a plan tree, the exact same set
+ * of nodes must be updated with the new limit each time; be careful that
+ * only unchanging conditions are tested here.
+ *
+ * copied from PG11 execProcNode.c, handling of GatherState and
+ * GatherMergeState adjusted to account for capabilities of older versions
+ */
+void
+ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node)
+{
+	/*
+	 * Since this function recurses, in principle we should check stack depth
+	 * here.  In practice, it's probably pointless since the earlier node
+	 * initialization tree traversal would surely have consumed more stack.
+	 */
+
+	if (IsA(child_node, SortState))
+	{
+		/*
+		 * If it is a Sort node, notify it that it can use bounded sort.
+		 *
+		 * Note: it is the responsibility of nodeSort.c to react properly to
+		 * changes of these parameters.  If we ever redesign this, it'd be a
+		 * good idea to integrate this signaling with the parameter-change
+		 * mechanism.
+		 */
+		SortState *sortState = (SortState *) child_node;
+
+		if (tuples_needed < 0)
+		{
+			/* make sure flag gets reset if needed upon rescan */
+			sortState->bounded = false;
+		}
+		else
+		{
+			sortState->bounded = true;
+			sortState->bound = tuples_needed;
+		}
+	}
+	else if (IsA(child_node, MergeAppendState))
+	{
+		/*
+		 * If it is a MergeAppend, we can apply the bound to any nodes that
+		 * are children of the MergeAppend, since the MergeAppend surely need
+		 * read no more than that many tuples from any one input.
+		 */
+		MergeAppendState *maState = (MergeAppendState *) child_node;
+		int i;
+
+		for (i = 0; i < maState->ms_nplans; i++)
+			ExecSetTupleBound(tuples_needed, maState->mergeplans[i]);
+	}
+	else if (IsA(child_node, ResultState))
+	{
+		/*
+		 * Similarly, for a projecting Result, we can apply the bound to its
+		 * child node.
+		 *
+		 * If Result supported qual checking, we'd have to punt on seeing a
+		 * qual.  Note that having a resconstantqual is not a showstopper: if
+		 * that condition succeeds it affects nothing, while if it fails, no
+		 * rows will be demanded from the Result child anyway.
+		 */
+		if (outerPlanState(child_node))
+			ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
+	}
+	else if (IsA(child_node, SubqueryScanState))
+	{
+		/*
+		 * We can also descend through SubqueryScan, but only if it has no
+		 * qual (otherwise it might discard rows).
+		 */
+		SubqueryScanState *subqueryState = (SubqueryScanState *) child_node;
+
+		if (subqueryState->ss.ps.qual == NULL)
+			ExecSetTupleBound(tuples_needed, subqueryState->subplan);
+	}
+	else if (IsA(child_node, GatherState))
+	{
+		/*
+		 * A Gather node can propagate the bound to its workers.  As with
+		 * MergeAppend, no one worker could possibly need to return more
+		 * tuples than the Gather itself needs to.
+		 *
+		 * Note: As with Sort, the Gather node is responsible for reacting
+		 * properly to changes to this parameter.
+		 */
+
+		/* Also pass down the bound to our own copy of the child plan */
+		ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
+	}
+#if PG10
+	else if (IsA(child_node, GatherMergeState))
+	{
+		/* Same comments as for Gather */
+
+		ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
+	}
+#endif
+
+	/*
+	 * In principle we could descend through any plan node type that is
+	 * certain not to discard or combine input rows; but on seeing a node that
+	 * can do that, we can't propagate the bound any further.  For the moment
+	 * it's unclear that any other cases are worth checking here.
+	 */
 }
 #endif

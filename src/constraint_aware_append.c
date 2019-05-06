@@ -25,6 +25,7 @@
 
 #include "constraint_aware_append.h"
 #include "hypertable.h"
+#include "chunk_append/transform.h"
 #include "compat.h"
 
 /*
@@ -87,102 +88,12 @@ get_appendrelinfo(PlannerInfo *root, Index rti)
 }
 
 static bool
-can_exclude_chunk(PlannerInfo *root, Scan *scan, EState *estate, Index rt_index,
-				  List *restrictinfos)
+can_exclude_chunk(PlannerInfo *root, EState *estate, Index rt_index, List *restrictinfos)
 {
-	RangeTblEntry *rte = rt_fetch(scan->scanrelid, estate->es_range_table);
+	RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
 
 	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
 		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
-}
-
-#define DATATYPE_PAIR(left, right, type1, type2)                                                   \
-	((left == type1 && right == type2) || (left == type2 && right == type1))
-
-/*
- * Cross datatype comparisons between DATE/TIMESTAMP/TIMESTAMPTZ
- * are not immutable which prevents their usage for chunk exclusion.
- * Unfortunately estimate_expression_value will not estimate those
- * expressions which makes them unusable for execution time chunk
- * exclusion with constraint aware append.
- * To circumvent this we inject casts and use an operator
- * with the same datatype on both sides when constifying
- * restrictinfo. This allows estimate_expression_value
- * to evaluate those expressions and makes them accessible for
- * execution time chunk exclusion.
- *
- * The following transformations are done:
- * TIMESTAMP OP TIMESTAMPTZ => TIMESTAMP OP (TIMESTAMPTZ::TIMESTAMP)
- * TIMESTAMPTZ OP DATE => TIMESTAMPTZ OP (DATE::TIMESTAMPTZ)
- *
- * No transformation is required for TIMESTAMP OP DATE because
- * those operators are marked immutable.
- */
-static Expr *
-transform_restrict_info_clause(Expr *clause)
-{
-	clause = copyObject(clause);
-	if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
-	{
-		OpExpr *op = castNode(OpExpr, clause);
-		Oid left_type = exprType(linitial(op->args));
-		Oid right_type = exprType(lsecond(op->args));
-
-		if (op->opresulttype != BOOLOID || op->opretset == true)
-			return clause;
-
-		if (!IsA(linitial(op->args), Var) && !IsA(lsecond(op->args), Var))
-			return clause;
-
-		if (DATATYPE_PAIR(left_type, right_type, TIMESTAMPOID, TIMESTAMPTZOID) ||
-			DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
-		{
-			char *opname = get_opname(op->opno);
-			Oid source_type, target_type, opno, cast_oid;
-
-			/*
-			 * if Var is on left side we put cast on right side otherwise
-			 * it will be left
-			 */
-			if (IsA(linitial(op->args), Var))
-			{
-				source_type = right_type;
-				target_type = left_type;
-			}
-			else
-			{
-				source_type = left_type;
-				target_type = right_type;
-			}
-
-			opno = get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
-			cast_oid = get_cast_func(source_type, target_type);
-
-			if (OidIsValid(opno) && OidIsValid(cast_oid))
-			{
-				Expr *left = linitial(op->args);
-				Expr *right = lsecond(op->args);
-
-				if (source_type == left_type)
-					left = (Expr *) makeFuncExpr(cast_oid,
-												 target_type,
-												 list_make1(left),
-												 InvalidOid,
-												 InvalidOid,
-												 0);
-				else
-					right = (Expr *) makeFuncExpr(cast_oid,
-												  target_type,
-												  list_make1(right),
-												  InvalidOid,
-												  InvalidOid,
-												  0);
-
-				clause = make_opclause(opno, BOOLOID, false, left, right, InvalidOid, InvalidOid);
-			}
-		}
-	}
-	return clause;
 }
 
 /*
@@ -321,7 +232,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				}
 				restrictinfos = constify_restrictinfos(&root, restrictinfos);
 
-				if (can_exclude_chunk(&root, (Scan *) plan, estate, scanrelid, restrictinfos))
+				if (can_exclude_chunk(&root, estate, scanrelid, restrictinfos))
 					continue;
 
 				*appendplans = lappend(*appendplans, plan);
@@ -425,16 +336,10 @@ ca_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	Oid relid = linitial_oid(linitial(cscan->custom_private));
 
 	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
-#if PG96 || PG10
-	ExplainPropertyInteger("Chunks left after exclusion", state->num_append_subplans, es);
-#else
-
-	/*
-	 * PG 11 adds a uint field for certain cases. (See:
-	 * https://github.com/postgres/postgres/commit/7a50bb690b4837d29e715293c156cff2fc72885c).
-	 */
-	ExplainPropertyInteger("Chunks left after exclusion", NULL, state->num_append_subplans, es);
-#endif
+	ExplainPropertyIntegerCompat("Chunks left after exclusion",
+								 NULL,
+								 state->num_append_subplans,
+								 es);
 }
 
 static CustomExecMethods constraint_aware_append_state_methods = {
@@ -465,7 +370,7 @@ static CustomScanMethods constraint_aware_append_plan_methods = {
 };
 
 static Plan *
-constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
+constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 									List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
@@ -534,7 +439,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, struct C
 
 				foreach (lc, clauses)
 				{
-					Node *clause = (Node *) transform_restrict_info_clause(
+					Node *clause = (Node *) ts_transform_cross_datatype_comparison(
 						castNode(RestrictInfo, lfirst(lc))->clause);
 					clause = adjust_appendrel_attrs_compat(root, clause, appinfo);
 					chunk_clauses = lappend(chunk_clauses, clause);
