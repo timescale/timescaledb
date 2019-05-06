@@ -9,6 +9,7 @@
 typedef struct TimescaleDBPrivate
 {
 	bool appends_ordered;
+	List *nested_oids;
 } TimescaleDBPrivate;
 
 #endif /* TIMESCALEDB_PLANNER_H */

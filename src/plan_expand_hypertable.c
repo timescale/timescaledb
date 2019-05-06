@@ -37,7 +37,7 @@
 #include "hypertable_restrict_info.h"
 #include "planner.h"
 #include "planner_import.h"
-#include "plan_ordered_append.h"
+#include "chunk_append/chunk_append.h"
 #include "guc.h"
 #include "extension.h"
 #include "chunk.h"
@@ -528,14 +528,15 @@ static bool
 should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *reverse)
 {
 	/* check if optimizations are enabled */
-	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append)
+	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append ||
+		!ts_guc_enable_chunk_append)
 		return false;
 
 	/*
 	 * only do this optimization for hypertables with 1 dimension and queries
 	 * with an ORDER BY clause
 	 */
-	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL)
+	if (ht->space->num_dimensions > 2 || root->parse->sortClause == NIL)
 		return false;
 
 	return ts_ordered_append_should_optimize(root, rel, ht, reverse);
@@ -611,6 +612,10 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 /**
  * Get chunk oids from either restrict info or explicit chunk exclusion. Explicit chunk exclusion
  * takes precedence.
+ *
+ * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
+ * If the hypertable uses space partitioning the nested oids are stored in nested_oids
+ * on rel->fdw_private when appends are ordered.
  */
 static List *
 get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
@@ -630,11 +635,20 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 
 		if (should_order_append(root, rel, ht, &reverse))
 		{
+			List **nested_oids = NULL;
+
 			if (rel->fdw_private != NULL)
+			{
 				((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
+
+				if (ht->space->num_dimensions == 2)
+					nested_oids = &((TimescaleDBPrivate *) rel->fdw_private)->nested_oids;
+			}
+
 			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
 																	  ht,
 																	  AccessShareLock,
+																	  nested_oids,
 																	  reverse);
 		}
 		else

@@ -541,17 +541,19 @@ ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertab
 	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
 }
 
+/*
+ * get chunk oids ordered by time dimension
+ *
+ * nested_oids is a list of lists, chunks that occupy the same time slice will be
+ * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
+ * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
+ *
+ */
 List *
 ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
-												   LOCKMODE lockmode, bool reverse)
+												   LOCKMODE lockmode, List **nested_oids,
+												   bool reverse)
 {
-	/*
-	 * we only support ordered append for partitioning by 1 dimension
-	 * initially
-	 *
-	 * to support space partitioning as well here this function needs to be
-	 * adjusted
-	 */
 	DimensionRestrictInfo *dri;
 	DimensionVec *dv;
 	List *chunk_oids = NIL;
@@ -561,7 +563,7 @@ ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, 
 	 * ordered append is the only user of this function which checks for
 	 * number of dimensions as well so we only assert here
 	 */
-	Assert(hri->num_dimensions == 1);
+	Assert(hri->num_dimensions == 1 || hri->num_dimensions == 2);
 
 	dri = hri->dimension_restriction[0];
 
@@ -587,24 +589,25 @@ ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, 
 	{
 		ListCell *lc;
 		List *chunk_ids = NIL;
+		List *slice_oids = NIL;
 		DimensionSlice *slice = dv->slices[i];
 
 		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
 															&chunk_ids,
 															CurrentMemoryContext);
 
-		/*
-		 * since we don't support space partitioning here atm, there should
-		 * only be 1 chunk per dimension slice
-		 */
-		Assert(list_length(chunk_ids) <= 1);
-
 		foreach (lc, chunk_ids)
 		{
 			Chunk *chunk = ts_chunk_get_by_id(lfirst_int(lc), 0, true);
 
 			chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
+
+			if (nested_oids != NULL)
+				slice_oids = lappend_oid(slice_oids, chunk->table_id);
 		}
+
+		if (slice_oids != NIL)
+			*nested_oids = lappend(*nested_oids, slice_oids);
 	}
 
 	return chunk_oids;

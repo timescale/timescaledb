@@ -46,6 +46,7 @@
 #include "chunk_dispatch_plan.h"
 #include "hypertable_insert.h"
 #include "constraint_aware_append.h"
+#include "chunk_append/chunk_append.h"
 #include "partitioning.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -54,7 +55,6 @@
 #include "plan_expand_hypertable.h"
 #include "plan_add_hashagg.h"
 #include "plan_agg_bookend.h"
-#include "plan_ordered_append.h"
 #include "plan_partialize.h"
 
 void _planner_init(void);
@@ -283,7 +283,16 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		0 == root->parse->resultRelation)
 	{
 		ListCell *lc;
-		List *merge = NIL;
+		bool ordered = false;
+		List *nested_oids = NIL;
+
+		if (rel->fdw_private != NULL)
+		{
+			TimescaleDBPrivate *private = (TimescaleDBPrivate *) rel->fdw_private;
+
+			ordered = private->appends_ordered;
+			nested_oids = private->nested_oids;
+		}
 
 		foreach (lc, rel->pathlist)
 		{
@@ -296,35 +305,18 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				case T_MergeAppendPath:
-					if (rel->fdw_private != NULL &&
-						((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
-						merge = lappend(merge, *pathptr);
-					if (should_optimize_append(*pathptr))
+					if (ordered)
+						*pathptr = ts_chunk_append_path_create(root,
+															   rel,
+															   ht,
+															   *pathptr,
+															   ordered,
+															   nested_oids);
+					else if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
 					break;
-			}
-		}
-
-		/*
-		 * for every MergeAppendPath we create an equivalent ordered AppendPath
-		 *
-		 * we create the new pathes in a separate loop because add_path
-		 * will modify pathlist and remove pathes if a path is added
-		 * that is cheaper than the alternatives
-		 */
-		foreach (lc, merge)
-		{
-			Path *ordered_path =
-				ts_ordered_append_path_create(root, rel, ht, castNode(MergeAppendPath, lfirst(lc)));
-
-			if (ordered_path != NULL)
-			{
-				if (should_optimize_append(ordered_path))
-					ordered_path = ts_constraint_aware_append_path_create(root, ht, ordered_path);
-
-				add_path(rel, ordered_path);
 			}
 		}
 

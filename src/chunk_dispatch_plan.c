@@ -49,7 +49,7 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * them up to the ModifyTable node.
  */
 static Plan *
-chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, struct CustomPath *best_path,
+chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_path,
 						   List *tlist, List *clauses, List *custom_plans)
 {
 	ChunkDispatchPath *cdpath = (ChunkDispatchPath *) best_path;

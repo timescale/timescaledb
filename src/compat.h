@@ -12,8 +12,10 @@
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
+#include <nodes/nodes.h>
 
 #include "export.h"
+#include "planner_import.h"
 
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
 #define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))
@@ -263,6 +265,14 @@ ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc)
 	return myslot;
 }
 
+/*
+ * ExecSetTupleBound is only available starting with PG11 so we map to a backported version
+ * for PG9.6 and PG10
+ */
+#if PG96 || PG10
+#define ExecSetTupleBound(tuples_needed, child_node) ts_ExecSetTupleBound(tuples_needed, child_node)
+#endif
+
 static inline TupleTableSlot *
 MakeTupleTableSlotCompat(TupleDesc tupdesc)
 {
@@ -478,6 +488,19 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 						map_size,                                                                  \
 						rowtype,                                                                   \
 						found_whole_row);
+#endif
+
+/*
+ * ExplainPropertyInteger
+ *
+ * PG11 added a unit parameter to ExplainPropertyInteger
+ */
+#if PG96 || PG10
+#define ExplainPropertyIntegerCompat(label, unit, value, es)                                       \
+	ExplainPropertyInteger(label, value, es)
+#else
+#define ExplainPropertyIntegerCompat(label, unit, value, es)                                       \
+	ExplainPropertyInteger(label, unit, value, es)
 #endif
 
 /* ParseFuncOrColumn */
