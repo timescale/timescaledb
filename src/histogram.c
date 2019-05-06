@@ -164,10 +164,10 @@ ts_hist_serializefunc(PG_FUNCTION_ARGS)
 	state = (Histogram *) PG_GETARG_POINTER(0);
 
 	pq_begintypsend(&buf);
-	pq_sendint(&buf, state->nbuckets, 4);
+	pq_sendint32(&buf, state->nbuckets);
 
 	for (i = 0; i < state->nbuckets; i++)
-		pq_sendint(&buf, DatumGetInt32(state->buckets[i]), 4);
+		pq_sendint32(&buf, DatumGetInt32(state->buckets[i]));
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }

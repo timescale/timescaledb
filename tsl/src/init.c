@@ -20,6 +20,11 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
+#include "compression/compression.h"
+#include "compression/dictionary.h"
+#include "compression/gorilla.h"
+#include "compression/array.h"
+#include "compression/deltadelta.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/drop.h"
 #include "continuous_aggs/insert.h"
@@ -83,6 +88,20 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_drop_chunks_by_chunk_id = ts_continuous_agg_drop_chunks_by_chunk_id,
 	.continuous_agg_trigfn = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
+	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
+	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
+	.compressed_data_send = tsl_compressed_data_send,
+	.compressed_data_recv = tsl_compressed_data_recv,
+	.compressed_data_in = tsl_compressed_data_in,
+	.compressed_data_out = tsl_compressed_data_out,
+	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
+	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
+	.gorilla_compressor_append = tsl_gorilla_compressor_append,
+	.gorilla_compressor_finish = tsl_gorilla_compressor_finish,
+	.dictionary_compressor_append = tsl_dictionary_compressor_append,
+	.dictionary_compressor_finish = tsl_dictionary_compressor_finish,
+	.array_compressor_append = tsl_array_compressor_append,
+	.array_compressor_finish = tsl_array_compressor_finish,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

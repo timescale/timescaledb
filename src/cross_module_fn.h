@@ -66,6 +66,26 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_trigfn;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+
+	/* The compression functions below are not installed in SQL as part of create extension;
+	 *  They are installed and tested during testing scripts. They are exposed in cross-module
+	 *  functions because they may be very useful for debugging customer problems if the sql
+	 *  stub is installed on the customer's machine.
+	 */
+	PGFunction compressed_data_decompress_forward;
+	PGFunction compressed_data_decompress_reverse;
+	PGFunction compressed_data_send;
+	PGFunction compressed_data_recv;
+	PGFunction compressed_data_in;
+	PGFunction compressed_data_out;
+	PGFunction deltadelta_compressor_append;
+	PGFunction deltadelta_compressor_finish;
+	PGFunction gorilla_compressor_append;
+	PGFunction gorilla_compressor_finish;
+	PGFunction dictionary_compressor_append;
+	PGFunction dictionary_compressor_finish;
+	PGFunction array_compressor_append;
+	PGFunction array_compressor_finish;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

@@ -97,7 +97,7 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 	if (pd->is_null)
 	{
 		/* emit -1 data length to signify a NULL */
-		pq_sendint(buf, -1, 4);
+		pq_sendint32(buf, -1);
 		return;
 	}
 
@@ -111,7 +111,7 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 		state->type_oid = pd->type_oid;
 	}
 	outputbytes = SendFunctionCall(&state->proc, pd->datum);
-	pq_sendint(buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
+	pq_sendint32(buf, VARSIZE(outputbytes) - VARHDRSZ);
 	pq_sendbytes(buf, VARDATA(outputbytes), VARSIZE(outputbytes) - VARHDRSZ);
 }
 

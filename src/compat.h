@@ -598,4 +598,22 @@ extern int oid_cmp(const void *p1, const void *p2);
 	WaitLatch(latch, wakeEvents, timeout, PG_WAIT_EXTENSION)
 #endif
 
+/* pq_sendint is deprecated in PG11, so create pq_sendint32 in 9.6 and 10 */
+#if PG96 || PG10
+#define pq_sendint32(buf, i) pq_sendint(buf, i, 4)
+#endif
+
+/* create this function for symmetry with above */
+#define pq_getmsgint32(buf) pq_getmsgint(buf, 4)
+
+#if PG96
+#if __GNUC__ >= 3
+#define likely(x) __builtin_expect((x) != 0, 1)
+#define unlikely(x) __builtin_expect((x) != 0, 0)
+#else
+#define likely(x) ((x) != 0)
+#define unlikely(x) ((x) != 0)
+#endif
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
