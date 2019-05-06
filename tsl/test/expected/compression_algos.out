@@ -1,0 +1,1094 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--install necessary functions for tests
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION ts_test_compression() RETURNS VOID
+AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
+\ir include/compression_utils.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+------------------
+-- C unit tests --
+------------------
+SELECT ts_test_compression();
+ ts_test_compression 
+---------------------
+ 
+(1 row)
+
+--------------------------
+-- cheap rand generator --
+--------------------------
+create table rand_minstd_state(i bigint);
+create function rand_minstd_advance(bigint) returns bigint
+language sql immutable as
+$$
+	select (16807 * $1) % 2147483647
+$$;
+create function gen_rand_minstd() returns bigint
+language sql as
+$$
+	update rand_minstd_state set i = rand_minstd_advance(i) returning i
+$$;
+-- seed the random num generator
+insert into rand_minstd_state values (321);
+------------------------
+-- BIGINT Compression --
+------------------------
+SELECT
+  $$
+  select item from base_ints order by rn
+  $$ AS "QUERY"
+\gset
+\set TYPE BIGINT
+\set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
+-- random order
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
+ compressed size 
+-----------------
+            1728
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+-- ascending order with nulls
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (SELECT generate_series(1, 1000) item) sub;
+INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             101
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+SELECT c ints_text FROM compressed;
+                                                              ints_text                                                               
+--------------------------------------------------------------------------------------------------------------------------------------
+ BAEAAAAAAAAAAQAAAAAAAAPoAAAAAAAAAAEAAAPnAAAAAgAAAAAAAADyAAAAAAAAAAIAADxwAAAAAAAAA+sAAAADAAAAAAAAAfEAAAAAAAAEAQAAOqAAAAAAAAAAAAAAAAE=
+(1 row)
+
+DROP TABLE base_ints;
+-- really big deltas
+SELECT  9223372036854775807 as big_int_max \gset
+SELECT -9223372036854775808	 as big_int_min \gset
+CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
+    (
+        VALUES
+           --big deltas
+           (0), (:big_int_max), (:big_int_min), (:big_int_max), (:big_int_min),
+           (0), (:big_int_min), (32), (5), (:big_int_min), (-52), (:big_int_max),
+           (1000),
+           --big delta_deltas
+            (0), (:big_int_max), (:big_int_max), (:big_int_min), (:big_int_min), (:big_int_max), (:big_int_max),
+            (0), (:big_int_max-1), (:big_int_max-1), (:big_int_min), (:big_int_min), (:big_int_max-1), (:big_int_max-1)
+    ) as t(item);
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             176
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+-- NULLs
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              77
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              77
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              77
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              77
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+------------------------
+-- INT Compression --
+------------------------
+--kinda silly test for now since compressed as bigint anyway
+--TODO add proper int support
+--TODO add proper smallint support and tests
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::int FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+SELECT
+  $$
+  select item::bigint from base_ints order by rn
+  $$ AS "QUERY"
+\gset
+\set TYPE BIGINT
+\set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item::bigint)
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+            1736
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_ints;
+-----------------------------
+-- TIMESTAMPTZ Compression --
+-----------------------------
+SELECT
+  $$
+  select item from base_time order by rn
+  $$ AS "QUERY"
+\gset
+\set TYPE TIMESTAMPTZ
+\set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
+CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
+    (select sub.item from (SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') item) as sub ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+            5332
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_time;
+------------------------
+-- DOUBLE Compression --
+------------------------
+SELECT
+  $$
+  select item from  base_doubles order by rn
+  $$ AS "QUERY"
+\gset
+SELECT 'DOUBLE PRECISION' as "TYPE" \gset
+\set COMPRESSION_CMD _timescaledb_internal.compress_gorilla(item)
+SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_FORWARD_CMD" \gset
+SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_REVERSE_CMD" \gset
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM
+    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+            1760
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+SELECT c gorilla_text FROM compressed;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               gorilla_text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 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
+(1 row)
+
+DROP TABLE  base_doubles;
+--special values
+CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
+    (
+        VALUES
+           --special
+           (0::double precision), ('Infinity'), ('-Infinity'), ('NaN'),
+           --big deltas
+           (0), ('Infinity'), ('-Infinity'), ('Infinity'), ('-Infinity'),
+           (0), ('-Infinity'), (32), (5), ('-Infinity'), (-52), ('Infinity'),
+           (1000),
+           --big delta_deltas
+            (0), ('Infinity'), ('Infinity'), ('-Infinity'), ('-Infinity'), ('Infinity'), ('Infinity')
+    ) as t(item);
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE  base_doubles;
+-- NULLs
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_doubles;
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_doubles;
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_doubles;
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             136
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_doubles;
+------------------------
+-- Dictionary Compression --
+------------------------
+SELECT
+  $$
+  select item from  base_texts order by rn
+  $$ AS "QUERY"
+\gset
+SELECT 'TEXT' as "TYPE" \gset
+\set COMPRESSION_CMD _timescaledb_internal.compress_dictionary(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TEXT)
+-- high cardinality
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
+    (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+            5376
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+SELECT c from compressed;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    c                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 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AAM2MDcAAAADMzYxAAAAAzY0NwAAAAM4MDgAAAADOTc5AAAAAzQ4MAAAAAM5MjMAAAADNzYxAAAAAzI0MwAAAAMzMjEAAAADMjE3AAAAAjM5AAAAAzYwMwAAAAMzNjkAAAADOTM4AAAAAzcyMQAAAAI4MgAAAAM4ODkAAAADMjM2AAAAAzk1NAAAAAMxMTUAAAADNzgyAAAAAzk3NgAAAAMyMDcAAAADNDU4AAAAAzQxMwAAAAM4MjAAAAADODg3AAAAAzk2OQAAAAIxOQAAAAM1MjYAAAADMzQwAAAAAzQ2MgAAAAM1ODYAAAADNTMxAAAAAzQzNgAAAAM3ODEAAAADOTkxAAAAAzQzMgAAAAM4MjUAAAADNTE0AAAAAzYxMQAAAAM0MDAAAAADNjA1AAAAAzQzMwAAAAMzNjYAAAADNjc2AAAAAzE1OQAAAAM1MDUAAAABNQAAAAMxMTIAAAADNDUyAAAAAzYwMgAAAAM2NzIAAAADMzkyAAAAAjM4AAAAAzE2MwAAAAM0ODcAAAADNjI1AAAAAzQ4NAAAAAM3MTIAAAADODM2AAAAAjM3AAAAAzgwNwAAAAM1MzYAAAADNjkzAAAAAzk2MAAAAAMxNTEAAAADMTU3AAAAAzEzMAAAAAM3ODkAAAADOTMyAAAAAzc0MQAAAAM2NDEAAAADOTYxAAAAAzk1MAAAAAMzMDQAAAADNDA1AAAAAzMyNgAAAAM2MTgAAAACNDIAAAADNTUxAAAAAzE3NgAAAAM4ODEAAAADMTc4AAAAAzQwMwAAAAI3MwAAAAI2NwAAAAM0MzgAAAADMjg0AAAAAzgyNgAAAAM5MTAAAAADNTA0AAAAAzgyOAAAAAI0NAAAAAMzNzYAAAADNTkwAAAAAzgzMgAAAAM3MzQAAAADNjcxAAAAAzk2NgAAAAM1ODAAAAADMTU1AAAAAzMyNwAAAAIyNQAAAAM5ODQAAAACMTgAAAADODc0AAAAAzk5NwAAAAMxMDgAAAADMTg3AAAAAzU3NwAAAAM1MTUAAAACMjkAAAACNTEAAAADMjk4AAAAAzczNgAAAAMyMjAAAAACNDkAAAADODgwAAAAAzQwOQAAAAM0MTcAAAADNzU1AAAAAzE5MAAAAAM0NDUAAAADNTYxAAAAAzcxNAAAAAI1MAAAAAM3NDYAAAADNDMxAAAAAzc5NAAAAAM3MjgAAAADNzQzAAAAAzk3MAAAAAM1NDUAAAADMTk0AAAAAzg3MQAAAAM4MjIAAAACMTAAAAADMzY1AAAAAzQ5MgAAAAMzMzUAAAADNTQ2AAAAAzQyMQAAAAM2MDYAAAADODAwAAAAAzkwNwAAAAM3MTcAAAADOTEzAAAAAzE0MwAAAAMxNzUAAAADNDgzAAAAAzE5OQAAAAMzMTYAAAADNDUxAAAAAzk0MAAAAAM0MzUAAAABOAAAAAM5MzQAAAADNTYzAAAAATIAAAADMTA0AAAAAzM0MgAAAAM0MjQAAAADMTUzAAAAAzc3OQAAAAM0MzcAAAADMzI0AAAAAzg0OQAAAAM2NzQAAAADMzMyAAAAAzgwMQAAAAM5MzAAAAADODA1AAAAAzE4MwAAAAM0MTgAAAADMzY4AAAAAzM5MAAAAAMxODIAAAADODU3AAAAAzU2OQAAAAM2NjMAAAADNjA0AAAAAzQzOQAAAAMyMzkAAAADMTM3AAAAAzE4OQAAAAMxMzQAAAADOTE0AAAAAzE4MAAAAAMzMDUAAAADNTg5AAAAAzIyNwAAAAM2NDkAAAADMzgzAAAAAzg4NgAAAAM3MTUAAAADNzEwAAAAAzMyOQAAAAM3MDMAAAADOTE5AAAAAzUyMQAAAAM4NDcAAAADOTg3AAAAAzYxNgAAAAMzMjgAAAADNTA4AAAAAzIzMAAAAAMzMDEAAAADMjI4AAAAAzgzOAAAAAM1MjUAAAADNDk3AAAAAzIwNgAAAAM0MDcAAAAEMTAwMAAAAAMzOTYAAAADNzA5AAAAAzkzMQAAAAM3NzMAAAADNjkxAAAAAzYwOAAAAAM3NTIAAAADOTU1AAAAAzQ5NQAAAAM0ODYAAAACNzgAAAADNjY1AAAAAzc4NwAAAAMxNTIAAAADMjUzAAAAAzk3MgAAAAM2ODQAAAADNzc0AAAAAzU2OAAAAAM3NTEAAAADNjU1AAAAAzMzOQAAAAM5MDUAAAADMzU4AAAAAzc5NwAAAAMzNDEAAAADMzk1AAAAAzM0NwAAAAM4MTEAAAADMzE4AAAAAzI5NAAAAAMyMzgAAAADNTgyAAAAAzU3NgAAAAM4NTMAAAADNjU5AAAAAzkxMgAAAAM4OTAAAAADNzM4AAAAAzU3MQAAAAM0NTQAAAADODI5AAAAAzk1NgAAAAMzODQAAAADNDY4AAAAAzE4NQAAAAMyNDkAAAADODY0AAAAAzM1MAAAAAI4NwAAAAM0NDgAAAADMzU2AAAAAzIyNAAAAAM4OTMAAAADNDA2AAAAAzQ0MAAAAAMyNjkAAAABNwAAAAI5OAAAAAI2NQAAAAIzNgAAAAM1ODMAAAABOQAAAAMyNTUAAAADMTIzAAAAAzE0MQAAAAM3MDIAAAADODY1AAAAAjI4AAAAAzE2NgAAAAMzNzcAAAADNTEzAAAAAzk1OQAAAAM3OTkAAAADOTM3AAAAAzk0MgAAAAMxMjkAAAADNzA0AAAAAzg3NwAAAAI3NAAAAAI3MgAAAAM1NzUAAAADMjkyAAAAAzc4OAAAAAM1OTgAAAADNjY4AAAAAzM1NAAAAAM4MTkAAAADMzIwAAAAAzY1MAAAAAM4NTkAAAADNTQ4AAAAAzc3NwAAAAM0NjUAAAADMjU3AAAAAzI0MQAAAAM3NzYAAAACOTkAAAADNDczAAAAAjE0AAAAAzMyMgAAAAM5OTkAAAACMTcAAAADMjIzAAAAAzc0MAAAAAMxNjAAAAADMzg3AAAAAjEzAAAAAjY2AAAAAzE3MAAAAAM3OTYAAAADODU4AAAAAzE4OAAAAAMyODYAAAADMjAyAAAAAzE4MQAAAAM3MjYAAAADMTc3AAAAATQAAAADMzU3AAAAAjQ2AAAAAzM3MQAAAAMxMzgAAAADNDk2AAAAAzkwMgAAAAM3NTkAAAACNDEAAAADMjI5AAAAAzcwNQAAAAM1NDcAAAADNDI5AAAAAzE5MwAAAAM3MjIAAAADODYxAAAAAzE1OAAAAAM0OTgAAAADNjEzAAAAAzM4OAAAAAM1NjAAAAADNTQxAAAAAzI0NAAAAAMxNjIAAAADNTY0AAAAAzU1NgAAAAM3NDIAAAADNTMzAAAAAzQ3MgAAAAM0NjcAAAADMjgwAAAAAzc1MAAAAAI5MQAAAAMyODkAAAADODQ1AAAAAzUwOQAAAAM2NTMAAAADNzgzAAAAAzc5MQAAAAM5ODEAAAADNjMwAAAAAzM3MwAAAAMzMDAAAAADNjQwAAAAAzk3NAAAAAM0NDcAAAADNjI2AAAAAzk4NQAAAAM2NjAAAAADNjg2AAAAAjMyAAAAAzE1NAAAAAMyMTkAAAADODg1AAAAAzcwMQAAAAM2MzUAAAADODM5AAAAAzQxNgAAAAM2ODUAAAADMjUyAAAAAzM5MQAAAAMzODYAAAADODQ0AAAAAzg4MwAAAAM0NzcAAAADMjEyAAAAAzU1NAAAAAMzOTgAAAADMzIzAAAAAzE5NwAAAAI4MQAAAAM2OTcAAAADNjY0AAAAAzYwMQAAAAM2NDUAAAADNjk5AAAAAzIyNQAAAAI4OAAAAAM0ODIAAAADMzcyAAAAAjIzAAAAAzY1OAAAAAM4MTUAAAADNTk0AAAAAzk5MwAAAAM1MjQAAAADMTEwAAAAAzc5MAAAAAMxNTAAAAADNjEyAAAAAjEyAAAAAzE0MgAAAAM1NjcAAAADODUwAAAAAzg0NgAAAAM1MjMAAAADMjU4AAAAAzMzMwAAAAIzMQAAAAM0MjMAAAADNDkxAAAAAzQ2MwAAAAM0NDQAAAADMzA3AAAAAjc3AAAAAzYxNQAAAAMxMDkAAAADNTg4AAAAAzYyMQAAAAM3NzUAAAADMzUxAAAAAzY3OQAAAAM1NzIAAAADODc4AAAAAzk0OQAAAAM5OTYAAAADNDk5AAAAAzUyMAAAAAMxNzMAAAADNTU4AAAAAjk0AAAAAzM0NQAAAAI5NgAAAAMyODUAAAADNzY3AAAAAzg3OQAAAAMyNjgAAAADOTkwAAAAAzczNQAAAAM5ODAAAAADMjgxAAAAAzY4MQAAAAMxMTQAAAADNzQ5AAAAAzk5NQAAAAI5MwAAAAM5OTQAAAADMjEzAAAAAzUxNgAAAAMxMDIAAAADNTUyAAAAAzU5MwAAAAMzODEAAAADMzgyAAAAAjk1AAAAAzE2NAAAAAM4OTgAAAADOTY0AAAAAzI3MwAAAAM5MjIAAAADNzIwAAAAAzM5NAAAAAIzMAAAAAM3MTYAAAADMTA1AAAAAzg3NQAAAAM3NjIAAAADNTkxAAAAAzk3NwAAAAM3NzgAAAADNjQ4AAAAAzc2OQAAAAM2NzUAAAADNzk1AAAAAzg2OQAAAAMzNDQAAAADOTQ4AAAAAzQyOAAAAAM2MTQAAAADNTE5AAAAAzE3NAAAAAMxNDgAAAADNDkwAAAAAzI4MgAAAAM1OTIAAAADOTgzAAAAAzM5NwAAAAMxOTIAAAADMzQzAAAAAzI3NQAAAAM1NzMAAAADNjE5AAAAAzMwNgAAAAM0MzQAAAACMjAAAAADODk3AAAAAzI2MwAAAAM4OTUAAAADODUxAAAAAzI1MAAAAAMyMzMAAAADNTc0AAAAAzg3MAAAAAMyNjEAAAADNDI1AAAAAzI4NwAAAAM1NDIAAAABMQAAAAM4MTYAAAADNzY2AAAAAjU1AAAAAzg5NAAAAAMyNDgAAAADNDg1AAAAAzI1MQAAAAM1MjkAAAADNzkyAAAAAzUzNwAAAAM2OTIAAAADOTUyAAAAAzczMwAAAAM2NzcAAAACOTIAAAADMTQ1AAAAAzYzMwAAAAM1MzIAAAADNjY5AAAAAjcxAAAAAzg2MgAAAAE2AAAAAzg5MQAAAAMxMDMAAAADNzcwAAAAAzI5MwAAAAM1NzkAAAACOTAAAAADNzA4AAAAAzU5NgAAAAM4MTQAAAADMzU5AAAAAzY0MgAAAAM5MzkAAAADMzY0AAAAAzIwNAAAAAM0OTQAAAADMjA4AAAAAzExMwAAAAM3NDUAAAACNzkAAAADMzQ4AAAAAjU3AAAAAzU0MwAAAAMzOTMAAAADNDU2AAAAAzMxMAAAAAM5MjQAAAADMjcwAAAAAzk3NQAAAAM5NDMAAAADMjE4AAAAAzM3NQAAAAMxNjUAAAADMTU2AAAAAzczOQAAAAMzNTUAAAADODU0AAAAAzEzNQAAAAM4MzAAAAADMzY3AAAAAzMwMgAAAAIyMgAAAAM0NzgAAAADNzY1AAAAAzI0MgAAAAMyOTUAAAADNzg1AAAAAzg4OAAAAAMzODUAAAACNDcAAAADNTM1AAAAAzU0NAAAAAMyMDAAAAADMTM5AAAAAzgyNAAAAAMxMTkAAAADNDU1AAAAAzE3OQAAAAM2NDQAAAADNTU1AAAAAzY4MgAAAAMyNjcAAAADMTkxAAAAAzgzNAAAAAMyMDkAAAADNjMxAAAAAzU3OAAAAAM5NDQAAAADNjgzAAAAAzEyMgAAAAIyMQAAAAM4ODQAAAADMzEyAAAAAzkzMwAAAAM0NDkAAAADNDU5AAAAAzI3NAAAAAMyNzIAAAADODQxAAAAAzI5MAAAAAI2NAAAAAMzNzkAAAADNTU5AAAAAzI5NwAAAAM1MTIAAAADOTE1AAAAAzQyNwAAAAM0MDQAAAADMzE1AAAAAzIzNwAAAAM4NDAAAAADMjYyAAAAAzY3OAAAAAMyODgAAAACNDgAAAADMjMyAAAAAzc0NAAAAAM5MjcAAAADMjU2AAAAAzk1NwAAAAM5NDUAAAADODk5AAAAAzI2MAAAAAMxMzMAAAADNTU3AAAAAzc2MwAAAAM2NzAAAAADMjkxAAAAAzg2OAAAAAMxNjEAAAADMzk5AAAAAzczMAAAAAM1MTEAAAACMjcAAAADNTAyAAAAAzYyMgAAAAM1NDkAAAADNDI2AAAAAjg0AAAAAjYzAAAAAzUyOAAAAAM3MjUAAAACNzAAAAADMjM1AAAAAzUzOAAAAAM0NzkAAAADOTE4AAAAAzY1MQAAAAM0MTkAAAADMzM2AAAAAzk5OAAAAAMxMjQAAAADMjQ3AAAAAzI5OQAAAAM1ODEAAAADMjMxAAAAAzMzMQAAAAMxNjcAAAADMjA1AAAAAzc5OAAAAAM2MjMAAAADNDMwAAAAAjg5AAAAAzI2NQAAAAM0ODkAAAACMTUAAAADMjc4AAAAAzgxOAAAAAM4NTIAAAACOTcAAAADNjIwAAAAAjU2AAAAAzkyMAAAAAM1NTAAAAADODczAAAAAzQ1NwAAAAM2NjIAAAADNDUwAAAAAzExOAAAAAM3MTgAAAADNzI3AAAAAzMwOQAAAAMyNzcAAAADNzExAAAAAzYwMAAAAAMzNDYAAAADNTAwAAAAAzg3NgAAAAM3NTQAAAADMzM0AAAAAzIzNAAAAAMxMzIAAAADMjE2AAAAAzc2OAAAAAMzNzAAAAADODgyAAAAAzI1NAAAAAM3MDcAAAADODY2AAAAAzE2OAAAAAMzMzAAAAADNTIyAAAAAzk2MgAAAAM3NDcAAAADNjgwAAAAAzg0MgAAAAM3NjQAAAADODkyAAAAAzI5NgAAAAM4NzIAAAADOTczAAAAAzQwMgAAAAM4NTUAAAADNDA4AAAAAzkzNQAAAAMzMTkAAAADNzYwAAAAAzYyOAAAAAM0MDEAAAADNDQyAAAAAjUyAAAAAzQyMAAAAAI3NQAAAAM4MDkAAAADNzU3AAAAAzI0NgAAAAM5MDAAAAACNzYAAAADNjk1AAAAAzc0OAAAAAMxMzYAAAACMzUAAAADMjAzAAAAAzczMgAAAAM4MzUAAAADMzE0AAAAAzYzOAAAAAM2ODcAAAADMTI4AAAAAzkyOAAAAAIzNAAAAAM3MjQAAAADODAyAAAAAzc1MwAAAAM4MDYAAAADNjQzAAAAAzkyNgAAAAMzMTMAAAADMTA3AAAAAzY5MAAAAAM5NjcAAAADNTA3AAAAAzQ4OAAAAAM2MzIAAAADOTA4AAAAAzQ5MwAAAAMxNDYAAAADMzExAAAAAzE0MAAAAAMzODAAAAADNjY3AAAAAzk4MgAAAAMxMjUAAAADOTA5AAAAAzk2OAAAAAM4MjcAAAADODAzAAAAAzE5OAAAAAM0MTUAAAADMjc2AAAAAzQ3MAAAAAMzNjIAAAADODM3AAAAAzk2MwAAAAM5NDEAAAADODk2AAAAAzcxOQAAAAM0NjAAAAADOTI1AAAAAzYyNwAAAAMzNjAAAAADODQ4AAAAAzg2MAAAAAM4MDQAAAADNzMxAAAAAzc4MAAAAAIzMwAAAAMyNzEAAAADMzA4AAAAAzExNgAAAAM5MTEAAAADOTQ2AAAAAzU4NQAAAAMzNTMAAAADNjM5AAAAAjgwAAAAAzMzNwAAAAMxMjcAAAADNTM5AAAAAzY5OAAAAAM4NjcAAAADNDcxAAAAAzY5NAAAAAI4NgAAAAM3MjkAAAADNDY2AAAAAzE3MgAAAAM3MTMAAAADOTY1AAAAAzg1NgAAAAM5MjEAAAADOTI5AAAAAjgzAAAAAzQ0MQAAAAM4MzMAAAADOTg5AAAAAzkxNwAAAAM4MTMAAAADNjUyAAAAAjExAAAAAzE3MQAAAAM2MTAAAAADNjg4AAAAAzE0OQAAAAM3MzcAAAADNDQzAAAAAzQ3NQAAAAM3ODYAAAADMzc0AAAAAzk4NgAAAAIyNAAAAAM5MDMAAAADNjY2AAAAAzU5NwAAAAMzMjUAAAACNTMAAAADMTExAAAAAzI4MwAAAAM1NDAAAAACNDMAAAADNTE3AAAAAzQ2OQAAAAMyNjYAAAADNTE4AAAAAzk4OAAAAAIyNgAAAAMxMjAAAAADNzA2AAAAAzIyNgAAAAMxNDQAAAADNDE0AAAAAzUwMQAAAAMyMTEAAAADOTQ3AAAAAjU0AAAAAjY4AAAAAzE2OQAAAAMzMDMAAAADODEyAAAAAzU3MAAAAAM4MzEAAAACNjAAAAADNzkzAAAAAzkxNgAAAAM4MjEAAAADNDIyAAAAAzQ3NgAAAAM1NjUAAAADNjQ2AAAAAzQ2MQAAAAMxODQAAAADOTcxAAAAAzQxMAAAAAMyNDUAAAACNDAAAAADNDUzAAAAAzQxMgAAAAM5OTIAAAADNjg5AAAAAzgxMAAAAAMxMzEAAAADNTg3AAAAAzU2NgAAAAMxOTYAAAACODUAAAADNzIzAAAAAzI0MAAAAAM2MzQAAAADNDY0AAAAAzk1OAAAAAMxMDYAAAADMzM4AAAAAzU2MgAAAAM2MzcAAAADMTAwAAAAAzI2NAAAAAMxMTcAAAADNjU2AAAAAzIxNAAAAAMxODYAAAACNjk=
+(1 row)
+
+DROP TABLE base_texts;
+-- low cardinality
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
+    (SELECT i as item FROM generate_series(1, 10) i, generate_series(1, 100) j ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             624
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+-- high cardinality with toasted values
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
+    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
+--make sure it's toasted
+SELECT pg_total_relation_size(reltoastrelid)
+      FROM pg_class c
+      WHERE relname = 'base_texts';
+ pg_total_relation_size 
+------------------------
+                  24576
+(1 row)
+
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+           10492
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+-- NULLs
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             121
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             121
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             121
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             109
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+------------------------
+-- Arrayy Compression --
+------------------------
+SELECT
+  $$
+  select item from  base_texts order by rn
+  $$ AS "QUERY"
+\gset
+SELECT 'TEXT' as "TYPE" \gset
+\set COMPRESSION_CMD _timescaledb_internal.compress_array(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TEXT)
+--basic test
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
+    (select sub.item from (SELECT generate_series(1, 100) item) as sub ORDER BY gen_rand_minstd()) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             440
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+SELECT c from compressed;
+                                                                                                                                                                                                                                                                                                                                                                                                                            c                                                                                                                                                                                                                                                                                                                                                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ AQBwZ19jYXRhbG9nAHRleHQAAAEAAABkAAAAAjU5AAAAAjg2AAAAAjE2AAAAAjM2AAAAAjk2AAAAAjM4AAAAAjI4AAAAAjEzAAAAAjczAAAAAjM3AAAAAjY5AAAAAjMxAAAAATkAAAACMTQAAAACNDQAAAABMQAAAAI3MQAAAAI2NgAAAAIxMAAAAAI4NQAAAAIyMwAAAAI3MAAAAAIyNQAAAAI4MAAAAAEzAAAAAjgzAAAAAjU2AAAAAjQ5AAAAAjUzAAAAAjI5AAAAAjk5AAAAATUAAAACNTIAAAACMjcAAAACNzkAAAACNDEAAAACNjUAAAACNTUAAAACNTAAAAACNjcAAAACNjEAAAACOTUAAAACNzcAAAACNzIAAAABNgAAAAI4MgAAAAIzNAAAAAI0NQAAAAI5NAAAAAI4NwAAAAI2MwAAAAI0NgAAAAIxOQAAAAI1MQAAAAI0NwAAAAEyAAAAATgAAAACOTIAAAACNTgAAAACNzUAAAACMTgAAAACOTMAAAACNDgAAAACNjAAAAACODQAAAACMTUAAAACMzAAAAACODgAAAACNzgAAAACNjQAAAACOTcAAAABNAAAAAI2MgAAAAI4MQAAAAI5OAAAAAI0MAAAAAI5MQAAAAE3AAAAAjI2AAAAAjQyAAAAAjg5AAAAAjEyAAAAAjkwAAAAAjE3AAAAAjc2AAAAAjM5AAAAAjMzAAAAAjMyAAAAAjIyAAAAAjY4AAAAAjQzAAAAAzEwMAAAAAIyMAAAAAIyNAAAAAI1NwAAAAIxMQAAAAIzNQAAAAI1NAAAAAI3NAAAAAIyMQ==
+(1 row)
+
+DROP TABLE base_texts;
+-- toasted values
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
+    (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
+--make sure it's toasted
+SELECT pg_total_relation_size(reltoastrelid)
+      FROM pg_class c
+      WHERE relname = 'base_texts';
+ pg_total_relation_size 
+------------------------
+                  24576
+(1 row)
+
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+           10468
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+-- NULLs
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              97
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              97
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              97
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              85
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;

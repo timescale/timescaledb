@@ -11,6 +11,7 @@ set(TEST_FILES
 )
 
 set(TEST_FILES_DEBUG
+    compression_algos.sql
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
     continuous_aggs.sql

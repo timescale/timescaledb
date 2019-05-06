@@ -13,48 +13,10 @@
 
 #include "utils.h"
 
+#include "test_utils.h"
+
 TS_FUNCTION_INFO_V1(ts_test_time_to_internal_conversion);
 TS_FUNCTION_INFO_V1(ts_test_interval_to_internal_conversion);
-
-#define AssertInt64Eq(a, b)                                                                        \
-	do                                                                                             \
-	{                                                                                              \
-		PG_TRY();                                                                                  \
-		{                                                                                          \
-			int64 a_i = (a);                                                                       \
-			int64 b_i = (b);                                                                       \
-			if (a_i != b_i)                                                                        \
-			{                                                                                      \
-				elog(ERROR, INT64_FORMAT " != " INT64_FORMAT, a_i, b_i);                           \
-			}                                                                                      \
-		}                                                                                          \
-		PG_CATCH();                                                                                \
-		{                                                                                          \
-			elog(WARNING, "error @ line %d", __LINE__);                                            \
-			PG_RE_THROW();                                                                         \
-		}                                                                                          \
-		PG_END_TRY();                                                                              \
-	} while (0)
-
-#define EnsureError(a)                                                                             \
-	do                                                                                             \
-	{                                                                                              \
-		volatile bool this_has_panicked = false;                                                   \
-		PG_TRY();                                                                                  \
-		{                                                                                          \
-			(a);                                                                                   \
-		}                                                                                          \
-		PG_CATCH();                                                                                \
-		{                                                                                          \
-			this_has_panicked = true;                                                              \
-			FlushErrorState();                                                                     \
-		}                                                                                          \
-		PG_END_TRY();                                                                              \
-		if (!this_has_panicked)                                                                    \
-		{                                                                                          \
-			elog(ERROR, "failed to panic @ line %d", __LINE__);                                    \
-		}                                                                                          \
-	} while (0)
 
 Datum
 ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)

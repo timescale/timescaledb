@@ -39,5 +39,6 @@ install(
 # endif(WIN32)
 
 add_subdirectory(bgw_policy)
+add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
 add_subdirectory(nodes)
