@@ -35,6 +35,13 @@ select location, count(*) from conditions , mat_t1
 where conditions.location = mat_t1.c
 group by location;
 
+-- join multiple tables WITH explicit JOIN
+create  view mat_m1 WITH ( timescaledb.continuous)
+as
+select location, count(*) from conditions JOIN mat_t1 ON true
+where conditions.location = mat_t1.c
+group by location;
+
 -- LATERAL multiple tables
 create  view mat_m1 WITH ( timescaledb.continuous)
 as

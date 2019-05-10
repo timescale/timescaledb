@@ -743,12 +743,12 @@ cagg_validate_query(Query *query)
 	expression_tree_walker((Node *) query->havingQual, cagg_agg_validate, NULL);
 
 	fromList = query->jointree->fromlist;
-	if (list_length(fromList) != 1)
+	if (list_length(fromList) != 1 || !IsA(linitial(fromList), RangeTblRef))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only 1 hypertable is permitted in SELECT query permitted for continuous "
-						"aggregate")));
+				 errmsg(
+					 "only 1 hypertable is permitted in SELECT query for continuous aggregate")));
 	}
 	/* check if we have a hypertable in the FROM clause */
 	rtref = linitial_node(RangeTblRef, query->jointree->fromlist);

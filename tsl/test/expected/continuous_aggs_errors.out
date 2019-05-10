@@ -35,14 +35,21 @@ as
 select location, count(*) from conditions , mat_t1
 where conditions.location = mat_t1.c
 group by location;
-ERROR:  only 1 hypertable is permitted in SELECT query permitted for continuous aggregate
+ERROR:  only 1 hypertable is permitted in SELECT query for continuous aggregate
+-- join multiple tables WITH explicit JOIN
+create  view mat_m1 WITH ( timescaledb.continuous)
+as
+select location, count(*) from conditions JOIN mat_t1 ON true
+where conditions.location = mat_t1.c
+group by location;
+ERROR:  only 1 hypertable is permitted in SELECT query for continuous aggregate
 -- LATERAL multiple tables
 create  view mat_m1 WITH ( timescaledb.continuous)
 as
 select location, count(*) from conditions,
 LATERAL (Select * from mat_t1 where c = conditions.location) q
 group by location;
-ERROR:  only 1 hypertable is permitted in SELECT query permitted for continuous aggregate
+ERROR:  only 1 hypertable is permitted in SELECT query for continuous aggregate
 --non-hypertable
 create  view mat_m1 WITH ( timescaledb.continuous)
 as
