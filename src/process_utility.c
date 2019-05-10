@@ -520,7 +520,6 @@ process_vacuum(ProcessUtilityArgs *args)
 		.chunk_rels = NIL,
 	};
 	ListCell *lc;
-	Oid hypertable_oid;
 	Cache *hcache;
 	Hypertable *ht;
 	bool affects_hypertable = false;
@@ -533,16 +532,21 @@ process_vacuum(ProcessUtilityArgs *args)
 	foreach (lc, stmt->rels)
 	{
 		VacuumRelation *vacuum_rel = lfirst_node(VacuumRelation, lc);
+		Oid table_relid = vacuum_rel->oid;
 
-		hypertable_oid = ts_hypertable_relid(vacuum_rel->relation);
-		if (!OidIsValid(hypertable_oid))
+		if (!OidIsValid(table_relid) && vacuum_rel->relation != NULL)
+			table_relid = RangeVarGetRelid(vacuum_rel->relation, NoLock, true);
+
+		if (!OidIsValid(table_relid))
+			continue;
+
+		ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+
+		if (!ht)
 			continue;
 
 		affects_hypertable = true;
-		ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
-		if (ht)
-			process_add_hypertable(args, ht);
-
+		process_add_hypertable(args, ht);
 		ctx.ht_vacuum_rel = vacuum_rel;
 		foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
 	}
