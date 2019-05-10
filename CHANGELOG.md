@@ -4,6 +4,15 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 1.3.1 (unreleased)
+
+**Bugfixes**
+* #1220 Fix detecting JOINs for continuous aggs
+
+**Thanks**
+* @od0 for reporting an error with continuous aggs and JOINs
+
 ## 1.3.0 (2019-05-06)
 
 This release contains major new functionality that we call continuous aggregates.
