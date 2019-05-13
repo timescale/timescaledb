@@ -42,7 +42,8 @@ get_connection(void)
 																					 false,
 																					 false))),
 														 -1)),
-								  NIL);
+								  NIL,
+								  false);
 }
 
 TS_FUNCTION_INFO_V1(tsl_test_remote_connection);

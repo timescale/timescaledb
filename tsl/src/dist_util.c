@@ -21,6 +21,9 @@
  */
 #define METADATA_DISTRIBUTED_UUID_KEY_NAME "dist_uuid"
 
+/* UUID associated with remote connection */
+static pg_uuid_t *peer_dist_id = NULL;
+
 /* Requires non-null arguments */
 static bool
 uuid_matches(Datum a, Datum b)
@@ -106,4 +109,33 @@ dist_util_remove_from_db()
 	}
 
 	return false;
+}
+
+void
+dist_util_set_peer_id(Datum dist_id)
+{
+	pg_uuid_t *uuid = DatumGetUUIDP(dist_id);
+	static pg_uuid_t id;
+
+	if (peer_dist_id != NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR), (errmsg("distributed peer ID already set"))));
+
+	memcpy(id.data, uuid->data, UUID_LEN);
+	peer_dist_id = &id;
+}
+
+bool
+dist_util_is_frontend_session(void)
+{
+	Datum dist_id;
+
+	if (dist_util_membership() == DIST_MEMBER_NONE)
+		return false;
+
+	if (!peer_dist_id)
+		return false;
+
+	dist_id = local_get_dist_id(NULL);
+	return uuid_matches(UUIDPGetDatum(peer_dist_id), dist_id);
 }

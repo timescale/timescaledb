@@ -24,4 +24,7 @@ bool dist_util_remove_from_db(void);
 
 const char *dist_util_internal_key_name(void);
 
+void dist_util_set_peer_id(Datum dist_id);
+bool dist_util_is_frontend_session(void);
+
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */
