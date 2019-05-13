@@ -200,6 +200,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.ddl_command_end = NULL,
 	.sql_drop = NULL,
 	.set_distributed_id = NULL,
+	.set_distributed_peer_id = NULL,
+	.is_frontend_session = NULL,
 	.remove_from_distributed_db = NULL,
 #else
 	.add_server = server_add,
@@ -224,6 +226,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.ddl_command_end = tsl_ddl_command_end,
 	.sql_drop = tsl_sql_drop,
 	.set_distributed_id = dist_util_set_id,
+	.set_distributed_peer_id = dist_util_set_peer_id,
+	.is_frontend_session = dist_util_is_frontend_session,
 	.remove_from_distributed_db = dist_util_remove_from_db,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,

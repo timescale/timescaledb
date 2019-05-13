@@ -25,7 +25,8 @@ typedef enum ConnOptionType
  * malloc. Most users should use `remote_dist_txn_get_connection` or
  * `remote_connection_cache_get_connection` instead. Must be closed with `remote_connection_close`
  */
-PGconn *remote_connection_open(char *server_name, List *server_options, List *user_options);
+PGconn *remote_connection_open(char *server_name, List *server_options, List *user_options,
+							   bool set_dist_id);
 PGconn *remote_connection_open_default(char *server_name);
 void remote_connection_close(PGconn *conn);
 

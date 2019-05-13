@@ -24,12 +24,16 @@
 #include <utils/inval.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
+#include <utils/uuid.h>
+#include <utils/builtins.h>
 
 #include <commands/defrem.h>
-
+#include <export.h>
+#include <telemetry/telemetry_metadata.h>
 #include "connection.h"
 #include "guc.h"
 #include "async.h"
+#include "dist_util.h"
 
 /* for assigning cursor numbers and prepared statement numbers */
 static unsigned int cursor_number = 0;
@@ -195,6 +199,25 @@ remote_connection_configure(PGconn *conn)
 }
 
 /*
+ * Configure remote connection using current instance UUID.
+ *
+ * This allows remote side to reason about whether this connection has been
+ * originated by frontend server.
+ */
+static void
+remote_connection_set_peer_dist_id(PGconn *conn)
+{
+	PGresult *res;
+	char *request;
+	Datum id_string = DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_uuid());
+
+	request = psprintf("SELECT * FROM _timescaledb_internal.set_peer_dist_id('%s')",
+					   DatumGetCString(id_string));
+	res = remote_connection_query_ok_result(conn, request);
+	remote_connection_result_close(res);
+}
+
+/*
  * Opens a connection.
  *
  *  Raw connection are not part of the transaction and do not have transactions auto-started.
@@ -204,7 +227,8 @@ remote_connection_configure(PGconn *conn)
  */
 
 PGconn *
-remote_connection_open(char *server_name, List *server_options, List *user_options)
+remote_connection_open(char *server_name, List *server_options, List *user_options,
+					   bool set_dist_id)
 {
 	PGconn *volatile conn = NULL;
 
@@ -270,6 +294,10 @@ remote_connection_open(char *server_name, List *server_options, List *user_optio
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
 
+		/* Inform remote server about instance UUID */
+		if (set_dist_id)
+			remote_connection_set_peer_dist_id(conn);
+
 		pfree(keywords);
 		pfree(values);
 	}
@@ -314,7 +342,7 @@ remote_connection_open_default(char *server_name)
 	}
 	PG_END_TRY();
 
-	return remote_connection_open(server_name, fs->options, um ? um->options : NULL);
+	return remote_connection_open(server_name, fs->options, um ? um->options : NULL, true);
 }
 
 void

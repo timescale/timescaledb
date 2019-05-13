@@ -100,6 +100,8 @@ typedef struct CrossModuleFunctions
 	void (*distributed_copy)(const CopyStmt *stmt, uint64 *processed, Hypertable *ht,
 							 CopyState cstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
+	void (*set_distributed_peer_id)(Datum id);
+	bool (*is_frontend_session)(void);
 	bool (*remove_from_distributed_db)();
 } CrossModuleFunctions;
 

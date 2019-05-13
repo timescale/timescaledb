@@ -34,6 +34,7 @@ TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 TS_FUNCTION_INFO_V1(ts_remote_txn_heal_server);
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 TS_FUNCTION_INFO_V1(ts_dist_remove_id);
+TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -141,6 +142,13 @@ Datum
 ts_dist_remove_id(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions->remove_from_distributed_db());
+}
+
+Datum
+ts_dist_set_peer_id(PG_FUNCTION_ARGS)
+{
+	ts_cm_functions->set_distributed_peer_id(PG_GETARG_DATUM(0));
+	PG_RETURN_VOID();
 }
 
 /*
@@ -339,6 +347,12 @@ set_distributed_id_default(Datum d)
 	return error_no_default_fn_bool_void_community();
 }
 
+static void
+set_distributed_peer_id_default(Datum d)
+{
+	return error_no_default_fn_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -398,6 +412,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.server_dispatch_path_create = server_dispatch_path_create_default,
 	.distributed_copy = distributed_copy_default,
 	.set_distributed_id = set_distributed_id_default,
+	.set_distributed_peer_id = set_distributed_peer_id_default,
+	.is_frontend_session = error_no_default_fn_bool_void_community,
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
 };
 

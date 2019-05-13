@@ -78,7 +78,7 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * remote_connection_close at cleanup is critical.
 	 */
 	entry->conn =
-		remote_connection_open(server->servername, server->options, q->user_mapping->options);
+		remote_connection_open(server->servername, server->options, q->user_mapping->options, true);
 	return entry;
 }
 

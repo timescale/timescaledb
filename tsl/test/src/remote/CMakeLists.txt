@@ -5,6 +5,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/async.c
   ${CMAKE_CURRENT_SOURCE_DIR}/remote_exec.c
   ${CMAKE_CURRENT_SOURCE_DIR}/test_utils.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_session.c
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_id.c
   ${CMAKE_CURRENT_SOURCE_DIR}/dist_commands.c
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_persistent_record.c

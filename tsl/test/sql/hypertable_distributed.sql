@@ -4,6 +4,7 @@
 
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;

@@ -53,7 +53,7 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 	 * Use a raw connection since you need to be out of transaction to do
 	 * COMMIT/ROLLBACK PREPARED
 	 */
-	PGconn *conn = remote_connection_open(server->servername, server->options, user->options);
+	PGconn *conn = remote_connection_open(server->servername, server->options, user->options, true);
 	PGresult *res;
 	int row;
 	List *unknown_txn_gid = NIL;
