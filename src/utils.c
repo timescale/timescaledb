@@ -244,7 +244,7 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 		}
 		case DATEOID:
 		{
-			DateADT d = DatumGetTimestamp(time_val);
+			DateADT d = DatumGetDateADT(time_val);
 			if (DATE_NOT_FINITE(d))
 			{
 				if (DATE_IS_NOBEGIN(d))

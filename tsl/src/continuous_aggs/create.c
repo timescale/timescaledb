@@ -233,15 +233,15 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 		NameGetDatum(&partial_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&partial_viewnm);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = bucket_width;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = Int64GetDatum(bucket_width);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = refresh_lag;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = Int64GetDatum(refresh_lag);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
 		NameGetDatum(&direct_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] =
-		max_interval_per_job;
+		Int64GetDatum(max_interval_per_job);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -265,7 +265,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 	namestrcpy(&mat_tbltimecol, matpartcolname);
 	time_dim_info = ts_dimension_info_create_open(mat_tbloid,
 												  &mat_tbltimecol,
-												  mat_tbltimecol_interval,
+												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
 												  InvalidOid);
 	// TODO fix this after change in C interface
