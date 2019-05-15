@@ -917,9 +917,9 @@ time_range_internal_to_min_time_value(Oid type)
 	switch (type)
 	{
 		case TIMESTAMPOID:
-			return DatumGetTimestampTz(DT_NOBEGIN);
+			return TimestampGetDatum(DT_NOBEGIN);
 		case TIMESTAMPTZOID:
-			return DatumGetTimestampTz(DT_NOBEGIN);
+			return TimestampTzGetDatum(DT_NOBEGIN);
 		case DATEOID:
 			return DateADTGetDatum(DATEVAL_NOBEGIN);
 		default:
@@ -933,9 +933,9 @@ time_range_internal_to_max_time_value(Oid type)
 	switch (type)
 	{
 		case TIMESTAMPOID:
-			return DatumGetTimestampTz(DT_NOEND);
+			return TimestampGetDatum(DT_NOEND);
 		case TIMESTAMPTZOID:
-			return DatumGetTimestampTz(DT_NOEND);
+			return TimestampTzGetDatum(DT_NOEND);
 		case DATEOID:
 			return DateADTGetDatum(DATEVAL_NOEND);
 			break;

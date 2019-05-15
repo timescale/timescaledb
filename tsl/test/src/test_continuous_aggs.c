@@ -24,7 +24,7 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 	Name partial_view_name = PG_GETARG_NAME(2);
 	Datum lowest_modified_value = PG_GETARG_DATUM(3);
 	Datum greatest_modified_value = PG_GETARG_DATUM(4);
-	Datum bucket_width = PG_GETARG_INT64(5);
+	Datum bucket_width = PG_GETARG_DATUM(5);
 	Name partial_view_schema = PG_GETARG_NAME(6);
 	Oid time_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 	int64 lmv = ts_time_value_to_internal(lowest_modified_value, time_type);
