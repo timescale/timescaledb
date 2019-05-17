@@ -13,6 +13,8 @@
 #include "utils/uuid.h"
 #include "errors.h"
 #include <utils/fmgrprotos.h>
+#include "remote/dist_commands.h"
+#include "funcapi.h"
 
 /*
  * When added to a distributed database, this key in the metadata table will be set to match the
@@ -139,3 +141,62 @@ dist_util_is_frontend_session(void)
 	dist_id = local_get_dist_id(NULL);
 	return uuid_matches(UUIDPGetDatum(peer_dist_id), dist_id);
 }
+
+#if !PG96
+Datum
+dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
+{
+	char *server_name;
+	FuncCallContext *funcctx;
+	PGresult *result;
+
+	Assert(!PG_ARGISNULL(0)); /* Strict function */
+	server_name = PG_GETARG_NAME(0)->data;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		TupleDesc tupdesc;
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		funcctx->user_fctx =
+			ts_dist_cmd_invoke_on_servers("SELECT * FROM "
+										  "timescaledb_information.hypertable_size_info;",
+										  list_make1((void *) server_name));
+		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	result = ts_dist_cmd_get_server_result(funcctx->user_fctx, server_name);
+
+	if (funcctx->call_cntr < PQntuples((PGresult *) funcctx->user_fctx))
+	{
+		HeapTuple tuple;
+		char **fields = palloc(sizeof(char *) * PQnfields(result));
+		int i;
+
+		for (i = 0; i < PQnfields(result); ++i)
+		{
+			fields[i] = PQgetvalue(result, funcctx->call_cntr, i);
+			if (fields[i][0] == '\0')
+				fields[i] = NULL;
+		}
+		tuple = BuildTupleFromCStrings(funcctx->attinmeta, fields);
+
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
+	}
+
+	ts_dist_cmd_close_response(funcctx->user_fctx);
+	SRF_RETURN_DONE(funcctx);
+}
+#endif

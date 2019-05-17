@@ -70,13 +70,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT * FROM show_servers();
 
--- Need super user permissions to run server_ping where UserMapping doesn't exist
-RESET ROLE;
--- Should show up in view. Note: `server_1` should be down since it's database is not created
-SELECT * FROM timescaledb_information.server
-ORDER BY server_name;
-
 -- List foreign servers and user mappings
+RESET ROLE;
 SELECT srvname, srvoptions
 FROM pg_foreign_server
 ORDER BY srvname;
