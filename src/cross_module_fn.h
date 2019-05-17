@@ -136,6 +136,7 @@ typedef struct CrossModuleFunctions
 	void (*set_distributed_peer_id)(Datum id);
 	bool (*is_frontend_session)(void);
 	bool (*remove_from_distributed_db)(void);
+	PGFunction remote_hypertable_info;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

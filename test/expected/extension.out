@@ -41,6 +41,7 @@ ORDER BY proname;
  hypertable_approximate_row_count
  hypertable_relation_size
  hypertable_relation_size_pretty
+ hypertable_server_relation_size
  indexes_relation_size
  indexes_relation_size_pretty
  interpolate
@@ -51,6 +52,7 @@ ORDER BY proname;
  remove_drop_chunks_policy
  remove_reorder_policy
  reorder_chunk
+ server_hypertable_info
  set_adaptive_chunking
  set_chunk_time_interval
  set_integer_now_func
@@ -63,5 +65,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(49 rows)
+(51 rows)
 

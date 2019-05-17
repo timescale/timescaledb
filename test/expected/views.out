@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 SELECT * FROM timescaledb_information.hypertable;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
 (0 rows)
 
 -- create simple hypertable with 1 chunk
@@ -25,10 +25,10 @@ SELECT create_hypertable('ht2','time');
 
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -56,43 +56,43 @@ SELECT create_hypertable('closed.closed_ht','time');
 
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
- closed       | closed_ht  | super_user        |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
+ closed       | closed_ht  | super_user        |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
+ open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
 (4 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
- closed       | closed_ht  | super_user        |              1 |          1 |            |            |            | 
- open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
+ closed       | closed_ht  | super_user        |              1 |          1 |            |            |            |            | f
+ open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
 (4 rows)
 
 -- filter by schema
 SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------
- closed       | closed_ht  | super_user  |              1 |          1 |            |            |            | 
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
+ closed       | closed_ht  | super_user  |              1 |          1 |            |            |            |            | f
 (1 row)
 
 -- filter by table name
 SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
 (1 row)
 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------
- closed       | closed_ht  | super_user  |              1 |          1 |            |            |            | 
- open         | open_ht    | super_user  |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
+ closed       | closed_ht  | super_user  |              1 |          1 |            |            |            |            | f
+ open         | open_ht    | super_user  |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
 (2 rows)
 

@@ -7,6 +7,7 @@
 #define TIMESCALEDB_TSL_DIST_UTIL_H
 
 #include <postgres.h>
+#include <fmgr.h>
 
 typedef enum DistUtilMembershipStatus
 {
@@ -26,5 +27,9 @@ const char *dist_util_internal_key_name(void);
 
 void dist_util_set_peer_id(Datum dist_id);
 bool dist_util_is_frontend_session(void);
+
+#if !PG96
+Datum dist_util_remote_hypertable_info(PG_FUNCTION_ARGS);
+#endif
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */

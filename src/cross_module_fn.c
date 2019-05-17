@@ -61,6 +61,7 @@ TS_FUNCTION_INFO_V1(ts_remote_txn_heal_server);
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 TS_FUNCTION_INFO_V1(ts_dist_remove_id);
 TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
+TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -217,6 +218,12 @@ ts_dist_set_peer_id(PG_FUNCTION_ARGS)
 {
 	ts_cm_functions->set_distributed_peer_id(PG_GETARG_DATUM(0));
 	PG_RETURN_VOID();
+}
+
+Datum
+ts_dist_remote_hypertable_info(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remote_hypertable_info(fcinfo));
 }
 
 /*
@@ -621,6 +628,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_distributed_peer_id = set_distributed_peer_id_default,
 	.is_frontend_session = error_no_default_fn_bool_void_community,
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
+	.remote_hypertable_info = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
