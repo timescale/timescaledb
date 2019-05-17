@@ -273,6 +273,7 @@ is_simple_expr_walker(Node *node, void *context)
 		case T_CoerceViaIO:
 		case T_CaseExpr:
 		case T_CaseWhen:
+		case T_Param:
 			break;
 		default:
 			return true;
