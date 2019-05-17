@@ -1338,6 +1338,32 @@ EXECUTE prep_gapfill;
 
 DEALLOCATE prep_gapfill;
 
+-- test prepared statement with variable gapfill arguments
+PREPARE prep_gapfill(int,int,int) AS
+
+SELECT
+  time_bucket_gapfill($1,time,$2,$3) AS time,
+  device_id,
+  sensor_id,
+  min(value)
+FROM metrics_int m1
+WHERE time >= $2 AND time < $3 AND device_id=1 AND sensor_id=1
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE prep_gapfill(5,0,10);
+EXECUTE prep_gapfill(4,100,110);
+EXECUTE prep_gapfill(5,0,10);
+EXECUTE prep_gapfill(4,100,110);
+EXECUTE prep_gapfill(5,0,10);
+EXECUTE prep_gapfill(4,100,110);
+EXECUTE prep_gapfill(5,0,10);
+EXECUTE prep_gapfill(4,100,110);
+EXECUTE prep_gapfill(5,0,10);
+EXECUTE prep_gapfill(4,100,110);
+
+DEALLOCATE prep_gapfill;
+
 -- test column references with TIME_COLUMN last
 SELECT
   row_number() OVER (PARTITION BY color),

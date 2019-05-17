@@ -9,9 +9,11 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #1220 Fix detecting JOINs for continuous aggs
+* #1232 Allow Param as time_bucket_gapfill arguments
 
 **Thanks**
 * @od0 for reporting an error with continuous aggs and JOINs
+* @rickbatka for reporting an error when using time_bucket_gapfill in functions
 
 ## 1.3.0 (2019-05-06)
 
