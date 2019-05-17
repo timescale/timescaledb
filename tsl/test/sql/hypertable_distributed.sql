@@ -137,6 +137,9 @@ SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM disttable;
 $$);
 
+SELECT * FROM timescaledb_information.server;
+SELECT * FROM hypertable_server_relation_size('disttable');
+
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT * FROM disttable;

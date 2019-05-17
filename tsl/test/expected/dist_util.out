@@ -3,8 +3,11 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+-- This test sets explicit UUIDs on the frontends to guarantee stable test output
+GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS backend_1;
@@ -12,12 +15,34 @@ DROP DATABASE IF EXISTS backend_2;
 DROP DATABASE IF EXISTS frontend_b;
 DROP DATABASE IF EXISTS backend_3;
 SET client_min_messages TO NOTICE;
--- Create a second frontend database and add a backend to it
+CREATE DATABASE backend_1;
+CREATE DATABASE backend_2;
+CREATE DATABASE backend_3;
 CREATE DATABASE frontend_b;
+\c backend_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
+SET client_min_messages TO NOTICE;
+\c backend_2
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
+SET client_min_messages TO NOTICE;
+\c backend_3
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
+SET client_min_messages TO NOTICE;
+-- Create a second frontend database and add a backend to it
 \c frontend_b
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '87c235e9-d857-4f16-b59f-7fbac9b87664', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
  key  |                value                 | include_in_telemetry 
@@ -25,10 +50,11 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (1 row)
 
-SELECT * FROM add_server('server_1', database => 'backend_3');
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_1    | localhost | 15432 | backend_3 | super_user | super_user      | t
+SELECT * FROM add_server('server_1', database => 'backend_3', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "backend_3" already exists, skipping
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_1    | localhost | 15432 | backend_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
@@ -38,19 +64,9 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  dist_uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (2 rows)
 
--- Set up another backend database for use later on
-CREATE DATABASE backend_2;
-\c backend_2
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET client_min_messages TO NOTICE;
-SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
- key | value | include_in_telemetry 
------+-------+----------------------
-(0 rows)
-
 -- Connect back to our original database and add a backend to it
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '77348176-09da-4a80-bc78-e31bdf5e63ec', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
  key  |                value                 | include_in_telemetry 
@@ -58,10 +74,11 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 77348176-09da-4a80-bc78-e31bdf5e63ec | t
 (1 row)
 
-SELECT * FROM add_server('server_1', database => 'backend_1');
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_1    | localhost | 15432 | backend_1 | super_user | super_user      | t
+SELECT * FROM add_server('server_1', database => 'backend_1', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "backend_1" already exists, skipping
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_1    | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
@@ -75,25 +92,28 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_server('frontend_b', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_server('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "frontend_b" already exists, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 -- Adding backend from a different group as a backend
-SELECT * FROM add_server('server_b', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_server('server_b', database => 'backend_3', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "backend_3" already exists, skipping
 ERROR:  [server_b]: database is already a member of a distributed database
 -- Adding a valid backend target but to an existing backend
 \c backend_1
-SELECT * FROM add_server('server_2', database => 'backend_2', if_not_exists => true);
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_server('server_2', database => 'backend_2', password => 'pass', if_not_exists => true);
 ERROR:  unable to assign backends to an existing backend database
 \c backend_2
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
  key | value | include_in_telemetry 
 -----+-------+----------------------
 (0 rows)
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_server('frontend_b', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_server('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "frontend_b" already exists, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
@@ -104,14 +124,16 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \set ON_ERROR_STOP 1
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM add_server('server_2', database => 'backend_2', if_not_exists => true);
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_server('server_2', database => 'backend_2', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "backend_2" already exists, skipping
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_2    | localhost | 15432 | backend_2 | super_user | super_user      | t
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_2    | localhost | 15432 | backend_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 \c backend_2
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
     key    |                value                 | include_in_telemetry 
 -----------+--------------------------------------+----------------------
@@ -119,8 +141,10 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Now remove a backend from this distributed database and then add it to the other cluster
 \c backend_1
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
     key    |                value                 | include_in_telemetry 
 -----------+--------------------------------------+----------------------
@@ -128,20 +152,23 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM delete_server('server_1', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_1
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_1
  delete_server 
 ---------------
  t
 (1 row)
 
 \c backend_1
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
  key | value | include_in_telemetry 
 -----+-------+----------------------
 (0 rows)
 
 \c frontend_b
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
     key    |                value                 | include_in_telemetry 
 -----------+--------------------------------------+----------------------
@@ -149,14 +176,15 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  dist_uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (2 rows)
 
-SELECT * FROM add_server('server_2', database => 'backend_1', if_not_exists => true);
+SELECT * FROM add_server('server_2', database => 'backend_1', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "backend_1" already exists, skipping
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_2    | localhost | 15432 | backend_1 | super_user | super_user      | t
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_2    | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 \c backend_1
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
     key    |                value                 | include_in_telemetry 
 -----------+--------------------------------------+----------------------
@@ -165,15 +193,16 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 -- Now remove both backends from frontend_b, then verify that they and frontend_b are now valid backends for TEST_DB
 \c frontend_b
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM delete_server('server_1', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_1
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_1
  delete_server 
 ---------------
  t
 (1 row)
 
 SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_2
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_2
  delete_server 
 ---------------
  t
@@ -186,28 +215,30 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM add_server('server_1', database => 'backend_1', if_not_exists => true);
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_server('server_1', database => 'backend_1', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "backend_1" already exists, skipping
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_1    | localhost | 15432 | backend_1 | super_user | super_user      | t
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_1    | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_3', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_server('server_3', database => 'backend_3', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "backend_3" already exists, skipping
- server_name |   host    | port  | database  |  username  | server_username | created 
--------------+-----------+-------+-----------+------------+-----------------+---------
- server_3    | localhost | 15432 | backend_3 | super_user | super_user      | t
+ server_name |   host    | port  | database  |       username       |   server_username    | created 
+-------------+-----------+-------+-----------+----------------------+----------------------+---------
+ server_3    | localhost | 15432 | backend_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_4', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_server('server_4', database => 'frontend_b', password => 'pass', if_not_exists => true);
 NOTICE:  remote server database "frontend_b" already exists, skipping
- server_name |   host    | port  |  database  |  username  | server_username | created 
--------------+-----------+-------+------------+------------+-----------------+---------
- server_4    | localhost | 15432 | frontend_b | super_user | super_user      | t
+ server_name |   host    | port  |  database  |       username       |   server_username    | created 
+-------------+-----------+-------+------------+----------------------+----------------------+---------
+ server_4    | localhost | 15432 | frontend_b | default_cluster_user | default_cluster_user | t
 (1 row)
 
 \c frontend_b
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
     key    |                value                 | include_in_telemetry 
 -----------+--------------------------------------+----------------------
@@ -216,30 +247,102 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test space reporting functions for distributed and non-distributed tables
+CREATE TABLE nondisttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
+SELECT * FROM create_hypertable('nondisttable', 'time');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             1 | public      | nondisttable | t
+(1 row)
+
+SELECT * FROM create_distributed_hypertable('disttable', 'time');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | disttable  | t
+(1 row)
+
+INSERT INTO nondisttable VALUES
+       ('2017-01-01 06:01', 1, 1.1),
+       ('2017-01-01 08:01', 1, 1.2),
+       ('2018-01-02 08:01', 2, 1.3),
+       ('2019-01-01 09:11', 3, 2.1),
+       ('2017-01-01 06:05', 1, 1.4);
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.1),
+       ('2017-01-01 08:01', 1, 1.2),
+       ('2018-01-02 08:01', 2, 1.3),
+       ('2019-01-01 09:11', 3, 2.1),
+       ('2017-01-01 06:05', 1, 1.4);
+SELECT * FROM timescaledb_information.server;
+ server_name | owner |                    options                    | server_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+-----------------------------------------------+-----------+-----------------+-----------------+-----------------
+ server_4    | 16388 | {host=localhost,port=15432,dbname=frontend_b} | t         |               1 |               0 | 
+ server_1    | 16388 | {host=localhost,port=15432,dbname=backend_1}  | t         |               1 |               1 | 24 kB
+ server_3    | 16388 | {host=localhost,port=15432,dbname=backend_3}  | t         |               1 |               1 | 24 kB
+ server_2    | 16388 | {host=localhost,port=15432,dbname=backend_2}  | t         |               1 |               1 | 24 kB
+(4 rows)
+
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema |  table_name  |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+--------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
+ public       | nondisttable | default_cluster_user |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
+ public       | disttable    | default_cluster_user |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | t
+(2 rows)
+
+SELECT * FROM hypertable_relation_size('disttable');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+       24576 |       49152 |             |       73728
+(1 row)
+
+SELECT * FROM hypertable_relation_size('nondisttable');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+       24576 |       49152 |             |       73728
+(1 row)
+
+SELECT * FROM hypertable_server_relation_size('disttable');
+ server_name | num_chunks | table_size | index_size | toast_size | total_size 
+-------------+------------+------------+------------+------------+------------
+ server_4    |          0 |            |            |            | 
+ server_1    |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ server_3    |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ server_2    |          1 | 8192 bytes | 16 kB      |            | 24 kB
+(4 rows)
+
+SELECT * FROM hypertable_server_relation_size('nondisttable');
+NOTICE:  Calling hypertable_server_relation_size on a non-distributed hypertable
+ server_name | num_chunks | table_size | index_size | toast_size | total_size 
+-------------+------------+------------+------------+------------+------------
+(0 rows)
+
 -- Clean up for future tests
+DROP TABLE disttable;
 SELECT * FROM delete_server('server_1', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_1
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_1
  delete_server 
 ---------------
  t
 (1 row)
 
 SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_2
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_2
  delete_server 
 ---------------
  t
 (1 row)
 
 SELECT * FROM delete_server('server_3', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_3
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_3
  delete_server 
 ---------------
  t
 (1 row)
 
 SELECT * FROM delete_server('server_4', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server server_4
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_4
  delete_server 
 ---------------
  t

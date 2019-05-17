@@ -38,13 +38,13 @@ set(SOURCE_FILES
   bgw_scheduler.sql
   metadata.sql
   server.sql
+  dist_internal.sql
   views.sql
   gapfill.sql
   maintenance_utils.sql
   partialize_finalize.sql
   restoring.sql
   timescaledb_fdw.sql
-  dist_internal.sql
 )
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")

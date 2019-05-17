@@ -5,6 +5,77 @@
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_relation_local_size(
+    schema_name_in NAME,
+    table_name_in NAME
+)
+RETURNS TABLE (table_bytes BIGINT,
+               index_bytes BIGINT,
+               toast_bytes BIGINT,
+               total_bytes BIGINT
+               ) LANGUAGE PLPGSQL STABLE STRICT
+               AS
+$BODY$
+BEGIN
+        RETURN QUERY
+        SELECT sub2.table_bytes,
+               sub2.index_bytes,
+               sub2.toast_bytes,
+               sub2.total_bytes
+               FROM (
+               SELECT *, sub1.total_bytes-sub1.index_bytes-COALESCE(sub1.toast_bytes,0) AS table_bytes FROM (
+                      SELECT
+                      sum(pg_total_relation_size(format('%I.%I', c.schema_name, c.table_name)))::bigint as total_bytes,
+                      sum(pg_indexes_size(format('%I.%I', c.schema_name, c.table_name)))::bigint AS index_bytes,
+                      sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
+                      FROM
+                      _timescaledb_catalog.hypertable h,
+                      _timescaledb_catalog.chunk c,
+                      pg_class pgc,
+                      pg_namespace pns
+                      WHERE h.schema_name = schema_name_in
+                      AND h.table_name = table_name_in
+                      AND c.hypertable_id = h.id
+                      AND pgc.relname = h.table_name
+                      AND pns.oid = pgc.relnamespace
+                      AND pns.nspname = h.schema_name
+                      AND relkind = 'r'
+                      ) sub1
+               ) sub2;
+
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_relation_remote_size(
+    schema_name_in NAME,
+    table_name_in NAME
+)
+RETURNS TABLE (table_bytes BIGINT,
+               index_bytes BIGINT,
+               toast_bytes BIGINT,
+               total_bytes BIGINT
+               ) LANGUAGE PLPGSQL STABLE STRICT
+               AS
+$BODY$
+BEGIN
+        RETURN QUERY
+        SELECT sum(entry.table_bytes)::bigint AS table_bytes,
+               sum(entry.index_bytes)::bigint AS index_bytes,
+               sum(entry.toast_bytes)::bigint AS toast_bytes,
+               sum(entry.total_bytes)::bigint AS total_bytes
+        FROM (
+        SELECT s.server_name, _timescaledb_internal.server_ping(server_name) AS server_up
+            FROM _timescaledb_catalog.hypertable AS ht, _timescaledb_catalog.hypertable_server AS s
+            WHERE ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id
+            ) AS srv
+        LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(CASE WHEN srv.server_up THEN srv.server_name ELSE NULL END) entry ON TRUE
+        WHERE entry.table_schema = schema_name_in
+        AND entry.table_name =  table_name_in;
+END;
+$BODY$;
+
 -- Get relation size of hypertable
 -- like pg_relation_size(hypertable)
 -- (https://www.postgresql.org/docs/9.6/static/functions-admin.html#FUNCTIONS-ADMIN-DBSIZE)
@@ -30,44 +101,23 @@ $BODY$
 DECLARE
         table_name       NAME;
         schema_name      NAME;
+        is_distributed   BOOL;
 BEGIN
-        SELECT relname, nspname
-        INTO STRICT table_name, schema_name
+        SELECT relname, nspname, replication_factor > 0
+        INTO STRICT table_name, schema_name, is_distributed
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = main_table;
 
-        RETURN QUERY EXECUTE format(
-        $$
-        SELECT table_bytes,
-               index_bytes,
-               toast_bytes,
-               total_bytes
-               FROM (
-               SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes FROM (
-                      SELECT
-                      sum(pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint as total_bytes,
-                      sum(pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint AS index_bytes,
-                      sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
-                      FROM
-                      _timescaledb_catalog.hypertable h,
-                      _timescaledb_catalog.chunk c,
-                      pg_class pgc,
-                      pg_namespace pns
-                      WHERE h.schema_name = %L
-                      AND h.table_name = %L
-                      AND c.hypertable_id = h.id
-                      AND pgc.relname = h.table_name
-                      AND pns.oid = pgc.relnamespace
-                      AND pns.nspname = h.schema_name
-                      AND relkind = 'r'
-                      ) sub1
-               ) sub2;
-        $$,
-        schema_name, table_name);
-
+        CASE WHEN is_distributed THEN
+            RETURN QUERY SELECT * FROM _timescaledb_internal.hypertable_relation_remote_size(schema_name, table_name);
+        ELSE
+            RETURN QUERY SELECT * FROM _timescaledb_internal.hypertable_relation_local_size(schema_name, table_name);
+        END CASE;
 END;
 $BODY$;
+
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
     time_value      BIGINT,
@@ -149,6 +199,62 @@ BEGIN
 END;
 $BODY$;
 
+
+-- Get the per-server relation size of a distributed hypertable across all servers in a distributed database
+-- like pg_relation_size(hypertable)
+-- (https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-DBSIZE)
+--
+-- main_table - hypertable to get size of
+--
+-- Returns:
+-- server_name        - Server hosting part of the table
+-- num_chunks         - Number of chunks hosted on the server
+-- table_size         - Pretty output of table_bytes for the server
+-- index_bytes        - Pretty output of index_bytes for the server
+-- toast_bytes        - Pretty output of toast_bytes for the server
+-- total_size         - Pretty output of total_bytes for the server
+
+CREATE OR REPLACE FUNCTION hypertable_server_relation_size(
+    main_table              REGCLASS
+)
+RETURNS TABLE (server_name   NAME,
+               num_chunks  BIGINT,
+               table_size  TEXT,
+               index_size  TEXT,
+               toast_size  TEXT,
+               total_size  TEXT) LANGUAGE PLPGSQL STABLE STRICT
+               AS
+$BODY$
+DECLARE
+        local_table_name       NAME;
+        local_schema_name      NAME;
+BEGIN
+        SELECT relname, nspname
+        INTO STRICT local_table_name, local_schema_name
+        FROM pg_class c
+        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        WHERE c.OID = main_table;
+
+        IF NOT (SELECT distributed FROM timescaledb_information.hypertable ht WHERE ht.table_name = local_table_name AND ht.table_schema = local_schema_name)
+            THEN RAISE NOTICE 'Calling hypertable_server_relation_size on a non-distributed hypertable';
+        END IF;
+
+        RETURN QUERY EXECUTE format(
+        $$
+        SELECT s.server_name as server,
+               size.num_chunks as chunks,
+               pg_size_pretty(table_bytes) as table,
+               pg_size_pretty(index_bytes) as index,
+               pg_size_pretty(toast_bytes) as toast,
+               pg_size_pretty(total_bytes) as total
+            FROM timescaledb_information.server s
+                LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(s.server_name) size ON TRUE
+            WHERE size.table_schema = %L 
+            AND size.table_name = %L;
+        $$,
+        local_schema_name, local_table_name);
+END;
+$BODY$;
 
 -- Get relation size of the chunks of an hypertable
 -- like pg_relation_size

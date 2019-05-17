@@ -5,7 +5,7 @@
 CREATE SCHEMA IF NOT EXISTS timescaledb_information;
 
 -- Convenience view to list all hypertables and their space usage
-CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_size_info AS
   SELECT ht.schema_name AS table_schema,
     ht.table_name,
     t.tableowner AS table_owner,
@@ -14,15 +14,29 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
      FROM _timescaledb_catalog.chunk ch
      WHERE ch.hypertable_id=ht.id
     ) AS num_chunks,
-    size.table_size,
-    size.index_size,
-    size.toast_size,
-    size.total_size
+    (CASE WHEN ht.replication_factor > 0 THEN true ELSE false END) AS distributed,
+    size.table_bytes,
+    size.index_bytes,
+    size.toast_bytes,
+    size.total_bytes
   FROM _timescaledb_catalog.hypertable ht
     LEFT OUTER JOIN pg_tables t ON ht.table_name=t.tablename AND ht.schema_name=t.schemaname
-    LEFT OUTER JOIN LATERAL @extschema@.hypertable_relation_size_pretty(
+    LEFT OUTER JOIN LATERAL @extschema@.hypertable_relation_size(
       CASE WHEN has_schema_privilege(ht.schema_name,'USAGE') THEN format('%I.%I',ht.schema_name,ht.table_name) ELSE NULL END
     ) size ON true;
+
+CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
+  SELECT ht.table_schema,
+    ht.table_name,
+    ht.table_owner,
+    ht.num_dimensions,
+    ht.num_chunks,
+    pg_size_pretty(ht.table_bytes) AS table_size,
+    pg_size_pretty(ht.index_bytes) AS index_size,
+    pg_size_pretty(ht.toast_bytes) AS toast_size,
+    pg_size_pretty(ht.total_bytes) AS total_size,
+    ht.distributed
+  FROM timescaledb_information.hypertable_size_info ht;
 
 CREATE OR REPLACE VIEW timescaledb_information.license AS
   SELECT _timescaledb_internal.license_edition() as edition,
@@ -131,10 +145,16 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     ON ( cagg.mat_hypertable_id = ct.materialization_id);
 
 CREATE OR REPLACE VIEW timescaledb_information.server AS
-  SELECT srvname AS server_name, srvowner AS owner, srvoptions AS options, _timescaledb_internal.server_ping(srvname) AS server_up
-  FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
-  WHERE srv.srvfdw = fdw.oid
-  AND fdw.fdwname = 'timescaledb_fdw';
+  SELECT s.server_name, s.owner, s.options, s.server_up,
+    COUNT(s.server_name) AS num_dist_tables,
+    SUM(size.num_chunks) AS num_dist_chunks,
+    pg_size_pretty(SUM(size.total_bytes)) AS total_dist_size
+  FROM (SELECT srvname AS server_name, srvowner AS owner, srvoptions AS options, _timescaledb_internal.server_ping(srvname) AS server_up
+        FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
+        WHERE srv.srvfdw = fdw.oid
+        AND fdw.fdwname = 'timescaledb_fdw') AS s
+    LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(CASE WHEN s.server_up THEN s.server_name ELSE NULL END) size ON TRUE
+  GROUP BY s.server_name, s.server_up, s.owner, s.options;
 
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

@@ -85,20 +85,8 @@ SELECT * FROM show_servers();
  server_4    | localhost | 15432 | server_4
 (4 rows)
 
--- Need super user permissions to run server_ping where UserMapping doesn't exist
-RESET ROLE;
--- Should show up in view. Note: `server_1` should be down since it's database is not created
-SELECT * FROM timescaledb_information.server
-ORDER BY server_name;
- server_name | owner |                   options                   | server_up 
--------------+-------+---------------------------------------------+-----------
- server_1    | 16386 | {host=localhost,port=15432,dbname=server_1} | f
- server_2    | 16385 | {host=localhost,port=15432,dbname=server_2} | t
- server_3    | 16385 | {host=localhost,port=15432,dbname=server_3} | t
- server_4    | 16386 | {host=localhost,port=15432,dbname=server_4} | t
-(4 rows)
-
 -- List foreign servers and user mappings
+RESET ROLE;
 SELECT srvname, srvoptions
 FROM pg_foreign_server
 ORDER BY srvname;

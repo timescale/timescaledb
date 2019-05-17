@@ -305,6 +305,22 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
  
 (1 row)
 
+SELECT * FROM timescaledb_information.server;
+ server_name | owner |                   options                   | server_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+---------------------------------------------+-----------+-----------------+-----------------+-----------------
+ server_2    | 16388 | {host=localhost,port=15432,dbname=server_2} | t         |               1 |               2 | 112 kB
+ server_3    | 16388 | {host=localhost,port=15432,dbname=server_3} | t         |               1 |               2 | 112 kB
+ server_1    | 16388 | {host=localhost,port=15432,dbname=server_1} | t         |               1 |               2 | 112 kB
+(3 rows)
+
+SELECT * FROM hypertable_server_relation_size('disttable');
+ server_name | num_chunks | table_size | index_size | toast_size | total_size 
+-------------+------------+------------+------------+------------+------------
+ server_2    |          2 | 16 kB      | 96 kB      |            | 112 kB
+ server_3    |          2 | 16 kB      | 96 kB      |            | 112 kB
+ server_1    |          2 | 16 kB      | 96 kB      |            | 112 kB
+(3 rows)
+
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT * FROM disttable;
@@ -1109,10 +1125,10 @@ SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_
 ERROR:  invalid replication_factor
 \set ON_ERROR_STOP 1
 SELECT * FROM timescaledb_information.hypertable;
- table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
---------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------
- public       | disttable       | default_cluster_user |              2 |          9 | 0 bytes    | 0 bytes    |            | 0 bytes
- public       | underreplicated | default_cluster_user |              1 |          1 | 0 bytes    | 0 bytes    |            | 0 bytes
+ table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
+ public       | disttable       | default_cluster_user |              2 |          9 | 72 kB      | 720 kB     |            | 792 kB     | t
+ public       | underreplicated | default_cluster_user |              1 |          1 |            |            |            |            | t
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters

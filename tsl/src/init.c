@@ -212,6 +212,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.set_distributed_peer_id = NULL,
 	.is_frontend_session = NULL,
 	.remove_from_distributed_db = NULL,
+	.remote_hypertable_info = error_not_supported_default_fn,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -240,6 +241,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.set_distributed_peer_id = dist_util_set_peer_id,
 	.is_frontend_session = dist_util_is_frontend_session,
 	.remove_from_distributed_db = dist_util_remove_from_db,
+	.remote_hypertable_info = dist_util_remote_hypertable_info,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
