@@ -2674,8 +2674,6 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	NameData view_name;
 	NameData view_schema;
 
-	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
-
 	if (!OidIsValid(view_relid))
 		return false;
 
@@ -2706,6 +2704,8 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 
 	if (materialization_id == -1)
 		return false;
+
+	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
 
 	PopActiveSnapshot();
 	CommitTransactionCommand();
