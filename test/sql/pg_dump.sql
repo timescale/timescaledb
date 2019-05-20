@@ -65,9 +65,9 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
 
-SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
-SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
-SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
 -- Show all index mappings
 SELECT * FROM _timescaledb_catalog.chunk_index;
@@ -119,9 +119,9 @@ SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
 
 --data should be the same
-SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
-SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
-SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
 SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
@@ -146,11 +146,6 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');
-
-        
-
-
-
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
