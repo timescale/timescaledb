@@ -903,9 +903,9 @@ SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
 SELECT * FROM _timescaledb_catalog.hypertable;
  id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id | replication_factor 
 ----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------+--------------------
-  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -928,9 +928,9 @@ FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.
 SELECT * FROM _timescaledb_catalog.hypertable;
  id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id | replication_factor 
 ----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------+--------------------
-  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -953,9 +953,9 @@ FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.
 SELECT * FROM _timescaledb_catalog.hypertable;
  id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id | replication_factor 
 ----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------+--------------------
-  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
-  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                 -1
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;

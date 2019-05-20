@@ -82,7 +82,7 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-	if (rel->fdw_private != NULL && ht != NULL && ht->fd.replication_factor > 0)
+	if (rel->fdw_private != NULL && ht != NULL && hypertable_is_distributed(ht))
 	{
 		FdwRoutine *fdw = (FdwRoutine *) DatumGetPointer(
 			DirectFunctionCall1(timescaledb_fdw_handler, PointerGetDatum(NULL)));

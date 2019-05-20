@@ -7,6 +7,14 @@
 ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 
+-- Support for remote_exec()
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\unset ECHO
+\o /dev/null
+\ir include/remote_exec.sql
+\o
+\set ECHO all
+
 CREATE OR REPLACE FUNCTION show_servers()
 RETURNS TABLE(server_name NAME, host TEXT, port INT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'test_server_show' LANGUAGE C;
@@ -110,33 +118,30 @@ SELECT * FROM delete_server('server_3', if_exists => true);
 
 SELECT * FROM show_servers();
 
--- Set up servers to receive distributed tables (database may be left over from other tests)
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_2;
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4;
+DROP SERVER server_1 CASCADE;
+SELECT * FROM delete_server('server_2', cascade => true);
+SELECT * FROM delete_server('server_4', cascade => true);
+
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS server_1;
 DROP DATABASE IF EXISTS server_2;
 DROP DATABASE IF EXISTS server_4;
 SET client_min_messages TO INFO;
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_4;
-\c server_1;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-CREATE ROLE cluster_user_1 WITH LOGIN;
-\c server_2;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c server_4;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
+
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+SELECT * FROM add_server('server_4', database => 'server_4', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+
+SELECT * FROM show_servers();
 
 -- Test that servers are added to a hypertable
 CREATE TABLE disttable(time timestamptz, device int, temp float);
-
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+
+-- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
+SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable';
+SELECT * FROM test.remote_exec(NULL, $$ SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
 
 -- All servers should be added.
 SELECT * FROM _timescaledb_catalog.hypertable_server;
@@ -164,6 +169,7 @@ SELECT * FROM attach_server('disttable', 'server_1');
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => -1);
 
 -- Non-existing server
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, servers => '{ "server_3" }');

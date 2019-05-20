@@ -168,7 +168,7 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
 			Int32GetDatum(fd->compressed_hypertable_id);
-	if (fd->replication_factor < 1)
+	if (fd->replication_factor == 0)
 		nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] = true;
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
@@ -1646,6 +1646,53 @@ create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 	return HeapTupleGetDatum(tuple);
 }
 
+static int16
+validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call)
+{
+	bool valid = replication_factor >= 1 && replication_factor <= PG_INT16_MAX;
+
+	/*
+	 * In case of create_distributed_hypertable(replication_factor => NULL) call,
+	 * replication_factor is equal to 0 and in invalid range.
+	 */
+
+	/* create_hypertable() call */
+	if (!is_dist_call)
+	{
+		if (is_null)
+		{
+			/* create_hypertable(replication_factor => NULL) */
+			Assert(replication_factor == 0);
+			valid = true;
+		}
+		else
+		{
+			/*
+			 * Special replication_factor case for hypertables created on remote
+			 * data nodes. Used to distinguish them from regular hypertables.
+			 *
+			 * Such argument is only allowed to be use by frontend session.
+			 */
+			if (replication_factor == -1)
+				valid =
+					ts_cm_functions->is_frontend_session && ts_cm_functions->is_frontend_session();
+		}
+	}
+
+	if (!valid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid replication_factor"),
+				 errhint("A hypertable's replication factor must be between 1 and %d.",
+						 PG_INT16_MAX)));
+
+	/*
+	 * replication_factor is within bounds, so it is now safe to convert it to
+	 * a smallint/int16, which is the format in the catalog table
+	 */
+	return (int16)(replication_factor & 0xFFFF);
+}
+
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 
@@ -1694,7 +1741,8 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 									  /* partitioning func */
 									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
 	DimensionInfo *space_dim_info = NULL;
-	int32 replication_factor = PG_ARGISNULL(14) ? 0 : PG_GETARG_INT32(14);
+	int32 replication_factor_in = PG_ARGISNULL(14) ? 0 : PG_GETARG_INT32(14);
+	int16 replication_factor;
 	ArrayType *servers = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
@@ -1738,16 +1786,12 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_column_name: cannot be NULL")));
 
-	/* Replication factor cannot be explicitly 0 for non-dist call, or explicitly null for dist call
+	/*
+	 * Ensure replication factor is a valid value and convert it to
+	 * catalog table format
 	 */
-	if (replication_factor < 1 && (is_dist_call || !PG_ARGISNULL(14)))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication_factor"),
-				 errhint("%s",
-						 is_dist_call ? "must be > 0 to create a distributed_hypertable" :
-										"omit this parameter or set to NULL to create a "
-										"non-distributed hypertable")));
+	replication_factor =
+		validate_replication_factor(replication_factor_in, PG_ARGISNULL(14), is_dist_call);
 
 	created = ts_hypertable_create_from_info(table_relid,
 											 INVALID_HYPERTABLE_ID,
@@ -1790,7 +1834,7 @@ bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
 							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
-							   ChunkSizingInfo *chunk_sizing_info, int32 replication_factor_in,
+							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
 							   ArrayType *servers)
 {
 	Cache *hcache;
@@ -1802,7 +1846,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	NameData schema_name, table_name, default_associated_schema_name;
 	Relation rel;
 	bool if_not_exists = (flags & HYPERTABLE_CREATE_IF_NOT_EXISTS) != 0;
-	int16 replication_factor;
 
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && ts_is_hypertable(table_relid))
@@ -1911,20 +1954,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.",
 						   get_rel_name(table_relid)),
 				 errhint("Remove the rules before calling create_hypertable")));
-
-	if (replication_factor_in != 0 &&
-		(replication_factor_in < 1 || replication_factor_in > PG_INT16_MAX))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication factor"),
-				 errhint("A hypertable's replication factor must be between 0 and %d.",
-						 PG_INT16_MAX)));
-
-	/*
-	 * replication_factor is within bounds, so it is now safe to convert it to
-	 * a smallint/int16, which is the format in the catalog table
-	 */
-	replication_factor = (int16)(replication_factor_in & 0xFFFF);
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check
