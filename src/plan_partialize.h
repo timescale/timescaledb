@@ -3,7 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#ifndef TIMESCALEDB_PLAN_PARTIALIZE_H
+#define TIMESCALEDB_PLAN_PARTIALIZE_H
 #include <postgres.h>
 #include <optimizer/planner.h>
 
 void plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
+
+#endif /* TIMESCALEDB_PLAN_PARTIALIZE_H */
