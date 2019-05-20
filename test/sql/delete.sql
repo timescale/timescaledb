@@ -6,11 +6,11 @@
 \ir include/insert_two_partitions.sql
 \o
 
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 
 DELETE FROM "two_Partitions" WHERE series_0 = 1.5;
 DELETE FROM "two_Partitions" WHERE series_0 = 100;
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 
 -- Make sure DELETE isn't optimized if it includes Append plans
 -- Need to turn of nestloop to make append appear the same on PG96 and PG10
@@ -35,7 +35,7 @@ DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 
 
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;

@@ -22,7 +22,7 @@ COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DE
 2257894000000000000,dev3,1.5,2
 \.
 
-COPY (SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id) TO STDOUT;
+COPY (SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1) TO STDOUT;
 
 
 ---test hypertable with FK

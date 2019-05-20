@@ -8,7 +8,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
 SELECT * FROM _timescaledb_catalog.chunk;
 
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 SELECT * FROM ONLY "two_Partitions";
 
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
