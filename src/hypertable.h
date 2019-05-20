@@ -77,7 +77,7 @@ typedef enum HypertableCreateFlags
 extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
 	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
-	ChunkSizingInfo *chunk_sizing_info, int32 replication_factor, ArrayType *servers);
+	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, ArrayType *servers);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
 extern TSDLLEXPORT int32 ts_hypertable_get_id_by_name(const char *schema, const char *name);
@@ -134,6 +134,10 @@ extern TSDLLEXPORT List *ts_hypertable_get_serverids_list(Hypertable *ht);
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
 
+#define HYPERTABLE_DIST_MEMBER_REPLICATION_FACTOR -1
+
 #define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
+#define hypertable_is_distributed_member(ht)                                                       \
+	((ht)->fd.replication_factor == HYPERTABLE_DIST_MEMBER_REPLICATION_FACTOR)
 
 #endif /* TIMESCALEDB_HYPERTABLE_H */

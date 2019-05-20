@@ -5,6 +5,10 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
+-- Support for remote_exec()
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\unset ECHO
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 CREATE OR REPLACE FUNCTION show_servers()
 RETURNS TABLE(server_name NAME, host TEXT, port INT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'test_server_show' LANGUAGE C;
@@ -179,28 +183,54 @@ SELECT * FROM show_servers();
  server_4    | localhost | 15432 | server_4
 (3 rows)
 
--- Set up servers to receive distributed tables (database may be left over from other tests)
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_2;
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4;
+DROP SERVER server_1 CASCADE;
+NOTICE:  drop cascades to user mapping for super_user on server server_1
+SELECT * FROM delete_server('server_2', cascade => true);
+NOTICE:  drop cascades to user mapping for default_perm_user on server server_2
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_4', cascade => true);
+NOTICE:  drop cascades to user mapping for default_perm_user on server server_4
+ delete_server 
+---------------
+ t
+(1 row)
+
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS server_1;
 DROP DATABASE IF EXISTS server_2;
 DROP DATABASE IF EXISTS server_4;
 SET client_min_messages TO INFO;
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_4;
-\c server_1;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-CREATE ROLE cluster_user_1 WITH LOGIN;
-\c server_2;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c server_4;
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_1    | localhost | 15432 | server_1 | super_user | super_user      | t
+(1 row)
+
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_2    | localhost | 15432 | server_2 | super_user | super_user      | t
+(1 row)
+
+SELECT * FROM add_server('server_4', database => 'server_4', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server_4    | localhost | 15432 | server_4 | super_user | super_user      | t
+(1 row)
+
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+SELECT * FROM show_servers();
+ server_name |   host    | port  |  dbname  
+-------------+-----------+-------+----------
+ server_1    | localhost | 15432 | server_1
+ server_2    | localhost | 15432 | server_2
+ server_4    | localhost | 15432 | server_4
+(3 rows)
+
 -- Test that servers are added to a hypertable
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
@@ -208,6 +238,43 @@ NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
+(1 row)
+
+-- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
+SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable';
+ replication_factor 
+--------------------
+                  1
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
+NOTICE:  [server_1]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+NOTICE:  [server_1]:
+replication_factor
+------------------
+                -1
+(1 row)
+
+
+NOTICE:  [server_2]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+NOTICE:  [server_2]:
+replication_factor
+------------------
+                -1
+(1 row)
+
+
+NOTICE:  [server_4]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+NOTICE:  [server_4]:
+replication_factor
+------------------
+                -1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
 (1 row)
 
 -- All servers should be added.
@@ -250,8 +317,10 @@ ERROR:  table "disttable" is not a hypertable
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
 ERROR:  invalid replication_factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
-ERROR:  invalid replication factor
+ERROR:  invalid replication_factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
+ERROR:  invalid replication_factor
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => -1);
 ERROR:  invalid replication_factor
 -- Non-existing server
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, servers => '{ "server_3" }');
@@ -343,7 +412,7 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 -- chunks that have multiple servers so that the chunk is not removed
 -- unnecessarily.
 SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
  delete_server 
 ---------------
  t
@@ -375,7 +444,7 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 
 -- Should also clean up hypertable_server when using standard DDL commands
 DROP SERVER server_4 CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
 SELECT * FROM test.show_subtables('disttable');
  Child | Tablespace 
 -------+------------
