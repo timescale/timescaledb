@@ -41,14 +41,14 @@ SELECT * FROM show_servers();
 
 -- Ensure database and extensions are installed
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
+SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 -- After delete database and extension should still be there
 SELECT * FROM delete_server('bootstrap_test', cascade => true);
 SELECT * FROM show_servers();
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
+SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 -- Try to recreate server with the same name, database and extension exists
@@ -78,13 +78,13 @@ SELECT * FROM show_servers();
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
+SELECT extname FROM pg_extension;
 DROP EXTENSION timescaledb CASCADE;
-\dx
+SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
+SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 SELECT * FROM delete_server('bootstrap_test', cascade => true);
@@ -94,11 +94,13 @@ DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_schema_test;
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 CREATE SCHEMA bootstrap_schema;
+SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb WITH SCHEMA bootstrap_schema;
-\dx
+SET client_min_messages TO NOTICE;
+SELECT extname FROM pg_extension;
 SELECT * FROM bootstrap_schema.add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
+SELECT extname FROM pg_extension;
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 SELECT * FROM bootstrap_schema.add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -113,7 +115,7 @@ DROP DATABASE bootstrap_test;
 -- bootstrap_database = 'template1'
 SELECT * FROM add_server('bootstrap_test', database => 'bootstrap_test', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', bootstrap_database => 'template1');
 \c bootstrap_test :ROLE_DEFAULT_PERM_USER;
-\dx
+SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM delete_server('bootstrap_test', cascade => true);
 

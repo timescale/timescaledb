@@ -49,12 +49,11 @@ SELECT * FROM show_servers();
 
 -- Ensure database and extensions are installed
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
-                                       List of installed extensions
-    Name     |  Version  |   Schema   |                            Description                            
--------------+-----------+------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | public     | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -72,12 +71,11 @@ SELECT * FROM show_servers();
 (0 rows)
 
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
-                                       List of installed extensions
-    Name     |  Version  |   Schema   |                            Description                            
--------------+-----------+------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | public     | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -122,20 +120,18 @@ SELECT * FROM show_servers();
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
-                                       List of installed extensions
-    Name     |  Version  |   Schema   |                            Description                            
--------------+-----------+------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | public     | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 DROP EXTENSION timescaledb CASCADE;
-\dx
-                 List of installed extensions
-  Name   | Version |   Schema   |         Description          
----------+---------+------------+------------------------------
- plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
+SELECT extname FROM pg_extension;
+ extname 
+---------
+ plpgsql
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -147,12 +143,11 @@ NOTICE:  remote server database "bootstrap_test" already exists, skipping
 (1 row)
 
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
-                                       List of installed extensions
-    Name     |  Version  |   Schema   |                            Description                            
--------------+-----------+------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | public     | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -168,35 +163,14 @@ DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_schema_test;
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 CREATE SCHEMA bootstrap_schema;
+SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb WITH SCHEMA bootstrap_schema;
-WARNING:  
-WELCOME TO
- _____ _                               _     ____________  
-|_   _(_)                             | |    |  _  \ ___ \ 
-  | |  _ _ __ ___   ___  ___  ___ __ _| | ___| | | | |_/ / 
-  | | | |  _ ` _ \ / _ \/ __|/ __/ _` | |/ _ \ | | | ___ \ 
-  | | | | | | | | |  __/\__ \ (_| (_| | |  __/ |/ /| |_/ /
-  |_| |_|_| |_| |_|\___||___/\___\__,_|_|\___|___/ \____/
-               Running version 1.3.0-dev
-For more information on TimescaleDB, please visit the following links:
-
- 1. Getting started: https://docs.timescale.com/getting-started
- 2. API reference documentation: https://docs.timescale.com/api
- 3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture
-
-Note: TimescaleDB collects anonymous reports to better understand and assist our users.
-For more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.
-
-Your license expires on Sun Sep 30 17:00:00 2018 PDT
-
-WARNING:  Your license expired on Sun Sep 30 17:00:00 2018 PDT
-
-\dx
-                                          List of installed extensions
-    Name     |  Version  |      Schema      |                            Description                            
--------------+-----------+------------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog       | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | bootstrap_schema | Enables scalable inserts and complex queries for time-series data
+SET client_min_messages TO NOTICE;
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 SELECT * FROM bootstrap_schema.add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
@@ -206,12 +180,11 @@ SELECT * FROM bootstrap_schema.add_server('bootstrap_test', database => 'bootstr
 (1 row)
 
 \c bootstrap_test :ROLE_SUPERUSER;
-\dx
-                                          List of installed extensions
-    Name     |  Version  |      Schema      |                            Description                            
--------------+-----------+------------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog       | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | bootstrap_schema | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
@@ -238,12 +211,11 @@ SELECT * FROM add_server('bootstrap_test', database => 'bootstrap_test', local_u
 (1 row)
 
 \c bootstrap_test :ROLE_DEFAULT_PERM_USER;
-\dx
-                                       List of installed extensions
-    Name     |  Version  |   Schema   |                            Description                            
--------------+-----------+------------+-------------------------------------------------------------------
- plpgsql     | 1.0       | pg_catalog | PL/pgSQL procedural language
- timescaledb | 1.3.0-dev | public     | Enables scalable inserts and complex queries for time-series data
+SELECT extname FROM pg_extension;
+   extname   
+-------------
+ plpgsql
+ timescaledb
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
