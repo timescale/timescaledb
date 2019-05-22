@@ -93,7 +93,7 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 11"
-      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0
+      env: PG_VERSION=11.3 PG_GIT_TAG=REL_11_3
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: type = cron
