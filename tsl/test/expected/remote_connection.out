@@ -48,7 +48,7 @@ SELECT _timescaledb_internal.test_remote_connection();
 
 SELECT _timescaledb_internal.test_remote_async();
 WARNING:  Expect warning about communication error:
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [testdb]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
  test_remote_async 

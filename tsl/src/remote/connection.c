@@ -41,8 +41,9 @@ static unsigned int prep_stmt_number = 0;
 
 typedef struct TSConnection
 {
-	PGconn *pg_conn; /* PostgreSQL connection */
-	bool processing; /* TRUE if there is ongoin Async request processing */
+	PGconn *pg_conn;	  /* PostgreSQL connection */
+	bool processing;	  /* TRUE if there is ongoin Async request processing */
+	NameData server_name; /* Associated server name */
 } TSConnection;
 
 static PQconninfoOption *
@@ -205,11 +206,12 @@ remote_connection_configure(TSConnection *conn)
 }
 
 static TSConnection *
-remote_connection_create(PGconn *pg_conn, bool processing)
+remote_connection_create(PGconn *pg_conn, bool processing, const char *server_name)
 {
 	TSConnection *conn = malloc(sizeof(TSConnection));
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
+	namestrcpy(&conn->server_name, server_name);
 	return conn;
 }
 
@@ -328,7 +330,7 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 						 "Non-superuser cannot connect if the server does not request a password."),
 					 errhint("Target server's authentication method must be changed.")));
 
-		conn = remote_connection_create(pg_conn, false);
+		conn = remote_connection_create(pg_conn, false, server_name);
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
@@ -478,8 +480,9 @@ remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn, bo
 
 		ereport(elevel,
 				(errcode(sqlstate),
-				 message_primary ? errmsg_internal("remote connection error: %s", message_primary) :
-								   errmsg("could not obtain message string for remote error"),
+				 message_primary ?
+					 errmsg_internal("[%s]: %s", NameStr(conn->server_name), message_primary) :
+					 errmsg("could not obtain message string for remote error"),
 				 message_detail ? errdetail_internal("%s", message_detail) : 0,
 				 message_hint ? errhint("%s", message_hint) : 0,
 				 message_context ? errcontext("%s", message_context) : 0,
