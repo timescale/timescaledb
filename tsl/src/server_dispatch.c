@@ -305,9 +305,11 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 		.entrysize = sizeof(ServerState),
 		.hcxt = mcxt,
 	};
+	List *available_servers = ts_hypertable_get_available_servers(ht, true);
 
 	Assert(NULL != ht);
 	Assert(hypertable_is_distributed(ht));
+	Assert(NIL != available_servers);
 
 	ps = ExecInitNode(subplan, estate, eflags);
 
@@ -321,7 +323,7 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	sds->set_processed = intVal(list_nth(cscan->custom_private, CustomScanPrivateSetProcessed));
 	sds->mcxt = mcxt;
 	sds->serverstates = hash_create("ServerDispatch tuple stores",
-									list_length(ht->servers),
+									list_length(available_servers),
 									&hctl,
 									HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 

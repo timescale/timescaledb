@@ -177,6 +177,7 @@ enum Anum_hypertable_server
 	Anum_hypertable_server_hypertable_id = 1,
 	Anum_hypertable_server_server_hypertable_id,
 	Anum_hypertable_server_server_name,
+	Anum_hypertable_server_block_chunks,
 	_Anum_hypertable_server_max,
 };
 
@@ -187,6 +188,7 @@ typedef struct FormData_hypertable_server
 	int32 hypertable_id;
 	int32 server_hypertable_id;
 	NameData server_name;
+	bool block_chunks;
 } FormData_hypertable_server;
 
 typedef FormData_hypertable_server *Form_hypertable_server;
