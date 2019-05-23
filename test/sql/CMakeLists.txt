@@ -24,7 +24,6 @@ set(TEST_FILES
   drop_hypertable.sql
   drop_rename_hypertable.sql
   dump_meta.sql
-  edition.sql
   extension.sql
   gapfill.sql
   hash.sql
@@ -52,6 +51,12 @@ set(TEST_FILES
   version.sql
   views.sql
 )
+
+# edition tests need community edition
+if(NOT APACHE_ONLY)
+  list(APPEND TEST_FILES
+    edition.sql)
+endif()
 
 # tests that fail or are unreliable when run in parallel
 set(SOLO_TESTS
