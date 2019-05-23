@@ -26,6 +26,7 @@
 #include "remote/connection_cache.h"
 #include "export.h"
 #include "test_utils.h"
+#include "connection.h"
 
 #define NEW_APPLICATION_NAME "app2"
 

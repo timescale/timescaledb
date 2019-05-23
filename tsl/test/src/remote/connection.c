@@ -46,7 +46,6 @@ get_connection()
 																					 false))),
 														 -1)),
 								  NIL,
-								  CurrentMemoryContext,
 								  false);
 }
 
