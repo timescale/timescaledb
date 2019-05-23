@@ -6,6 +6,9 @@
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -793,7 +796,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set ON_ERROR_STOP 0
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('remotetable', 'time', replication_factor => 1);
-ERROR:  remote connection error: relation "remotetable" already exists
+ERROR:  [server_3]: relation "remotetable" already exists
 -- Test distributed_hypertable creation fails with replication factor 0
 CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
@@ -1433,10 +1436,12 @@ INSERT INTO twodim DEFAULT VALUES;
 INSERT INTO twodim DEFAULT VALUES;
 -- Reset the batch size
 SET timescaledb.max_insert_batch_size=4;
--- Constraint violation
+-- Constraint violation error check
+--
+-- Execute and filter mentioned server name in the error message.
 \set ON_ERROR_STOP 0
-INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2);
-ERROR:  remote connection error: new row for relation "_hyper_7_17_dist_chunk" violates check constraint "twodim_Color_check"
+SELECT test.execute_sql_and_filter_server_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
+ERROR:  [server_x]: new row for relation "_hyper_7_17_dist_chunk" violates check constraint "twodim_Color_check"
 \set ON_ERROR_STOP 1
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
 -- First EXPLAIN with batching turned on.

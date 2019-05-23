@@ -8,6 +8,14 @@
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+\o /dev/null
+\ir include/filter_exec.sql
+\o
+\set ECHO all
+
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
@@ -547,9 +555,11 @@ INSERT INTO twodim DEFAULT VALUES;
 -- Reset the batch size
 SET timescaledb.max_insert_batch_size=4;
 
--- Constraint violation
+-- Constraint violation error check
+--
+-- Execute and filter mentioned server name in the error message.
 \set ON_ERROR_STOP 0
-INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2);
+SELECT test.execute_sql_and_filter_server_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
 \set ON_ERROR_STOP 1
 
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.

@@ -124,7 +124,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20002;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
@@ -145,7 +145,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: pre-commit
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  remote connection error: terminating connection due to administrator command
+ERROR:  [loopback]: terminating connection due to administrator command
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20003;
  count 
 -------
@@ -175,7 +175,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: waiting-commit
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  remote connection error: terminating connection due to administrator command
+ERROR:  [loopback]: terminating connection due to administrator command
 --during waiting-commit the data node process could die before or after
 --executing the commit on the remote node. So the behaviour here is non-deterministic
 --this is the bad part of 1-pc transactions.
@@ -203,8 +203,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
 
 ROLLBACK;
 WARNING:  kill event: pre-abort
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 WARNING:  failure aborting remote transaction during local abort
@@ -285,7 +285,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
@@ -306,7 +306,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: pre-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  remote connection error: server closed the connection unexpectedly
+ERROR:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10002;
@@ -338,7 +338,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: waiting-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  remote connection error: server closed the connection unexpectedly
+ERROR:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
@@ -385,8 +385,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: post-prepare-transaction
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 WARNING:  error while performing second phase of 2-pc
@@ -456,8 +456,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: pre-commit-prepared
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 WARNING:  error while performing second phase of 2-pc
@@ -515,8 +515,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: waiting-commit-prepared
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 WARNING:  error while performing second phase of 2-pc
@@ -559,7 +559,7 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 BEGIN;
     SAVEPOINT save_1;
@@ -572,11 +572,11 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 
         SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
     ROLLBACK TO SAVEPOINT save_1;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
  count 
@@ -600,7 +600,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 (1 row)
 
 COMMIT;
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 SELECT count(*) FROM pg_prepared_xacts;
  count 
 -------
@@ -627,7 +627,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (1 row)
 
 COMMIT;
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10010;
  count 
 -------
@@ -665,12 +665,12 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 
 COMMIT;
 WARNING:  kill event: pre-abort
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
  count 
 -------
@@ -785,8 +785,8 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 
 	ROLLBACK TO SAVEPOINT save_1;
 WARNING:  kill event: subxact-abort
-WARNING:  remote connection error: terminating connection due to administrator command
-WARNING:  remote connection error: server closed the connection unexpectedly
+WARNING:  [loopback]: terminating connection due to administrator command
+WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
