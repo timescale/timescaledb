@@ -18,6 +18,7 @@
 #include "remote/connection.h"
 #include "remote/dist_txn.h"
 #include "test_utils.h"
+#include "connection.h"
 
 typedef struct RemoteNodeKiller
 {

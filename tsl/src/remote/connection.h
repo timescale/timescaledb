@@ -29,7 +29,7 @@ typedef enum ConnOptionType
  */
 TSConnection *remote_connection_open_default(const char *server_name);
 TSConnection *remote_connection_open(const char *server_name, List *server_options,
-									 List *user_options, MemoryContext mctx, bool set_dist_id);
+									 List *user_options, bool set_dist_id);
 void remote_connection_close(TSConnection *conn);
 
 extern void remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn,

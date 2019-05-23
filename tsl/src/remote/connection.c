@@ -41,9 +41,8 @@ static unsigned int prep_stmt_number = 0;
 
 typedef struct TSConnection
 {
-	PGconn *pg_conn;   /* PostgreSQL connection */
-	bool processing;   /* TRUE if there is ongoin Async request processing */
-	MemoryContext ctx; /* Memory context where connection is allocated */
+	PGconn *pg_conn; /* PostgreSQL connection */
+	bool processing; /* TRUE if there is ongoin Async request processing */
 } TSConnection;
 
 static PQconninfoOption *
@@ -206,12 +205,11 @@ remote_connection_configure(TSConnection *conn)
 }
 
 static TSConnection *
-remote_connection_create(PGconn *pg_conn, bool processing, MemoryContext mctx)
+remote_connection_create(PGconn *pg_conn, bool processing)
 {
-	TSConnection *conn = palloc0(sizeof(TSConnection));
+	TSConnection *conn = malloc(sizeof(TSConnection));
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
-	conn->ctx = mctx;
 	return conn;
 }
 
@@ -258,21 +256,19 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 /*
  * Opens a connection.
  *
- *  Raw connection are not part of the transaction and do not have transactions auto-started.
- *  They must be explicitly closed by remote_connection_close. Note that connections are allocated
- * using malloc and so if you do not call remote_connection_close, you'll have a memory leak. Note
- * that the connection cache handles all of this for you so use that if you can.
+ * Raw connections are not part of the transaction and do not have transactions
+ * auto-started. They must be explicitly closed by
+ * remote_connection_close. Note that connections are allocated using malloc
+ * and so if you do not call remote_connection_close, you'll have a memory
+ * leak. Note that the connection cache handles all of this for you so use
+ * that if you can.
  */
-
 TSConnection *
 remote_connection_open(const char *server_name, List *server_options, List *user_options,
-					   MemoryContext mctx, bool set_dist_id)
+					   bool set_dist_id)
 {
 	TSConnection *conn = NULL;
 	PGconn *volatile pg_conn = NULL;
-	MemoryContext old_mctx;
-
-	old_mctx = MemoryContextSwitchTo(mctx);
 
 	/*
 	 * Use PG_TRY block to ensure closing connection on error.
@@ -332,7 +328,7 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 						 "Non-superuser cannot connect if the server does not request a password."),
 					 errhint("Target server's authentication method must be changed.")));
 
-		conn = remote_connection_create(pg_conn, false, mctx);
+		conn = remote_connection_create(pg_conn, false);
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
@@ -352,7 +348,6 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
-	MemoryContextSwitchTo(old_mctx);
 
 	return conn;
 }
@@ -386,23 +381,16 @@ remote_connection_open_default(const char *server_name)
 	}
 	PG_END_TRY();
 
-	return remote_connection_open(server_name,
-								  fs->options,
-								  um ? um->options : NULL,
-								  CurrentMemoryContext,
-								  true);
+	return remote_connection_open(server_name, fs->options, um ? um->options : NULL, true);
 }
 
 void
 remote_connection_close(TSConnection *conn)
 {
-	MemoryContext old;
 	Assert(conn != NULL);
-	old = MemoryContextSwitchTo(conn->ctx);
 	PQfinish(conn->pg_conn);
 	conn->pg_conn = NULL;
-	pfree(conn);
-	MemoryContextSwitchTo(old);
+	free(conn);
 }
 
 /*
