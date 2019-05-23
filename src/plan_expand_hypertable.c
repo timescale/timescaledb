@@ -28,6 +28,9 @@
 #include <catalog/pg_type.h>
 #include <utils/errcodes.h>
 #include <utils/syscache.h>
+#if !(PG96 || PG10)
+#include <partitioning/partbounds.h>
+#endif
 
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
@@ -746,6 +749,7 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 	hyper_rel->part_scheme = part_scheme;
 	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
 	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
+	hyper_rel->boundinfo = palloc(sizeof(PartitionBoundInfoData));
 }
 
 #endif /* !(PG96 || PG10) */
