@@ -91,14 +91,14 @@ CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             1 |                    1 | server_1
-             1 |                    1 | server_2
-             1 |                    1 | server_3
-             2 |                    2 | server_1
-             2 |                    2 | server_2
-             2 |                    2 | server_3
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             1 |                    1 | server_1    | f
+             1 |                    1 | server_2    | f
+             1 |                    1 | server_3    | f
+             2 |                    2 | server_1    | f
+             2 |                    2 | server_2    | f
+             2 |                    2 | server_3    | f
 (6 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -634,7 +634,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
-WARNING:  under-replicated chunk 5, lacks 1 server(s)
+WARNING:  new chunks for hypertable "underreplicated" will be under-replicated due to insufficient available server, lacks 1 server(s)
 SELECT * FROM _timescaledb_catalog.chunk_server;
  chunk_id | server_chunk_id | server_name 
 ----------+-----------------+-------------
@@ -845,16 +845,16 @@ NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
 
 -- Test attach_server
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             1 |                    1 | server_1
-             1 |                    1 | server_2
-             1 |                    1 | server_3
-             2 |                    2 | server_1
-             2 |                    2 | server_2
-             2 |                    2 | server_3
-             4 |                    3 | server_2
-             4 |                    3 | server_3
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             1 |                    1 | server_1    | f
+             1 |                    1 | server_2    | f
+             1 |                    1 | server_3    | f
+             2 |                    2 | server_1    | f
+             2 |                    2 | server_2    | f
+             2 |                    2 | server_3    | f
+             4 |                    3 | server_2    | f
+             4 |                    3 | server_3    | f
 (8 rows)
 
 SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
@@ -864,17 +864,17 @@ SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             1 |                    1 | server_1
-             1 |                    1 | server_2
-             1 |                    1 | server_3
-             2 |                    2 | server_1
-             2 |                    2 | server_2
-             2 |                    2 | server_3
-             4 |                    3 | server_2
-             4 |                    3 | server_3
-             4 |                    3 | server_1
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             1 |                    1 | server_1    | f
+             1 |                    1 | server_2    | f
+             1 |                    1 | server_3    | f
+             2 |                    2 | server_1    | f
+             2 |                    2 | server_2    | f
+             2 |                    2 | server_3    | f
+             4 |                    3 | server_2    | f
+             4 |                    3 | server_3    | f
+             4 |                    3 | server_1    | f
 (9 rows)
 
 -- Verify hypertables on all servers

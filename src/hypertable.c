@@ -2086,6 +2086,23 @@ ts_is_partitioning_column(Hypertable *ht, Index column_attno)
 
 #define MIN(x, y) (x < y ? x : y)
 
+#if defined(USE_ASSERT_CHECKING)
+static void
+assert_chunk_servers_is_a_set(List *chunk_servers)
+{
+	Bitmapset *chunk_server_oids = NULL;
+	ListCell *lc;
+
+	foreach (lc, chunk_servers)
+	{
+		HypertableServer *server = lfirst(lc);
+		chunk_server_oids = bms_add_member(chunk_server_oids, server->foreign_server_oid);
+	}
+
+	Assert(list_length(chunk_servers) == bms_num_members(chunk_server_oids));
+}
+#endif
+
 /*
  * Assign servers to a chunk.
  *
@@ -2096,23 +2113,59 @@ List *
 ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube)
 {
 	List *chunk_servers = NIL;
-	int num_assigned = MIN(ht->fd.replication_factor, list_length(ht->servers));
+	List *available_servers = ts_hypertable_get_available_servers(ht, true);
+	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_servers));
 	int n, i;
 
 	n = hypertable_get_chunk_slice_ordinal(ht, cube);
 
 	for (i = 0; i < num_assigned; i++)
 	{
-		int j = (n + i) % list_length(ht->servers);
+		int j = (n + i) % list_length(available_servers);
 
-		chunk_servers = lappend(chunk_servers, list_nth(ht->servers, j));
+		chunk_servers = lappend(chunk_servers, list_nth(available_servers, j));
 	}
+
+	if (list_length(chunk_servers) < ht->fd.replication_factor)
+		ereport(WARNING,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("new chunks for hypertable \"%s\" will be under-replicated due to "
+						"insufficient available server, lacks %d server(s)",
+						NameStr(ht->fd.table_name),
+						ht->fd.replication_factor - list_length(chunk_servers)),
+				 errhint("attach more servers or allow new chunks on blocked servers")));
+
+#if defined(USE_ASSERT_CHECKING)
+	assert_chunk_servers_is_a_set(chunk_servers);
+#endif
 
 	return chunk_servers;
 }
 
-List *
-ts_hypertable_get_servername_list(Hypertable *ht)
+typedef bool (*hypertable_server_filter)(HypertableServer *hs);
+
+static bool
+filter_non_blocked_servers(HypertableServer *server)
+{
+	return !server->fd.block_chunks;
+}
+
+typedef void *(*get_value)(HypertableServer *hs);
+
+static void *
+get_hypertable_server_name(HypertableServer *server)
+{
+	return pstrdup(NameStr(server->fd.server_name));
+}
+
+static void *
+get_hypertable_server(HypertableServer *server)
+{
+	return server;
+}
+
+static List *
+get_hypertable_server_values(Hypertable *ht, hypertable_server_filter filter, get_value value)
 {
 	List *list = NULL;
 	ListCell *cell;
@@ -2120,15 +2173,38 @@ ts_hypertable_get_servername_list(Hypertable *ht)
 	foreach (cell, ht->servers)
 	{
 		HypertableServer *server = lfirst(cell);
-
-		list = lappend(list, pstrdup(NameStr(server->fd.server_name)));
+		if (filter == NULL || filter(server))
+			list = lappend(list, value(server));
 	}
 
 	return list;
 }
 
 List *
-ts_hypertable_get_serverids_list(Hypertable *ht)
+ts_hypertable_get_servername_list(Hypertable *ht)
+{
+	return get_hypertable_server_values(ht, NULL, get_hypertable_server_name);
+}
+
+TSDLLEXPORT List *
+ts_hypertable_get_available_servers(Hypertable *ht, bool error)
+{
+	List *available_servers =
+		get_hypertable_server_values(ht, filter_non_blocked_servers, get_hypertable_server);
+	if (available_servers == NIL && error)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_NO_SERVERS),
+				 (errmsg("no available servers (detached or blocked for new chunks) for "
+						 "hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)),
+				  errhint("attach more servers or allow new chunks for existing servers for "
+						  "hypertable \"%s\"",
+						  get_rel_name(ht->main_table_relid)))));
+	return available_servers;
+}
+
+static List *
+get_hypertable_server_ids(Hypertable *ht, hypertable_server_filter filter)
 {
 	List *serverids = NIL;
 	ListCell *lc;
@@ -2136,9 +2212,21 @@ ts_hypertable_get_serverids_list(Hypertable *ht)
 	foreach (lc, ht->servers)
 	{
 		HypertableServer *server = lfirst(lc);
-
-		serverids = lappend_oid(serverids, server->foreign_server_oid);
+		if (filter == NULL || filter(server))
+			serverids = lappend_oid(serverids, server->foreign_server_oid);
 	}
 
 	return serverids;
+}
+
+List *
+ts_hypertable_get_serverids_list(Hypertable *ht)
+{
+	return get_hypertable_server_ids(ht, NULL);
+}
+
+TSDLLEXPORT List *
+ts_hypertable_get_available_server_oids(Hypertable *ht)
+{
+	return get_hypertable_server_ids(ht, filter_non_blocked_servers);
 }

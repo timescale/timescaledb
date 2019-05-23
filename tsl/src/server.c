@@ -731,31 +731,53 @@ server_attach(PG_FUNCTION_ARGS)
 }
 
 static void
-server_detach_validate(const char *server_name, Hypertable *ht)
+check_replication(const char *server_name, Hypertable *ht, bool force, bool detach)
+{
+	List *available_servers = ts_hypertable_get_available_servers(ht, false);
+	char *operation = detach ? "detaching" : "blocking new chunks on";
+
+	if (ht->fd.replication_factor < list_length(available_servers))
+		return;
+
+	if (!force)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("%s server \"%s\" risks making new data for hypertable \"%s\" "
+						"under-replicated",
+						operation,
+						server_name,
+						NameStr(ht->fd.table_name)),
+				 errhint("Call function with force => true to force this operation.")));
+
+	ereport(WARNING,
+			(errcode(ERRCODE_TS_INTERNAL_ERROR),
+			 errmsg("new data for hypertable \"%s\" will be under-replicated due to %s server "
+					"\"%s\"",
+					NameStr(ht->fd.table_name),
+					operation,
+					server_name)));
+}
+
+static void
+server_detach_validate(const char *server_name, Hypertable *ht, bool force)
 {
 	List *chunk_servers =
 		ts_chunk_server_scan_by_servername_and_hypertable_id(server_name,
 															 ht->fd.id,
 															 CurrentMemoryContext);
+
 	if (list_length(chunk_servers) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR),
 				 errmsg("server \"%s\" cannot be detached because it contains chunks",
 						server_name)));
 
-	if (ht->fd.replication_factor >= list_length(ht->servers))
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("detaching server \"%s\" risks making hypertable \"%s\" under-replicated",
-						server_name,
-						NameStr(ht->fd.table_name)),
-				 errhint("First reduce the table's replication factor if you really want to detach "
-						 "the server.")));
+	check_replication(server_name, ht, force, true);
 }
 
 static int
-server_detach_hypertable_servers(const char *server_name, List *hypertable_servers,
-								 bool all_hypertables)
+server_modify_hypertable_servers(const char *server_name, List *hypertable_servers,
+								 bool all_hypertables, bool detach, bool block_chunks, bool force)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -780,25 +802,104 @@ server_detach_hypertable_servers(const char *server_name, List *hypertable_serve
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 						 errmsg("permission denied for hypertable \"%s\"", get_rel_name(relid))));
-		else
+		else if (detach)
 		{
 			/* we have permissions to detach */
-			server_detach_validate(NameStr(server->fd.server_name), ht);
+			server_detach_validate(NameStr(server->fd.server_name), ht, force);
 			removed +=
 				ts_hypertable_server_delete_by_servername_and_hypertable_id(server_name, ht->fd.id);
+		}
+		else
+		{
+			/*  set block new chunks */
+			if (block_chunks)
+			{
+				if (server->fd.block_chunks)
+				{
+					ereport(NOTICE,
+							(errcode(ERRCODE_TS_INTERNAL_ERROR),
+							 errmsg("new chunks already blocked on server \"%s\" for hypertable "
+									"\"%s\"",
+									NameStr(server->fd.server_name),
+									get_rel_name(relid))));
+					continue;
+				}
+
+				check_replication(server_name, ht, force, false);
+			}
+			server->fd.block_chunks = block_chunks;
+			removed += ts_hypertable_server_update(server);
 		}
 	}
 	ts_cache_release(hcache);
 	return removed;
 }
 
-Datum
-server_detach(PG_FUNCTION_ARGS)
+static int
+server_block_hypertable_servers(const char *server_name, List *hypertable_servers,
+								bool all_hypertables, bool block_chunks, bool force)
+{
+	return server_modify_hypertable_servers(server_name,
+											hypertable_servers,
+											all_hypertables,
+											false,
+											block_chunks,
+											force);
+}
+
+static int
+server_detach_hypertable_servers(const char *server_name, List *hypertable_servers,
+								 bool all_hypertables, bool force)
+{
+	return server_modify_hypertable_servers(server_name,
+											hypertable_servers,
+											all_hypertables,
+											true,
+											false,
+											force);
+}
+
+static HypertableServer *
+get_hypertable_server(Oid table_id, const char *server_name)
+{
+	HypertableServer *hs = NULL;
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id);
+	ListCell *lc;
+
+	if (ht == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("relation \"%s\" is not a hypertable", get_rel_name(table_id))));
+
+	foreach (lc, ht->servers)
+	{
+		hs = lfirst(lc);
+		if (namestrcmp(&hs->fd.server_name, server_name) == 0)
+			break;
+		else
+			hs = NULL;
+	}
+	if (hs == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_SERVER_NOT_ATTACHED),
+				 errmsg("server \"%s\" is not attached to hypertable \"%s\"",
+						server_name,
+						get_rel_name(table_id))));
+
+	ts_cache_release(hcache);
+	return hs;
+}
+
+static Datum
+server_block_or_allow_new_chunks(PG_FUNCTION_ARGS, bool block_chunks)
 {
 	const char *server_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
-	ListCell *lc;
-	int removed = 0;
+	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	int affected = 0;
+	bool all_hypertables = table_id == InvalidOid ? true : false;
+	List *hypertable_servers = NIL;
 
 	if (server_name == NULL)
 		ereport(ERROR,
@@ -806,42 +907,50 @@ server_detach(PG_FUNCTION_ARGS)
 				 errmsg("invalid server_name: cannot be NULL")));
 
 	if (table_id != InvalidOid)
-	{
-		HypertableServer *hs = NULL;
-		Cache *hcache = ts_hypertable_cache_pin();
-		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id);
-
-		if (ht == NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("relation \"%s\" is not a hypertable", get_rel_name(table_id))));
-
-		foreach (lc, ht->servers)
-		{
-			hs = lfirst(lc);
-			if (namestrcmp(&hs->fd.server_name, server_name) == 0)
-				break;
-			else
-				hs = NULL;
-		}
-		if (hs == NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_SERVER_NOT_ATTACHED),
-					 errmsg("server \"%s\" is not attached to hypertable \"%s\"",
-							server_name,
-							get_rel_name(table_id))));
-
-		removed = server_detach_hypertable_servers(server_name, list_make1(hs), false);
-		ts_cache_release(hcache);
-	}
+		hypertable_servers = list_make1(get_hypertable_server(table_id, server_name));
 	else
-	{
-		/* detach server for all hypertables */
-		List *hypertable_servers =
+		/* block or allow for all hypertables */
+		hypertable_servers =
 			ts_hypertable_server_scan_by_server_name(server_name, CurrentMemoryContext);
 
-		removed = server_detach_hypertable_servers(server_name, hypertable_servers, true);
-	}
+	affected = server_block_hypertable_servers(server_name,
+											   hypertable_servers,
+											   all_hypertables,
+											   block_chunks,
+											   force);
+	return Int32GetDatum(affected);
+}
+
+Datum
+server_set_block_new_chunks(PG_FUNCTION_ARGS, bool block)
+{
+	return server_block_or_allow_new_chunks(fcinfo, block);
+}
+
+Datum
+server_detach(PG_FUNCTION_ARGS)
+{
+	const char *server_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	bool all_hypertables = PG_ARGISNULL(1);
+	bool force = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
+	int removed = 0;
+	List *hypertable_servers = NIL;
+
+	if (server_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid server_name: cannot be NULL")));
+
+	if (table_id != InvalidOid)
+		hypertable_servers = list_make1(get_hypertable_server(table_id, server_name));
+	else
+		/* detach server for all hypertables */
+		hypertable_servers =
+			ts_hypertable_server_scan_by_server_name(server_name, CurrentMemoryContext);
+
+	removed =
+		server_detach_hypertable_servers(server_name, hypertable_servers, all_hypertables, force);
 	PG_RETURN_INT32(removed);
 }
 

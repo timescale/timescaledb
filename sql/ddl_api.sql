@@ -190,5 +190,13 @@ CREATE OR REPLACE FUNCTION attach_server(
 AS '@MODULE_PATHNAME@', 'ts_server_attach' LANGUAGE C VOLATILE;
 
 -- Detach a server from a hypertable. NULL hypertable means it will do detach for all
-CREATE OR REPLACE FUNCTION detach_server(server_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+CREATE OR REPLACE FUNCTION detach_server(server_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_server_detach' LANGUAGE C VOLATILE;
+
+-- Block new chunks on a server. NULL hypertable means it will block chunks for all hypertables 
+CREATE OR REPLACE FUNCTION block_new_chunks_on_server(server_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_server_block_new_chunks' LANGUAGE C VOLATILE;
+
+-- Allow new chunks on a server. NULL hypertable means it will allow chunks for all hypertables 
+CREATE OR REPLACE FUNCTION allow_new_chunks_on_server(server_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_server_allow_new_chunks' LANGUAGE C VOLATILE;

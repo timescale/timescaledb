@@ -15,7 +15,7 @@
 
 static void
 hypertable_server_insert_relation(Relation rel, int32 hypertable_id, int32 server_hypertable_id,
-								  Name server_name)
+								  Name server_name, bool block_chunks)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_hypertable_server];
@@ -25,6 +25,7 @@ hypertable_server_insert_relation(Relation rel, int32 hypertable_id, int32 serve
 	values[AttrNumberGetAttrOffset(Anum_hypertable_server_hypertable_id)] =
 		Int32GetDatum(hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_name)] = NameGetDatum(server_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_server_block_chunks)] = block_chunks;
 
 	if (server_hypertable_id > 0)
 		values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_hypertable_id)] =
@@ -53,7 +54,8 @@ ts_hypertable_server_insert_multi(List *hypertable_servers)
 		hypertable_server_insert_relation(rel,
 										  server->fd.hypertable_id,
 										  server->fd.server_hypertable_id,
-										  &server->fd.server_name);
+										  &server->fd.server_name,
+										  server->fd.block_chunks);
 	}
 
 	heap_close(rel, RowExclusiveLock);
@@ -93,6 +95,27 @@ hypertable_server_tuple_delete(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
+static ScanTupleResult
+hypertable_server_tuple_update(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+	HypertableServer *update = data;
+	HeapTuple tuple = heap_copytuple(ti->tuple);
+	FormData_hypertable_server *form = (FormData_hypertable_server *) GETSTRUCT(tuple);
+
+	Assert(form->hypertable_id == update->fd.hypertable_id);
+	Assert(strcmp(NameStr(form->server_name), NameStr(update->fd.server_name)) == 0);
+
+	form->server_hypertable_id = update->fd.server_hypertable_id;
+	form->block_chunks = update->fd.block_chunks;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_update(ti->scanrel, tuple);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return SCAN_DONE;
+}
+
 static HypertableServer *
 hypertable_server_create_from_tuple(TupleInfo *ti)
 {
@@ -126,6 +149,8 @@ hypertable_server_create_from_tuple(TupleInfo *ti)
 		hypertable_server->fd.server_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_hypertable_id)]);
 
+	hypertable_server->fd.block_chunks =
+		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_server_block_chunks)]);
 	hypertable_server->foreign_server_oid = foreign_server->serverid;
 	MemoryContextSwitchTo(old);
 
@@ -276,4 +301,17 @@ ts_hypertable_server_scan_by_server_name(const char *server_name, MemoryContext 
 										 AccessShareLock,
 										 mctx);
 	return hypertable_servers;
+}
+
+TSDLLEXPORT int
+ts_hypertable_server_update(HypertableServer *hypertable_server)
+{
+	return hypertable_server_scan_by_hypertable_id_and_servername(hypertable_server->fd
+																	  .hypertable_id,
+																  NameStr(hypertable_server->fd
+																			  .server_name),
+																  hypertable_server_tuple_update,
+																  hypertable_server,
+																  RowExclusiveLock,
+																  CurrentMemoryContext);
 }

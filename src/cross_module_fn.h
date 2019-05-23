@@ -83,6 +83,7 @@ typedef struct CrossModuleFunctions
 	Datum (*attach_server)(PG_FUNCTION_ARGS);
 	Datum (*server_ping)(PG_FUNCTION_ARGS);
 	Datum (*detach_server)(PG_FUNCTION_ARGS);
+	Datum (*server_set_block_new_chunks)(PG_FUNCTION_ARGS, bool block);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
 	List *(*get_servername_list)(void);

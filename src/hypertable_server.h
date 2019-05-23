@@ -24,5 +24,6 @@ extern TSDLLEXPORT void ts_hypertable_server_insert_multi(List *hypertable_serve
 extern TSDLLEXPORT int
 ts_hypertable_server_delete_by_servername_and_hypertable_id(const char *servername,
 															int32 hypertable_id);
+extern TSDLLEXPORT int ts_hypertable_server_update(HypertableServer *hypertable_server);
 
 #endif /* TIMESCALEDB_HYPERTABLE_SERVER_H */

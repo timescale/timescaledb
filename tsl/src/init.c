@@ -138,6 +138,13 @@ error_distributed_copy_not_supported(const CopyStmt *stmt, uint64 *processed, Hy
 	pg_unreachable();
 }
 
+static Datum
+error_server_set_block_new_chunks_not_supported(PG_FUNCTION_ARGS, bool block)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
 #endif /* PG96 */
 
 /*
@@ -185,6 +192,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.add_server = error_not_supported_default_fn,
 	.delete_server = error_not_supported_default_fn,
 	.attach_server = error_not_supported_default_fn,
+	.detach_server = error_not_supported_default_fn,
+	.server_set_block_new_chunks = error_server_set_block_new_chunks_not_supported,
 	.show_chunk = error_not_supported_default_fn,
 	.create_chunk = error_not_supported_default_fn,
 	.create_chunk_on_servers = error_create_chunk_on_servers_not_supported,
@@ -208,6 +217,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.attach_server = server_attach,
 	.server_ping = server_ping,
 	.detach_server = server_detach,
+	.server_set_block_new_chunks = server_set_block_new_chunks,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
 	.create_chunk_on_servers = chunk_api_create_on_servers,

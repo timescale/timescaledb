@@ -29,7 +29,7 @@
 
 static List *
 server_append(List *servers, int32 hypertable_id, const char *servername,
-			  int32 server_hypertable_id)
+			  int32 server_hypertable_id, bool block_chunks)
 {
 	ForeignServer *server = GetForeignServerByName(servername, false);
 	HypertableServer *hs = palloc0(sizeof(HypertableServer));
@@ -42,6 +42,7 @@ server_append(List *servers, int32 hypertable_id, const char *servername,
 	namestrcpy(&hs->fd.server_name, servername);
 	hs->fd.server_hypertable_id = server_hypertable_id;
 	hs->foreign_server_oid = server->serverid;
+	hs->fd.block_chunks = block_chunks;
 
 	return lappend(servers, hs);
 }
@@ -108,7 +109,7 @@ hypertable_assign_servers(int32 hypertable_id, List *servers)
 	forboth (lc, servers, id_cell, remote_ids)
 	{
 		assigned_servers =
-			server_append(assigned_servers, hypertable_id, lfirst(lc), lfirst_int(id_cell));
+			server_append(assigned_servers, hypertable_id, lfirst(lc), lfirst_int(id_cell), false);
 	}
 
 	ts_hypertable_server_insert_multi(assigned_servers);

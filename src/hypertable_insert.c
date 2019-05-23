@@ -358,7 +358,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	Path *path = &mtpath->path;
 	Cache *hcache = ts_hypertable_cache_pin();
-	ListCell *lc, *lc_path, *lc_rel;
+	ListCell *lc_path, *lc_rel;
 	List *subpaths = NIL;
 	Bitmapset *server_dispatch_plans = NULL;
 	Hypertable *ht = NULL;
@@ -414,15 +414,9 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->cpath.custom_paths = list_make1(mtpath);
 	hipath->cpath.methods = &hypertable_insert_path_methods;
 	hipath->server_dispatch_plans = server_dispatch_plans;
+	hipath->serveroids = ts_hypertable_get_available_server_oids(ht);
 	path = &hipath->cpath.path;
 	mtpath->subpaths = subpaths;
-
-	foreach (lc, ht->servers)
-	{
-		HypertableServer *server = lfirst(lc);
-
-		hipath->serveroids = lappend_oid(hipath->serveroids, server->foreign_server_oid);
-	}
 
 	return path;
 }

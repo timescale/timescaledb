@@ -279,11 +279,11 @@ replication_factor
 
 -- All servers should be added.
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             1 |                    1 | server_1
-             1 |                    1 | server_2
-             1 |                    1 | server_4
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             1 |                    1 | server_1    | f
+             1 |                    1 | server_2    | f
+             1 |                    1 | server_4    | f
 (3 rows)
 
 -- Create one chunk
@@ -298,8 +298,8 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 DROP TABLE disttable;
 -- server mappings should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -358,10 +358,10 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             3 |                    2 | server_2
-             3 |                    2 | server_4
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             3 |                    2 | server_2    | f
+             3 |                    2 | server_4    | f
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -431,9 +431,9 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             3 |                    2 | server_4
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             3 |                    2 | server_4    | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -451,8 +451,8 @@ SELECT * FROM test.show_subtables('disttable');
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -473,9 +473,9 @@ SELECT * FROM attach_server('disttable', 'server_1');
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             3 |                    2 | server_1
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             3 |                    2 | server_1    | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -551,8 +551,8 @@ SELECT * FROM test.show_subtables('disttable');
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -647,11 +647,11 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             6 |                    1 | server_1
-             6 |                    1 | server_2
-             6 |                    1 | server_3
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_1    | f
+             6 |                    1 | server_2    | f
+             6 |                    1 | server_3    | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
@@ -676,14 +676,156 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE TABLE devices(device int, name text);
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             6 |                    1 | server_1
-             6 |                    1 | server_2
-             6 |                    1 | server_3
-             7 |                    2 | server_1
-             7 |                    2 | server_2
-             7 |                    2 | server_3
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_1    | f
+             6 |                    1 | server_2    | f
+             6 |                    1 | server_3    | f
+             7 |                    2 | server_1    | f
+             7 |                    2 | server_2    | f
+             7 |                    2 | server_3    | f
+(6 rows)
+
+-- Block one server for specific hypertable
+SELECT * FROM block_new_chunks_on_server('server_1', 'disttable');
+ block_new_chunks_on_server 
+----------------------------
+                          1
+(1 row)
+
+-- Block one server for all hypertables
+SELECT * FROM block_new_chunks_on_server('server_1');
+NOTICE:  new chunks already blocked on server "server_1" for hypertable "disttable"
+ block_new_chunks_on_server 
+----------------------------
+                          1
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_2    | f
+             6 |                    1 | server_3    | f
+             7 |                    2 | server_2    | f
+             7 |                    2 | server_3    | f
+             6 |                    1 | server_1    | t
+             7 |                    2 | server_1    | t
+(6 rows)
+
+-- insert more data 
+INSERT INTO disttable VALUES
+       ('2019-08-02 10:45', 1, 14.4),
+       ('2019-08-15 10:45', 4, 14.9),
+       ('2019-08-26 10:45', 8, 17.6);
+-- no new chunks on server_1
+SELECT * FROM _timescaledb_catalog.chunk_server;
+ chunk_id | server_chunk_id | server_name 
+----------+-----------------+-------------
+        5 |               1 | server_1
+        5 |               1 | server_2
+        6 |               2 | server_2
+        6 |               1 | server_3
+        7 |               2 | server_3
+        7 |               2 | server_1
+        8 |               3 | server_3
+        8 |               3 | server_2
+        9 |               4 | server_2
+        9 |               4 | server_3
+       10 |               5 | server_3
+       10 |               5 | server_2
+(12 rows)
+
+-- some ERROR cases
+\set ON_ERROR_STOP 0
+-- Will error due to under-replication
+SELECT * FROM block_new_chunks_on_server('server_2');
+ERROR:  blocking new chunks on server "server_2" risks making new data for hypertable "disttable" under-replicated
+-- can't block/allow non-existing server
+SELECT * FROM block_new_chunks_on_server('server_12345', 'disttable');
+ERROR:  server "server_12345" is not attached to hypertable "disttable"
+SELECT * FROM allow_new_chunks_on_server('server_12345', 'disttable');
+ERROR:  server "server_12345" is not attached to hypertable "disttable"
+-- NULL server
+SELECT * FROM block_new_chunks_on_server(NULL, 'disttable');
+ERROR:  invalid server_name: cannot be NULL
+SELECT * FROM allow_new_chunks_on_server(NULL, 'disttable');
+ERROR:  invalid server_name: cannot be NULL
+-- can't block/allow on non hypertable
+SELECT * FROM block_new_chunks_on_server('server_1', 'devices');
+ERROR:  relation "devices" is not a hypertable
+SELECT * FROM allow_new_chunks_on_server('server_1', 'devices');
+ERROR:  relation "devices" is not a hypertable
+\set ON_ERROR_STOP 1
+-- Force block all servers
+SELECT * FROM block_new_chunks_on_server('server_2', force => true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on server "server_2"
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on server "server_2"
+ block_new_chunks_on_server 
+----------------------------
+                          2
+(1 row)
+
+SELECT * FROM block_new_chunks_on_server('server_1', force => true);
+NOTICE:  new chunks already blocked on server "server_1" for hypertable "disttable"
+NOTICE:  new chunks already blocked on server "server_1" for hypertable "disttable_2"
+ block_new_chunks_on_server 
+----------------------------
+                          0
+(1 row)
+
+SELECT * FROM block_new_chunks_on_server('server_3', force => true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on server "server_3"
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on server "server_3"
+ block_new_chunks_on_server 
+----------------------------
+                          2
+(1 row)
+
+-- All servers are blocked
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_1    | t
+             7 |                    2 | server_1    | t
+             6 |                    1 | server_2    | t
+             7 |                    2 | server_2    | t
+             6 |                    1 | server_3    | t
+             7 |                    2 | server_3    | t
+(6 rows)
+
+\set ON_ERROR_STOP 0
+-- insert should fail b/c all servers are blocked
+INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
+ERROR:  no available servers (detached or blocked for new chunks) for hypertable "disttable"
+\set ON_ERROR_STOP 1
+-- unblock serves for all hypertables
+SELECT * FROM allow_new_chunks_on_server('server_1');
+ allow_new_chunks_on_server 
+----------------------------
+                          2
+(1 row)
+
+SELECT * FROM allow_new_chunks_on_server('server_2');
+ allow_new_chunks_on_server 
+----------------------------
+                          2
+(1 row)
+
+SELECT * FROM allow_new_chunks_on_server('server_3');
+ allow_new_chunks_on_server 
+----------------------------
+                          2
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_1    | f
+             7 |                    2 | server_1    | f
+             6 |                    1 | server_2    | f
+             7 |                    2 | server_2    | f
+             6 |                    1 | server_3    | f
+             7 |                    2 | server_3    | f
 (6 rows)
 
 -- Detach should work b/c disttable_2 has no data
@@ -708,11 +850,19 @@ SELECT * FROM detach_server('server_2', 'disttable_2');
 ERROR:  server "server_2" is not attached to hypertable "disttable_2"
 -- can't detach b/c of replication factor for disttable_2
 SELECT * FROM detach_server('server_3', 'disttable_2');
-ERROR:  detaching server "server_3" risks making hypertable "disttable_2" under-replicated
+ERROR:  detaching server "server_3" risks making new data for hypertable "disttable_2" under-replicated
 -- can't detach non hypertable
 SELECT * FROM detach_server('server_3', 'devices');
 ERROR:  relation "devices" is not a hypertable
 \set ON_ERROR_STOP 1
+-- force detach server to become under-replicated for new data
+SELECT * FROM detach_server('server_3', 'disttable_2', true);
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to detaching server "server_3"
+ detach_server 
+---------------
+             1
+(1 row)
+
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 -- Let's add more servers
@@ -751,6 +901,10 @@ NOTICE:  adding not-null constraint to column "time"
 -- error due to missing permissions
 SELECT * FROM detach_server('server_4', 'disttable_3');
 ERROR:  permission denied for hypertable "disttable_3"
+SELECT * FROM block_new_chunks_on_server('server_4', 'disttable_3');
+ERROR:  permission denied for hypertable "disttable_3"
+SELECT * FROM allow_new_chunks_on_server('server_4', 'disttable_3');
+ERROR:  permission denied for hypertable "disttable_3"
 \set ON_ERROR_STOP 1
 -- detach table(s) where user has permissions, otherwise show NOTICE
 SELECT * FROM detach_server('server_4');
@@ -770,14 +924,14 @@ NOTICE:  drop cascades to 2 other objects
 (1 row)
 
 SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
  delete_server 
 ---------------
  t
 (1 row)
 
 SELECT * FROM delete_server('server_3', cascade => true);
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 4 other objects
  delete_server 
 ---------------
  t

@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_server (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
     server_hypertable_id   INTEGER NULL,
     server_name            NAME NOT NULL,
+    block_chunks           BOOLEAN NOT NULL,
     UNIQUE (server_hypertable_id, server_name),
     UNIQUE (hypertable_id, server_name)
 );
