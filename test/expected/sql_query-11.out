@@ -233,8 +233,8 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
 
 --TODO: time transform doesn't work
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
  Limit
    Output: ((_hyper_1_1_chunk."timeCustom" / 10)), (min(_hyper_1_1_chunk.series_0))
    ->  Sort
@@ -242,21 +242,23 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBL
          Sort Key: ((_hyper_1_1_chunk."timeCustom" / 10)) DESC NULLS LAST
          ->  HashAggregate
                Output: ((_hyper_1_1_chunk."timeCustom" / 10)), min(_hyper_1_1_chunk.series_0)
-               Group Key: ((_hyper_1_1_chunk."timeCustom" / 10))
-               ->  Append
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: (_hyper_1_1_chunk."timeCustom" / 10), _hyper_1_1_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: (_hyper_1_2_chunk."timeCustom" / 10), _hyper_1_2_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: (_hyper_1_3_chunk."timeCustom" / 10), _hyper_1_3_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: (_hyper_1_4_chunk."timeCustom" / 10), _hyper_1_4_chunk.series_0
-(17 rows)
+               Group Key: (_hyper_1_1_chunk."timeCustom" / 10)
+               ->  Result
+                     Output: (_hyper_1_1_chunk."timeCustom" / 10), _hyper_1_1_chunk.series_0
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                                 Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                                 Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+(19 rows)
 
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Limit
    Output: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)), (min(_hyper_1_1_chunk.series_0))
    ->  Sort
@@ -264,15 +266,17 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBL
          Sort Key: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)) DESC NULLS LAST
          ->  HashAggregate
                Output: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)), min(_hyper_1_1_chunk.series_0)
-               Group Key: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint))
-               ->  Append
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: (_hyper_1_1_chunk."timeCustom" % '10'::bigint), _hyper_1_1_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: (_hyper_1_2_chunk."timeCustom" % '10'::bigint), _hyper_1_2_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: (_hyper_1_3_chunk."timeCustom" % '10'::bigint), _hyper_1_3_chunk.series_0
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: (_hyper_1_4_chunk."timeCustom" % '10'::bigint), _hyper_1_4_chunk.series_0
-(17 rows)
+               Group Key: (_hyper_1_1_chunk."timeCustom" % '10'::bigint)
+               ->  Result
+                     Output: (_hyper_1_1_chunk."timeCustom" % '10'::bigint), _hyper_1_1_chunk.series_0
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                                 Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                                 Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+(19 rows)
 

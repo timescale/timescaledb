@@ -30,12 +30,13 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: (time_bucket(10, _hyper_1_1_chunk."time"))
-   ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
-(3 rows)
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Result
+   ->  Merge Append
+         Sort Key: (time_bucket(10, _hyper_1_1_chunk."time"))
+         ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
+(4 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
@@ -52,9 +53,10 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
 ------------------------------------------------------------------------------------
  Sort
    Sort Key: (time_bucket(10, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device_id
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-(4 rows)
+   ->  Result
+         ->  Append
+               ->  Seq Scan on _hyper_1_1_chunk
+(5 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
@@ -67,10 +69,11 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
 
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, (time_bucket(10, _hyper_1_1_chunk."time"))
-   ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
-(3 rows)
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Result
+   ->  Merge Append
+         Sort Key: _hyper_1_1_chunk.device_id, (time_bucket(10, _hyper_1_1_chunk."time"))
+         ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
+(4 rows)
 
