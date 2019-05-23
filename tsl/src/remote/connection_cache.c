@@ -77,11 +77,8 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * because PGconn allocation happens using malloc. Which is why calling
 	 * remote_connection_close at cleanup is critical.
 	 */
-	entry->conn = remote_connection_open(server->servername,
-										 server->options,
-										 q->user_mapping->options,
-										 cache->hctl.hcxt,
-										 true);
+	entry->conn =
+		remote_connection_open(server->servername, server->options, q->user_mapping->options, true);
 	return entry;
 }
 

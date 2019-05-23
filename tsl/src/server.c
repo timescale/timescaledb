@@ -254,7 +254,7 @@ server_bootstrap_database(const char *servername, const char *host, int32 port, 
 
 	server_options =
 		create_server_options(host, port, bootstrap_database, bootstrap_user, bootstrap_password);
-	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
+	conn = remote_connection_open(servername, server_options, NULL, false);
 
 	PG_TRY();
 	{
@@ -305,7 +305,7 @@ server_bootstrap_extension(const char *servername, const char *host, int32 port,
 	List *server_options;
 
 	server_options = create_server_options(host, port, dbname, user, user_password);
-	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
+	conn = remote_connection_open(servername, server_options, NULL, false);
 
 	PG_TRY();
 	{
@@ -371,7 +371,7 @@ add_distributed_id_to_backend(const char *servername, const char *host, int32 po
 	List *server_options;
 
 	server_options = create_server_options(host, port, dbname, user, user_password);
-	conn = remote_connection_open(servername, server_options, NULL, CurrentMemoryContext, false);
+	conn = remote_connection_open(servername, server_options, NULL, false);
 
 	PG_TRY();
 	{
@@ -413,11 +413,7 @@ remove_distributed_id_from_backend(const char *servername)
 		um = NULL;
 	}
 	PG_END_TRY();
-	conn = remote_connection_open(servername,
-								  fs->options,
-								  um ? um->options : NULL,
-								  CurrentMemoryContext,
-								  true);
+	conn = remote_connection_open(servername, fs->options, um ? um->options : NULL, true);
 
 	PG_TRY();
 	{
