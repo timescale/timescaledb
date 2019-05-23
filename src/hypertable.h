@@ -135,6 +135,8 @@ extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable
 extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
 extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_serverids_list(Hypertable *ht);
+extern TSDLLEXPORT List *ts_hypertable_get_available_servers(Hypertable *ht, bool error);
+extern TSDLLEXPORT List *ts_hypertable_get_available_server_oids(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

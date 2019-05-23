@@ -834,19 +834,7 @@ chunk_assign_servers(Chunk *chunk, Hypertable *ht)
 	Assert(chunk->cube != NULL);
 
 	htservers = ts_hypertable_assign_chunk_servers(ht, chunk->cube);
-
 	Assert(htservers != NIL);
-	Assert(list_length(htservers) <= ht->fd.replication_factor);
-
-	if (list_length(htservers) < ht->fd.replication_factor)
-		ereport(WARNING,
-				(errcode(ERRCODE_WARNING),
-				 errmsg("under-replicated chunk %u, lacks %d server(s)",
-						chunk->fd.id,
-						ht->fd.replication_factor - list_length(htservers)),
-				 errhint("Make sure hypertable \"%s\" has at least %d assigned server(s).",
-						 get_rel_name(ht->main_table_relid),
-						 ht->fd.replication_factor)));
 
 	foreach (lc, htservers)
 	{

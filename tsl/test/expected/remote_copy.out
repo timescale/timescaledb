@@ -191,11 +191,11 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 (32 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             1 |                    1 | server_1
-             1 |                    1 | server_2
-             1 |                    1 | server_3
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             1 |                    1 | server_1    | f
+             1 |                    1 | server_2    | f
+             1 |                    1 | server_3    | f
 (3 rows)
 
 select * from show_chunks('"+ri(k33_'')"');

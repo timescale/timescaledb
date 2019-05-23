@@ -323,6 +323,58 @@ CREATE TABLE devices(device int, name text);
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 
+-- Block one server for specific hypertable
+SELECT * FROM block_new_chunks_on_server('server_1', 'disttable');
+
+-- Block one server for all hypertables
+SELECT * FROM block_new_chunks_on_server('server_1');
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- insert more data 
+INSERT INTO disttable VALUES
+       ('2019-08-02 10:45', 1, 14.4),
+       ('2019-08-15 10:45', 4, 14.9),
+       ('2019-08-26 10:45', 8, 17.6);
+
+-- no new chunks on server_1
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
+-- some ERROR cases
+\set ON_ERROR_STOP 0
+-- Will error due to under-replication
+SELECT * FROM block_new_chunks_on_server('server_2');
+-- can't block/allow non-existing server
+SELECT * FROM block_new_chunks_on_server('server_12345', 'disttable');
+SELECT * FROM allow_new_chunks_on_server('server_12345', 'disttable');
+-- NULL server
+SELECT * FROM block_new_chunks_on_server(NULL, 'disttable');
+SELECT * FROM allow_new_chunks_on_server(NULL, 'disttable');
+-- can't block/allow on non hypertable
+SELECT * FROM block_new_chunks_on_server('server_1', 'devices');
+SELECT * FROM allow_new_chunks_on_server('server_1', 'devices');
+\set ON_ERROR_STOP 1
+
+-- Force block all servers
+SELECT * FROM block_new_chunks_on_server('server_2', force => true);
+SELECT * FROM block_new_chunks_on_server('server_1', force => true);
+SELECT * FROM block_new_chunks_on_server('server_3', force => true);
+
+-- All servers are blocked
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+\set ON_ERROR_STOP 0
+-- insert should fail b/c all servers are blocked
+INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
+\set ON_ERROR_STOP 1
+
+-- unblock serves for all hypertables
+SELECT * FROM allow_new_chunks_on_server('server_1');
+SELECT * FROM allow_new_chunks_on_server('server_2');
+SELECT * FROM allow_new_chunks_on_server('server_3');
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
 -- Detach should work b/c disttable_2 has no data
 SELECT * FROM detach_server('server_2', 'disttable_2');
 
@@ -340,6 +392,9 @@ SELECT * FROM detach_server('server_3', 'disttable_2');
 -- can't detach non hypertable
 SELECT * FROM detach_server('server_3', 'devices');
 \set ON_ERROR_STOP 1
+
+-- force detach server to become under-replicated for new data
+SELECT * FROM detach_server('server_3', 'disttable_2', true);
 
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
@@ -361,6 +416,8 @@ SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_f
 \set ON_ERROR_STOP 0
 -- error due to missing permissions
 SELECT * FROM detach_server('server_4', 'disttable_3');
+SELECT * FROM block_new_chunks_on_server('server_4', 'disttable_3');
+SELECT * FROM allow_new_chunks_on_server('server_4', 'disttable_3');
 \set ON_ERROR_STOP 1
 
 -- detach table(s) where user has permissions, otherwise show NOTICE
