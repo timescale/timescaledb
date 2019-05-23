@@ -31,6 +31,9 @@
 #if !(PG96 || PG10)
 #include <partitioning/partbounds.h>
 #endif
+#if !(PG96 || PG10)
+#include <optimizer/cost.h>
+#endif
 
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
@@ -806,7 +809,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
-	build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
+	if (enable_partitionwise_aggregate)
+		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
 #endif
 
 	foreach (l, inh_oids)
