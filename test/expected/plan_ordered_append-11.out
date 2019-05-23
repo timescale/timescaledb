@@ -606,30 +606,32 @@ ORDER BY time ASC LIMIT 1;
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY 1 LIMIT 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
-         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(6 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+(7 rows)
 
 -- test query with order by time_bucket (should not use ordered append)
 :PREFIX SELECT
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY time_bucket('1d',time) LIMIT 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
-         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(6 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+(7 rows)
 
 -- test query with now() should result in ordered append with constraint aware append
 :PREFIX SELECT * FROM ordered_append WHERE time < now() + '1 month'
