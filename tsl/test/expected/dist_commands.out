@@ -162,7 +162,7 @@ SELECT is_frontend_session();
 \set ON_ERROR_STOP 0
 SELECT * FROM test.remote_exec('{server1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
 NOTICE:  [server1]:  SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec')
-ERROR:  remote connection error: distributed peer ID already set
+ERROR:  [server1]: distributed peer ID already set
 \set ON_ERROR_STOP 1
 -- Repeat is_frontend_session() test again, but this time using connections openned from frontend
 -- to backend nodes. Must return true.
