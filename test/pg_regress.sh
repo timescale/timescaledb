@@ -11,8 +11,10 @@ EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 PG_REGRESS=${PG_REGRESS:-pg_regress}
 PG_REGRESS_DIFF_OPTS=-u
 TEST_SCHEDULE=${TEST_SCHEDULE:-}
+TEMP_SCHEDULE=${CURRENT_DIR}/temp_schedule
 TESTS=${TESTS:-}
 IGNORES=${IGNORES:-}
+SKIPS=${SKIPS:-}
 
 contains() {
     # a list contains a value foo if the regex ".* foo .*" holds true
@@ -22,6 +24,7 @@ contains() {
 
 echo "TESTS ${TESTS}"
 echo "IGNORES ${IGNORES}"
+echo "SKIPS ${SKIPS}"
 
 if [[ -z ${TESTS} ]]; then
     if [[ -z ${TEST_SCHEDULE} ]]; then
@@ -29,11 +32,11 @@ if [[ -z ${TESTS} ]]; then
             t=${t##${EXE_DIR}/sql/}
             t=${t%.sql}
 
-            if ! contains "${IGNORES}" "${t}"; then
+            if ! contains "${SKIPS}" "${t}"; then
                 TESTS="${TESTS} ${t}"
             fi
         done
-    elif [[ -n ${IGNORES} ]]; then
+    elif [[ -n ${IGNORES} ]] || [[ -n ${SKIPS} ]]; then
         # get the tests from the test schedule, but ignore our IGNORES
         while read t; do
             if [[ t =~ ignore:* ]]; then
@@ -44,7 +47,7 @@ if [[ -z ${TESTS} ]]; then
             t=${t##test: }
             ## check each individual test in test group to see if it should be ignored
             for el in ${t[@]}; do
-                if ! contains "${IGNORES}" "${el}"; then
+                if ! contains "${SKIPS}" "${el}"; then
                     TESTS="${TESTS} ${el}"
                 fi
             done
@@ -63,7 +66,7 @@ else
         t=${t##${EXE_DIR}/sql/}
         t=${t%.sql}
 
-        if contains "${FILTER}" "${t}" && ! contains "${IGNORES}" "${t}"; then
+        if contains "${FILTER}" "${t}" && ! contains "${SKIPS}" "${t}"; then
             TESTS="${TESTS} $t"
         fi
     done
@@ -92,4 +95,17 @@ mkdir -p ${EXE_DIR}/sql/dump
 
 export PG_REGRESS_DIFF_OPTS
 
-${PG_REGRESS} $@ ${PG_REGRESS_OPTS} ${TESTS}
+touch ${TEMP_SCHEDULE}
+rm ${TEMP_SCHEDULE}
+touch ${TEMP_SCHEDULE}
+
+for t in ${IGNORES}; do
+    echo "ignore: ${t}" >> ${TEMP_SCHEDULE}
+done
+
+for t in ${TESTS}; do
+    echo "test: ${t}" >> ${TEMP_SCHEDULE}
+done
+
+PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${TEMP_SCHEDULE}"
+${PG_REGRESS} $@ ${PG_REGRESS_OPTS}

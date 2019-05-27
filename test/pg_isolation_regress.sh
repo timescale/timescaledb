@@ -11,8 +11,10 @@ EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 SPECS_DIR=${SPECS_DIR:-${EXE_DIR}/isolation/specs}
 PG_ISOLATION_REGRESS=${PG_ISOLATION_REGRESS:-pg_isolation_regress}
 ISOLATION_TEST_SCHEDULE=${ISOLATION_TEST_SCHEDULE:-}
+TEMP_SCHEDULE=${CURRENT_DIR}/temp_schedule
 TESTS=${TESTS:-}
 IGNORES=${IGNORES:-}
+SKIPS=${SKIPS:-}
 
 contains() {
     # a list contains a value foo if the regex ".* foo .*" holds true
@@ -22,6 +24,7 @@ contains() {
 
 echo "TESTS ${TESTS}"
 echo "IGNORES ${IGNORES}"
+echo "SKIPS ${SKIPS}"
 
 if [[ -z ${TESTS} ]]; then
     if [[ -z ${ISOLATION_TEST_SCHEDULE} ]]; then
@@ -29,24 +32,26 @@ if [[ -z ${TESTS} ]]; then
             t=${t##${SPECS_DIR}/}
             t=${t%.spec}
 
-            if ! contains "${IGNORES}" "${t}"; then
+            if ! contains "${SKIPS}" "${t}"; then
                 TESTS="${TESTS} ${t}"
             fi
         done
-    elif [[ -n ${IGNORES} ]]; then
+    elif [[ -n ${IGNORES} ]] || [[ -n ${SKIPS} ]]; then
         # get the tests from the test schedule, but ignore our IGNORES
         while read t; do
             if [[ t =~ ignore:* ]]; then
                 t=${t##ignore:* }
                 IGNORES="${t} ${IGNORES}"
+                # run the test but ignore the result
+                TESTS="${TESTS} ${t}"
                 continue
             fi
             t=${t##test: }
             ## check each individual test in test group to see if it should be ignored
             ## note that now isolation tests are not grouped together and so the for loop
-            ##   will always run once.
+            ## will always run once.
             for el in ${t[@]}; do
-                if ! contains "${IGNORES}" "${el}"; then
+                if ! contains "${SKIPS}" "${el}"; then
                     TESTS="${TESTS} ${el}"
                 fi
             done
@@ -65,7 +70,7 @@ else
         t=${t##${SPECS_DIR}/}
         t=${t%.spec}
 
-        if contains "${FILTER}" "${t}" && ! contains "${IGNORES}" "${t}"; then
+        if contains "${FILTER}" "${t}" && ! contains "${SKIPS}" "${t}"; then
             TESTS="${TESTS} $t"
         fi
     done
@@ -75,4 +80,18 @@ if [[ -z ${TESTS} ]] && [[ -z ${ISOLATION_TEST_SCHEDULE} ]]; then
     exit 0;
 fi
 
-${PG_ISOLATION_REGRESS} $@ ${PG_ISOLATION_REGRESS_OPTS} ${TESTS}
+touch ${TEMP_SCHEDULE}
+rm ${TEMP_SCHEDULE}
+touch ${TEMP_SCHEDULE}
+
+for t in ${IGNORES}; do
+    echo "ignore: ${t}" >> ${TEMP_SCHEDULE}
+done
+
+for t in ${TESTS}; do
+    echo "test: ${t}" >> ${TEMP_SCHEDULE}
+done
+
+PG_ISOLATION_REGRESS_OPTS="${PG_ISOLATION_REGRESS_OPTS}  --schedule=${TEMP_SCHEDULE}"
+
+${PG_ISOLATION_REGRESS} $@ ${PG_ISOLATION_REGRESS_OPTS}
