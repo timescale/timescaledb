@@ -379,6 +379,22 @@ LEFT OUTER JOIN LATERAL(
 -- should use 2 ChunkAppend
 :PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time ORDER BY o1.time LIMIT 100;
 
+-- test JOIN on time column with USING
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 USING(time) ORDER BY o1.time LIMIT 100;
+
+-- test NATURAL JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 NATURAL INNER JOIN ordered_append o2 ORDER BY o1.time LIMIT 100;
+
+-- test LEFT JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 LEFT JOIN ordered_append o2 ON o1.time=o2.time ORDER BY o1.time LIMIT 100;
+
+-- test RIGHT JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 RIGHT JOIN ordered_append o2 ON o1.time=o2.time ORDER BY o2.time LIMIT 100;
+
 -- test JOIN on time column with ON clause expression order switched
 -- should use 2 ChunkAppend
 :PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o2.time = o1.time ORDER BY o1.time LIMIT 100;

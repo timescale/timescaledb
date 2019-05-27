@@ -570,7 +570,7 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 
 static bool
 should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *join_conditions,
-					bool *reverse)
+					int *order_attno, bool *reverse)
 {
 	/* check if optimizations are enabled */
 	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append ||
@@ -584,7 +584,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	if (root->parse->sortClause == NIL)
 		return false;
 
-	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, reverse);
+	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
 }
 
 bool
@@ -659,6 +659,8 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
  * takes precedence.
  *
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
+ * To make verifying pathkeys easier in set_rel_pathlist the attno of the column ordered by
+ * is
  * If the hypertable uses space partitioning the nested oids are stored in nested_oids
  * on rel->fdw_private when appends are ordered.
  */
@@ -666,6 +668,7 @@ static List *
 get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
 	bool reverse;
+	int order_attno;
 
 	if (ctx->chunk_exclusion_func == NULL)
 	{
@@ -678,21 +681,29 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		 */
 		ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
 
-		if (should_order_append(root, rel, ht, ctx->join_conditions, &reverse))
+		/*
+		 * If fdw_private has not been setup by caller there is no point checking
+		 * for ordered append as we can't pass the required metadata in fdw_private
+		 * to signal that this is safe to transform in ordered append plan in
+		 * set_rel_pathlist.
+		 */
+		if (rel->fdw_private != NULL &&
+			should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
 		{
+			TimescaleDBPrivate *private = (TimescaleDBPrivate *) rel->fdw_private;
 			List **nested_oids = NULL;
 
-			if (rel->fdw_private != NULL)
-			{
-				((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
+		  private
+			->appends_ordered = true;
+		  private
+			->order_attno = order_attno;
 
-				/*
-				 * for space partitioning we need extra information about the
-				 * time slices of the chunks
-				 */
-				if (ht->space->num_dimensions > 1)
-					nested_oids = &((TimescaleDBPrivate *) rel->fdw_private)->nested_oids;
-			}
+			/*
+			 * for space partitioning we need extra information about the
+			 * time slices of the chunks
+			 */
+			if (ht->space->num_dimensions > 1)
+				nested_oids = &private->nested_oids;
 
 			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
 																	  ht,

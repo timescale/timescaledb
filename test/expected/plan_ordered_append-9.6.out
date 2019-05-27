@@ -1129,14 +1129,13 @@ LEFT OUTER JOIN LATERAL(
          ->  Custom Scan (ChunkAppend) on ordered_append o
                Order: o."time" DESC
                Chunks excluded during startup: 0
-               Chunks excluded during runtime: 3
                ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o_1
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o_2
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o_3
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
-(13 rows)
+(12 rows)
 
 -- test LATERAL with correlated query
 -- only 2nd chunk should be executed
@@ -1154,14 +1153,13 @@ LEFT OUTER JOIN LATERAL(
          ->  Custom Scan (ChunkAppend) on ordered_append o
                Order: o."time"
                Chunks excluded during startup: 0
-               Chunks excluded during runtime: 3
                ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o_1
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o_2
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o_3
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
-(13 rows)
+(12 rows)
 
 -- test startup and runtime exclusion together
 :PREFIX SELECT *
@@ -1178,14 +1176,13 @@ LEFT OUTER JOIN LATERAL(
          ->  Custom Scan (ChunkAppend) on ordered_append o
                Order: o."time" DESC
                Chunks excluded during startup: 0
-               Chunks excluded during runtime: 3
                ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o_1
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o_2
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o_3
                      Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
-(13 rows)
+(12 rows)
 
 -- test startup and runtime exclusion together
 -- all chunks should be filtered
@@ -1203,8 +1200,7 @@ LEFT OUTER JOIN LATERAL(
          ->  Custom Scan (ChunkAppend) on ordered_append o
                Order: o."time" DESC
                Chunks excluded during startup: 3
-               Chunks excluded during runtime: 0
-(7 rows)
+(6 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -1283,13 +1279,13 @@ ORDER BY o1.time;
 FROM ordered_append WHERE time = (SELECT max(time) FROM ordered_append) ORDER BY time;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
- Append
+ Custom Scan (ChunkAppend) on ordered_append
    InitPlan 2 (returns $1)
      ->  Result
            InitPlan 1 (returns $0)
              ->  Limit
-                   ->  Custom Scan (ChunkAppend) on ordered_append
-                         Order: ordered_append."time" DESC
+                   ->  Custom Scan (ChunkAppend) on ordered_append ordered_append_1
+                         Order: ordered_append_1."time" DESC
                          ->  Index Only Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1
                                Index Cond: ("time" IS NOT NULL)
                          ->  Index Only Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -1522,6 +1518,91 @@ LEFT OUTER JOIN LATERAL(
                      ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
                      ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
                      ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
+(14 rows)
+
+-- test JOIN on time column with USING
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 USING(time) ORDER BY o1.time LIMIT 100;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Join
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on ordered_append o1
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on ordered_append o2
+                     Order: o2."time"
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
+(14 rows)
+
+-- test NATURAL JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 NATURAL INNER JOIN ordered_append o2 ORDER BY o1.time LIMIT 100;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Join
+         Merge Cond: (o1."time" = o2."time")
+         Join Filter: ((o1.device_id = o2.device_id) AND (o1.value = o2.value))
+         ->  Custom Scan (ChunkAppend) on ordered_append o1
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on ordered_append o2
+                     Order: o2."time"
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
+(15 rows)
+
+-- test LEFT JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 LEFT JOIN ordered_append o2 ON o1.time=o2.time ORDER BY o1.time LIMIT 100;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Left Join
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on ordered_append o1
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on ordered_append o2
+                     Order: o2."time"
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
+(14 rows)
+
+-- test RIGHT JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 RIGHT JOIN ordered_append o2 ON o1.time=o2.time ORDER BY o2.time LIMIT 100;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Merge Left Join
+         Merge Cond: (o2."time" = o1."time")
+         ->  Custom Scan (ChunkAppend) on ordered_append o2
+               Order: o2."time"
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on ordered_append o1
+                     Order: o1."time"
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3
 (14 rows)
 
 -- test JOIN on time column with ON clause expression order switched

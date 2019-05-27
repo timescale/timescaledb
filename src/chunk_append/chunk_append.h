@@ -17,12 +17,14 @@ typedef struct ChunkAppendPath
 	CustomPath cpath;
 	bool startup_exclusion;
 	bool runtime_exclusion;
+	bool pushdown_limit;
 } ChunkAppendPath;
 
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										 Path *subpath, bool ordered, List *nested_oids);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-											  List *join_conditions, bool *reverse);
+											  List *join_conditions, int *order_attno,
+											  bool *reverse);
 
 #endif /* TIMESCALEDB_CHUNK_APPEND_H */

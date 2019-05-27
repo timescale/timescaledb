@@ -172,20 +172,22 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 
 -- test constraint aware append
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
-                      QUERY PLAN                      
-------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Gather
    Workers Planned: 1
    Single Copy: true
    ->  Result
          One-Time Filter: (length(version()) > 0)
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: test
-               Chunks left after exclusion: 2
-               ->  Append
+         ->  Custom Scan (ChunkAppend) on test
+               Chunks excluded during startup: 0
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
                      ->  Seq Scan on _hyper_1_1_chunk
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
                      ->  Seq Scan on _hyper_1_2_chunk
-(11 rows)
+(13 rows)
 
 -- test constraint aware append with parallel aggregation
 SET max_parallel_workers_per_gather = 1;
@@ -198,13 +200,15 @@ EXPLAIN (costs off) SELECT count(*) FROM "test" WHERE length(version()) > 0;
          ->  Partial Aggregate
                ->  Result
                      One-Time Filter: (length(version()) > 0)
-                     ->  Custom Scan (ConstraintAwareAppend)
-                           Hypertable: test
-                           Chunks left after exclusion: 2
-                           ->  Append
+                     ->  Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
+                           ->  Result
+                                 One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
+                           ->  Result
+                                 One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-(12 rows)
+(14 rows)
 
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
   count  
@@ -217,45 +221,39 @@ SET max_parallel_workers_per_gather = 4;
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and
 -- transaction_timestamp() are marked parallel safe
 :PREFIX SELECT i FROM "test" WHERE ts < CURRENT_TIMESTAMP;
-                QUERY PLAN                
-------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: test
-   Chunks left after exclusion: 2
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (ts < now())
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (ts < now())
-(8 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on test
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (ts < now())
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (ts < now())
+(6 rows)
 
 :PREFIX SELECT i FROM "test" WHERE ts < transaction_timestamp();
-                         QUERY PLAN                         
-------------------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Gather
    Workers Planned: 1
    Single Copy: true
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: test
-         Chunks left after exclusion: 2
-         ->  Append
-               ->  Seq Scan on _hyper_1_1_chunk
-                     Filter: (ts < transaction_timestamp())
-               ->  Seq Scan on _hyper_1_2_chunk
-                     Filter: (ts < transaction_timestamp())
-(11 rows)
+   ->  Custom Scan (ChunkAppend) on test
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: (ts < transaction_timestamp())
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: (ts < transaction_timestamp())
+(9 rows)
 
 -- this won't be parallel query because now() is parallel restricted in PG < 12
 :PREFIX SELECT i FROM "test" WHERE ts < now();
-                QUERY PLAN                
-------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: test
-   Chunks left after exclusion: 2
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (ts < now())
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (ts < now())
-(8 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on test
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (ts < now())
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (ts < now())
+(6 rows)
 

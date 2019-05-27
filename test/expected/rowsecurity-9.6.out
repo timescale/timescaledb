@@ -190,7 +190,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
 ----------------------------------------------------------
  Subquery Scan on document
    Filter: f_leak(document.dtitle)
-   ->  Append
+   ->  Custom Scan (ChunkAppend) on document document_1
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
@@ -215,7 +215,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
    Hash Cond: (document.cid = category.cid)
    ->  Subquery Scan on document
          Filter: f_leak(document.dtitle)
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on document document_1
                InitPlan 1 (returns $0)
                  ->  Index Scan using uaccount_pkey on uaccount
                        Index Cond: (pguser = "current_user"())
@@ -299,14 +299,34 @@ NOTICE:  f_leak => great manga
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                        QUERY PLAN                        
-----------------------------------------------------------
+                       QUERY PLAN                       
+--------------------------------------------------------
  Subquery Scan on document
    Filter: f_leak(document.dtitle)
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: document
-         Chunks left after exclusion: 6
-         ->  Append
+   ->  Custom Scan (ChunkAppend) on document document_1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_1_4_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_1_5_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_1_6_chunk
+               Filter: (dauthor = "current_user"())
+(16 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Nested Loop
+   ->  Subquery Scan on document
+         Filter: f_leak(document.dtitle)
+         ->  Custom Scan (ChunkAppend) on document document_1
+               Chunks excluded during startup: 0
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (dauthor = "current_user"())
                ->  Seq Scan on _hyper_1_2_chunk
@@ -319,33 +339,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                      Filter: (dauthor = "current_user"())
                ->  Seq Scan on _hyper_1_6_chunk
                      Filter: (dauthor = "current_user"())
-(18 rows)
-
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                           QUERY PLAN                           
-----------------------------------------------------------------
- Nested Loop
-   ->  Subquery Scan on document
-         Filter: f_leak(document.dtitle)
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: document
-               Chunks left after exclusion: 6
-               ->  Append
-                     ->  Seq Scan on _hyper_1_1_chunk
-                           Filter: (dauthor = "current_user"())
-                     ->  Seq Scan on _hyper_1_2_chunk
-                           Filter: (dauthor = "current_user"())
-                     ->  Seq Scan on _hyper_1_3_chunk
-                           Filter: (dauthor = "current_user"())
-                     ->  Seq Scan on _hyper_1_4_chunk
-                           Filter: (dauthor = "current_user"())
-                     ->  Seq Scan on _hyper_1_5_chunk
-                           Filter: (dauthor = "current_user"())
-                     ->  Seq Scan on _hyper_1_6_chunk
-                           Filter: (dauthor = "current_user"())
    ->  Index Scan using category_pkey on category
          Index Cond: (cid = document.cid)
-(21 rows)
+(19 rows)
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -903,11 +899,11 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                        
-----------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Subquery Scan on hyper_document
    Filter: f_leak(hyper_document.dtitle)
-   ->  Append
+   ->  Custom Scan (ChunkAppend) on hyper_document hyper_document_1
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
@@ -953,11 +949,11 @@ NOTICE:  f_leak => awesome technology book
 (10 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                        
-----------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Subquery Scan on hyper_document
    Filter: f_leak(hyper_document.dtitle)
-   ->  Append
+   ->  Custom Scan (ChunkAppend) on hyper_document hyper_document_1
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
@@ -1066,11 +1062,11 @@ NOTICE:  f_leak => awesome technology book
 (10 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                        
-----------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Subquery Scan on hyper_document
    Filter: f_leak(hyper_document.dtitle)
-   ->  Append
+   ->  Custom Scan (ChunkAppend) on hyper_document hyper_document_1
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
@@ -1128,27 +1124,25 @@ NOTICE:  f_leak => great satire
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                        
-----------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Subquery Scan on hyper_document
    Filter: f_leak(hyper_document.dtitle)
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: hyper_document
-         Chunks left after exclusion: 6
-         ->  Append
-               ->  Seq Scan on _hyper_2_7_chunk
-                     Filter: (dauthor = "current_user"())
-               ->  Seq Scan on _hyper_2_8_chunk
-                     Filter: (dauthor = "current_user"())
-               ->  Seq Scan on _hyper_2_9_chunk
-                     Filter: (dauthor = "current_user"())
-               ->  Seq Scan on _hyper_2_10_chunk
-                     Filter: (dauthor = "current_user"())
-               ->  Seq Scan on _hyper_2_11_chunk
-                     Filter: (dauthor = "current_user"())
-               ->  Seq Scan on _hyper_2_12_chunk
-                     Filter: (dauthor = "current_user"())
-(18 rows)
+   ->  Custom Scan (ChunkAppend) on hyper_document hyper_document_1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_2_7_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_2_8_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: (dauthor = "current_user"())
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: (dauthor = "current_user"())
+(16 rows)
 
 -- database superuser does bypass RLS policy when enabled
 RESET SESSION AUTHORIZATION;
@@ -2835,19 +2829,17 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                QUERY PLAN                 
--------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_46_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_47_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_48_chunk
-               Filter: f_leak(b)
-(10 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_46_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_47_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_48_chunk
+         Filter: f_leak(b)
+(8 rows)
 
 -- Query as view/table owner.  Should return all records.
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -2865,19 +2857,17 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                QUERY PLAN                 
--------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_46_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_47_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_48_chunk
-               Filter: f_leak(b)
-(10 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_46_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_47_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_48_chunk
+         Filter: f_leak(b)
+(8 rows)
 
 DROP VIEW rls_view;
 -- View and Table owners are different.
@@ -3125,16 +3115,14 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y1
-   Chunks left after exclusion: 1
-   ->  Append
-         ->  Index Scan using _hyper_12_54_chunk_y1_a_idx on _hyper_12_54_chunk
-               Index Cond: (a = 1)
-               Filter: f_leak(b)
-(7 rows)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y1
+   Chunks excluded during startup: 0
+   ->  Index Scan using _hyper_12_54_chunk_y1_a_idx on _hyper_12_54_chunk
+         Index Cond: (a = 1)
+         Filter: f_leak(b)
+(5 rows)
 
 DROP VIEW rls_sbv;
 -- Create view as role that does not own table.  RLS should be applied.
@@ -3268,35 +3256,33 @@ NOTICE:  f_leak => abc
 (14 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y2
-   Chunks left after exclusion: 11
-   ->  Append
-         ->  Seq Scan on _hyper_13_55_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_56_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_57_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_58_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_59_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_60_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_61_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_62_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_63_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_64_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_65_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-(26 rows)
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y2
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_13_55_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_56_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_57_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_58_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_59_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_60_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_61_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_62_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_63_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_64_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_65_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+(24 rows)
 
 CREATE TABLE test_qual_pushdown (
     abc text
