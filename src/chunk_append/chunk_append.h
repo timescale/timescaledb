@@ -24,6 +24,6 @@ extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hyp
 										 Path *subpath, bool ordered, List *nested_oids);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-											  bool *reverse);
+											  List *join_conditions, bool *reverse);
 
 #endif /* TIMESCALEDB_CHUNK_APPEND_H */
