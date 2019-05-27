@@ -63,6 +63,7 @@ static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
+static bool contain_param(Node *node);
 
 #define CTE_NAME_HYPERTABLES "hypertable_parent"
 
@@ -199,6 +200,65 @@ should_optimize_append(const Path *path)
 }
 
 static inline bool
+should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered, int order_attno)
+{
+	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append)
+		return false;
+
+	switch (nodeTag(path))
+	{
+		case T_AppendPath:
+			/*
+			 * If there are clauses that have mutable functions, or clauses that reference
+			 * Params this Path might benefit from startup or runtime exclusion
+			 */
+			{
+				ListCell *lc;
+
+				foreach (lc, rel->baserestrictinfo)
+				{
+					RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+					if (contain_mutable_functions((Node *) rinfo->clause) ||
+						contain_param((Node *) rinfo->clause))
+						return true;
+				}
+				return false;
+				break;
+			}
+		case T_MergeAppendPath:
+			/*
+			 * Can we do ordered append
+			 */
+			{
+				PathKey *pk;
+				ListCell *lc;
+
+				if (!ordered || path->pathkeys == NIL)
+					return false;
+
+				pk = linitial_node(PathKey, path->pathkeys);
+
+				/*
+				 * check pathkey is compatible with ordered append ordering
+				 * we created when expanding hypertable
+				 */
+				foreach (lc, pk->pk_eclass->ec_members)
+				{
+					EquivalenceMember *em = lfirst(lc);
+					if (!em->em_is_child && IsA(em->em_expr, Var) &&
+						castNode(Var, em->em_expr)->varattno == order_attno)
+						return true;
+				}
+				return false;
+				break;
+			}
+		default:
+			return false;
+	}
+}
+
+static inline bool
 is_append_child(RelOptInfo *rel, RangeTblEntry *rte)
 {
 	return rel->reloptkind == RELOPT_OTHER_MEMBER_REL && rte->inh == false &&
@@ -283,6 +343,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	{
 		ListCell *lc;
 		bool ordered = false;
+		int order_attno = 0;
 		List *nested_oids = NIL;
 
 		if (rel->fdw_private != NULL)
@@ -290,6 +351,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			TimescaleDBPrivate *private = (TimescaleDBPrivate *) rel->fdw_private;
 
 			ordered = private->appends_ordered;
+			order_attno = private->order_attno;
 			nested_oids = private->nested_oids;
 		}
 
@@ -300,11 +362,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			switch (nodeTag(*pathptr))
 			{
 				case T_AppendPath:
-					if (should_optimize_append(*pathptr))
-						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
-					break;
 				case T_MergeAppendPath:
-					if (ordered)
+					if (should_chunk_append(root, rel, *pathptr, ordered, order_attno))
 						*pathptr = ts_chunk_append_path_create(root,
 															   rel,
 															   ht,
@@ -327,7 +386,14 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			{
 				case T_AppendPath:
 				case T_MergeAppendPath:
-					if (should_optimize_append(*pathptr))
+					if (should_chunk_append(root, rel, *pathptr, ordered, order_attno))
+						*pathptr = ts_chunk_append_path_create(root,
+															   rel,
+															   ht,
+															   *pathptr,
+															   ordered,
+															   nested_oids);
+					else if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
@@ -563,6 +629,24 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 	}
+}
+
+static bool
+contain_param_exec_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Param))
+		return true;
+
+	return expression_tree_walker(node, contain_param_exec_walker, context);
+}
+
+static bool
+contain_param(Node *node)
+{
+	return contain_param_exec_walker(node, NULL);
 }
 
 void

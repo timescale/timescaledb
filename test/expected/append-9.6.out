@@ -150,15 +150,13 @@ psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: append_test
-   Chunks left after exclusion: 1
-   ->  Append
-         ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
-               Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-(6 rows)
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on append_test
+   Chunks excluded during startup: 2
+   ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+         Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+(4 rows)
 
 -- adding ORDER BY and LIMIT should turn the plan into an optimized
 -- ordered append plan
@@ -251,21 +249,19 @@ psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
  Sort
    Sort Key: (date_trunc('year'::text, append_test."time")) DESC
    ->  HashAggregate
-         Group Key: date_trunc('year'::text, append_test."time")
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: append_test
-               Chunks left after exclusion: 2
-               ->  Append
-                     ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
-                           Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-                     ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
-                           Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-(12 rows)
+         Group Key: (date_trunc('year'::text, append_test."time"))
+         ->  Custom Scan (ChunkAppend) on append_test
+               Chunks excluded during startup: 1
+               ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+               ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+(10 rows)
 
 -- querying outside the time range should return nothing. This tests
 -- that ConstraintAwareAppend can handle the case when an Append node
@@ -328,26 +324,24 @@ psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Merge Left Join
    Merge Cond: (period.btime = data.btime)
    CTE data
      ->  HashAggregate
-           Group Key: time_bucket('@ 30 days'::interval, append_test."time")
-           ->  Custom Scan (ConstraintAwareAppend)
-                 Hypertable: append_test
-                 Chunks left after exclusion: 3
-                 ->  Append
-                       ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
-                             Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                             Filter: (colorid > 0)
-                       ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
-                             Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                             Filter: (colorid > 0)
-                       ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
-                             Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                             Filter: (colorid > 0)
+           Group Key: (time_bucket('@ 30 days'::interval, append_test."time"))
+           ->  Custom Scan (ChunkAppend) on append_test
+                 Chunks excluded during startup: 0
+                 ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
+                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                       Filter: (colorid > 0)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                       Filter: (colorid > 0)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                       Filter: (colorid > 0)
    CTE period
      ->  Function Scan on generate_series "time"
    ->  Sort
@@ -356,7 +350,7 @@ psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
    ->  Sort
          Sort Key: data.btime
          ->  CTE Scan on data
-(26 rows)
+(24 rows)
 
 WITH data AS (
     SELECT time_bucket(INTERVAL '30 day', TIME) AS btime, AVG(temp) AS VALUE
@@ -414,23 +408,19 @@ psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
  Nested Loop
    Join Filter: (a.colorid = j.colorid)
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: append_test
-         Chunks left after exclusion: 1
-         ->  Append
-               ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk a_1
-                     Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: join_test
-         Chunks left after exclusion: 1
-         ->  Append
-               ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_1
-                     Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-(14 rows)
+   ->  Custom Scan (ChunkAppend) on append_test a
+         Chunks excluded during startup: 2
+         ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk a_1
+               Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
+   ->  Custom Scan (ChunkAppend) on join_test j
+         Chunks excluded during startup: 2
+         ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_1
+               Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
+(10 rows)
 
 reset enable_hashjoin;
 reset enable_mergejoin;
@@ -887,24 +877,189 @@ psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
+                             QUERY PLAN                              
+---------------------------------------------------------------------
  Sort
    Sort Key: append_test."time" DESC
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: append_test
-         Chunks left after exclusion: 3
+   ->  Custom Scan (ChunkAppend) on append_test
+         Chunks excluded during startup: 0
+         ->  Sample Scan on _hyper_1_3_chunk
+               Sampling: system ('1'::real)
+               Filter: ("time" > (now_s() - '@ 400 days'::interval))
+         ->  Sample Scan on _hyper_1_2_chunk
+               Sampling: system ('1'::real)
+               Filter: ("time" > (now_s() - '@ 400 days'::interval))
+         ->  Sample Scan on _hyper_1_1_chunk
+               Sampling: system ('1'::real)
+               Filter: ("time" > (now_s() - '@ 400 days'::interval))
+(13 rows)
+
+-- test runtime exclusion
+-- test runtime exclusion with LATERAL and 2 hypertables
+:PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+-- test runtime exclusion with LATERAL and generate_series
+:PREFIX SELECT g.time FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d'::interval) g(time) LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m WHERE m.time=g.time LIMIT 1) m ON true;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m_1
+                     Index Cond: ("time" = g."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m_2
+                     Index Cond: ("time" = g."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m_3
+                     Index Cond: ("time" = g."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m_4
+                     Index Cond: ("time" = g."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5
+                     Index Cond: ("time" = g."time")
+(14 rows)
+
+:PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time) m ON true;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m."time" = g."time")
+   ->  Merge Append
+         Sort Key: m."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m_1
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m_2
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m_3
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_4
+   ->  Sort
+         Sort Key: g."time"
+         ->  Function Scan on generate_series g
+(12 rows)
+
+:PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time ORDER BY time) m ON true;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m_1
+               Index Cond: ("time" = g."time")
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m_2
+               Index Cond: ("time" = g."time")
+         ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m_3
+               Index Cond: ("time" = g."time")
+         ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m_4
+               Index Cond: ("time" = g."time")
+         ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5
+               Index Cond: ("time" = g."time")
+(13 rows)
+
+-- test runtime exclusion with subquery
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE m1.time=(SELECT max(time) FROM metrics_timestamptz);
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz m1
+   InitPlan 2 (returns $1)
+     ->  Result
+           InitPlan 1 (returns $0)
+             ->  Limit
+                   ->  Custom Scan (ChunkAppend) on metrics_timestamptz
+                         Order: metrics_timestamptz."time" DESC
+                         ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
+                               Index Cond: ("time" IS NOT NULL)
+                         ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
+                               Index Cond: ("time" IS NOT NULL)
+                         ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
+                               Index Cond: ("time" IS NOT NULL)
+                         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+                               Index Cond: ("time" IS NOT NULL)
+                         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+                               Index Cond: ("time" IS NOT NULL)
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+         Index Cond: ("time" = $1)
+(27 rows)
+
+-- test runtime exclusion with correlated subquery
+:PREFIX SELECT m1.time, (SELECT m2.time FROM metrics_timestamptz m2 WHERE m2.time < m1.time ORDER BY m2.time DESC LIMIT 1) FROM metrics_timestamptz m1 WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz m1
+   Order: m1."time"
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         SubPlan 1
+           ->  Limit
+                 ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+                       Order: m2."time" DESC
+                       ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_1
+                             Index Cond: ("time" < m1_1."time")
+                       ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_2
+                             Index Cond: ("time" < m1_1."time")
+                       ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                             Index Cond: ("time" < m1_1."time")
+                       ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_4
+                             Index Cond: ("time" < m1_1."time")
+                       ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_5
+                             Index Cond: ("time" < m1_1."time")
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(20 rows)
+
+-- test EXISTS
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE EXISTS(SELECT 1 FROM metrics_timestamptz m2 WHERE m1.time < m2.time) ORDER BY m1.time DESC limit 1000;
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Nested Loop Semi Join
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+               Order: m1."time" DESC
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_1
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_2
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_4
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_5
          ->  Append
-               ->  Sample Scan on _hyper_1_3_chunk
-                     Sampling: system ('1'::real)
-                     Filter: ("time" > (now_s() - '@ 400 days'::interval))
-               ->  Sample Scan on _hyper_1_2_chunk
-                     Sampling: system ('1'::real)
-                     Filter: ("time" > (now_s() - '@ 400 days'::interval))
-               ->  Sample Scan on _hyper_1_1_chunk
-                     Sampling: system ('1'::real)
-                     Filter: ("time" > (now_s() - '@ 400 days'::interval))
-(15 rows)
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2
+                     Index Cond: ("time" > m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_1
+                     Index Cond: ("time" > m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_2
+                     Index Cond: ("time" > m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_3
+                     Index Cond: ("time" > m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_4
+                     Index Cond: ("time" > m1."time")
+(20 rows)
 
 --generate the results into two different files
 \set ECHO errors

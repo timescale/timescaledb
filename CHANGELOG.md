@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## 1.4.0 (unreleased)
 
+**Major features**
+* #1270 Use ChunkAppend to replace Append nodes
+
 **Minor features**
 * #1273 Propagate quals to joined hypertables
 

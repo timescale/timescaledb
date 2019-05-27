@@ -262,15 +262,37 @@ SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
 (0 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                        QUERY PLAN                         
------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: document
-   Chunks left after exclusion: 6
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ChunkAppend) on document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_3_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_4_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_5_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_6_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Hash Join
+   Hash Cond: (document.cid = category.cid)
+   InitPlan 1 (returns $0)
+     ->  Index Scan using uaccount_pkey on uaccount
+           Index Cond: (pguser = CURRENT_USER)
+   ->  Custom Scan (ChunkAppend) on document
+         Chunks excluded during startup: 0
          ->  Seq Scan on _hyper_1_1_chunk
                Filter: ((dlevel <= $0) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_2_chunk
@@ -283,35 +305,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                Filter: ((dlevel <= $0) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_6_chunk
                Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
-
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                           QUERY PLAN                            
------------------------------------------------------------------
- Hash Join
-   Hash Cond: (document.cid = category.cid)
-   InitPlan 1 (returns $0)
-     ->  Index Scan using uaccount_pkey on uaccount
-           Index Cond: (pguser = CURRENT_USER)
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: document
-         Chunks left after exclusion: 6
-         ->  Append
-               ->  Seq Scan on _hyper_1_1_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_2_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_3_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_4_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_5_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_6_chunk
-                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
    ->  Hash
          ->  Seq Scan on category
-(23 rows)
+(21 rows)
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
@@ -354,32 +350,30 @@ NOTICE:  f_leak => awesome technology book
 (7 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: document
-   Chunks left after exclusion: 6
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_1_3_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_1_4_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_1_5_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_1_6_chunk
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_3_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_4_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_5_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_6_chunk
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (category.cid = document.cid)
    InitPlan 1 (returns $0)
@@ -387,23 +381,21 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on category
    ->  Hash
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: document
-               Chunks left after exclusion: 6
-               ->  Append
-                     ->  Seq Scan on _hyper_1_1_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_2_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_3_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_4_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_5_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_6_chunk
-                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-(23 rows)
+         ->  Custom Scan (ChunkAppend) on document
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_1_1_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_2_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_4_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_5_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+(21 rows)
 
 -- 44 would technically fail for both p2r and p1r, but we should get an error
 -- back from p1r for this because it sorts first
@@ -476,12 +468,30 @@ NOTICE:  f_leak => great manga
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Custom Scan (ChunkAppend) on document
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_3_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_4_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_5_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_1_6_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+(14 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: document
-   Chunks left after exclusion: 6
-   ->  Append
+ Nested Loop
+   ->  Custom Scan (ChunkAppend) on document
+         Chunks excluded during startup: 0
          ->  Seq Scan on _hyper_1_1_chunk
                Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_2_chunk
@@ -494,31 +504,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_6_chunk
                Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-(16 rows)
-
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Nested Loop
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: document
-         Chunks left after exclusion: 6
-         ->  Append
-               ->  Seq Scan on _hyper_1_1_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_2_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_3_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_4_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_5_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-               ->  Seq Scan on _hyper_1_6_chunk
-                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
    ->  Index Scan using category_pkey on category
          Index Cond: (cid = document.cid)
-(19 rows)
+(17 rows)
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -1074,28 +1062,26 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                         
------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -1125,28 +1111,26 @@ NOTICE:  f_leak => awesome technology book
 (10 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                         
------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
@@ -1164,28 +1148,26 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                                QUERY PLAN                                
---------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 -- pp1 ERROR
 INSERT INTO hyper_document VALUES (1, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
@@ -1254,28 +1236,26 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                                QUERY PLAN                                
---------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -1307,28 +1287,26 @@ NOTICE:  f_leak => awesome technology book
 (11 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                        QUERY PLAN                         
------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(19 rows)
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(17 rows)
 
 -- only owner can change policies
 ALTER POLICY pp1 ON hyper_document USING (true);    --fail
@@ -1368,25 +1346,23 @@ NOTICE:  f_leak => great satire
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                             QUERY PLAN                              
----------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: hyper_document
-   Chunks left after exclusion: 6
-   ->  Append
-         ->  Seq Scan on _hyper_2_9_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_10_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_11_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_12_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_13_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-         ->  Seq Scan on _hyper_2_14_chunk
-               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-(16 rows)
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Custom Scan (ChunkAppend) on hyper_document
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_2_9_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_10_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_11_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_12_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_13_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Seq Scan on _hyper_2_14_chunk
+         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+(14 rows)
 
 -- database superuser does bypass RLS policy when enabled
 RESET SESSION AUTHORIZATION;
@@ -1663,51 +1639,49 @@ NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: s1
-   Chunks left after exclusion: 11
-   ->  Append
-         ->  Seq Scan on _hyper_6_16_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-               SubPlan 1
-                 ->  Append
-                       ->  Seq Scan on _hyper_7_27_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_28_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_29_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_30_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_31_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_32_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_7_33_chunk
-                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-         ->  Seq Scan on _hyper_6_17_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_18_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_19_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_20_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_21_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_22_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_23_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_24_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_25_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_6_26_chunk
-               Filter: ((hashed SubPlan 1) AND f_leak(b))
-(42 rows)
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on s1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_6_16_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         SubPlan 1
+           ->  Append
+                 ->  Seq Scan on _hyper_7_27_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_28_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_29_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_30_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_31_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_32_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_7_33_chunk
+                       Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+   ->  Seq Scan on _hyper_6_17_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_18_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_19_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_20_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_21_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_22_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_23_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_24_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_25_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_6_26_chunk
+         Filter: ((hashed SubPlan 1) AND f_leak(b))
+(40 rows)
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
  xx | x  |                y                 
@@ -1718,8 +1692,8 @@ SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Result
    ->  Append
          ->  Seq Scan on _hyper_7_27_chunk
@@ -1738,47 +1712,46 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
                Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
    SubPlan 2
      ->  Limit
-           ->  Result
-                 ->  Append
-                       ->  Seq Scan on _hyper_6_16_chunk
-                             Filter: (hashed SubPlan 1)
-                             SubPlan 1
-                               ->  Append
-                                     ->  Seq Scan on _hyper_7_27_chunk _hyper_7_27_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_28_chunk _hyper_7_28_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_29_chunk _hyper_7_29_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_30_chunk _hyper_7_30_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_31_chunk _hyper_7_31_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_32_chunk _hyper_7_32_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                                     ->  Seq Scan on _hyper_7_33_chunk _hyper_7_33_chunk_1
-                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-                       ->  Seq Scan on _hyper_6_17_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_18_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_19_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_20_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_21_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_22_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_23_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_24_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_25_chunk
-                             Filter: (hashed SubPlan 1)
-                       ->  Seq Scan on _hyper_6_26_chunk
-                             Filter: (hashed SubPlan 1)
-(58 rows)
+           ->  Custom Scan (ChunkAppend) on s1
+                 ->  Seq Scan on _hyper_6_16_chunk
+                       Filter: (hashed SubPlan 1)
+                       SubPlan 1
+                         ->  Append
+                               ->  Seq Scan on _hyper_7_27_chunk _hyper_7_27_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_28_chunk _hyper_7_28_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_29_chunk _hyper_7_29_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_30_chunk _hyper_7_30_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_31_chunk _hyper_7_31_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_32_chunk _hyper_7_32_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                               ->  Seq Scan on _hyper_7_33_chunk _hyper_7_33_chunk_1
+                                     Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                 ->  Seq Scan on _hyper_6_17_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_18_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_19_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_20_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_21_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_22_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_23_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_24_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_25_chunk
+                       Filter: (hashed SubPlan 1)
+                 ->  Seq Scan on _hyper_6_26_chunk
+                       Filter: (hashed SubPlan 1)
+(57 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
@@ -2504,75 +2477,67 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 PREPARE plancache_test AS SELECT * FROM z1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 PREPARE plancache_test2 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                         QUERY PLAN                          
--------------------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  Result
    One-Time Filter: false
    CTE q
-     ->  Custom Scan (ConstraintAwareAppend)
-           Hypertable: z1
-           Chunks left after exclusion: 3
-           ->  Append
-                 ->  Seq Scan on _hyper_9_49_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_50_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_51_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-(13 rows)
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+(11 rows)
 
 PREPARE plancache_test3 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                        QUERY PLAN                         
------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Nested Loop
    CTE q
      ->  Result
            One-Time Filter: false
    ->  CTE Scan on q
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: z1
-         Chunks left after exclusion: 3
-         ->  Append
-               ->  Seq Scan on _hyper_9_49_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-(15 rows)
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(13 rows)
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2585,72 +2550,64 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                         QUERY PLAN                          
--------------------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  Result
    One-Time Filter: false
    CTE q
-     ->  Custom Scan (ConstraintAwareAppend)
-           Hypertable: z1
-           Chunks left after exclusion: 3
-           ->  Append
-                 ->  Seq Scan on _hyper_9_49_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_50_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_51_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-(13 rows)
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+(11 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                        QUERY PLAN                         
------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Nested Loop
    CTE q
      ->  Result
            One-Time Filter: false
    ->  CTE Scan on q
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: z1
-         Chunks left after exclusion: 3
-         ->  Append
-               ->  Seq Scan on _hyper_9_49_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-(15 rows)
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(13 rows)
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2663,72 +2620,64 @@ NOTICE:  f_leak => ccc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                         QUERY PLAN                          
--------------------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  Result
    One-Time Filter: false
    CTE q
-     ->  Custom Scan (ConstraintAwareAppend)
-           Hypertable: z1
-           Chunks left after exclusion: 3
-           ->  Append
-                 ->  Seq Scan on _hyper_9_49_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_50_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_51_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-(13 rows)
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+(11 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                        QUERY PLAN                         
------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Nested Loop
    CTE q
      ->  Result
            One-Time Filter: false
    ->  CTE Scan on q
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: z1
-         Chunks left after exclusion: 3
-         ->  Append
-               ->  Seq Scan on _hyper_9_49_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-(15 rows)
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(13 rows)
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2741,72 +2690,64 @@ NOTICE:  f_leak => ccc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 1) AND f_leak(b))
+(8 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                         QUERY PLAN                          
--------------------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  Result
    One-Time Filter: false
    CTE q
-     ->  Custom Scan (ConstraintAwareAppend)
-           Hypertable: z1
-           Chunks left after exclusion: 3
-           ->  Append
-                 ->  Seq Scan on _hyper_9_49_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_50_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-                 ->  Seq Scan on _hyper_9_51_chunk
-                       Filter: (((a % 2) = 1) AND f_leak(b))
-(13 rows)
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+(11 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                        QUERY PLAN                         
------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Nested Loop
    CTE q
      ->  Result
            One-Time Filter: false
    ->  CTE Scan on q
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: z1
-         Chunks left after exclusion: 3
-         ->  Append
-               ->  Seq Scan on _hyper_9_49_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-(15 rows)
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(13 rows)
 
 --
 -- Views should follow policy for view owner.
@@ -2831,19 +2772,17 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                QUERY PLAN                 
--------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: f_leak(b)
-(10 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: f_leak(b)
+(8 rows)
 
 -- Query as view/table owner.  Should return all records.
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -2861,19 +2800,17 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                QUERY PLAN                 
--------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: f_leak(b)
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: f_leak(b)
-(10 rows)
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: f_leak(b)
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: f_leak(b)
+(8 rows)
 
 DROP VIEW rls_view;
 -- View and Table owners are different.
@@ -2893,19 +2830,17 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 -- Query as role that is not owner of table but is owner of view.
 -- Should return records based on view owner policies.
@@ -2920,19 +2855,17 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 -- Query as role that is not the owner of the table or view without permissions.
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -2953,19 +2886,17 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-                     QUERY PLAN                      
------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: z1
-   Chunks left after exclusion: 3
-   ->  Append
-         ->  Seq Scan on _hyper_9_49_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_50_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Seq Scan on _hyper_9_51_chunk
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                  QUERY PLAN                   
+-----------------------------------------------
+ Custom Scan (ChunkAppend) on z1
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_9_49_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_50_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Seq Scan on _hyper_9_51_chunk
+         Filter: (((a % 2) = 0) AND f_leak(b))
+(8 rows)
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 DROP VIEW rls_view;
@@ -3124,16 +3055,14 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y1
-   Chunks left after exclusion: 1
-   ->  Append
-         ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
-               Index Cond: (a = 1)
-               Filter: f_leak(b)
-(7 rows)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y1
+   Chunks excluded during startup: 0
+   ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
+         Index Cond: (a = 1)
+         Filter: f_leak(b)
+(5 rows)
 
 DROP VIEW rls_sbv;
 -- Create view as role that does not own table.  RLS should be applied.
@@ -3141,16 +3070,14 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y1
-   Chunks left after exclusion: 1
-   ->  Append
-         ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
-               Index Cond: (a = 1)
-               Filter: (((a > 2) OR ((a % 2) = 0)) AND f_leak(b))
-(7 rows)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y1
+   Chunks excluded during startup: 0
+   ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
+         Index Cond: (a = 1)
+         Filter: (((a > 2) OR ((a % 2) = 0)) AND f_leak(b))
+(5 rows)
 
 DROP VIEW rls_sbv;
 --
@@ -3195,35 +3122,33 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (14 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y2
-   Chunks left after exclusion: 11
-   ->  Append
-         ->  Seq Scan on _hyper_13_58_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_59_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_60_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_61_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_62_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_63_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_64_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_65_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_66_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_67_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-         ->  Seq Scan on _hyper_13_68_chunk
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-(26 rows)
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y2
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_13_58_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_59_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_60_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_61_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_62_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_63_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_64_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_65_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_66_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_67_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+   ->  Seq Scan on _hyper_13_68_chunk
+         Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+(24 rows)
 
 --
 -- Qual push-down of leaky functions, when not referring to table
@@ -3269,35 +3194,33 @@ NOTICE:  f_leak => abc
 (14 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend)
-   Hypertable: y2
-   Chunks left after exclusion: 11
-   ->  Append
-         ->  Seq Scan on _hyper_13_58_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_59_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_60_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_61_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_62_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_63_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_64_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_65_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_66_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_67_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-         ->  Seq Scan on _hyper_13_68_chunk
-               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-(26 rows)
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on y2
+   Chunks excluded during startup: 0
+   ->  Seq Scan on _hyper_13_58_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_59_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_60_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_61_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_62_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_63_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_64_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_65_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_66_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_67_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+   ->  Seq Scan on _hyper_13_68_chunk
+         Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+(24 rows)
 
 CREATE TABLE test_qual_pushdown (
     abc text
@@ -3363,39 +3286,37 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (0 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (test_qual_pushdown.abc = y2.b)
    ->  Seq Scan on test_qual_pushdown
    ->  Hash
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: y2
-               Chunks left after exclusion: 11
-               ->  Append
-                     ->  Seq Scan on _hyper_13_58_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_59_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_60_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_61_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_62_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_63_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_64_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_65_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_66_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_67_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-                     ->  Seq Scan on _hyper_13_68_chunk
-                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-(30 rows)
+         ->  Custom Scan (ChunkAppend) on y2
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_13_58_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_59_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_60_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_61_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_62_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_63_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_64_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_65_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_66_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_67_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Seq Scan on _hyper_13_68_chunk
+                     Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+(28 rows)
 
 DROP TABLE test_qual_pushdown;
 --
@@ -3497,37 +3418,35 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (11 rows)
 
 EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
-                         QUERY PLAN                          
--------------------------------------------------------------
+                      QUERY PLAN                       
+-------------------------------------------------------
  CTE Scan on cte1
    CTE cte1
-     ->  Custom Scan (ConstraintAwareAppend)
-           Hypertable: t1
-           Chunks left after exclusion: 11
-           ->  Append
-                 ->  Seq Scan on _hyper_15_69_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_70_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_71_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_72_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_73_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_74_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_75_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_76_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_77_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_78_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-                 ->  Seq Scan on _hyper_15_79_chunk
-                       Filter: (((a % 2) = 0) AND f_leak(b))
-(28 rows)
+     ->  Custom Scan (ChunkAppend) on t1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on _hyper_15_69_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_70_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_71_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_72_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_73_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_74_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_75_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_76_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_77_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_78_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_15_79_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+(26 rows)
 
 WITH cte1 AS (UPDATE t1 SET a = a + 1 RETURNING *) SELECT * FROM cte1; --fail
 ERROR:  new row violates row-level security policy for table "t1"
@@ -4073,6 +3992,9 @@ DROP TABLE copy_t;
 DROP TABLE copy_rel_to CASCADE;
 -- Check WHERE CURRENT OF
 SET SESSION AUTHORIZATION regress_rls_alice;
+-- WHERE CURRENT OF does not work with custom scan nodes
+-- so we have to disable chunk append here
+SET timescaledb.disable_optimizations TO true;
 CREATE TABLE current_check (currentid int, payload text, rlsuser text);
 SELECT public.create_hypertable('current_check', 'currentid', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "currentid"
@@ -4119,28 +4041,76 @@ FETCH ABSOLUTE 1 FROM current_check_cursor;
 
 -- Still cannot UPDATE row 2 through cursor
 UPDATE current_check SET payload = payload || '_new' WHERE CURRENT OF current_check_cursor RETURNING *;
-ERROR:  cursor "current_check_cursor" is not a simply updatable scan of table "current_check"
+ currentid | payload | rlsuser 
+-----------+---------+---------
+(0 rows)
+
 -- Can update row 4 through cursor, which is the next visible row
 FETCH RELATIVE 1 FROM current_check_cursor;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         4 | def     | regress_rls_bob
+(1 row)
+
 UPDATE current_check SET payload = payload || '_new' WHERE CURRENT OF current_check_cursor RETURNING *;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         4 | def_new | regress_rls_bob
+(1 row)
+
 SELECT * FROM current_check;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         2 | bcd     | regress_rls_bob
+         4 | def_new | regress_rls_bob
+(2 rows)
+
 -- Plan should be a subquery TID scan
 EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Update on current_check
+   Update on current_check
+   Update on _hyper_21_104_chunk
+   ->  Tid Scan on current_check
+         TID Cond: CURRENT OF current_check_cursor
+         Filter: ((currentid = 4) AND ((currentid % 2) = 0))
+   ->  Tid Scan on _hyper_21_104_chunk
+         TID Cond: CURRENT OF current_check_cursor
+         Filter: ((currentid = 4) AND ((currentid % 2) = 0))
+(9 rows)
+
 -- Similarly can only delete row 4
 FETCH ABSOLUTE 1 FROM current_check_cursor;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         2 | bcd     | regress_rls_bob
+(1 row)
+
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload | rlsuser 
+-----------+---------+---------
+(0 rows)
+
 FETCH RELATIVE 1 FROM current_check_cursor;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         4 | def     | regress_rls_bob
+(1 row)
+
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         4 | def_new | regress_rls_bob
+(1 row)
+
 SELECT * FROM current_check;
-ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ currentid | payload |     rlsuser     
+-----------+---------+-----------------
+         2 | bcd     | regress_rls_bob
+(1 row)
+
+RESET timescaledb.disable_optimizations;
 COMMIT;
 --
 -- check pg_stats view filtering

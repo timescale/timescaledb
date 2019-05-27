@@ -101,7 +101,21 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-	if (path->path.pathkeys != NIL)
+	if (path->path.pathkeys == NIL)
+	{
+		ListCell *lc_plan, *lc_path;
+		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
+		{
+			Plan *child_plan = lfirst(lc_plan);
+			Path *child_path = lfirst(lc_path);
+			AppendRelInfo *appinfo = get_appendrelinfo(root, child_path->parent->relid);
+
+			/* push down targetlist to children */
+			child_plan->targetlist =
+				(List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
+		}
+	}
+	else
 	{
 		/*
 		 * If this is an ordered append node we need to ensure the columns
@@ -226,7 +240,7 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 		Assert(list_length(chunk_ri_clauses) == list_length(chunk_rt_indexes));
 	}
 
-	if (root->limit_tuples > 0 && root->limit_tuples <= PG_UINT32_MAX)
+	if (capath->pushdown_limit && root->limit_tuples > 0 && root->limit_tuples <= PG_UINT32_MAX)
 		limit = root->limit_tuples;
 
 	custom_private = list_make1(

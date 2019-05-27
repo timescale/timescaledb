@@ -7,6 +7,7 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
@@ -81,8 +82,16 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			children = castNode(AppendPath, subpath)->subpaths;
 			break;
 		case T_MergeAppendPath:
-			if (!ordered)
-				return subpath;
+			/*
+			 * check if ordered append is applicable, only assert ordered here
+			 * checked properly in ts_ordered_append_should_optimize
+			 */
+			Assert(ordered);
+
+			/*
+			 * we only push down LIMIT for ordered append
+			 */
+			path->pushdown_limit = true;
 			children = castNode(MergeAppendPath, subpath)->subpaths;
 			path->cpath.path.pathkeys = subpath->pathkeys;
 			break;
@@ -184,7 +193,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		 * We do this to prevent planner choosing parallel plan which might
 		 * otherwise look preferable cost wise.
 		 */
-		if (root->limit_tuples == -1.0 || rows < root->limit_tuples)
+		if (!path->pushdown_limit || root->limit_tuples == -1.0 || rows < root->limit_tuples)
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;
@@ -205,7 +214,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  */
 bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-								  List *join_conditions, bool *reverse)
+								  List *join_conditions, int *order_attno, bool *reverse)
 {
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
@@ -270,8 +279,9 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	if (namestrcmp(&ht->space->dimensions[0].fd.column_name, column) != 0)
 		return false;
 
-	if (reverse != NULL)
-		*reverse = sort->sortop == tce->lt_opr ? false : true;
+	Assert(order_attno != NULL && reverse != NULL);
+	*order_attno = ht_var->varattno;
+	*reverse = sort->sortop == tce->lt_opr ? false : true;
 
 	return true;
 }

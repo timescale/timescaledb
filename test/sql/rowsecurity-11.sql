@@ -1373,6 +1373,10 @@ UPDATE current_check SET payload = payload || '_new' WHERE currentid = 2 RETURNI
 
 BEGIN;
 
+-- WHERE CURRENT OF does not work with custom scan nodes
+-- so we have to disable chunk append here
+SET timescaledb.enable_chunk_append TO false;
+
 DECLARE current_check_cursor SCROLL CURSOR FOR SELECT * FROM current_check;
 -- Returns rows that can be seen according to SELECT policy, like plain SELECT
 -- above (even rows)
@@ -1391,6 +1395,8 @@ DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
 FETCH RELATIVE 1 FROM current_check_cursor;
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
 SELECT * FROM current_check;
+
+RESET timescaledb.enable_chunk_append;
 
 COMMIT;
 
