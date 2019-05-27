@@ -43,7 +43,7 @@ on_postmaster_death(void)
 static int64
 get_timeout_millisec(TimestampTz by_time)
 {
-	int64 timeout_sec = 0;
+	long timeout_sec = 0;
 	int timeout_usec = 0;
 
 	if (TIMESTAMP_IS_NOBEGIN(by_time))
@@ -54,7 +54,7 @@ get_timeout_millisec(TimestampTz by_time)
 	if (timeout_sec <= 0 && timeout_usec <= 0)
 		return 0;
 
-	return timeout_sec * MILLISECS_PER_SEC + timeout_usec / USECS_PER_MILLISEC;
+	return (int64)(timeout_sec * MILLISECS_PER_SEC + timeout_usec / USECS_PER_MILLISEC);
 }
 
 static bool
