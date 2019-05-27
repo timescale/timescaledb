@@ -19,7 +19,7 @@ TS_FUNCTION_INFO_V1(ts_test_interval_to_internal_conversion);
 			int64 b_i = (b);                                                                       \
 			if (a_i != b_i)                                                                        \
 			{                                                                                      \
-				elog(ERROR, "%ld != %ld @ line %d", a_i, b_i, __LINE__);                           \
+				elog(ERROR, INT64_FORMAT " != " INT64_FORMAT, a_i, b_i);                           \
 			}                                                                                      \
 		}                                                                                          \
 		PG_CATCH();                                                                                \
