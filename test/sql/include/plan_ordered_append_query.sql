@@ -303,7 +303,7 @@ LEFT OUTER JOIN LATERAL(
 SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
 
 -- test JOIN
--- no exclusion on joined table because its not ChunkAppend node
+-- no exclusion on joined table because quals are not propagated yet
 :PREFIX SELECT *
 FROM ordered_append o1
 INNER JOIN ordered_append o2 ON o1.time = o2.time
@@ -369,5 +369,40 @@ LEFT OUTER JOIN LATERAL(
   SELECT * FROM space o
     WHERE o.time >= g.time AND o.time < g.time + '1d'::interval AND o.time < now() ORDER BY time DESC LIMIT 1
 ) l ON true;
+
+-- test JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on time column with ON clause expression order switched
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o2.time = o1.time ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on time column with equality condition in WHERE clause
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON true WHERE o1.time = o2.time ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on time column with ORDER BY 2nd hypertable
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time ORDER BY o2.time LIMIT 100;
+
+-- test JOIN on time column and device_id
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.device_id = o2.device_id AND o1.time = o2.time ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on device_id
+-- should not use ordered append for 2nd hypertable
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.device_id = o2.device_id ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on time column with implicit join
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1, ordered_append o2 WHERE o1.time = o2.time ORDER BY o1.time LIMIT 100;
+
+-- test JOIN on time column with 3 hypertables
+-- should use 3 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time INNER JOIN ordered_append o3 ON o1.time = o3.time ORDER BY o1.time LIMIT 100;
+
+-- test with space partitioning
+:PREFIX SELECT * FROM space s1 INNER JOIN space s2 ON s1.time = s2.time ORDER BY s1.time LIMIT 100;
 
 

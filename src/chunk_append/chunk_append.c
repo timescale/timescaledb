@@ -18,6 +18,8 @@
 
 static bool contain_param_exec(Node *node);
 static bool contain_param_exec_walker(Node *node, void *context);
+static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
+								   List *join_conditions);
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
@@ -81,6 +83,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			children = castNode(AppendPath, subpath)->subpaths;
 			break;
 		case T_MergeAppendPath:
+			if (!ordered)
+				return subpath;
 			children = castNode(MergeAppendPath, subpath)->subpaths;
 			path->cpath.path.pathkeys = subpath->pathkeys;
 			break;
@@ -89,8 +93,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			break;
 	}
 
-	Assert(ht->space->num_dimensions <= 2);
-	if (ht->space->num_dimensions == 1)
+	if (!ordered || ht->space->num_dimensions == 1)
 		path->cpath.custom_paths = children;
 	else
 	{
@@ -118,6 +121,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		ListCell *flat = list_head(children);
 		List *nested_children = NIL;
 		bool has_scan_childs = false;
+
+		Assert(ht->space->num_dimensions <= 2);
 
 		foreach (lc, nested_oids)
 		{
@@ -203,13 +208,18 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  * Check if conditions for doing ordered append optimization are fulfilled
  */
 bool
-ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *reverse)
+ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+								  List *join_conditions, bool *reverse)
 {
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
 	TypeCacheEntry *tce;
 	char *column;
+	Index ht_relid = rel->relid;
+	Index sort_relid;
+	Var *ht_var;
+	Var *sort_var;
 
 	/* these are checked in caller so we only Assert */
 	Assert(!ts_guc_disable_optimizations && ts_guc_enable_ordered_append &&
@@ -221,41 +231,47 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	 */
 	Assert(ht->space->num_dimensions <= 2 && root->parse->sortClause != NIL);
 
-	/* doublecheck rel actually refers to our hypertable */
-	Assert(ht->space->main_table_relid == rte->relid);
-
-	/*
-	 * we only support direct column references for now
-	 */
+	/* we only support direct column references here */
 	if (!IsA(tle->expr, Var))
 		return false;
 
-	/*
-	 * check Var points to a rel
-	 */
-	if (castNode(Var, tle->expr)->varno >= root->simple_rel_array_size)
+	sort_var = castNode(Var, tle->expr);
+	sort_relid = sort_var->varno;
+	tce = lookup_type_cache(sort_var->vartype,
+							TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
+
+	/* check sort operation is either less than or greater than */
+	if (sort->sortop != tce->lt_opr && sort->sortop != tce->gt_opr)
 		return false;
 
 	/*
 	 * check the ORDER BY column actually belongs to our hypertable
 	 */
-	if (root->simple_rte_array[castNode(Var, tle->expr)->varno] != rte)
-		return false;
+	if (sort_relid == ht_relid)
+	{
+		/* ORDER BY column belongs to our hypertable */
+		ht_var = sort_var;
+	}
+	else
+	{
+		/*
+		 * If the ORDER BY does not match our hypertable but we are joining
+		 * against another hypertable on the time column doing an ordered
+		 * append here is still beneficial because we can skip the sort
+		 * step for the MergeJoin
+		 */
+		if (join_conditions == NIL)
+			return false;
 
-	/*
-	 * check that the first element of the ORDER BY clause actually matches
-	 * the first dimension of the hypertable
-	 */
-	column = strVal(
-		list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(castNode(Var, tle->expr)->varattno)));
+		ht_var = find_equality_join_var(sort_var, ht_relid, tce->eq_opr, join_conditions);
+
+		if (ht_var == NULL)
+			return false;
+	}
+
+	/* Check hypertable column is the first dimension of the hypertable */
+	column = strVal(list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(ht_var->varattno)));
 	if (namestrcmp(&ht->space->dimensions[0].fd.column_name, column) != 0)
-		return false;
-
-	/*
-	 * check sort operation is either less than or greater than
-	 */
-	tce = lookup_type_cache(castNode(Var, tle->expr)->vartype, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
-	if (sort->sortop != tce->lt_opr && sort->sortop != tce->gt_opr)
 		return false;
 
 	if (reverse != NULL)
@@ -280,4 +296,37 @@ contain_param_exec_walker(Node *node, void *context)
 		return castNode(Param, node)->paramkind == PARAM_EXEC;
 
 	return expression_tree_walker(node, contain_param_exec_walker, context);
+}
+
+/*
+ * Find equality join between column referenced by sort_var and Relation
+ * with relid ht_relid
+ */
+static Var *
+find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_conditions)
+{
+	ListCell *lc;
+	Index sort_relid = sort_var->varno;
+
+	foreach (lc, join_conditions)
+	{
+		OpExpr *op = lfirst(lc);
+
+		if (op->opno == eq_opr)
+		{
+			Var *left = linitial(op->args);
+			Var *right = lsecond(op->args);
+
+			Assert(IsA(left, Var) && IsA(right, Var));
+
+			/* Is this a join condition referencing our hypertable */
+			if ((left->varno == sort_relid && right->varno == ht_relid &&
+				 left->varattno == sort_var->varattno) ||
+				(left->varno == ht_relid && right->varno == sort_relid &&
+				 right->varattno == sort_var->varattno))
+				return left->varno == sort_relid ? right : left;
+		}
+	}
+
+	return NULL;
 }

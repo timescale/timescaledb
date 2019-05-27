@@ -50,6 +50,7 @@ typedef struct CollectQualCtx
 	RelOptInfo *rel;
 	List *restrictions;
 	FuncExpr *chunk_exclusion_func;
+	List *join_conditions;
 } CollectQualCtx;
 
 static Oid chunk_exclusion_func = InvalidOid;
@@ -413,12 +414,30 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 		Expr *qual = lfirst(lc);
 		RestrictInfo *restrictinfo;
 		Relids relids = pull_varnos((Node *) qual);
+		int num_rels = bms_num_members(relids);
 
-		/*
-		 * skip expressions not for current rel
-		 */
-		if (bms_num_members(relids) != 1 || !bms_is_member(ctx->rel->relid, relids))
+		/* skip expressions not for current rel */
+		if (num_rels == 0 || num_rels > 2 || !bms_is_member(ctx->rel->relid, relids))
 			continue;
+
+		/* collect equality JOIN conditions for current rel */
+		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if (IsA(left, Var) && IsA(right, Var))
+			{
+				Var *ht_var =
+					castNode(Var, castNode(Var, left)->varno == ctx->rel->relid ? left : right);
+				TypeCacheEntry *tce = lookup_type_cache(ht_var->vartype, TYPECACHE_EQ_OPR);
+
+				if (op->opno == tce->eq_opr)
+					ctx->join_conditions = lappend(ctx->join_conditions, op);
+			}
+			continue;
+		}
 
 		if (is_chunk_exclusion_func(qual))
 		{
@@ -437,16 +456,16 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			return quals;
 		}
 
-		/*
-		 * check for time_bucket comparisons
-		 * time_bucket(Const, time_colum) > Const
-		 */
 		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
 		{
 			OpExpr *op = castNode(OpExpr, qual);
 			Expr *left = linitial(op->args);
 			Expr *right = lsecond(op->args);
 
+			/*
+			 * check for time_bucket comparisons
+			 * time_bucket(Const, time_colum) > Const
+			 */
 			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
 				 list_length(castNode(FuncExpr, left)->args) == 2 &&
 				 is_time_bucket_function(left)) ||
@@ -525,7 +544,8 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 }
 
 static bool
-should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *reverse)
+should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *join_conditions,
+					bool *reverse)
 {
 	/* check if optimizations are enabled */
 	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append ||
@@ -539,7 +559,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *re
 	if (ht->space->num_dimensions > 2 || root->parse->sortClause == NIL)
 		return false;
 
-	return ts_ordered_append_should_optimize(root, rel, ht, reverse);
+	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, reverse);
 }
 
 bool
@@ -633,7 +653,7 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		 */
 		ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
 
-		if (should_order_append(root, rel, ht, &reverse))
+		if (should_order_append(root, rel, ht, ctx->join_conditions, &reverse))
 		{
 			List **nested_oids = NULL;
 
@@ -787,6 +807,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		.rel = rel,
 		.restrictions = NIL,
 		.chunk_exclusion_func = NULL,
+		.join_conditions = NIL,
 	};
 
 	/* double check our permissions are valid */

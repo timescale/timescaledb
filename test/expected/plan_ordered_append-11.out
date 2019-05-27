@@ -753,7 +753,7 @@ LIMIT 2;
 ---------------------------------------------------------------------------------------------------
  Limit
    ->  Nested Loop Left Join
-         Join Filter: (dimension_last."time" = _hyper_4_11_chunk."time")
+         Join Filter: (dimension_last."time" = _hyper_4_14_chunk."time")
          ->  Custom Scan (ChunkAppend)
                Hypertable: dimension_last
                ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk
@@ -762,10 +762,10 @@ LIMIT 2;
                ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk
          ->  Materialize
                ->  Append
-                     ->  Seq Scan on _hyper_4_11_chunk
-                     ->  Seq Scan on _hyper_4_12_chunk
-                     ->  Seq Scan on _hyper_4_13_chunk
                      ->  Seq Scan on _hyper_4_14_chunk
+                     ->  Seq Scan on _hyper_4_13_chunk
+                     ->  Seq Scan on _hyper_4_12_chunk
+                     ->  Seq Scan on _hyper_4_11_chunk
 (15 rows)
 
 -- test INNER JOIN against non-hypertable
@@ -778,21 +778,21 @@ LIMIT 2;
 --------------------------------------------------------------------------------------------------------
  Limit
    ->  Nested Loop
-         ->  Merge Append
-               Sort Key: _hyper_4_11_chunk."time" DESC
-               ->  Index Only Scan using _hyper_4_11_chunk_dimension_only_time_idx on _hyper_4_11_chunk
-               ->  Index Only Scan using _hyper_4_12_chunk_dimension_only_time_idx on _hyper_4_12_chunk
-               ->  Index Only Scan using _hyper_4_13_chunk_dimension_only_time_idx on _hyper_4_13_chunk
+         ->  Custom Scan (ChunkAppend)
+               Hypertable: dimension_only
                ->  Index Only Scan using _hyper_4_14_chunk_dimension_only_time_idx on _hyper_4_14_chunk
+               ->  Index Only Scan using _hyper_4_13_chunk_dimension_only_time_idx on _hyper_4_13_chunk
+               ->  Index Only Scan using _hyper_4_12_chunk_dimension_only_time_idx on _hyper_4_12_chunk
+               ->  Index Only Scan using _hyper_4_11_chunk_dimension_only_time_idx on _hyper_4_11_chunk
          ->  Append
                ->  Index Scan using _hyper_3_10_chunk_dimension_last_time_idx on _hyper_3_10_chunk
-                     Index Cond: ("time" = _hyper_4_11_chunk."time")
+                     Index Cond: ("time" = dimension_only."time")
                ->  Index Scan using _hyper_3_9_chunk_dimension_last_time_idx on _hyper_3_9_chunk
-                     Index Cond: ("time" = _hyper_4_11_chunk."time")
+                     Index Cond: ("time" = dimension_only."time")
                ->  Index Scan using _hyper_3_8_chunk_dimension_last_time_idx on _hyper_3_8_chunk
-                     Index Cond: ("time" = _hyper_4_11_chunk."time")
+                     Index Cond: ("time" = dimension_only."time")
                ->  Index Scan using _hyper_3_7_chunk_dimension_last_time_idx on _hyper_3_7_chunk
-                     Index Cond: ("time" = _hyper_4_11_chunk."time")
+                     Index Cond: ("time" = dimension_only."time")
 (17 rows)
 
 -- test join against non-hypertable
@@ -1149,7 +1149,7 @@ SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
 (8 rows)
 
 -- test JOIN
--- no exclusion on joined table because its not ChunkAppend node
+-- no exclusion on joined table because quals are not propagated yet
 :PREFIX SELECT *
 FROM ordered_append o1
 INNER JOIN ordered_append o2 ON o1.time = o2.time
@@ -1168,11 +1168,11 @@ ORDER BY o1.time;
          ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (actual rows=23043 loops=1)
                Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize (actual rows=220327 loops=1)
-         ->  Merge Append (actual rows=73443 loops=1)
-               Sort Key: o2."time"
-               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2 (actual rows=20160 loops=1)
-               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_1 (actual rows=30240 loops=1)
-               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_2 (actual rows=23043 loops=1)
+         ->  Custom Scan (ChunkAppend) (actual rows=73443 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=20160 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (actual rows=30240 loops=1)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (actual rows=23043 loops=1)
 (16 rows)
 
 -- test JOIN
@@ -1432,6 +1432,222 @@ LEFT OUTER JOIN LATERAL(
                      ->  Index Scan using _hyper_7_30_chunk_space_time_idx on _hyper_7_30_chunk o_8 (actual rows=1 loops=3)
                            Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
 (25 rows)
+
+-- test JOIN on time column
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time ORDER BY o1.time LIMIT 100;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=34 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=34 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(14 rows)
+
+-- test JOIN on time column with ON clause expression order switched
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o2.time = o1.time ORDER BY o1.time LIMIT 100;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=34 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=34 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(14 rows)
+
+-- test JOIN on time column with equality condition in WHERE clause
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON true WHERE o1.time = o2.time ORDER BY o1.time LIMIT 100;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=34 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=34 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(14 rows)
+
+-- test JOIN on time column with ORDER BY 2nd hypertable
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time ORDER BY o2.time LIMIT 100;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=34 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=34 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(14 rows)
+
+-- test JOIN on time column and device_id
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.device_id = o2.device_id AND o1.time = o2.time ORDER BY o1.time LIMIT 100;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         Join Filter: (o1.device_id = o2.device_id)
+         Rows Removed by Join Filter: 198
+         ->  Custom Scan (ChunkAppend) (actual rows=100 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=100 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=298 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=100 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=100 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(16 rows)
+
+-- test JOIN on device_id
+-- should not use ordered append for 2nd hypertable
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.device_id = o2.device_id ORDER BY o1.time LIMIT 100;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Nested Loop (actual rows=100 loops=1)
+         ->  Custom Scan (ChunkAppend) (actual rows=1 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Append (actual rows=100 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk o2 (actual rows=100 loops=1)
+                     Index Cond: (device_id = o1.device_id)
+               ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk o2_1 (never executed)
+                     Index Cond: (device_id = o1.device_id)
+               ->  Index Scan using _hyper_1_3_chunk_ordered_append_device_id_time_idx on _hyper_1_3_chunk o2_2 (never executed)
+                     Index Cond: (device_id = o1.device_id)
+(14 rows)
+
+-- test JOIN on time column with implicit join
+-- should use 2 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1, ordered_append o2 WHERE o1.time = o2.time ORDER BY o1.time LIMIT 100;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=34 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=34 loops=1)
+                     Hypertable: ordered_append
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=34 loops=1)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(14 rows)
+
+-- test JOIN on time column with 3 hypertables
+-- should use 3 ChunkAppend
+:PREFIX SELECT * FROM ordered_append o1 INNER JOIN ordered_append o2 ON o1.time = o2.time INNER JOIN ordered_append o3 ON o1.time = o3.time ORDER BY o1.time LIMIT 100;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (o3."time" = o1."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=12 loops=1)
+               Hypertable: ordered_append
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o3_1 (actual rows=12 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o3_2 (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o3_3 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Merge Join (actual rows=37 loops=1)
+                     Merge Cond: (o1."time" = o2."time")
+                     ->  Custom Scan (ChunkAppend) (actual rows=13 loops=1)
+                           Hypertable: ordered_append
+                           ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o1_1 (actual rows=13 loops=1)
+                           ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o1_2 (never executed)
+                           ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o1_3 (never executed)
+                     ->  Materialize (actual rows=37 loops=1)
+                           ->  Custom Scan (ChunkAppend) (actual rows=13 loops=1)
+                                 Hypertable: ordered_append
+                                 ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1 (actual rows=13 loops=1)
+                                 ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2 (never executed)
+                                 ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3 (never executed)
+(22 rows)
+
+-- test with space partitioning
+:PREFIX SELECT * FROM space s1 INNER JOIN space s2 ON s1.time = s2.time ORDER BY s1.time LIMIT 100;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Merge Join (actual rows=100 loops=1)
+         Merge Cond: (s1."time" = s2."time")
+         ->  Custom Scan (ChunkAppend) (actual rows=17 loops=1)
+               Hypertable: space
+               ->  Merge Append (actual rows=17 loops=1)
+                     Sort Key: s1_1."time"
+                     ->  Index Scan Backward using _hyper_7_24_chunk_space_time_idx on _hyper_7_24_chunk s1_1 (actual rows=3 loops=1)
+                     ->  Index Scan Backward using _hyper_7_26_chunk_space_time_idx on _hyper_7_26_chunk s1_2 (actual rows=7 loops=1)
+                     ->  Index Scan Backward using _hyper_7_28_chunk_space_time_idx on _hyper_7_28_chunk s1_3 (actual rows=3 loops=1)
+                     ->  Index Scan Backward using _hyper_7_30_chunk_space_time_idx on _hyper_7_30_chunk s1_4 (actual rows=7 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: s1_5."time"
+                     ->  Index Scan Backward using _hyper_7_23_chunk_space_time_idx on _hyper_7_23_chunk s1_5 (never executed)
+                     ->  Index Scan Backward using _hyper_7_25_chunk_space_time_idx on _hyper_7_25_chunk s1_6 (never executed)
+                     ->  Index Scan Backward using _hyper_7_27_chunk_space_time_idx on _hyper_7_27_chunk s1_7 (never executed)
+                     ->  Index Scan Backward using _hyper_7_29_chunk_space_time_idx on _hyper_7_29_chunk s1_8 (never executed)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) (actual rows=19 loops=1)
+                     Hypertable: space
+                     ->  Merge Append (actual rows=19 loops=1)
+                           Sort Key: s2_1."time"
+                           ->  Index Scan Backward using _hyper_7_24_chunk_space_time_idx on _hyper_7_24_chunk s2_1 (actual rows=4 loops=1)
+                           ->  Index Scan Backward using _hyper_7_26_chunk_space_time_idx on _hyper_7_26_chunk s2_2 (actual rows=7 loops=1)
+                           ->  Index Scan Backward using _hyper_7_28_chunk_space_time_idx on _hyper_7_28_chunk s2_3 (actual rows=4 loops=1)
+                           ->  Index Scan Backward using _hyper_7_30_chunk_space_time_idx on _hyper_7_30_chunk s2_4 (actual rows=7 loops=1)
+                     ->  Merge Append (never executed)
+                           Sort Key: s2_5."time"
+                           ->  Index Scan Backward using _hyper_7_23_chunk_space_time_idx on _hyper_7_23_chunk s2_5 (never executed)
+                           ->  Index Scan Backward using _hyper_7_25_chunk_space_time_idx on _hyper_7_25_chunk s2_6 (never executed)
+                           ->  Index Scan Backward using _hyper_7_27_chunk_space_time_idx on _hyper_7_27_chunk s2_7 (never executed)
+                           ->  Index Scan Backward using _hyper_7_29_chunk_space_time_idx on _hyper_7_29_chunk s2_8 (never executed)
+(32 rows)
 
 --generate the results into two different files
 \set ECHO errors
