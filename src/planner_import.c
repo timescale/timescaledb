@@ -23,7 +23,7 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
-#if PG_VERSION_NUM >= 110003
+#if PG_VERSION_NUM >= 110002
 #include <optimizer/paramassign.h>
 #endif
 #include <optimizer/placeholder.h>
@@ -885,7 +885,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	if (IsA(node, Var))
 	{
 		Var *var = (Var *) node;
-#if PG_VERSION_NUM < 110003
+#if PG_VERSION_NUM < 110002
 		Param *param;
 		NestLoopParam *nlp;
 		ListCell *lc;
@@ -895,7 +895,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		/* If not to be replaced, we can just return the Var unmodified */
 		if (!bms_is_member(var->varno, root->curOuterRels))
 			return node;
-#if PG_VERSION_NUM < 110003
+#if PG_VERSION_NUM < 110002
 		/* Create a Param representing the Var */
 		param = assign_nestloop_param_var(root, var);
 		/* Is this param already listed in root->curOuterParams? */
@@ -924,7 +924,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	if (IsA(node, PlaceHolderVar))
 	{
 		PlaceHolderVar *phv = (PlaceHolderVar *) node;
-#if PG_VERSION_NUM < 110003
+#if PG_VERSION_NUM < 110002
 		Param *param;
 		NestLoopParam *nlp;
 		ListCell *lc;
@@ -962,7 +962,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 			newphv->phexpr = (Expr *) replace_nestloop_params_mutator((Node *) phv->phexpr, root);
 			return (Node *) newphv;
 		}
-#if PG_VERSION_NUM < 110003
+#if PG_VERSION_NUM < 110002
 		/* Create a Param representing the PlaceHolderVar */
 		param = assign_nestloop_param_placeholdervar(root, phv);
 		/* Is this param already listed in root->curOuterParams? */
