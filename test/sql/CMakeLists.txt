@@ -55,7 +55,9 @@ set(TEST_FILES
 # edition tests need community edition
 if(NOT APACHE_ONLY)
   list(APPEND TEST_FILES
-    edition.sql)
+    edition.sql
+    telemetry_community.sql
+    )
 endif()
 
 # tests that fail or are unreliable when run in parallel
