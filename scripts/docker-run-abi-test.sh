@@ -26,7 +26,7 @@ docker volume rm $COMPILE_VOLUME
 set -e
 
 #build the snapshot image
-docker build --no-cache --build-arg major_version=$PG_MAJOR -t $PG_IMAGE_TAG_RUN -f ${SCRIPT_DIR}/docker_postgres_snapshot/Dockerfile ${SCRIPT_DIR}/docker_postgres_snapshot/
+docker build --no-cache --build-arg major_version=$PG_MAJOR --build-arg minor_version=$PG_MINOR_COMPILE -t $PG_IMAGE_TAG_RUN -f ${SCRIPT_DIR}/docker_postgres_snapshot/Dockerfile ${SCRIPT_DIR}/docker_postgres_snapshot/
 
 create_base_container() {
   echo "Creating container $1 for tag $2"
@@ -34,7 +34,7 @@ create_base_container() {
   # Run a Postgres container
   docker run -u postgres -d --name $1 -v ${BASE_DIR}:/src -v ${COMPILE_VOLUME}:/compile $2
   # Install build dependencies
-  docker exec -u root -it $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev libssl1.0 && mkdir -p /build/debug"
+  docker exec -u root -it $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
 
   # Copy the source files to build directory
   docker exec -u root -it $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,tsl,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug && make -C /build/debug install && chown -R postgres /build"
