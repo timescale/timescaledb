@@ -23,9 +23,6 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
-#if PG_VERSION_NUM >= 110002
-#include <optimizer/paramassign.h>
-#endif
 #include <optimizer/placeholder.h>
 #include <optimizer/planner.h>
 #include <optimizer/subselect.h>
@@ -39,6 +36,20 @@
 
 #include "planner_import.h"
 #include "compat.h"
+
+#if (PG11 && PG_VERSION_NUM >= 110002) || (PG10 && PG_VERSION_NUM >= 100007) ||                    \
+	(PG96 && PG_VERSION_NUM >= 90612)
+#include <optimizer/paramassign.h>
+#else
+/*
+ * these functions need to be backported to allow timescaledb built on older versions
+ * to work with latest pg version
+ */
+static Param *replace_nestloop_param_var(PlannerInfo *root, Var *var);
+static Param *replace_nestloop_param_placeholdervar(PlannerInfo *root, PlaceHolderVar *phv);
+static Param *generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod,
+									  Oid paramcollation);
+#endif
 
 static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
 												 Relids relids);
@@ -885,50 +896,17 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	if (IsA(node, Var))
 	{
 		Var *var = (Var *) node;
-#if PG_VERSION_NUM < 110002
-		Param *param;
-		NestLoopParam *nlp;
-		ListCell *lc;
-#endif
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
 		if (!bms_is_member(var->varno, root->curOuterRels))
 			return node;
-#if PG_VERSION_NUM < 110002
-		/* Create a Param representing the Var */
-		param = assign_nestloop_param_var(root, var);
-		/* Is this param already listed in root->curOuterParams? */
-		foreach (lc, root->curOuterParams)
-		{
-			nlp = (NestLoopParam *) lfirst(lc);
-			if (nlp->paramno == param->paramid)
-			{
-				Assert(equal(var, nlp->paramval));
-				/* Present, so we can just return the Param */
-				return (Node *) param;
-			}
-		}
-		/* No, so add it */
-		nlp = makeNode(NestLoopParam);
-		nlp->paramno = param->paramid;
-		nlp->paramval = var;
-		root->curOuterParams = lappend(root->curOuterParams, nlp);
-		/* And return the replacement Param */
-		return (Node *) param;
-#else
 		/* Replace the Var with a nestloop Param */
 		return (Node *) replace_nestloop_param_var(root, var);
-#endif
 	}
 	if (IsA(node, PlaceHolderVar))
 	{
 		PlaceHolderVar *phv = (PlaceHolderVar *) node;
-#if PG_VERSION_NUM < 110002
-		Param *param;
-		NestLoopParam *nlp;
-		ListCell *lc;
-#endif
 
 		/* Upper-level PlaceHolderVars should be long gone at this point */
 		Assert(phv->phlevelsup == 0);
@@ -962,31 +940,8 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 			newphv->phexpr = (Expr *) replace_nestloop_params_mutator((Node *) phv->phexpr, root);
 			return (Node *) newphv;
 		}
-#if PG_VERSION_NUM < 110002
-		/* Create a Param representing the PlaceHolderVar */
-		param = assign_nestloop_param_placeholdervar(root, phv);
-		/* Is this param already listed in root->curOuterParams? */
-		foreach (lc, root->curOuterParams)
-		{
-			nlp = (NestLoopParam *) lfirst(lc);
-			if (nlp->paramno == param->paramid)
-			{
-				Assert(equal(phv, nlp->paramval));
-				/* Present, so we can just return the Param */
-				return (Node *) param;
-			}
-		}
-		/* No, so add it */
-		nlp = makeNode(NestLoopParam);
-		nlp->paramno = param->paramid;
-		nlp->paramval = (Var *) phv;
-		root->curOuterParams = lappend(root->curOuterParams, nlp);
-		/* And return the replacement Param */
-		return (Node *) param;
-#else
 		/* Replace the PlaceHolderVar with a nestloop Param */
 		return (Node *) replace_nestloop_param_placeholdervar(root, phv);
-#endif
 	}
 	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
 }
@@ -1110,5 +1065,140 @@ ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node)
 	 * can do that, we can't propagate the bound any further.  For the moment
 	 * it's unclear that any other cases are worth checking here.
 	 */
+}
+#endif
+
+/*
+ * these functions need to be backported to allow timescaledb built on older versions
+ * to work with latest pg version
+ */
+#if (PG11 && PG_VERSION_NUM < 110002) || (PG10 && PG_VERSION_NUM < 100007) ||                      \
+	(PG96 && PG_VERSION_NUM < 90612)
+/*
+ * Generate a Param node to replace the given Var,
+ * which is expected to come from some upper NestLoop plan node.
+ * Record the need for the Var in root->curOuterParams.
+ *
+ * backported from util/paramassign.c
+ */
+static Param *
+replace_nestloop_param_var(PlannerInfo *root, Var *var)
+{
+	Param *param;
+	NestLoopParam *nlp;
+	ListCell *lc;
+
+	/* Is this Var already listed in root->curOuterParams? */
+	foreach (lc, root->curOuterParams)
+	{
+		nlp = (NestLoopParam *) lfirst(lc);
+		if (equal(var, nlp->paramval))
+		{
+			/* Yes, so just make a Param referencing this NLP's slot */
+			param = makeNode(Param);
+			param->paramkind = PARAM_EXEC;
+			param->paramid = nlp->paramno;
+			param->paramtype = var->vartype;
+			param->paramtypmod = var->vartypmod;
+			param->paramcollid = var->varcollid;
+			param->location = var->location;
+			return param;
+		}
+	}
+
+	/* No, so assign a PARAM_EXEC slot for a new NLP */
+	param = generate_new_exec_param(root, var->vartype, var->vartypmod, var->varcollid);
+	param->location = var->location;
+
+	/* Add it to the list of required NLPs */
+	nlp = makeNode(NestLoopParam);
+	nlp->paramno = param->paramid;
+	nlp->paramval = copyObject(var);
+	root->curOuterParams = lappend(root->curOuterParams, nlp);
+
+	/* And return the replacement Param */
+	return param;
+}
+
+/*
+ * Generate a Param node to replace the given PlaceHolderVar,
+ * which is expected to come from some upper NestLoop plan node.
+ * Record the need for the PHV in root->curOuterParams.
+ *
+ * This is just like replace_nestloop_param_var, except for PlaceHolderVars.
+ *
+ * backported from util/paramassign.c
+ */
+Param *
+replace_nestloop_param_placeholdervar(PlannerInfo *root, PlaceHolderVar *phv)
+{
+	Param *param;
+	NestLoopParam *nlp;
+	ListCell *lc;
+
+	/* Is this PHV already listed in root->curOuterParams? */
+	foreach (lc, root->curOuterParams)
+	{
+		nlp = (NestLoopParam *) lfirst(lc);
+		if (equal(phv, nlp->paramval))
+		{
+			/* Yes, so just make a Param referencing this NLP's slot */
+			param = makeNode(Param);
+			param->paramkind = PARAM_EXEC;
+			param->paramid = nlp->paramno;
+			param->paramtype = exprType((Node *) phv->phexpr);
+			param->paramtypmod = exprTypmod((Node *) phv->phexpr);
+			param->paramcollid = exprCollation((Node *) phv->phexpr);
+			param->location = -1;
+			return param;
+		}
+	}
+
+	/* No, so assign a PARAM_EXEC slot for a new NLP */
+	param = generate_new_exec_param(root,
+									exprType((Node *) phv->phexpr),
+									exprTypmod((Node *) phv->phexpr),
+									exprCollation((Node *) phv->phexpr));
+
+	/* Add it to the list of required NLPs */
+	nlp = makeNode(NestLoopParam);
+	nlp->paramno = param->paramid;
+	nlp->paramval = (Var *) copyObject(phv);
+	root->curOuterParams = lappend(root->curOuterParams, nlp);
+
+	/* And return the replacement Param */
+	return param;
+}
+
+/*
+ * Generate a new Param node that will not conflict with any other.
+ *
+ * This is used to create Params representing subplan outputs or
+ * NestLoop parameters.
+ *
+ * We don't need to build a PlannerParamItem for such a Param, but we do
+ * need to record the PARAM_EXEC slot number as being allocated.
+ *
+ * backported from util/paramassign.c
+ */
+Param *
+generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod, Oid paramcollation)
+{
+	Param *retval;
+
+	retval = makeNode(Param);
+	retval->paramkind = PARAM_EXEC;
+#if PG96 || PG10
+	retval->paramid = root->glob->nParamExec++;
+#else
+	retval->paramid = list_length(root->glob->paramExecTypes);
+	root->glob->paramExecTypes = lappend_oid(root->glob->paramExecTypes, paramtype);
+#endif
+	retval->paramtype = paramtype;
+	retval->paramtypmod = paramtypmod;
+	retval->paramcollid = paramcollation;
+	retval->location = -1;
+
+	return retval;
 }
 #endif

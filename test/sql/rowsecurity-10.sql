@@ -1529,8 +1529,10 @@ SELECT * FROM r2;
 
 -- r2 is read-only
 INSERT INTO r2 VALUES (2); -- Not allowed
+\pset tuples_only 1
 UPDATE r2 SET a = 2 RETURNING *; -- Updates nothing
 DELETE FROM r2 RETURNING *; -- Deletes nothing
+\pset tuples_only 0
 
 -- r2 can be used as a non-target relation in DML
 INSERT INTO r1 SELECT a + 1 FROM r2 RETURNING *; -- OK
