@@ -477,12 +477,6 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 (3 rows)
 
 \set ON_ERROR_STOP 0
--- only one continuous aggregate per hypertable
-CREATE VIEW second_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
-AS SELECT time_bucket('3', time), SUM(data)
-    FROM drop_chunks_table_u
-    GROUP BY 1;
-ERROR:  hypertable already has a continuous aggregate
 -- no continuous aggregates on a continuous aggregate materialization table
 CREATE VIEW new_name_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
 AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)

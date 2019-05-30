@@ -39,6 +39,7 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 		.schema = partial_view_schema,
 		.name = partial_view_name,
 	};
+	int64 invalidation_threshold;
 	Cache *hcache = ts_hypertable_cache_pin();
 	int32 hypertable_id = ts_hypertable_cache_get_entry(hcache, hypertable)->fd.id;
 	int32 materialization_id = ts_hypertable_cache_get_entry(hcache, materialization_table)->fd.id;
@@ -46,12 +47,14 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 
 	if (partial_view.name == NULL)
 		elog(ERROR, "view cannot be NULL");
-
+	invalidation_threshold = invalidation_threshold_get(hypertable_id);
+	/* since we have only 1 cagg, we can use the hypertable's inv. threshold */
 	continuous_agg_execute_materialization(bw,
 										   hypertable_id,
 										   materialization_id,
 										   partial_view,
-										   invalidations);
+										   invalidations,
+										   invalidation_threshold);
 
 	PG_RETURN_VOID();
 }

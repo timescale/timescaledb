@@ -609,6 +609,7 @@ WHERE user_view_name = 'mat_drop_test';
 select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
