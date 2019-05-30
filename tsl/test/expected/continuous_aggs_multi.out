@@ -1,0 +1,343 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- stop the continous aggregate background workers from interfering
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- stop the continous aggregate background workers from interfering
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
+select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
+NOTICE:  adding not-null constraint to column "timeval"
+        create_hypertable         
+----------------------------------
+ (1,public,continuous_agg_test,t)
+(1 row)
+
+INSERT INTO continuous_agg_test VALUES
+    (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
+    (15, -4, 22), (16, -4, 23);
+-- TEST for multiple continuous aggs 
+--- invalidations are picked up by both caggs
+CREATE VIEW cagg_1( timed, cnt ) 
+WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2')
+AS
+    SELECT time_bucket( 2, timeval), COUNT(col1) 
+    FROM continuous_agg_test
+    GROUP BY 1;
+CREATE VIEW cagg_2( timed, grp, maxval) 
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2' )
+AS
+    SELECT time_bucket(2, timeval), col1, max(col2) 
+    FROM continuous_agg_test
+    GROUP BY 1, 2;
+NOTICE:  adding index _materialized_hypertable_3_grp_timed_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(grp, timed)
+select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job , materialization_hypertable 
+from timescaledb_information.continuous_aggregates;
+ view_name |    view_owner     | refresh_lag | refresh_interval | max_interval_per_job |            materialization_hypertable            
+-----------+-------------------+-------------+------------------+----------------------+--------------------------------------------------
+ cagg_1    | default_perm_user | -2          | @ 12 hours       | 40                   | _timescaledb_internal._materialized_hypertable_2
+ cagg_2    | default_perm_user | -2          | @ 12 hours       | 40                   | _timescaledb_internal._materialized_hypertable_3
+(2 rows)
+
+--TEST1: cagg_1 is materialized, not cagg_2.
+refresh materialized view cagg_1;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
+INFO:  materializing continuous aggregate public.cagg_1: new range up to 18
+select * from cagg_1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   2
+    12 |   2
+    14 |   2
+    16 |   1
+(4 rows)
+
+SELECT time_bucket(2, timeval), COUNT(col1) as value
+FROM continuous_agg_test
+GROUP BY 1 order by 1;
+ time_bucket | value 
+-------------+-------
+          10 |     2
+          12 |     2
+          14 |     2
+          16 |     1
+(4 rows)
+
+-- check that cagg_2 not materialized 
+select * from cagg_2 order by 1,2;
+ timed | grp | maxval 
+-------+-----+--------
+(0 rows)
+
+refresh materialized view cagg_2;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
+INFO:  materializing continuous aggregate public.cagg_2: new range up to 18
+select * from cagg_2 order by 1,2;
+ timed | grp | maxval 
+-------+-----+--------
+    10 |  -4 |      1
+    10 |  -3 |      5
+    12 |  -3 |      9
+    14 |  -4 |     22
+    16 |  -4 |     23
+(5 rows)
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+ materialization_id | watermark 
+--------------------+-----------
+                  2 |        18
+                  3 |        18
+(2 rows)
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |        18
+(1 row)
+
+--TEST2: cagg_2 gets invalidations after cagg_1's refresh
+--will trigger invalidations 
+INSERT INTO continuous_agg_test VALUES
+    (10, -4, 10), (11, - 3, 50), (11, - 3, 70), (10, - 4, 10);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+ materialization_id | watermark 
+--------------------+-----------
+                  2 |        18
+                  3 |        18
+(2 rows)
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |        18
+(1 row)
+
+refresh materialized view cagg_1;
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+select * from cagg_1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   6
+    12 |   2
+    14 |   2
+    16 |   1
+(4 rows)
+
+SELECT time_bucket(2, timeval), COUNT(col1) as value
+FROM continuous_agg_test
+GROUP BY 1 order by 1;
+ time_bucket | value 
+-------------+-------
+          10 |     6
+          12 |     2
+          14 |     2
+          16 |     1
+(4 rows)
+
+-- are the invalidations picked up here?
+select * from cagg_2 order by 1, 2;
+ timed | grp | maxval 
+-------+-----+--------
+    10 |  -4 |      1
+    10 |  -3 |      5
+    12 |  -3 |      9
+    14 |  -4 |     22
+    16 |  -4 |     23
+(5 rows)
+
+SELECT time_bucket(2, timeval), col1, max(col2) 
+FROM continuous_agg_test
+GROUP BY 1, 2
+order by 1,2 ;
+ time_bucket | col1 | max 
+-------------+------+-----
+          10 |   -4 |  10
+          10 |   -3 |  70
+          12 |   -3 |   9
+          14 |   -4 |  22
+          16 |   -4 |  23
+(5 rows)
+
+refresh materialized view cagg_2;
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize
+select * from cagg_2 order by 1, 2;
+ timed | grp | maxval 
+-------+-----+--------
+    10 |  -4 |     10
+    10 |  -3 |     70
+    12 |  -3 |      9
+    14 |  -4 |     22
+    16 |  -4 |     23
+(5 rows)
+
+--TEST3: invalidations left over by cagg_1 are dropped
+--trigger another invalidation
+INSERT INTO continuous_agg_test VALUES
+    (10, -4, 1000);
+select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ count 
+-------
+     0
+(1 row)
+
+refresh materialized view cagg_1;
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ count 
+-------
+     1
+(1 row)
+
+--now drop cagg_1, should still have materialization_invalidation_log
+drop view cagg_1 cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_5_chunk
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ count 
+-------
+     1
+(1 row)
+
+drop table continuous_agg_test cascade;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_6_chunk
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ count 
+-------
+     0
+(1 row)
+
+--TEST4: invalidations that are copied over by cagg1 are not deleted by cagg2 refresh if
+-- they do not meet materialization invalidation threshold for cagg2.
+CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
+select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
+NOTICE:  adding not-null constraint to column "timeval"
+        create_hypertable         
+----------------------------------
+ (4,public,continuous_agg_test,t)
+(1 row)
+
+INSERT INTO continuous_agg_test VALUES
+    (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
+    (15, -4, 22), (16, -4, 23);
+CREATE VIEW cagg_1( timed, cnt ) 
+WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2')
+AS
+    SELECT time_bucket( 2, timeval), COUNT(col1) 
+    FROM continuous_agg_test
+    GROUP BY 1;
+CREATE VIEW cagg_2( timed, maxval) 
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2' )
+AS
+    SELECT time_bucket(2, timeval), max(col2) 
+    FROM continuous_agg_test
+    GROUP BY 1;
+refresh materialized view cagg_1;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
+INFO:  materializing continuous aggregate public.cagg_1: new range up to 18
+select * from cagg_1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   2
+    12 |   2
+    14 |   2
+    16 |   1
+(4 rows)
+
+refresh materialized view cagg_2;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (14)
+INFO:  materializing continuous aggregate public.cagg_2: new range up to 14
+select * from cagg_2 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      9
+(2 rows)
+
+--this insert will be processed only by cagg_1 and copied over to cagg_2
+insert into continuous_agg_test values( 14, -2, 100); 
+refresh materialized view cagg_1;
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+select * from cagg_1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   2
+    12 |   2
+    14 |   3
+    16 |   1
+(4 rows)
+
+refresh materialized view cagg_2;
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (14)
+INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize or invalidations found, exiting early
+select * from cagg_2 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      9
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order by 1;
+ hypertable_id | watermark 
+---------------+-----------
+             4 |        18
+(1 row)
+
+select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+                  6 |                    14 |                      14
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--this insert will be processed only by cagg_1 and cagg_2 will process the previous
+--one
+insert into continuous_agg_test values( 18, -2, 200); 
+refresh materialized view cagg_1;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (20)
+INFO:  materializing continuous aggregate public.cagg_1: new range up to 20
+select * from cagg_1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   2
+    12 |   2
+    14 |   3
+    16 |   1
+    18 |   1
+(5 rows)
+
+refresh materialized view cagg_2;
+INFO:  new materialization range for public.continuous_agg_test (time column timeval) (16)
+INFO:  materializing continuous aggregate public.cagg_2: new range up to 16
+select * from cagg_2 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      9
+    14 |    100
+(3 rows)
+
+ 

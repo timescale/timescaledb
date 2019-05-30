@@ -1,5 +1,6 @@
 set(TEST_FILES
-  continuous_aggs_insert.spec)
+  continuous_aggs_insert.spec
+  continuous_aggs_multi.spec)
 
 set(TEST_TEMPLATES
  reorder_deadlock.spec.in

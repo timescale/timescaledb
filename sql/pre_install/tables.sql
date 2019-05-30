@@ -266,6 +266,20 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (hypertable_id, lowest_modified_value ASC);
 
+-- per cagg copy of invalidation log
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
+    materialization_id INTEGER PRIMARY KEY
+        REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
+        ON DELETE CASCADE,
+    lowest_modified_value BIGINT NOT NULL,
+    greatest_modified_value BIGINT NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_invalidation_log', '');
+
+CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
+    ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
+
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
