@@ -23,21 +23,19 @@ install:
   # We only need to build the regress and isolation stuff
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/regress"
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
-
-  # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS='-Werror -O2' cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install"
-  # Now build with OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS='-Werror -O2' cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install"
   # Ensure postgres user has permissions
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
+  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
 script:
-  - ${RETRY_PREFIX} docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
-  # First run only telemetry test to see that it works without OpenSSL
+  # First build without OpenSSL
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS='-Werror -O2' cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
+  # Run only telemetry test to see that it works without OpenSSL
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-
+  # Now build with OpenSSL
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS='-Werror -O2' cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
   # Now run all tests
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-
+  # Run the PG regression tests too
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 after_failure:
   - docker exec -u postgres -it pgbuild cat /build/debug/test/regression.diffs /build/debug-nossl/test/regression.diffs /build/debug/tsl/test/regression.diffs /build/debug/test/isolation/regression.diffs /build/debug/tsl/test/isolation/regression.diffs /build/debug/test/pgtest/regression.diffs
