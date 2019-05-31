@@ -18,6 +18,7 @@
 
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/exec.h"
+#include "chunk_append/explain.h"
 #include "chunk_append/planner.h"
 #include "compat.h"
 
@@ -25,8 +26,6 @@ static TupleTableSlot *chunk_append_exec(CustomScanState *node);
 static void chunk_append_begin(CustomScanState *node, EState *estate, int eflags);
 static void chunk_append_end(CustomScanState *node);
 static void chunk_append_rescan(CustomScanState *node);
-
-static void chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
 static CustomExecMethods chunk_append_state_methods = {
 	.BeginCustomScan = chunk_append_begin,
@@ -60,11 +59,11 @@ chunk_append_state_create(CustomScan *cscan)
 	state->initial_subplans = cscan->custom_plans;
 	state->initial_ri_clauses = lsecond(cscan->custom_private);
 	adjust_ri_clauses(state, lthird(cscan->custom_private));
+	state->sort_options = lfourth(cscan->custom_private);
 
-	state->ht_reloid = linitial_oid(linitial(cscan->custom_private));
-	state->startup_exclusion = (bool) lsecond_oid(linitial(cscan->custom_private));
-	state->runtime_exclusion = (bool) lthird_oid(linitial(cscan->custom_private));
-	state->limit = lfourth_oid(linitial(cscan->custom_private));
+	state->startup_exclusion = (bool) linitial_oid(linitial(cscan->custom_private));
+	state->runtime_exclusion = (bool) lsecond_oid(linitial(cscan->custom_private));
+	state->limit = lthird_oid(linitial(cscan->custom_private));
 
 	state->current = 0;
 	state->runtime_initialized = false;
@@ -358,34 +357,6 @@ chunk_append_rescan(CustomScanState *node)
 		state->valid_subplans = NULL;
 		state->runtime_initialized = false;
 	}
-}
-
-static void
-chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
-{
-	ChunkAppendState *state = (ChunkAppendState *) node;
-
-	ExplainPropertyText("Hypertable", get_rel_name(state->ht_reloid), es);
-
-	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
-		ExplainPropertyBool("Startup Exclusion", state->startup_exclusion, es);
-
-	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
-		ExplainPropertyBool("Runtime Exclusion", state->runtime_exclusion, es);
-
-	if (state->startup_exclusion)
-		ExplainPropertyIntegerCompat("Chunks excluded during startup",
-									 NULL,
-									 list_length(state->initial_subplans) -
-										 list_length(node->custom_ps),
-									 es);
-
-	if (state->runtime_exclusion)
-		ExplainPropertyIntegerCompat("Chunks excluded during runtime",
-									 NULL,
-									 list_length(state->filtered_subplans) -
-										 bms_num_members(state->valid_subplans),
-									 es);
 }
 
 /*

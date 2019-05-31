@@ -1012,8 +1012,8 @@ psql:include/plan_expand_hypertable_query.sql:156: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1000d',time) < '294276-01-01'::timestamp ORDER BY time;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamp
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
          Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
@@ -1037,8 +1037,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
@@ -1117,8 +1117,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_date WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                              QUERY PLAN                                              
 -----------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_date
+ Custom Scan (ChunkAppend) on metrics_date
+   Order: metrics_date."time"
    ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_date_time_idx on _hyper_7_165_chunk
          Index Cond: ("time" < '01-04-2000'::date)
          Filter: (time_bucket('@ 1 day'::interval, "time") < '01-03-2000'::date)
@@ -1127,8 +1127,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_date WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                        QUERY PLAN                                                                        
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_date
+ Custom Scan (ChunkAppend) on metrics_date
+   Order: metrics_date."time"
    ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_date_time_idx on _hyper_7_165_chunk
          Index Cond: (("time" >= '01-03-2000'::date) AND ("time" <= '01-11-2000'::date))
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= '01-03-2000'::date) AND (time_bucket('@ 1 day'::interval, "time") <= '01-10-2000'::date))
@@ -1141,8 +1141,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamp
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
          Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000'::timestamp without time zone)
@@ -1151,8 +1151,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                                                             QUERY PLAN                                                                                                             
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamp
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
          Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000'::timestamp without time zone) AND ("time" <= 'Tue Jan 11 00:00:00 2000'::timestamp without time zone))
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000'::timestamp without time zone) AND (time_bucket('@ 1 day'::interval, "time") <= 'Mon Jan 10 00:00:00 2000'::timestamp without time zone))
@@ -1165,8 +1165,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Index Cond: ("time" < 'Mon Jan 03 06:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 6 hours'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
@@ -1175,8 +1175,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
                                                                                                                QUERY PLAN                                                                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 10 06:00:00 2000 PST'::timestamp with time zone))
          Filter: ((time_bucket('@ 6 hours'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
@@ -1189,8 +1189,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
@@ -1199,8 +1199,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                                                              QUERY PLAN                                                                                                              
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Tue Jan 11 00:00:00 2000 PST'::timestamp with time zone))
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
@@ -1212,8 +1212,8 @@ psql:include/plan_expand_hypertable_query.sql:165: ERROR:  timestamp out of rang
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
                                                                                                               QUERY PLAN                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: metrics_timestamptz
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
          Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))

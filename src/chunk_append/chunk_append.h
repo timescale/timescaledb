@@ -15,7 +15,6 @@
 typedef struct ChunkAppendPath
 {
 	CustomPath cpath;
-	Oid ht_reloid;
 	bool startup_exclusion;
 	bool runtime_exclusion;
 } ChunkAppendPath;

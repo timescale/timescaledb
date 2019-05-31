@@ -37,6 +37,9 @@ typedef struct ChunkAppendState
 	/* valid subplans for runtime exclusion */
 	Bitmapset *valid_subplans;
 
+	/* sort options if this append is ordered */
+	List *sort_options;
+
 } ChunkAppendState;
 
 extern Node *chunk_append_state_create(CustomScan *cscan);

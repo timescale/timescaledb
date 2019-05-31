@@ -109,8 +109,8 @@ EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
  Limit
-   ->  Custom Scan (ChunkAppend)
-         Hypertable: hyper_1
+   ->  Custom Scan (ChunkAppend) on hyper_1
+         Order: hyper_1."time" DESC
          ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (4 rows)
 
