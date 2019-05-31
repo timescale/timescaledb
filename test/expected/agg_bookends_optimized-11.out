@@ -25,8 +25,8 @@ INSERT INTO "btest" VALUES('2017-01-20T09:00:43', '2017-01-20T09:01:55', 2, 20.1
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend)
-   Hypertable: btest
+ Custom Scan (ChunkAppend) on btest
+   Order: btest."time"
    ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk
 (3 rows)
 

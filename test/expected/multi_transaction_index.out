@@ -337,9 +337,9 @@ EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORD
 --------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: partial_index_test."time"
-   ->  Custom Scan (ChunkAppend)
+   ->  Custom Scan (ChunkAppend) on public.partial_index_test
          Output: partial_index_test."time"
-         Hypertable: partial_index_test
+         Order: partial_index_test."time"
          Startup Exclusion: false
          Runtime Exclusion: false
          ->  Index Only Scan using _hyper_3_4_chunk_partial_index_test_time_idx on _timescaledb_internal._hyper_3_4_chunk

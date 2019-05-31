@@ -410,4 +410,13 @@ LEFT OUTER JOIN LATERAL(
 -- test with space partitioning
 :PREFIX SELECT * FROM space s1 INNER JOIN space s2 ON s1.time = s2.time ORDER BY s1.time LIMIT 100;
 
+-- test COLLATION
+-- cant be tested in our ci because alpine doesnt support locales
+-- :PREFIX SELECT * FROM sortopt_test ORDER BY time, device COLLATE "en_US.utf8";
+
+-- test NULLS FIRST
+:PREFIX SELECT * FROM sortopt_test ORDER BY time, device NULLS FIRST;
+
+-- test NULLS LAST
+:PREFIX SELECT * FROM sortopt_test ORDER BY time, device DESC NULLS LAST;
 

@@ -146,4 +146,19 @@ INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'
 INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 1, 1.5;
 INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 2, 1.5;
 
+ANALYZE space3;
+
+CREATE TABLE sortopt_test(time timestamptz NOT NULL, device TEXT);
+SELECT create_hypertable('sortopt_test','time',create_default_indexes:=false);
+
+-- since alpine does not support locales we cant test collations in our ci
+-- CREATE COLLATION IF NOT EXISTS en_US(LOCALE='en_US.utf8');
+-- CREATE INDEX time_device_utf8 ON sortopt_test(time, device COLLATE "en_US");
+
+CREATE INDEX time_device_nullsfirst ON sortopt_test(time, device NULLS FIRST);
+CREATE INDEX time_device_nullslast ON sortopt_test(time, device DESC NULLS LAST);
+
+INSERT INTO sortopt_test SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 'Device 1';
+
+ANALYZE sortopt_test;
 

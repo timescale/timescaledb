@@ -87,6 +87,7 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 	ListCell *lc_child;
 	List *chunk_ri_clauses = NIL;
 	List *chunk_rt_indexes = NIL;
+	List *sort_options = NIL;
 	List *custom_private = NIL;
 	uint32 limit = 0;
 
@@ -95,7 +96,7 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 
 	cscan->flags = path->flags;
 	cscan->methods = &chunk_append_plan_methods;
-	cscan->scan.scanrelid = 0;
+	cscan->scan.scanrelid = rel->relid;
 
 	tlist = ts_build_path_tlist(root, (Path *) path);
 	cscan->custom_scan_tlist = tlist;
@@ -116,6 +117,11 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 		Oid *collations;
 		bool *nullsFirst;
 		List *pathkeys = path->path.pathkeys;
+		List *sort_indexes = NIL;
+		List *sort_ops = NIL;
+		List *sort_collations = NIL;
+		List *sort_nulls = NIL;
+		int i;
 
 		/* Compute sort column info, and adjust MergeAppend's tlist as needed */
 		ts_prepare_sort_from_pathkeys(&cscan->scan.plan,
@@ -128,6 +134,19 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 									  &sortOperators,
 									  &collations,
 									  &nullsFirst);
+
+		/*
+		 * collect sort information to make available to explain
+		 */
+		for (i = 0; i < numCols; i++)
+		{
+			sort_indexes = lappend_oid(sort_indexes, sortColIdx[i]);
+			sort_ops = lappend_oid(sort_ops, sortOperators[i]);
+			sort_collations = lappend_oid(sort_collations, collations[i]);
+			sort_nulls = lappend_oid(sort_nulls, nullsFirst[i]);
+		}
+
+		sort_options = list_make4(sort_indexes, sort_ops, sort_collations, sort_nulls);
 
 		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 		{
@@ -211,12 +230,11 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 	if (root->limit_tuples > 0 && root->limit_tuples <= PG_UINT32_MAX)
 		limit = root->limit_tuples;
 
-	custom_private = list_make1(list_make4_oid(capath->ht_reloid,
-											   (Oid) capath->startup_exclusion,
-											   (Oid) capath->runtime_exclusion,
-											   limit));
+	custom_private = list_make1(
+		list_make3_oid((Oid) capath->startup_exclusion, (Oid) capath->runtime_exclusion, limit));
 	custom_private = lappend(custom_private, chunk_ri_clauses);
 	custom_private = lappend(custom_private, chunk_rt_indexes);
+	custom_private = lappend(custom_private, sort_options);
 
 	cscan->custom_private = custom_private;
 

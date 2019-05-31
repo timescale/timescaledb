@@ -47,8 +47,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	path->cpath.path.parallel_safe = subpath->parallel_safe;
 	path->cpath.path.parallel_workers = subpath->parallel_workers;
 
-	path->ht_reloid = ht->main_table_relid;
-
 	/*
 	 * Set flags. We can set CUSTOMPATH_SUPPORT_BACKWARD_SCAN and
 	 * CUSTOMPATH_SUPPORT_MARK_RESTORE. The only interesting flag is the first

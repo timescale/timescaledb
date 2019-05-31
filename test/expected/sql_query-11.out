@@ -138,9 +138,9 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "t
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-   ->  Custom Scan (ChunkAppend)
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Hypertable: two_Partitions
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
          Startup Exclusion: false
          Runtime Exclusion: false
          ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
@@ -161,9 +161,9 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-   ->  Custom Scan (ChunkAppend)
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Hypertable: two_Partitions
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
          Startup Exclusion: false
          Runtime Exclusion: false
          ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_3_chunk
@@ -184,9 +184,9 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-   ->  Custom Scan (ChunkAppend)
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Hypertable: two_Partitions
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
          Startup Exclusion: false
          Runtime Exclusion: false
          ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_3_chunk
@@ -214,9 +214,9 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
    ->  GroupAggregate
          Output: "two_Partitions"."timeCustom", min("two_Partitions".series_0)
          Group Key: "two_Partitions"."timeCustom"
-         ->  Custom Scan (ChunkAppend)
+         ->  Custom Scan (ChunkAppend) on public."two_Partitions"
                Output: "two_Partitions"."timeCustom", "two_Partitions".series_0
-               Hypertable: two_Partitions
+               Order: "two_Partitions"."timeCustom" DESC NULLS LAST
                Startup Exclusion: false
                Runtime Exclusion: false
                ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
