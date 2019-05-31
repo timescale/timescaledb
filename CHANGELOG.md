@@ -5,15 +5,28 @@
 accidentally triggering the load of a previous DB version.**
 
 
-## 1.3.1 (unreleased)
+## 1.3.1 (2019-06-10)
+
+This maintenance release contains bugfixes since the 1.3.0 release.
+We deem it low-to-moderate priority for upgrading.
+
+In particular, the fixes contained in this maintenance release do not address any
+security vulnerabilities, while the only one affecting system stability is related
+to TimescaleDB running on PostgreSQL 11.  More details below.
 
 **Bugfixes**
 * #1220 Fix detecting JOINs for continuous aggs
+* #1221 Fix segfault in VACUUM on PG11
+* #1228 ARM32 Fix: Pass int64 using Int64GetDatum when a Datum is required
 * #1232 Allow Param as time_bucket_gapfill arguments
+* #1236 Stop preventing REFRESH in transaction blocks
 
 **Thanks**
 * @od0 for reporting an error with continuous aggs and JOINs
 * @rickbatka for reporting an error when using time_bucket_gapfill in functions
+* @OneMoreSec for reporting the bug with VACUUM
+* @dvdrozdov @od0 @t0k4rt for reporting the issue with REFRESH in transaction blocks
+* @mhagander and @devrimgunduz for suggesting adding a CMAKE flag to control the default telemetry level
 
 ## 1.3.0 (2019-05-06)
 
