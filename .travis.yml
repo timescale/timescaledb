@@ -25,7 +25,7 @@ install:
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
 
   # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS='-Werror -O2' cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS} && make install"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS='-Werror -O2' cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install"
   # Now build with OpenSSL
   - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS='-Werror -O2' cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install"
   # Ensure postgres user has permissions
