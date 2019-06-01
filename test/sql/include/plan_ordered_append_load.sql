@@ -132,3 +132,18 @@ INSERT INTO space2 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'
 
 ANALYZE space2;
 
+CREATE TABLE space3(time timestamptz NOT NULL, x int NOT NULL, y int NOT NULL, z int NOT NULL, value float);
+SELECT create_hypertable('space3','time','x',number_partitions:=2);
+SELECT add_dimension('space3','y',number_partitions:=2);
+SELECT add_dimension('space3','z',number_partitions:=2);
+
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 1, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 1, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 2, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 2, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 1, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 1, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 2, 1.5;
+
+

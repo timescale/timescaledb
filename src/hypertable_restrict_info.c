@@ -559,12 +559,6 @@ ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, 
 	List *chunk_oids = NIL;
 	int i;
 
-	/*
-	 * ordered append is the only user of this function which checks for
-	 * number of dimensions as well so we only assert here
-	 */
-	Assert(hri->num_dimensions == 1 || hri->num_dimensions == 2);
-
 	dri = hri->dimension_restriction[0];
 
 	Assert(NULL != dri);
