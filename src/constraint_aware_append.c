@@ -374,11 +374,25 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 									List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
-	Plan *subplan = linitial(custom_plans);
+	Plan *subplan;
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	List *chunk_ri_clauses = NIL;
 	List *children = NIL;
 	ListCell *lc_child;
+
+	/* Postgres will inject Result nodes above mergeappend when target lists don't match
+	 * because the nodes themselves do not perform projection. The ConstraintAwareAppend
+	 * node can do this projection itself, however, so just throw away the result node */
+	if (IsA(linitial(custom_plans), Result))
+	{
+		Result *result = castNode(Result, linitial(custom_plans));
+
+		if (result->plan.righttree != NULL)
+			elog(ERROR, "unexpected right tree below result node in constraint aware append");
+
+		custom_plans = list_make1(result->plan.lefttree);
+	}
+	subplan = linitial(custom_plans);
 
 	cscan->scan.scanrelid = 0;			 /* Not a real relation we are scanning */
 	cscan->scan.plan.targetlist = tlist; /* Target list we expect as output */
