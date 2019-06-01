@@ -256,10 +256,15 @@ FROM space
 ORDER BY device_id, time LIMIT 1;
 
 -- test hypertable with 2 space dimensions
--- does not use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM space2
+ORDER BY time DESC;
+
+-- test hypertable with 3 space dimensions
+:PREFIX SELECT
+  time
+FROM space3
 ORDER BY time DESC;
 
 -- test LATERAL with correlated query

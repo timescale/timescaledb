@@ -122,8 +122,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		List *nested_children = NIL;
 		bool has_scan_childs = false;
 
-		Assert(ht->space->num_dimensions <= 2);
-
 		foreach (lc, nested_oids)
 		{
 			ListCell *lc_oid;
@@ -229,7 +227,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	 * only do this optimization for queries with an ORDER BY clause,
 	 * caller checked this, so only asserting
 	 */
-	Assert(ht->space->num_dimensions <= 2 && root->parse->sortClause != NIL);
+	Assert(root->parse->sortClause != NIL);
 
 	/* we only support direct column references here */
 	if (!IsA(tle->expr, Var))

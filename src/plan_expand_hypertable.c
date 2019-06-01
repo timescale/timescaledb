@@ -559,7 +559,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	 * only do this optimization for hypertables with 1 dimension and queries
 	 * with an ORDER BY clause
 	 */
-	if (ht->space->num_dimensions > 2 || root->parse->sortClause == NIL)
+	if (root->parse->sortClause == NIL)
 		return false;
 
 	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, reverse);
@@ -664,7 +664,11 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 			{
 				((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
 
-				if (ht->space->num_dimensions == 2)
+				/*
+				 * for space partitioning we need extra information about the
+				 * time slices of the chunks
+				 */
+				if (ht->space->num_dimensions > 1)
 					nested_oids = &((TimescaleDBPrivate *) rel->fdw_private)->nested_oids;
 			}
 

@@ -174,6 +174,33 @@ INSERT INTO space2 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'
 INSERT INTO space2 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 3, 2.5;
 INSERT INTO space2 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 3, 3, 3.5;
 ANALYZE space2;
+CREATE TABLE space3(time timestamptz NOT NULL, x int NOT NULL, y int NOT NULL, z int NOT NULL, value float);
+SELECT create_hypertable('space3','time','x',number_partitions:=2);
+  create_hypertable  
+---------------------
+ (9,public,space3,t)
+(1 row)
+
+SELECT add_dimension('space3','y',number_partitions:=2);
+     add_dimension      
+------------------------
+ (14,public,space3,y,t)
+(1 row)
+
+SELECT add_dimension('space3','z',number_partitions:=2);
+     add_dimension      
+------------------------
+ (15,public,space3,z,t)
+(1 row)
+
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 1, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 1, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 2, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 2, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 1, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 1, 2, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 1, 1.5;
+INSERT INTO space3 SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2, 2, 1.5;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -240,7 +267,23 @@ ORDER BY ht.table_name, range_start, chunk;
  space2                 | _hyper_8_43_chunk |      947116800000000
  space2                 | _hyper_8_45_chunk |      947116800000000
  space2                 | _hyper_8_47_chunk |      947116800000000
-(48 rows)
+ space3                 | _hyper_9_50_chunk | -9223372036854775808
+ space3                 | _hyper_9_52_chunk | -9223372036854775808
+ space3                 | _hyper_9_54_chunk | -9223372036854775808
+ space3                 | _hyper_9_56_chunk | -9223372036854775808
+ space3                 | _hyper_9_58_chunk | -9223372036854775808
+ space3                 | _hyper_9_60_chunk | -9223372036854775808
+ space3                 | _hyper_9_62_chunk | -9223372036854775808
+ space3                 | _hyper_9_64_chunk |      946512000000000
+ space3                 | _hyper_9_49_chunk |      947116800000000
+ space3                 | _hyper_9_51_chunk |      947116800000000
+ space3                 | _hyper_9_53_chunk |      947116800000000
+ space3                 | _hyper_9_55_chunk |      947116800000000
+ space3                 | _hyper_9_57_chunk |      947116800000000
+ space3                 | _hyper_9_59_chunk |      947116800000000
+ space3                 | _hyper_9_61_chunk |      947116800000000
+ space3                 | _hyper_9_63_chunk |      947116800000000
+(64 rows)
 
 -- test ASC for ordered chunks
 :PREFIX SELECT
@@ -1012,34 +1055,84 @@ ORDER BY device_id, time LIMIT 1;
 (13 rows)
 
 -- test hypertable with 2 space dimensions
--- does not use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM space2
 ORDER BY time DESC;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
- Merge Append (actual rows=116649 loops=1)
-   Sort Key: _hyper_8_31_chunk."time" DESC
-   ->  Index Scan using _hyper_8_31_chunk_space2_time_idx on _hyper_8_31_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_32_chunk_space2_time_idx on _hyper_8_32_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_33_chunk_space2_time_idx on _hyper_8_33_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_34_chunk_space2_time_idx on _hyper_8_34_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_35_chunk_space2_time_idx on _hyper_8_35_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_36_chunk_space2_time_idx on _hyper_8_36_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_37_chunk_space2_time_idx on _hyper_8_37_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_38_chunk_space2_time_idx on _hyper_8_38_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_39_chunk_space2_time_idx on _hyper_8_39_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_40_chunk_space2_time_idx on _hyper_8_40_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_41_chunk_space2_time_idx on _hyper_8_41_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_42_chunk_space2_time_idx on _hyper_8_42_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_43_chunk_space2_time_idx on _hyper_8_43_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_44_chunk_space2_time_idx on _hyper_8_44_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_45_chunk_space2_time_idx on _hyper_8_45_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_46_chunk_space2_time_idx on _hyper_8_46_chunk (actual rows=6720 loops=1)
-   ->  Index Scan using _hyper_8_47_chunk_space2_time_idx on _hyper_8_47_chunk (actual rows=6241 loops=1)
-   ->  Index Scan using _hyper_8_48_chunk_space2_time_idx on _hyper_8_48_chunk (actual rows=6720 loops=1)
-(20 rows)
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) (actual rows=116649 loops=1)
+   Hypertable: space2
+   ->  Merge Append (actual rows=56169 loops=1)
+         Sort Key: _hyper_8_31_chunk."time" DESC
+         ->  Index Scan using _hyper_8_31_chunk_space2_time_idx on _hyper_8_31_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_33_chunk_space2_time_idx on _hyper_8_33_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_35_chunk_space2_time_idx on _hyper_8_35_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_37_chunk_space2_time_idx on _hyper_8_37_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_39_chunk_space2_time_idx on _hyper_8_39_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_41_chunk_space2_time_idx on _hyper_8_41_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_43_chunk_space2_time_idx on _hyper_8_43_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_45_chunk_space2_time_idx on _hyper_8_45_chunk (actual rows=6241 loops=1)
+         ->  Index Scan using _hyper_8_47_chunk_space2_time_idx on _hyper_8_47_chunk (actual rows=6241 loops=1)
+   ->  Merge Append (actual rows=60480 loops=1)
+         Sort Key: _hyper_8_32_chunk."time" DESC
+         ->  Index Scan using _hyper_8_32_chunk_space2_time_idx on _hyper_8_32_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_34_chunk_space2_time_idx on _hyper_8_34_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_36_chunk_space2_time_idx on _hyper_8_36_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_38_chunk_space2_time_idx on _hyper_8_38_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_40_chunk_space2_time_idx on _hyper_8_40_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_42_chunk_space2_time_idx on _hyper_8_42_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_44_chunk_space2_time_idx on _hyper_8_44_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_46_chunk_space2_time_idx on _hyper_8_46_chunk (actual rows=6720 loops=1)
+         ->  Index Scan using _hyper_8_48_chunk_space2_time_idx on _hyper_8_48_chunk (actual rows=6720 loops=1)
+(24 rows)
+
+-- test hypertable with 3 space dimensions
+:PREFIX SELECT
+  time
+FROM space3
+ORDER BY time DESC;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) (actual rows=103688 loops=1)
+   Hypertable: space3
+   ->  Merge Append (actual rows=49928 loops=1)
+         Sort Key: _hyper_9_49_chunk."time" DESC
+         ->  Index Only Scan using _hyper_9_49_chunk_space3_time_idx on _hyper_9_49_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_51_chunk_space3_time_idx on _hyper_9_51_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_53_chunk_space3_time_idx on _hyper_9_53_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_55_chunk_space3_time_idx on _hyper_9_55_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_57_chunk_space3_time_idx on _hyper_9_57_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_59_chunk_space3_time_idx on _hyper_9_59_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_61_chunk_space3_time_idx on _hyper_9_61_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+         ->  Index Only Scan using _hyper_9_63_chunk_space3_time_idx on _hyper_9_63_chunk (actual rows=6241 loops=1)
+               Heap Fetches: 6241
+   ->  Merge Append (actual rows=53760 loops=1)
+         Sort Key: _hyper_9_50_chunk."time" DESC
+         ->  Index Only Scan using _hyper_9_50_chunk_space3_time_idx on _hyper_9_50_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_52_chunk_space3_time_idx on _hyper_9_52_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_54_chunk_space3_time_idx on _hyper_9_54_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_56_chunk_space3_time_idx on _hyper_9_56_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_58_chunk_space3_time_idx on _hyper_9_58_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_60_chunk_space3_time_idx on _hyper_9_60_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_62_chunk_space3_time_idx on _hyper_9_62_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+         ->  Index Only Scan using _hyper_9_64_chunk_space3_time_idx on _hyper_9_64_chunk (actual rows=6720 loops=1)
+               Heap Fetches: 6720
+(38 rows)
 
 -- test LATERAL with correlated query
 -- only last chunk should be executed
