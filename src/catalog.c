@@ -256,7 +256,7 @@ static const char *cache_proxy_table_names[_MAX_CACHE_TYPES] = {
 };
 
 /* Catalog information for the current database. */
-static Catalog catalog = {
+static Catalog s_catalog = {
 	.initialized = false,
 };
 
@@ -398,23 +398,23 @@ ts_catalog_get(void)
 	if (!ts_extension_is_loaded())
 		elog(ERROR, "tried calling catalog_get when extension isn't loaded");
 
-	if (catalog.initialized || !IsTransactionState())
-		return &catalog;
+	if (s_catalog.initialized || !IsTransactionState())
+		return &s_catalog;
 
-	memset(&catalog, 0, sizeof(Catalog));
-	ts_catalog_table_info_init(catalog.tables,
+	memset(&s_catalog, 0, sizeof(Catalog));
+	ts_catalog_table_info_init(s_catalog.tables,
 							   _MAX_CATALOG_TABLES,
 							   catalog_table_names,
 							   catalog_table_index_definitions,
 							   catalog_table_serial_id_names);
 
-	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
+	s_catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
-		catalog.caches[i].inval_proxy_id =
-			get_relname_relid(cache_proxy_table_names[i], catalog.cache_schema_id);
+		s_catalog.caches[i].inval_proxy_id =
+			get_relname_relid(cache_proxy_table_names[i], s_catalog.cache_schema_id);
 
-	catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
+	s_catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
 
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
@@ -434,17 +434,17 @@ ts_catalog_get(void)
 				 def.name,
 				 def.args);
 
-		catalog.functions[i].function_id = funclist->oid;
+		s_catalog.functions[i].function_id = funclist->oid;
 	}
-	catalog.initialized = true;
+	s_catalog.initialized = true;
 
-	return &catalog;
+	return &s_catalog;
 }
 
 void
 ts_catalog_reset(void)
 {
-	catalog.initialized = false;
+	s_catalog.initialized = false;
 	database_info.database_id = InvalidOid;
 }
 
