@@ -1,8 +1,16 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-SET timescaledb.disable_optimizations= 'off';
-\ir include/sql_query_results.sql
+\set TEST_BASE_NAME query
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
+\gset
+\set PREFIX 'EXPLAIN (costs OFF)'
+\ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
@@ -104,8 +112,18 @@ ANALYZE hyper_1;
 ANALYZE hyper_1_tz;
 ANALYZE hyper_1_int;
 ANALYZE hyper_1_date;
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+SHOW timescaledb.disable_optimizations;
+ timescaledb.disable_optimizations 
+-----------------------------------
+ off
+(1 row)
+
 --non-aggregates use MergeAppend in both optimized and non-optimized
-EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
+:PREFIX SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
  Limit
@@ -114,14 +132,7 @@ EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
          ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (4 rows)
 
-SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
-           time           | series_0 | series_1 |     series_2     
---------------------------+----------+----------+------------------
- Wed Dec 31 21:33:20 1969 |    20000 |    30000 |  141.42135623731
- Wed Dec 31 21:33:19 1969 |    19999 |    29999 | 141.417820659208
-(2 rows)
-
-EXPLAIN (costs off) SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
+:PREFIX SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Limit
@@ -130,15 +141,8 @@ EXPLAIN (costs off) SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("tim
          ->  Index Scan using _hyper_5_19_chunk_time_plain_timefunc on _hyper_5_19_chunk
 (4 rows)
 
-SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
- time  | series_0 | series_1 |     series_2     
--------+----------+----------+------------------
- 20000 |    20000 |    30000 |  141.42135623731
- 19999 |    19999 |    29999 | 141.417820659208
-(2 rows)
-
 --Aggregates use MergeAppend only in optimized
-EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Limit
@@ -150,8 +154,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Limit
@@ -176,22 +179,32 @@ FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
 (19 rows)
 
 --the minute and second results should be diff
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
-(2 rows)
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
+         ->  Result
+               ->  Merge Append
+                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
+                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(7 rows)
 
-SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |  avg  |  min  |       avg        
---------------------------+-------+-------+------------------
- Wed Dec 31 21:33:20 1969 | 20000 | 30000 |  141.42135623731
- Wed Dec 31 21:33:19 1969 | 19999 | 29999 | 141.417820659208
-(2 rows)
+:PREFIX SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('second'::text, _hyper_1_1_chunk."time"))
+         ->  Result
+               ->  Merge Append
+                     Sort Key: (date_trunc('second'::text, _hyper_1_1_chunk."time")) DESC
+                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(7 rows)
 
 --test that when index on time used by constraint, still works correctly
-EXPLAIN (costs off)
+:PREFIX
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1
 WHERE time < to_timestamp(900)
@@ -212,23 +225,11 @@ LIMIT 2;
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (10 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1
-WHERE time < to_timestamp(900)
-GROUP BY t
-ORDER BY t DESC
-LIMIT 2;
-            t             |  avg  |  min  |       avg        
---------------------------+-------+-------+------------------
- Wed Dec 31 16:14:00 1969 | 869.5 | 10840 | 29.4858228711055
- Wed Dec 31 16:13:00 1969 | 809.5 | 10780 | 28.4500853206775
-(2 rows)
-
 --test on table with time partitioning function. Currently not
 --optimized to use index for ordering since the index is an expression
 --on time (e.g., timefunc(time)), and we currently don't handle that
 --case.
-EXPLAIN (costs off)
+:PREFIX
 SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_timefunc
 WHERE to_timestamp(time) < to_timestamp(900)
@@ -248,23 +249,12 @@ LIMIT 2;
                                  Index Cond: (to_timestamp("time") < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (9 rows)
 
-SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_timefunc
-WHERE to_timestamp(time) < to_timestamp(900)
-GROUP BY t
-ORDER BY t DESC
-LIMIT 2;
-              t               |  avg  |  min  |       avg        
-------------------------------+-------+-------+------------------
- Wed Dec 31 16:14:00 1969 PST | 869.5 | 10840 | 29.4858228711055
- Wed Dec 31 16:13:00 1969 PST | 809.5 | 10780 | 28.4500853206775
-(2 rows)
-
---test that still works with an expression index on data_trunc.
-DROP INDEX "time_plain";
-CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
-ANALYZE hyper_1;
-EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+BEGIN;
+  --test that still works with an expression index on data_trunc.
+  DROP INDEX "time_plain";
+  CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
+  ANALYZE hyper_1;
+  :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Limit
@@ -276,17 +266,10 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
 (7 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
-(2 rows)
-
---test that works with both indexes
-CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
-ANALYZE hyper_1;
-EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+  --test that works with both indexes
+  CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
+  ANALYZE hyper_1;
+  :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Limit
@@ -298,15 +281,8 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
 (7 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  Limit
@@ -318,16 +294,8 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -339,16 +307,8 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg_trunc1   |  min  |  avg_trunc2  
---------------------------+----------------+-------+--------------
- Wed Dec 31 21:32:30 1969 | 19975.00000000 | 29950 | 141.33293065
- Wed Dec 31 21:31:30 1969 | 19919.50000000 | 29890 | 141.13644545
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -360,16 +320,8 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg_trunc1   |  min  |  avg_trunc2  
---------------------------+----------------+-------+--------------
- Wed Dec 31 21:32:00 1969 | 19975.00000000 | 29950 | 141.33293065
- Wed Dec 31 21:31:00 1969 | 19919.50000000 | 29890 | 141.13644545
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -381,16 +333,8 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg_trunc1   |  min  |  avg_trunc2  
---------------------------+----------------+-------+--------------
- Wed Dec 31 21:32:30 1969 | 19975.00000000 | 29950 | 141.33293065
- Wed Dec 31 21:31:30 1969 | 19919.50000000 | 29890 | 141.13644545
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  Limit
@@ -402,16 +346,8 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-              t               |   avg   |  min  |       avg        
-------------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 PST |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 PST | 19949.5 | 29920 | 141.242685621416
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -423,16 +359,8 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
 (7 rows)
 
-SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
- Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Limit
@@ -446,16 +374,8 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
 (9 rows)
 
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-   t   |   avg   |  min  |       avg        
--------+---------+-------+------------------
- 20000 |   20000 | 30000 |  141.42135623731
- 19990 | 19994.5 | 29990 | 141.401909099017
-(2 rows)
-
-EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+  :PREFIX SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Limit
@@ -469,16 +389,9 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                      ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
 (9 rows)
 
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
-FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-   t   |   avg   |  min  |       avg        
--------+---------+-------+------------------
- 20000 |   20000 | 30000 |  141.42135623731
- 19990 | 19994.5 | 29990 | 141.401909099017
-(2 rows)
-
+ROLLBACK;
 --plain tables shouldnt be optimized by default
-EXPLAIN (costs off)
+:PREFIX
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM plain_table
 WHERE time < to_timestamp(900)
@@ -496,22 +409,10 @@ LIMIT 2;
                      Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (7 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-FROM plain_table
-WHERE time < to_timestamp(900)
-GROUP BY t
-ORDER BY t DESC
-LIMIT 2;
-              t               |  avg  |  min  |       avg        
-------------------------------+-------+-------+------------------
- Wed Dec 31 16:14:00 1969 PST | 869.5 | 10840 | 29.4858228711055
- Wed Dec 31 16:13:00 1969 PST | 809.5 | 10780 | 28.4500853206775
-(2 rows)
-
 --can turn on plain table optimizations
 BEGIN;
     SET LOCAL timescaledb.optimize_non_hypertables = 'on';
-    EXPLAIN (costs off)
+    :PREFIX
     SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
     FROM plain_table
     WHERE time < to_timestamp(900)
@@ -527,16 +428,15 @@ BEGIN;
                Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (5 rows)
 
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-    FROM plain_table
-    WHERE time < to_timestamp(900)
-    GROUP BY t
-    ORDER BY t DESC
-    LIMIT 2;
-              t               |  avg  |  min  |       avg        
-------------------------------+-------+-------+------------------
- Wed Dec 31 16:14:00 1969 PST | 869.5 | 10840 | 29.4858228711055
- Wed Dec 31 16:13:00 1969 PST | 809.5 | 10780 | 28.4500853206775
-(2 rows)
-
 ROLLBACK;
+--generate the results into two different files
+\set ECHO errors
+3c3
+<  off
+---
+>  on
+ ?column? 
+----------
+ Done
+(1 row)
+
