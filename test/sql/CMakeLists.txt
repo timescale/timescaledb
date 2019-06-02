@@ -36,6 +36,7 @@ set(TEST_FILES
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
+  query.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql
@@ -76,9 +77,6 @@ set(POST_TESTS
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
-  sql_query_results_x_diff-9.6
-  sql_query_results_x_diff-10
-  sql_query_results_x_diff-11
 )
 
 # only test custom type if we are in 64-bit architecture
@@ -145,9 +143,6 @@ set(TEST_TEMPLATES
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
   sql_query.sql.in
-  sql_query_results_unoptimized.sql.in
-  sql_query_results_optimized.sql.in
-  sql_query_results_x_diff.sql.in
   )
 
 # Regression tests that vary with PostgreSQL version. Generated test
