@@ -11,7 +11,6 @@
 #include <utils/builtins.h>
 #include <utils/guc.h>
 #include <nodes/plannodes.h>
-#include <nodes/relation.h>
 #include <access/xact.h>
 #include <optimizer/plancat.h>
 #include <optimizer/clauses.h>

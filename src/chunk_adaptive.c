@@ -13,7 +13,6 @@
 #include <utils/builtins.h>
 #include <utils/array.h>
 #include <utils/snapmgr.h>
-#include <utils/tqual.h>
 #include <utils/typcache.h>
 #include <funcapi.h>
 #include <math.h>

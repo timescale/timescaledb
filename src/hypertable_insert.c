@@ -10,7 +10,6 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
-#include <nodes/relation.h>
 #include <executor/nodeModifyTable.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
