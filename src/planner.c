@@ -5,7 +5,6 @@
  */
 #include <postgres.h>
 #include <nodes/plannodes.h>
-#include <nodes/relation.h>
 #include <parser/parsetree.h>
 #include <optimizer/clauses.h>
 #include <optimizer/planner.h>

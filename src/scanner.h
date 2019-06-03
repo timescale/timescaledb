@@ -12,7 +12,6 @@
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
 #include <utils.h>
-#include <access/relscan.h>
 
 #include "export.h"
 

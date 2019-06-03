@@ -4,7 +4,6 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <nodes/relation.h>
 #include <utils/typcache.h>
 #include <optimizer/clauses.h>
 #include <utils/lsyscache.h>
