@@ -52,6 +52,7 @@ TS_FUNCTION_INFO_V1(ts_server_ping);
 TS_FUNCTION_INFO_V1(ts_server_detach);
 TS_FUNCTION_INFO_V1(ts_server_block_new_chunks);
 TS_FUNCTION_INFO_V1(ts_server_allow_new_chunks);
+TS_FUNCTION_INFO_V1(ts_set_chunk_default_server);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
@@ -161,6 +162,12 @@ Datum
 ts_server_allow_new_chunks(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->server_set_block_new_chunks(fcinfo, false));
+}
+
+Datum
+ts_set_chunk_default_server(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_server(fcinfo));
 }
 
 Datum
@@ -596,6 +603,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.server_ping = error_no_default_fn_pg_community,
 	.detach_server = error_no_default_fn_pg_community,
 	.server_set_block_new_chunks = server_set_block_new_chunks_default,
+	.set_chunk_default_server = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.create_chunk_on_servers = create_chunk_on_servers_default,

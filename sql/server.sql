@@ -5,3 +5,7 @@
 -- Check if server is up
 CREATE FUNCTION _timescaledb_internal.server_ping(server_name NAME) RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_server_ping' LANGUAGE C VOLATILE;
+
+-- change default server for a chunk
+CREATE OR REPLACE FUNCTION _timescaledb_internal.set_chunk_default_server(schema_name NAME, chunk_table_name NAME, server_name NAME) RETURNS BOOLEAN
+AS '@MODULE_PATHNAME@', 'ts_set_chunk_default_server' LANGUAGE C VOLATILE;
