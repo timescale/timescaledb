@@ -84,6 +84,7 @@ typedef struct CrossModuleFunctions
 	Datum (*server_ping)(PG_FUNCTION_ARGS);
 	Datum (*detach_server)(PG_FUNCTION_ARGS);
 	Datum (*server_set_block_new_chunks)(PG_FUNCTION_ARGS, bool block);
+	Datum (*set_chunk_default_server)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
 	List *(*get_servername_list)(void);
@@ -103,6 +104,7 @@ typedef struct CrossModuleFunctions
 	void (*set_distributed_peer_id)(Datum id);
 	bool (*is_frontend_session)(void);
 	bool (*remove_from_distributed_db)();
+
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

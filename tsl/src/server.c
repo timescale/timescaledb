@@ -10,12 +10,15 @@
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
 #include <catalog/pg_foreign_server.h>
+#include <catalog/pg_foreign_table.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <utils/builtins.h>
+#include <utils/inval.h>
+#include <utils/syscache.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <funcapi.h>
@@ -29,6 +32,7 @@
 #if !PG96
 #include "remote/async.h"
 #include "remote/connection.h"
+#include "remote/connection_cache.h"
 #endif
 #include "server.h"
 #include "hypertable.h"
@@ -608,69 +612,6 @@ server_add_without_dist_id(PG_FUNCTION_ARGS)
 }
 
 Datum
-server_delete(PG_FUNCTION_ARGS)
-{
-	const char *servername = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-	bool cascade = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	ForeignServer *server = GetForeignServerByName(servername, if_exists);
-	bool deleted = false;
-
-	if (NULL != server)
-	{
-		DropStmt stmt = {
-			.type = T_DropStmt,
-#if PG96
-			.objects = list_make1(list_make1(makeString(pstrdup(servername)))),
-#else
-			.objects = list_make1(makeString(pstrdup(servername))),
-#endif
-			.removeType = OBJECT_FOREIGN_SERVER,
-			.behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
-			.missing_ok = if_exists,
-		};
-		ObjectAddress address;
-		ObjectAddress secondaryObject = InvalidObjectAddress;
-		Node *parsetree = (Node *) &stmt;
-
-		/* Make sure event triggers are invoked so that all dropped objects
-		 * are collected during a cascading drop. This ensures all dependent
-		 * objects get cleaned up. */
-		EventTriggerBeginCompleteQuery();
-
-#if !PG96
-		remove_distributed_id_from_backend(servername);
-#endif
-
-		PG_TRY();
-		{
-			EventTriggerDDLCommandStart(parsetree);
-			RemoveObjects(&stmt);
-			EventTriggerCollectSimpleCommand(address, secondaryObject, parsetree);
-			EventTriggerSQLDrop(parsetree);
-			EventTriggerDDLCommandEnd(parsetree);
-		}
-		PG_CATCH();
-		{
-			EventTriggerEndCompleteQuery();
-			PG_RE_THROW();
-		}
-		PG_END_TRY();
-
-#if !PG96
-		/* Remove self from dist db if no longer have backends */
-		if (server_get_servername_list() == NIL)
-			dist_util_remove_from_db();
-#endif
-
-		EventTriggerEndCompleteQuery();
-		deleted = true;
-	}
-
-	PG_RETURN_BOOL(deleted);
-}
-
-Datum
 server_attach(PG_FUNCTION_ARGS)
 {
 	Oid table_id = PG_GETARG_OID(0);
@@ -730,11 +671,36 @@ server_attach(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(create_hypertable_server_datum(fcinfo, (HypertableServer *) linitial(result)));
 }
 
+/* Only used for generating proper error message */
+typedef enum OperationType
+{
+	BLOCK,
+	DETACH,
+	DELETE
+} OperationType;
+
+static char *
+get_operation_type_message(OperationType op_type)
+{
+	switch (op_type)
+	{
+		case BLOCK:
+			return "blocking new chunks on";
+		case DETACH:
+			return "detaching";
+		case DELETE:
+			return "deleting";
+		default:
+			return NULL;
+	}
+}
+
 static void
-check_replication(const char *server_name, Hypertable *ht, bool force, bool detach)
+check_replication_for_new_data(const char *server_name, Hypertable *ht, bool force,
+							   OperationType op_type)
 {
 	List *available_servers = ts_hypertable_get_available_servers(ht, false);
-	char *operation = detach ? "detaching" : "blocking new chunks on";
+	char *operation = get_operation_type_message(op_type);
 
 	if (ht->fd.replication_factor < list_length(available_servers))
 		return;
@@ -758,26 +724,57 @@ check_replication(const char *server_name, Hypertable *ht, bool force, bool deta
 					server_name)));
 }
 
-static void
-server_detach_validate(const char *server_name, Hypertable *ht, bool force)
+static List *
+server_detach_validate(const char *server_name, Hypertable *ht, bool force, OperationType op_type)
 {
 	List *chunk_servers =
 		ts_chunk_server_scan_by_servername_and_hypertable_id(server_name,
 															 ht->fd.id,
 															 CurrentMemoryContext);
+	bool has_non_replicated_chunks = ts_chunk_server_contains_non_replicated_chunks(chunk_servers);
+	char *operation = get_operation_type_message(op_type);
 
-	if (list_length(chunk_servers) > 0)
+	if (has_non_replicated_chunks)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("server \"%s\" cannot be detached because it contains chunks",
-						server_name)));
+				 errmsg("%s server \"%s\" would mean a data-loss for hypertable "
+						"\"%s\" since server has the only data replica",
+						operation,
+						server_name,
+						NameStr(ht->fd.table_name)),
+				 errhint("Ensure the server \"%s\" has no non-replicated data before %s it.",
+						 server_name,
+						 operation)));
 
-	check_replication(server_name, ht, force, true);
+	if (list_length(chunk_servers) > 0)
+	{
+		if (force)
+			ereport(WARNING,
+					(errcode(ERRCODE_WARNING),
+					 errmsg("hypertable \"%s\" has under-replicated chunks due to %s "
+							"server \"%s\"",
+							NameStr(ht->fd.table_name),
+							operation,
+							server_name)));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_SERVER_IN_USE),
+					 errmsg("%s server \"%s\" failed because it contains chunks "
+							"for hypertable \"%s\"",
+							operation,
+							server_name,
+							NameStr(ht->fd.table_name))));
+	}
+
+	check_replication_for_new_data(server_name, ht, force, op_type);
+
+	return chunk_servers;
 }
 
 static int
 server_modify_hypertable_servers(const char *server_name, List *hypertable_servers,
-								 bool all_hypertables, bool detach, bool block_chunks, bool force)
+								 bool all_hypertables, OperationType op_type, bool block_chunks,
+								 bool force)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -802,10 +799,24 @@ server_modify_hypertable_servers(const char *server_name, List *hypertable_serve
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 						 errmsg("permission denied for hypertable \"%s\"", get_rel_name(relid))));
-		else if (detach)
+		else if (op_type == DETACH || op_type == DELETE)
 		{
 			/* we have permissions to detach */
-			server_detach_validate(NameStr(server->fd.server_name), ht, force);
+			List *chunk_servers =
+				server_detach_validate(NameStr(server->fd.server_name), ht, force, op_type);
+			ListCell *cs_lc;
+
+			/* update chunk foreign table server and delete chunk mapping */
+			foreach (cs_lc, chunk_servers)
+			{
+				ChunkServer *cs = lfirst(cs_lc);
+				ts_chunk_server_update_foreign_table_server_if_needed(cs->fd.chunk_id,
+																	  cs->foreign_server_oid);
+				ts_chunk_server_delete_by_chunk_id_and_server_name(cs->fd.chunk_id,
+																   NameStr(cs->fd.server_name));
+			}
+
+			/* delete hypertable mapping */
 			removed +=
 				ts_hypertable_server_delete_by_servername_and_hypertable_id(server_name, ht->fd.id);
 		}
@@ -825,7 +836,7 @@ server_modify_hypertable_servers(const char *server_name, List *hypertable_serve
 					continue;
 				}
 
-				check_replication(server_name, ht, force, false);
+				check_replication_for_new_data(server_name, ht, force, BLOCK);
 			}
 			server->fd.block_chunks = block_chunks;
 			removed += ts_hypertable_server_update(server);
@@ -842,19 +853,19 @@ server_block_hypertable_servers(const char *server_name, List *hypertable_server
 	return server_modify_hypertable_servers(server_name,
 											hypertable_servers,
 											all_hypertables,
-											false,
+											BLOCK,
 											block_chunks,
 											force);
 }
 
 static int
 server_detach_hypertable_servers(const char *server_name, List *hypertable_servers,
-								 bool all_hypertables, bool force)
+								 bool all_hypertables, bool force, OperationType op_type)
 {
 	return server_modify_hypertable_servers(server_name,
 											hypertable_servers,
 											all_hypertables,
-											true,
+											op_type,
 											false,
 											force);
 }
@@ -949,9 +960,104 @@ server_detach(PG_FUNCTION_ARGS)
 		hypertable_servers =
 			ts_hypertable_server_scan_by_server_name(server_name, CurrentMemoryContext);
 
-	removed =
-		server_detach_hypertable_servers(server_name, hypertable_servers, all_hypertables, force);
+	removed = server_detach_hypertable_servers(server_name,
+											   hypertable_servers,
+											   all_hypertables,
+											   force,
+											   DETACH);
 	PG_RETURN_INT32(removed);
+}
+
+Datum
+server_delete(PG_FUNCTION_ARGS)
+{
+	const char *server_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool cascade = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	ForeignServer *server = GetForeignServerByName(server_name, if_exists);
+	List *hypertable_servers = NIL;
+	DropStmt stmt;
+	ObjectAddress address;
+	ObjectAddress secondaryObject = InvalidObjectAddress;
+	Node *parsetree = NULL;
+#if !PG96
+	UserMapping *um = NULL;
+	Cache *conn_cache;
+#endif
+
+	if (server_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid server_name: cannot be NULL")));
+
+	if (server == NULL)
+		PG_RETURN_BOOL(false);
+
+#if !PG96
+	um = get_user_mapping(GetUserId(), server->serverid);
+	if (um != NULL)
+	{
+		conn_cache = remote_connection_cache_pin();
+		remote_connection_cache_remove(conn_cache, um);
+		ts_cache_release(conn_cache);
+	}
+#endif
+	/* detach server */
+	hypertable_servers =
+		ts_hypertable_server_scan_by_server_name(server_name, CurrentMemoryContext);
+
+	server_detach_hypertable_servers(server_name, hypertable_servers, true, force, DELETE);
+
+	stmt = (DropStmt)
+	{
+		.type = T_DropStmt,
+#if PG96
+		.objects = list_make1(list_make1(makeString(pstrdup(server_name)))),
+#else
+		.objects = list_make1(makeString(pstrdup(server_name))),
+#endif
+		.removeType = OBJECT_FOREIGN_SERVER, .behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
+		.missing_ok = if_exists,
+	};
+
+	parsetree = (Node *) &stmt;
+
+	/* Make sure event triggers are invoked so that all dropped objects
+	 * are collected during a cascading drop. This ensures all dependent
+	 * objects get cleaned up. */
+	EventTriggerBeginCompleteQuery();
+
+#if !PG96
+	remove_distributed_id_from_backend(server_name);
+#endif
+
+	PG_TRY();
+	{
+		EventTriggerDDLCommandStart(parsetree);
+		RemoveObjects(&stmt);
+		EventTriggerCollectSimpleCommand(address, secondaryObject, parsetree);
+		EventTriggerSQLDrop(parsetree);
+		EventTriggerDDLCommandEnd(parsetree);
+	}
+	PG_CATCH();
+	{
+		EventTriggerEndCompleteQuery();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+#if !PG96
+	/* Remove self from dist db if no longer have backends */
+	if (server_get_servername_list() == NIL)
+		dist_util_remove_from_db();
+#endif
+
+	EventTriggerEndCompleteQuery();
+	CommandCounterIncrement();
+	CacheInvalidateRelcacheByRelid(ForeignServerRelationId);
+
+	PG_RETURN_BOOL(true);
 }
 
 List *
@@ -1039,4 +1145,17 @@ server_ping(PG_FUNCTION_ARGS)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 (errmsg("server ping is only supported on PG10 and above"))));
 #endif
+}
+
+Datum
+server_set_chunk_default_server(PG_FUNCTION_ARGS)
+{
+	char *schema_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	char *table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1);
+	char *server_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
+	ForeignServer *server = GetForeignServerByName(server_name, false);
+	Chunk *chunk = chunk_get_by_name(schema_name, table_name, 0, true);
+
+	ts_chunk_server_update_foreign_table_server(chunk->table_id, server->serverid);
+	PG_RETURN_BOOL(true);
 }

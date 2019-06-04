@@ -2203,11 +2203,11 @@ ts_hypertable_get_servername_list(Hypertable *ht)
 }
 
 TSDLLEXPORT List *
-ts_hypertable_get_available_servers(Hypertable *ht, bool error)
+ts_hypertable_get_available_servers(Hypertable *ht, bool error_if_missing)
 {
 	List *available_servers =
 		get_hypertable_server_values(ht, filter_non_blocked_servers, get_hypertable_server);
-	if (available_servers == NIL && error)
+	if (available_servers == NIL && error_if_missing)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_NO_SERVERS),
 				 (errmsg("no available servers (detached or blocked for new chunks) for "

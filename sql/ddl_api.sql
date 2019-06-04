@@ -178,7 +178,8 @@ AS '@MODULE_PATHNAME@', 'ts_server_add' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION delete_server(
     server_name            NAME,
     if_exists              BOOLEAN = FALSE,
-    cascade                BOOLEAN = FALSE
+    cascade                BOOLEAN = FALSE,
+    force                  BOOLEAN = FALSE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_server_delete' LANGUAGE C VOLATILE;
 
 -- Attach a server to a hypertable

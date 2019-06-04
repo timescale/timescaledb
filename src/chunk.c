@@ -1816,7 +1816,7 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, int16 num_constra
 	return chunk;
 }
 
-Chunk *
+TSDLLEXPORT Chunk *
 ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name,
 										 int16 num_constraints, MemoryContext mctx,
 										 bool fail_if_not_found)

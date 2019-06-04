@@ -389,6 +389,15 @@ SELECT * FROM test.show_subtables('disttable');
  _timescaledb_internal._hyper_3_4_dist_chunk | 
 (2 rows)
 
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+  foreign_table_name   | foreign_server_name 
+-----------------------+---------------------
+ _hyper_3_3_dist_chunk | server_4
+ _hyper_3_4_dist_chunk | server_2
+(2 rows)
+
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
@@ -405,14 +414,51 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         4 |               3 | server_4
 (4 rows)
 
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_2');
+ set_chunk_default_server 
+--------------------------
+ t
+(1 row)
+
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+  foreign_table_name   | foreign_server_name 
+-----------------------+---------------------
+ _hyper_3_3_dist_chunk | server_2
+ _hyper_3_4_dist_chunk | server_2
+(2 rows)
+
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_4');
+ set_chunk_default_server 
+--------------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Will fail because server_2 contains chunks
+SELECT * FROM delete_server('server_2', cascade => true);
+ERROR:  deleting server "server_2" failed because it contains chunks for hypertable "disttable"
+-- non-existing chunk
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('x', 'x_chunk', 'server_4');
+ERROR:  chunk not found
+-- non-existing server
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_0000');
+ERROR:  server "server_0000" does not exist
+-- NULL try
+SELECT * FROM _timescaledb_internal.set_chunk_default_server(NULL, NULL, 'server_4');
+ERROR:  chunk not found
+\set ON_ERROR_STOP 1
 -- Deleting a server removes the "foreign" chunk table(s) that
 -- reference that server as "primary" and should also remove the
 -- hypertable_server and chunk_server mappings for that server.  In
 -- the future we might want to fallback to a replica server for those
 -- chunks that have multiple servers so that the chunk is not removed
--- unnecessarily.
-SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to 2 other objects
+-- unnecessarily. We use force => true b/c server_2 contains chunks.
+SELECT * FROM delete_server('server_2', cascade => true, force => true);
+WARNING:  hypertable "disttable" has under-replicated chunks due to deleting server "server_2"
+WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting server "server_2"
+NOTICE:  drop cascades to user mapping for super_user on server server_2
  delete_server 
 ---------------
  t
@@ -422,13 +468,24 @@ SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
  _timescaledb_internal._hyper_3_3_dist_chunk | 
-(1 row)
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
+(2 rows)
+
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+  foreign_table_name   | foreign_server_name 
+-----------------------+---------------------
+ _hyper_3_3_dist_chunk | server_4
+ _hyper_3_4_dist_chunk | server_4
+(2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
   3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
-(1 row)
+  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
+(2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name | block_chunks 
@@ -440,11 +497,17 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
  chunk_id | server_chunk_id | server_name 
 ----------+-----------------+-------------
         3 |               2 | server_4
-(1 row)
+        4 |               3 | server_4
+(2 rows)
 
+\set ON_ERROR_STOP 0
+-- can't delete b/c it's last data replica
+SELECT * FROM delete_server('server_4', cascade => true, force => true);
+ERROR:  deleting server "server_4" would mean a data-loss for hypertable "disttable" since server has the only data replica
+\set ON_ERROR_STOP 1
 -- Should also clean up hypertable_server when using standard DDL commands
 DROP SERVER server_4 CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 SELECT * FROM test.show_subtables('disttable');
  Child | Tablespace 
 -------+------------
@@ -665,7 +728,7 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         7 |               2 | server_1
 (6 rows)
 
--- Add additional hypertable 
+-- Add additional hypertable
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
 NOTICE:  adding not-null constraint to column "time"
@@ -712,7 +775,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
              7 |                    2 | server_1    | t
 (6 rows)
 
--- insert more data 
+-- insert more data
 INSERT INTO disttable VALUES
        ('2019-08-02 10:45', 1, 14.4),
        ('2019-08-15 10:45', 4, 14.9),
@@ -844,7 +907,7 @@ SELECT * FROM detach_server(NULL, 'disttable');
 ERROR:  invalid server_name: cannot be NULL
 -- Can't detach server_1 b/c it contains data for disttable
 SELECT * FROM detach_server('server_1');
-ERROR:  server "server_1" cannot be detached because it contains chunks
+ERROR:  detaching server "server_1" failed because it contains chunks for hypertable "disttable"
 -- can't detach already detached server
 SELECT * FROM detach_server('server_2', 'disttable_2');
 ERROR:  server "server_2" is not attached to hypertable "disttable_2"
@@ -858,6 +921,88 @@ ERROR:  relation "devices" is not a hypertable
 -- force detach server to become under-replicated for new data
 SELECT * FROM detach_server('server_3', 'disttable_2', true);
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to detaching server "server_3"
+ detach_server 
+---------------
+             1
+(1 row)
+
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+   foreign_table_name   | foreign_server_name 
+------------------------+---------------------
+ _hyper_6_10_dist_chunk | server_3
+ _hyper_6_5_dist_chunk  | server_1
+ _hyper_6_6_dist_chunk  | server_2
+ _hyper_6_7_dist_chunk  | server_3
+ _hyper_6_8_dist_chunk  | server_3
+ _hyper_6_9_dist_chunk  | server_2
+(6 rows)
+
+-- force detach server with data
+SELECT * FROM detach_server('server_3', 'disttable', true);
+WARNING:  hypertable "disttable" has under-replicated chunks due to detaching server "server_3"
+ detach_server 
+---------------
+             1
+(1 row)
+
+-- chunk and hypertable metadata should be deleted as well
+SELECT * FROM _timescaledb_catalog.chunk_server;
+ chunk_id | server_chunk_id | server_name 
+----------+-----------------+-------------
+        5 |               1 | server_1
+        5 |               1 | server_2
+        6 |               2 | server_2
+        7 |               2 | server_1
+        8 |               3 | server_2
+        9 |               4 | server_2
+       10 |               5 | server_2
+(7 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name | block_chunks 
+---------------+----------------------+-------------+--------------
+             6 |                    1 | server_1    | f
+             7 |                    2 | server_1    | f
+             6 |                    1 | server_2    | f
+(3 rows)
+
+-- detached server_3 should not show up any more
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+   foreign_table_name   | foreign_server_name 
+------------------------+---------------------
+ _hyper_6_10_dist_chunk | server_2
+ _hyper_6_5_dist_chunk  | server_1
+ _hyper_6_6_dist_chunk  | server_2
+ _hyper_6_7_dist_chunk  | server_1
+ _hyper_6_8_dist_chunk  | server_2
+ _hyper_6_9_dist_chunk  | server_2
+(6 rows)
+
+\set ON_ERROR_STOP 0
+-- detaching server with last data replica should ERROR even when forcing
+SELECT * FROM detach_server('server_2', 'disttable', true);
+ERROR:  detaching server "server_2" would mean a data-loss for hypertable "disttable" since server has the only data replica
+\set ON_ERROR_STOP 1
+-- drop all chunks
+SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+ foreign_table_name | foreign_server_name 
+--------------------+---------------------
+(0 rows)
+
+SELECT * FROM detach_server('server_2', 'disttable', true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to detaching server "server_2"
  detach_server 
 ---------------
              1
@@ -916,35 +1061,39 @@ NOTICE:  skipping hypertable "disttable_3" due to missing permissions
 
 -- Cleanup
 RESET ROLE;
-SELECT * FROM delete_server('server_1', cascade => true);
+SELECT * FROM delete_server('server_1', cascade => true, force =>true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting server "server_1"
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to deleting server "server_1"
+NOTICE:  drop cascades to user mapping for super_user on server server_1
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_2', cascade => true, force =>true);
+NOTICE:  drop cascades to user mapping for super_user on server server_2
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_3', cascade => true, force =>true);
+NOTICE:  drop cascades to user mapping for super_user on server server_3
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_4', cascade => true, force =>true);
 NOTICE:  drop cascades to 2 other objects
  delete_server 
 ---------------
  t
 (1 row)
 
-SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to 3 other objects
- delete_server 
----------------
- t
-(1 row)
-
-SELECT * FROM delete_server('server_3', cascade => true);
-NOTICE:  drop cascades to 4 other objects
- delete_server 
----------------
- t
-(1 row)
-
-SELECT * FROM delete_server('server_4', cascade => true);
-NOTICE:  drop cascades to 2 other objects
- delete_server 
----------------
- t
-(1 row)
-
-SELECT * FROM delete_server('server_5', cascade => true);
+SELECT * FROM delete_server('server_5', cascade => true, force =>true);
+WARNING:  new data for hypertable "disttable_3" will be under-replicated due to deleting server "server_5"
+WARNING:  new data for hypertable "disttable_4" will be under-replicated due to deleting server "server_5"
 NOTICE:  drop cascades to 2 other objects
  delete_server 
 ---------------

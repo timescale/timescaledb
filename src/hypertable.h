@@ -132,7 +132,7 @@ extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
 extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
 extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_serverids_list(Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_available_servers(Hypertable *ht, bool error);
+extern TSDLLEXPORT List *ts_hypertable_get_available_servers(Hypertable *ht, bool error_if_missing);
 extern TSDLLEXPORT List *ts_hypertable_get_available_server_oids(Hypertable *ht);
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
 

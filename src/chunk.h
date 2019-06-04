@@ -96,10 +96,11 @@ extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE 
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
 
 extern Chunk *ts_chunk_copy(Chunk *chunk);
-extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
-													   const char *table_name,
-													   int16 num_constraints, MemoryContext mctx,
-													   bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
+																   const char *table_name,
+																   int16 num_constraints,
+																   MemoryContext mctx,
+																   bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints,
 											 bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints,
