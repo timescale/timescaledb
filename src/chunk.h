@@ -120,9 +120,10 @@ extern List *ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMO
 extern TSDLLEXPORT int ts_chunk_add_constraints(Chunk *chunk);
 
 extern Chunk *ts_chunk_copy(Chunk *chunk);
-extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
-													   const char *table_name, MemoryContext mctx,
-													   bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
+																   const char *table_name,
+																   MemoryContext mctx,
+																   bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock);
 
 extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht,

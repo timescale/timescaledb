@@ -194,21 +194,51 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
 
 SELECT * FROM test.show_subtables('disttable');
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.chunk_server;
+
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_2');
+
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_4');
+
+\set ON_ERROR_STOP 0
+-- Will fail because server_2 contains chunks
+SELECT * FROM delete_server('server_2', cascade => true);
+-- non-existing chunk
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('x', 'x_chunk', 'server_4');
+-- non-existing server
+SELECT * FROM _timescaledb_internal.set_chunk_default_server('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'server_0000');
+-- NULL try
+SELECT * FROM _timescaledb_internal.set_chunk_default_server(NULL, NULL, 'server_4');
+\set ON_ERROR_STOP 1
 
 -- Deleting a server removes the "foreign" chunk table(s) that
 -- reference that server as "primary" and should also remove the
 -- hypertable_server and chunk_server mappings for that server.  In
 -- the future we might want to fallback to a replica server for those
 -- chunks that have multiple servers so that the chunk is not removed
--- unnecessarily.
-SELECT * FROM delete_server('server_2', cascade => true);
+-- unnecessarily. We use force => true b/c server_2 contains chunks.
+SELECT * FROM delete_server('server_2', cascade => true, force => true);
 
 SELECT * FROM test.show_subtables('disttable');
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 SELECT * FROM _timescaledb_catalog.chunk_server;
+
+\set ON_ERROR_STOP 0
+-- can't delete b/c it's last data replica
+SELECT * FROM delete_server('server_4', cascade => true, force => true);
+\set ON_ERROR_STOP 1
 
 -- Should also clean up hypertable_server when using standard DDL commands
 DROP SERVER server_4 CASCADE;
@@ -314,7 +344,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 SELECT * FROM _timescaledb_catalog.chunk_server;
 
--- Add additional hypertable 
+-- Add additional hypertable
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', replication_factor => 2, servers => '{"server_1", "server_2", "server_3"}');
@@ -331,7 +361,7 @@ SELECT * FROM block_new_chunks_on_server('server_1');
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 
--- insert more data 
+-- insert more data
 INSERT INTO disttable VALUES
        ('2019-08-02 10:45', 1, 14.4),
        ('2019-08-15 10:45', 4, 14.9),
@@ -396,6 +426,33 @@ SELECT * FROM detach_server('server_3', 'devices');
 -- force detach server to become under-replicated for new data
 SELECT * FROM detach_server('server_3', 'disttable_2', true);
 
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+-- force detach server with data
+SELECT * FROM detach_server('server_3', 'disttable', true);
+
+-- chunk and hypertable metadata should be deleted as well
+SELECT * FROM _timescaledb_catalog.chunk_server;
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+-- detached server_3 should not show up any more
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+
+\set ON_ERROR_STOP 0
+-- detaching server with last data replica should ERROR even when forcing
+SELECT * FROM detach_server('server_2', 'disttable', true);
+\set ON_ERROR_STOP 1
+
+-- drop all chunks
+SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
+SELECT foreign_table_name, foreign_server_name
+FROM information_schema.foreign_tables
+ORDER BY foreign_table_name;
+
+SELECT * FROM detach_server('server_2', 'disttable', true);
+
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 
@@ -425,11 +482,11 @@ SELECT * FROM detach_server('server_4');
 
 -- Cleanup
 RESET ROLE;
-SELECT * FROM delete_server('server_1', cascade => true);
-SELECT * FROM delete_server('server_2', cascade => true);
-SELECT * FROM delete_server('server_3', cascade => true);
-SELECT * FROM delete_server('server_4', cascade => true);
-SELECT * FROM delete_server('server_5', cascade => true);
+SELECT * FROM delete_server('server_1', cascade => true, force =>true);
+SELECT * FROM delete_server('server_2', cascade => true, force =>true);
+SELECT * FROM delete_server('server_3', cascade => true, force =>true);
+SELECT * FROM delete_server('server_4', cascade => true, force =>true);
+SELECT * FROM delete_server('server_5', cascade => true, force =>true);
 DROP DATABASE server_1;
 DROP DATABASE server_2;
 DROP DATABASE server_3;
