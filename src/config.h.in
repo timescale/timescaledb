@@ -37,6 +37,10 @@
 #cmakedefine TS_DEBUG
 #endif
 
+#ifndef TELEMETRY_DEFAULT
+#cmakedefine TELEMETRY_DEFAULT @TELEMETRY_DEFAULT@
+#endif
+
 /* Avoid conflicts with USE_OPENSSL defined by PostgreSQL */
 #cmakedefine TS_USE_OPENSSL
 

@@ -6,6 +6,7 @@ DO language plpgsql $$
 DECLARE
   end_time  TIMESTAMPTZ;
   expiration_time_string TEXT;
+  telemetry_string TEXT;
 BEGIN
   end_time := _timescaledb_internal.license_expiration_time();
 
@@ -16,7 +17,14 @@ BEGIN
     expiration_time_string = '';
   END IF;
 
-  RAISE WARNING E'%\n%',
+  IF current_setting('timescaledb.telemetry_level') = 'off'
+  THEN
+    telemetry_string = E'Note: Please enable telemetry to help us improve our product by running: ALTER DATABASE "' || current_database() || E'" SET timescaledb.telemetry_level = ''basic'';';
+  ELSE
+    telemetry_string = E'Note: TimescaleDB collects anonymous reports to better understand and assist our users.\nFor more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.';
+  END IF;
+
+  RAISE WARNING E'%\n%\n%',
     E'\nWELCOME TO\n' ||
     E' _____ _                               _     ____________  \n' ||
     E'|_   _(_)                             | |    |  _  \\ ___ \\ \n' ||
@@ -30,8 +38,8 @@ BEGIN
     ||
     E' 1. Getting started: https://docs.timescale.com/getting-started\n' ||
     E' 2. API reference documentation: https://docs.timescale.com/api\n' ||
-    E' 3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture\n\n' ||
-    E'Note: TimescaleDB collects anonymous reports to better understand and assist our users.\nFor more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.',
+    E' 3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture\n',
+    telemetry_string,
     expiration_time_string;
 
 IF now() > end_time
