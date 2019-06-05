@@ -9,6 +9,7 @@
 
 #include "guc.h"
 #include "license_guc.h"
+#include "config.h"
 #include "hypertable_cache.h"
 #include "telemetry/telemetry.h"
 
@@ -41,7 +42,7 @@ bool ts_guc_enable_ordered_append = true;
 bool ts_guc_enable_constraint_exclusion = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
-int ts_guc_telemetry_level = TELEMETRY_BASIC;
+int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 
 TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
 char *ts_last_tune_time = NULL;
@@ -166,7 +167,7 @@ _guc_init(void)
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
 							 &ts_guc_telemetry_level,
-							 TELEMETRY_BASIC,
+							 TELEMETRY_DEFAULT,
 							 telemetry_level_options,
 							 PGC_USERSET,
 							 0,
