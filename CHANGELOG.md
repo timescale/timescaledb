@@ -4,6 +4,10 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.4.0 (unreleased)
+
+**Minor features**
+* #1273 Propagate quals to joined hypertables
 
 ## 1.3.1 (2019-06-10)
 

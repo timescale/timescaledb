@@ -77,7 +77,7 @@ psql:include/plan_expand_hypertable_load.sql:62: NOTICE:  adding not-null constr
 (1 row)
 
 INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1d'::interval);
-CREATE TABLE metrics_timestamptz(time timestamptz);
+CREATE TABLE metrics_timestamptz(time timestamptz, device_id int);
 SELECT create_hypertable('metrics_timestamptz','time');
 psql:include/plan_expand_hypertable_load.sql:66: NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
@@ -85,10 +85,12 @@ psql:include/plan_expand_hypertable_load.sql:66: NOTICE:  adding not-null constr
  (6,public,metrics_timestamptz,t)
 (1 row)
 
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 3;
 CREATE TABLE metrics_date(time date);
 SELECT create_hypertable('metrics_date','time');
-psql:include/plan_expand_hypertable_load.sql:70: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:72: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (7,public,metrics_date,t)
@@ -100,6 +102,9 @@ ANALYZE hyper_w_space;
 ANALYZE tag;
 ANALYZE hyper_ts;
 ANALYZE hyper_timefunc;
+-- create normal table for JOIN tests
+CREATE TABLE regular_timestamptz(time timestamptz);
+INSERT INTO regular_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
 \ir include/plan_expand_hypertable_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -911,7 +916,7 @@ SELECT * FROM cte ORDER BY value;
 (9 rows)
 
 -- test constraint exclusion for constraints in ON clause of JOINs
--- should exclude chunks on m1
+-- should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -927,33 +932,31 @@ SELECT * FROM cte ORDER BY value;
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
-               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
-               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
-               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
-(16 rows)
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
 
--- should exclude chunks on m2
+-- should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Merge Join
-   Merge Cond: (m2."time" = m1."time")
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
-         Order: m2."time"
-         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
-               Order: m1."time"
-               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
-               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
-               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
-               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
-(16 rows)
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
 
 -- must not exclude on m1
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
@@ -1171,11 +1174,11 @@ psql:include/plan_expand_hypertable_query.sql:171: ERROR:  timestamp out of rang
 -- this will error because even though the transformation results in a valid timestamp
 -- our supported range of values for time is smaller then postgres
 \set ON_ERROR_STOP 0
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
 psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
 -- transformation would be out of range
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1303,7 +1306,7 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
 (8 rows)
 
 -- time_bucket exclusion with timestamptz
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1313,7 +1316,7 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: (time_bucket('@ 6 hours'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
 (5 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
                                                                                                                QUERY PLAN                                                                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1327,7 +1330,7 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
 (8 rows)
 
 -- time_bucket exclusion with timestamptz and day interval
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1337,7 +1340,7 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
 (5 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                                                              QUERY PLAN                                                                                                              
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1350,7 +1353,7 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (8 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
                                                                                                               QUERY PLAN                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1455,6 +1458,686 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          ->  Seq Scan on _hyper_4_154_chunk
                Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
 (65 rows)
+
+-- test qual propagation for joins
+RESET constraint_exclusion;
+-- nothing to propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+(17 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+(17 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+(17 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: m1."time"
+   ->  Merge Left Join
+         Merge Cond: (m2."time" = m1."time")
+         ->  Merge Append
+               Sort Key: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_4
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+                     Order: m1."time"
+                     ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+                     ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+                     ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+                     ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+                     ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+(19 rows)
+
+-- OR constraints should not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' OR m1.time > '2001-01-01' ORDER BY m1.time;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) OR ("time" > 'Mon Jan 01 00:00:00 2001 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) OR ("time" > 'Mon Jan 01 00:00:00 2001 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+(16 rows)
+
+-- test single constraint
+-- constraint should be on both scans
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: (m1."time" = m2."time")
+   Filter: (m2."time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+(14 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
+
+-- test 2 constraints on single relation
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   Filter: ((m2."time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND (m2."time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Append
+         ->  Index Only Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2
+               Index Cond: ("time" = m1."time")
+         ->  Index Only Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_1
+               Index Cond: ("time" = m1."time")
+(13 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+-- test 2 constraints with 1 constraint on each relation
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+-- test constraints in ON clause of INNER JOIN
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(15 rows)
+
+-- test constraints in ON clause of LEFT JOIN
+-- must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(16 rows)
+
+-- test constraints in ON clause of RIGHT JOIN
+-- must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather Merge
+   Workers Planned: 1
+   ->  Sort
+         Sort Key: m1."time"
+         ->  Merge Left Join
+               Merge Cond: (m2."time" = m1."time")
+               Join Filter: ((m2."time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND (m2."time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Sort
+                     Sort Key: m2."time"
+                     ->  Append
+                           ->  Parallel Seq Scan on _hyper_6_160_chunk m2
+                           ->  Parallel Seq Scan on _hyper_6_161_chunk m2_1
+                           ->  Parallel Seq Scan on _hyper_6_162_chunk m2_2
+                           ->  Parallel Seq Scan on _hyper_6_163_chunk m2_3
+                           ->  Parallel Seq Scan on _hyper_6_164_chunk m2_4
+               ->  Sort
+                     Sort Key: m1."time"
+                     ->  Append
+                           ->  Seq Scan on _hyper_6_160_chunk m1
+                           ->  Seq Scan on _hyper_6_161_chunk m1_1
+                           ->  Seq Scan on _hyper_6_162_chunk m1_2
+                           ->  Seq Scan on _hyper_6_163_chunk m1_3
+                           ->  Seq Scan on _hyper_6_164_chunk m1_4
+(23 rows)
+
+-- test equality condition not in ON clause
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
+
+-- test constraints not joined on
+-- device_id constraint must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (device_id = 1)
+         ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (device_id = 1)
+   ->  Append
+         ->  Index Only Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2
+               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_1
+               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(14 rows)
+
+-- test multiple join conditions
+-- device_id constraint should propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (device_id = 1)
+         ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (device_id = 1)
+   ->  Append
+         ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2
+               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: (device_id = 1)
+         ->  Index Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_1
+               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: (device_id = 1)
+(16 rows)
+
+-- test join with 3 tables
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time INNER JOIN metrics_timestamptz m3 ON m2.time=m3.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m3."time")
+   ->  Merge Join
+         Merge Cond: (m1."time" = m2."time")
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+               Order: m1."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Materialize
+               ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+                     Order: m2."time"
+                     ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                           Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                           Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Materialize
+         ->  Merge Append
+               Sort Key: m3."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m3
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m3_1
+                     Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(24 rows)
+
+-- test non-Const constraints
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10'::text::timestamptz ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         Chunks excluded during startup: 3
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               Chunks excluded during startup: 3
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(17 rows)
+
+-- test now()
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < now() ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         Chunks excluded during startup: 0
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < now())
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < now())
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+               Index Cond: ("time" < now())
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+               Index Cond: ("time" < now())
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+               Index Cond: ("time" < now())
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               Chunks excluded during startup: 0
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+                     Index Cond: ("time" < now())
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+                     Index Cond: ("time" < now())
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+                     Index Cond: ("time" < now())
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+                     Index Cond: ("time" < now())
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+                     Index Cond: ("time" < now())
+(29 rows)
+
+-- test volatile function
+-- should not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < clock_timestamp() ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         Chunks excluded during startup: 0
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+               Filter: ("time" < clock_timestamp())
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+(23 rows)
+
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m2.time < clock_timestamp() ORDER BY m1.time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m2."time" = m1."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+         Order: m2."time"
+         Chunks excluded during startup: 0
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m2_1
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m2_2
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m2_3
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m2_4
+               Filter: ("time" < clock_timestamp())
+         ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
+               Filter: ("time" < clock_timestamp())
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+               Order: m1."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
+               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
+               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
+(23 rows)
+
+-- test JOINs with normal table
+-- will not propagate because constraints are only added to hypertables
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Sort
+         Sort Key: m2."time"
+         ->  Seq Scan on regular_timestamptz m2
+(11 rows)
+
+-- test JOINs with normal table
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m2.time < '2000-01-10' ORDER BY m1.time;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Sort
+         Sort Key: m2."time"
+         ->  Seq Scan on regular_timestamptz m2
+               Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(12 rows)
 
 \ir include/plan_expand_hypertable_chunks_in_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -1734,8 +2417,8 @@ psql:include/plan_expand_hypertable_chunks_in_query.sql:40: ERROR:  chunk id can
 psql:include/plan_expand_hypertable_query.sql:171: ERROR:  timestamp out of range
 psql:include/plan_expand_hypertable_query.sql:171: STATEMENT:  SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
 psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of range
-psql:include/plan_expand_hypertable_query.sql:180: STATEMENT:  SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
-852a853,924
+psql:include/plan_expand_hypertable_query.sql:180: STATEMENT:  SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+1468a1469,1604
 >            time           
 > --------------------------
 >  Sat Jan 01 00:00:00 2000
@@ -1775,36 +2458,100 @@ psql:include/plan_expand_hypertable_query.sql:180: STATEMENT:  SELECT * FROM met
 >              time             
 > ------------------------------
 >  Sat Jan 01 00:00:00 2000 PST
+>  Sat Jan 01 00:00:00 2000 PST
+>  Sat Jan 01 00:00:00 2000 PST
+>  Sun Jan 02 00:00:00 2000 PST
+>  Sun Jan 02 00:00:00 2000 PST
 >  Sun Jan 02 00:00:00 2000 PST
 >  Mon Jan 03 00:00:00 2000 PST
+>  Mon Jan 03 00:00:00 2000 PST
+>  Mon Jan 03 00:00:00 2000 PST
+>  Tue Jan 04 00:00:00 2000 PST
+>  Tue Jan 04 00:00:00 2000 PST
 >  Tue Jan 04 00:00:00 2000 PST
 >  Wed Jan 05 00:00:00 2000 PST
+>  Wed Jan 05 00:00:00 2000 PST
+>  Wed Jan 05 00:00:00 2000 PST
+>  Thu Jan 06 00:00:00 2000 PST
+>  Thu Jan 06 00:00:00 2000 PST
 >  Thu Jan 06 00:00:00 2000 PST
 >  Fri Jan 07 00:00:00 2000 PST
+>  Fri Jan 07 00:00:00 2000 PST
+>  Fri Jan 07 00:00:00 2000 PST
+>  Sat Jan 08 00:00:00 2000 PST
+>  Sat Jan 08 00:00:00 2000 PST
 >  Sat Jan 08 00:00:00 2000 PST
 >  Sun Jan 09 00:00:00 2000 PST
+>  Sun Jan 09 00:00:00 2000 PST
+>  Sun Jan 09 00:00:00 2000 PST
+>  Mon Jan 10 00:00:00 2000 PST
+>  Mon Jan 10 00:00:00 2000 PST
 >  Mon Jan 10 00:00:00 2000 PST
 >  Tue Jan 11 00:00:00 2000 PST
+>  Tue Jan 11 00:00:00 2000 PST
+>  Tue Jan 11 00:00:00 2000 PST
+>  Wed Jan 12 00:00:00 2000 PST
+>  Wed Jan 12 00:00:00 2000 PST
 >  Wed Jan 12 00:00:00 2000 PST
 >  Thu Jan 13 00:00:00 2000 PST
+>  Thu Jan 13 00:00:00 2000 PST
+>  Thu Jan 13 00:00:00 2000 PST
+>  Fri Jan 14 00:00:00 2000 PST
+>  Fri Jan 14 00:00:00 2000 PST
 >  Fri Jan 14 00:00:00 2000 PST
 >  Sat Jan 15 00:00:00 2000 PST
+>  Sat Jan 15 00:00:00 2000 PST
+>  Sat Jan 15 00:00:00 2000 PST
+>  Sun Jan 16 00:00:00 2000 PST
+>  Sun Jan 16 00:00:00 2000 PST
 >  Sun Jan 16 00:00:00 2000 PST
 >  Mon Jan 17 00:00:00 2000 PST
+>  Mon Jan 17 00:00:00 2000 PST
+>  Mon Jan 17 00:00:00 2000 PST
+>  Tue Jan 18 00:00:00 2000 PST
+>  Tue Jan 18 00:00:00 2000 PST
 >  Tue Jan 18 00:00:00 2000 PST
 >  Wed Jan 19 00:00:00 2000 PST
+>  Wed Jan 19 00:00:00 2000 PST
+>  Wed Jan 19 00:00:00 2000 PST
+>  Thu Jan 20 00:00:00 2000 PST
+>  Thu Jan 20 00:00:00 2000 PST
 >  Thu Jan 20 00:00:00 2000 PST
 >  Fri Jan 21 00:00:00 2000 PST
+>  Fri Jan 21 00:00:00 2000 PST
+>  Fri Jan 21 00:00:00 2000 PST
+>  Sat Jan 22 00:00:00 2000 PST
+>  Sat Jan 22 00:00:00 2000 PST
 >  Sat Jan 22 00:00:00 2000 PST
 >  Sun Jan 23 00:00:00 2000 PST
+>  Sun Jan 23 00:00:00 2000 PST
+>  Sun Jan 23 00:00:00 2000 PST
+>  Mon Jan 24 00:00:00 2000 PST
+>  Mon Jan 24 00:00:00 2000 PST
 >  Mon Jan 24 00:00:00 2000 PST
 >  Tue Jan 25 00:00:00 2000 PST
+>  Tue Jan 25 00:00:00 2000 PST
+>  Tue Jan 25 00:00:00 2000 PST
+>  Wed Jan 26 00:00:00 2000 PST
+>  Wed Jan 26 00:00:00 2000 PST
 >  Wed Jan 26 00:00:00 2000 PST
 >  Thu Jan 27 00:00:00 2000 PST
+>  Thu Jan 27 00:00:00 2000 PST
+>  Thu Jan 27 00:00:00 2000 PST
+>  Fri Jan 28 00:00:00 2000 PST
+>  Fri Jan 28 00:00:00 2000 PST
 >  Fri Jan 28 00:00:00 2000 PST
 >  Sat Jan 29 00:00:00 2000 PST
+>  Sat Jan 29 00:00:00 2000 PST
+>  Sat Jan 29 00:00:00 2000 PST
+>  Sun Jan 30 00:00:00 2000 PST
+>  Sun Jan 30 00:00:00 2000 PST
 >  Sun Jan 30 00:00:00 2000 PST
 >  Mon Jan 31 00:00:00 2000 PST
+>  Mon Jan 31 00:00:00 2000 PST
+>  Mon Jan 31 00:00:00 2000 PST
 >  Tue Feb 01 00:00:00 2000 PST
-> (32 rows)
+>  Tue Feb 01 00:00:00 2000 PST
+>  Tue Feb 01 00:00:00 2000 PST
+> (96 rows)
 > 

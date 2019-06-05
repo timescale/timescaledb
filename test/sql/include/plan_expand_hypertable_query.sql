@@ -141,9 +141,9 @@ SELECT * FROM cte ORDER BY value;
 
 -- test constraint exclusion for constraints in ON clause of JOINs
 
--- should exclude chunks on m1
+-- should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
--- should exclude chunks on m2
+-- should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
 -- must not exclude on m1
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
@@ -177,10 +177,10 @@ SELECT * FROM cte ORDER BY value;
 -- this will error because even though the transformation results in a valid timestamp
 -- our supported range of values for time is smaller then postgres
 \set ON_ERROR_STOP 0
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
 \set ON_ERROR_STOP 1
 -- transformation would be out of range
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
@@ -196,13 +196,13 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
 
 -- time_bucket exclusion with timestamptz
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
 
 -- time_bucket exclusion with timestamptz and day interval
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
 
 --exclude chunks based on time column with partitioning function. This
 --transparently applies the time partitioning function on the time
@@ -210,4 +210,81 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper_timefunc WHERE time < 4 ORDER BY value;
 --excluding based on time expression is currently unoptimized
 :PREFIX SELECT * FROM hyper_timefunc WHERE unix_to_timestamp(time) < 'Wed Dec 31 16:00:04 1969 PST' ORDER BY value;
+
+-- test qual propagation for joins
+RESET constraint_exclusion;
+
+-- nothing to propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+
+-- OR constraints should not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' OR m1.time > '2001-01-01' ORDER BY m1.time;
+
+-- test single constraint
+-- constraint should be on both scans
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+
+-- test 2 constraints on single relation
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+
+-- test 2 constraints with 1 constraint on each relation
+-- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+
+-- test constraints in ON clause of INNER JOIN
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+
+-- test constraints in ON clause of LEFT JOIN
+-- must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+
+-- test constraints in ON clause of RIGHT JOIN
+-- must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+
+-- test equality condition not in ON clause
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+
+-- test constraints not joined on
+-- device_id constraint must not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+
+-- test multiple join conditions
+-- device_id constraint should propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+
+-- test join with 3 tables
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time INNER JOIN metrics_timestamptz m3 ON m2.time=m3.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+
+-- test non-Const constraints
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10'::text::timestamptz ORDER BY m1.time;
+
+-- test now()
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < now() ORDER BY m1.time;
+
+-- test volatile function
+-- should not propagate
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < clock_timestamp() ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m2.time < clock_timestamp() ORDER BY m1.time;
+
+-- test JOINs with normal table
+-- will not propagate because constraints are only added to hypertables
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+
+-- test JOINs with normal table
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m2.time < '2000-01-10' ORDER BY m1.time;
 

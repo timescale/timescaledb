@@ -81,15 +81,22 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
  Hash Join
-   Hash Cond: (_hyper_1_1_chunk.series_1 = "two_Partitions".series_1)
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-         ->  Seq Scan on _hyper_1_2_chunk
-         ->  Seq Scan on _hyper_1_3_chunk
-         ->  Seq Scan on _hyper_1_4_chunk
+   Hash Cond: ("two_Partitions".series_1 = "two_Partitions_1".series_1)
+   ->  Custom Scan (ConstraintAwareAppend)
+         Hypertable: two_Partitions
+         Chunks left after exclusion: 4
+         ->  Append
+               ->  Index Only Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk
+                     Index Cond: (series_1 > (series_val())::double precision)
+               ->  Index Only Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk
+                     Index Cond: (series_1 > (series_val())::double precision)
+               ->  Index Only Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk
+                     Index Cond: (series_1 > (series_val())::double precision)
+               ->  Index Only Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk
+                     Index Cond: (series_1 > (series_val())::double precision)
    ->  Hash
          ->  HashAggregate
-               Group Key: "two_Partitions".series_1
+               Group Key: "two_Partitions_1".series_1
                ->  Custom Scan (ConstraintAwareAppend)
                      Hypertable: two_Partitions
                      Chunks left after exclusion: 4
@@ -102,7 +109,7 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Only Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
-(22 rows)
+(29 rows)
 
 -- ConstraintAwareAppend NOT applied for DELETE
 EXPLAIN (costs off)
