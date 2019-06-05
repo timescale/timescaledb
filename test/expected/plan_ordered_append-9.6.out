@@ -1245,9 +1245,12 @@ ORDER BY o1.time;
          ->  Custom Scan (ChunkAppend) on ordered_append o2
                Order: o2."time"
                ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk o2_1
+                     Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk o2_2
+                     Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk o2_3
-(16 rows)
+                     Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+(19 rows)
 
 -- test JOIN
 -- last chunk of o2 should not be executed

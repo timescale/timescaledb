@@ -62,9 +62,11 @@ CREATE TABLE metrics_timestamp(time timestamp);
 SELECT create_hypertable('metrics_timestamp','time');
 INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1d'::interval);
 
-CREATE TABLE metrics_timestamptz(time timestamptz);
+CREATE TABLE metrics_timestamptz(time timestamptz, device_id int);
 SELECT create_hypertable('metrics_timestamptz','time');
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 3;
 
 CREATE TABLE metrics_date(time date);
 SELECT create_hypertable('metrics_date','time');
@@ -75,3 +77,8 @@ ANALYZE hyper_w_space;
 ANALYZE tag;
 ANALYZE hyper_ts;
 ANALYZE hyper_timefunc;
+
+-- create normal table for JOIN tests
+CREATE TABLE regular_timestamptz(time timestamptz);
+INSERT INTO regular_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
+

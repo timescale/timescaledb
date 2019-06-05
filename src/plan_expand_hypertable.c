@@ -53,7 +53,10 @@ typedef struct CollectQualCtx
 	List *restrictions;
 	FuncExpr *chunk_exclusion_func;
 	List *join_conditions;
+	List *all_quals;
 } CollectQualCtx;
+
+static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
 
 static Oid chunk_exclusion_func = InvalidOid;
 #define CHUNK_EXCL_FUNC_NAME "chunks_in"
@@ -405,7 +408,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
  * will throw an error when executed.
  */
 static Node *
-process_quals(Node *quals, CollectQualCtx *ctx)
+process_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
 {
 	ListCell *lc;
 	ListCell *prev = NULL;
@@ -417,10 +420,6 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 		RestrictInfo *restrictinfo;
 		Relids relids = pull_varnos((Node *) qual);
 		int num_rels = bms_num_members(relids);
-
-		/* skip expressions not for current rel */
-		if (num_rels == 0 || num_rels > 2 || !bms_is_member(ctx->rel->relid, relids))
-			continue;
 
 		/* collect equality JOIN conditions for current rel */
 		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
@@ -440,6 +439,17 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			}
 			continue;
 		}
+
+		/*
+		 * collect quals to propagate to join relations
+		 */
+		if (num_rels == 1 && propagate && IsA(qual, OpExpr) &&
+			list_length(castNode(OpExpr, qual)->args) == 2)
+			ctx->all_quals = lappend(ctx->all_quals, qual);
+
+		/* stop processing if not for current rel */
+		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+			continue;
 
 		if (is_chunk_exclusion_func(qual))
 		{
@@ -511,7 +521,7 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	if (IsA(node, FromExpr))
 	{
 		FromExpr *f = castNode(FromExpr, node);
-		f->quals = process_quals(f->quals, ctx);
+		f->quals = process_quals(f->quals, ctx, true);
 	}
 	else if (IsA(node, JoinExpr))
 	{
@@ -523,13 +533,13 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 		 */
 		JoinExpr *j = castNode(JoinExpr, node);
 		if (!IS_OUTER_JOIN(j->jointype))
-			j->quals = process_quals(j->quals, ctx);
+			j->quals = process_quals(j->quals, ctx, true);
 		else if (j->jointype == JOIN_LEFT && IsA(j->rarg, RangeTblRef) &&
 				 ctx->rel->relid == castNode(RangeTblRef, j->rarg)->rtindex)
-			j->quals = process_quals(j->quals, ctx);
+			j->quals = process_quals(j->quals, ctx, false);
 		else if (j->jointype == JOIN_RIGHT && IsA(j->larg, RangeTblRef) &&
 				 ctx->rel->relid == castNode(RangeTblRef, j->larg)->rtindex)
-			j->quals = process_quals(j->quals, ctx);
+			j->quals = process_quals(j->quals, ctx, false);
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
@@ -826,6 +836,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		.rel = rel,
 		.restrictions = NIL,
 		.chunk_exclusion_func = NULL,
+		.all_quals = NIL,
 		.join_conditions = NIL,
 	};
 
@@ -842,6 +853,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
+
+	if (ctx.join_conditions != NIL)
+		propagate_join_quals(root, rel, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
 
@@ -936,4 +950,109 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	 */
 	setup_append_rel_array(root);
 #endif
+}
+
+void
+propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
+{
+	ListCell *lc;
+
+	/* propagate join constraints */
+	foreach (lc, ctx->join_conditions)
+	{
+		ListCell *lc_qual;
+		OpExpr *op = lfirst(lc);
+		Var *rel_var, *other_var;
+
+		/*
+		 * join_conditions only has OpExpr with 2 Var as arguments
+		 * this is enforced in process_quals
+		 */
+		Assert(IsA(op, OpExpr) && list_length(castNode(OpExpr, op)->args) == 2);
+		Assert(IsA(linitial(op->args), Var) && IsA(lsecond(op->args), Var));
+
+		/*
+		 * check this join condition refers to current hypertable
+		 * our Var might be on either side of the expression
+		 */
+		if (linitial_node(Var, op->args)->varno == rel->relid)
+		{
+			rel_var = linitial_node(Var, op->args);
+			other_var = lsecond_node(Var, op->args);
+		}
+		else if (lsecond_node(Var, op->args)->varno == rel->relid)
+		{
+			rel_var = lsecond_node(Var, op->args);
+			other_var = linitial_node(Var, op->args);
+		}
+		else
+			continue;
+
+		foreach (lc_qual, ctx->all_quals)
+		{
+			OpExpr *qual = lfirst(lc_qual);
+			Expr *left = linitial(qual->args);
+			Expr *right = lsecond(qual->args);
+			OpExpr *propagated;
+			ListCell *lc_ri;
+			bool new_qual = true;
+
+			/*
+			 * check this is Var OP Expr / Expr OP Var
+			 * Var needs to reference the relid of the JOIN condition and
+			 * Expr must not contain volatile functions
+			 */
+			if (IsA(left, Var) && castNode(Var, left)->varno == other_var->varno &&
+				castNode(Var, left)->varattno == other_var->varattno && !IsA(right, Var) &&
+				!contain_volatile_functions((Node *) right))
+			{
+				propagated = copyObject(qual);
+				propagated->args = list_make2(rel_var, lsecond(propagated->args));
+			}
+			else if (IsA(right, Var) && castNode(Var, right)->varno == other_var->varno &&
+					 castNode(Var, right)->varattno == other_var->varattno && !IsA(left, Var) &&
+					 !contain_volatile_functions((Node *) left))
+			{
+				propagated = copyObject(qual);
+				propagated->args = list_make2(linitial(propagated->args), rel_var);
+			}
+			else
+				continue;
+
+			/*
+			 * check if this is a new qual
+			 */
+			foreach (lc_ri, ctx->restrictions)
+			{
+				if (equal(castNode(RestrictInfo, lfirst(lc_ri))->clause, propagated))
+				{
+					new_qual = false;
+					break;
+				}
+			}
+
+			if (new_qual)
+			{
+				Relids relids = pull_varnos((Node *) propagated);
+				RestrictInfo *restrictinfo;
+
+#if PG96
+				restrictinfo =
+					make_restrictinfo((Expr *) propagated, true, false, false, relids, NULL, NULL);
+#else
+				restrictinfo = make_restrictinfo((Expr *) propagated,
+												 true,
+												 false,
+												 false,
+												 ctx->root->qual_security_level,
+												 relids,
+												 NULL,
+												 NULL);
+#endif
+				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+				root->parse->jointree->quals =
+					(Node *) lappend((List *) root->parse->jointree->quals, propagated);
+			}
+		}
+	}
 }
