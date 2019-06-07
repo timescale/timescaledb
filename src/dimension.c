@@ -13,6 +13,7 @@
 #include <utils/timestamp.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
 
 #include "catalog.h"
 #include "compat.h"
@@ -183,6 +184,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
+	d->main_table_relid = main_table_relid;
 }
 
 static Datum
@@ -1629,4 +1631,47 @@ ts_dimensions_rename_schema_name(char *old_name, char *new_name)
 				NameGetDatum(&old_schema_name));
 
 	ts_scanner_scan(&scanctx);
+}
+
+/*
+ * Create partitioning key expressions for a dimension.
+ *
+ * This function returns a list of Expr nodes that represent the dimension as
+ * a partitioning key.
+ */
+List *
+ts_dimension_get_partexprs(Dimension *dim, Index hyper_varno)
+{
+	Expr *expr;
+	HeapTuple tuple;
+	Form_pg_attribute att;
+	List *exprs = NIL;
+
+	tuple = SearchSysCache2(ATTNUM,
+							ObjectIdGetDatum(dim->main_table_relid),
+							Int16GetDatum(dim->column_attno));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for attribute");
+
+	att = (Form_pg_attribute) GETSTRUCT(tuple);
+
+	if (!att->attisdropped)
+		expr = (Expr *) makeVar(hyper_varno,
+								dim->column_attno,
+								att->atttypid,
+								att->atttypmod,
+								att->attcollation,
+								0);
+
+	ReleaseSysCache(tuple);
+
+	/* The expression on the partitioning key can be the raw key or the
+	 * partitioning function on the key */
+	if (NULL != dim->partitioning)
+		exprs = list_make2(expr, dim->partitioning->partfunc.func_fmgr.fn_expr);
+	else
+		exprs = list_make1(expr);
+
+	return exprs;
 }
