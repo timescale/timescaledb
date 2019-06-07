@@ -12,8 +12,10 @@
 
 #include "compat.h"
 
-Datum tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS);
-Datum tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS);
-Datum tsl_partialize_agg(PG_FUNCTION_ARGS);
+#define PARTIALIZE_FUNC_NAME "partialize_agg"
+
+extern Datum tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS);
+extern Datum tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS);
+extern Datum tsl_partialize_agg(PG_FUNCTION_ARGS);
 
 #endif
