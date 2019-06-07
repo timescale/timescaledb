@@ -102,13 +102,11 @@ DimensionVec *
 ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec = *vecptr;
-
 	int32 existing_slice_index = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
 
 	if (existing_slice_index == -1)
-	{
 		return ts_dimension_vec_add_slice(vecptr, slice);
-	}
+
 	return vec;
 }
 
