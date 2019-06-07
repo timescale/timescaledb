@@ -46,25 +46,29 @@ OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
 -- Create a 2-dimensional partitioned table for comparision
-CREATE TABLE pg2dim (time timestamptz, device int, temp float) PARTITION BY HASH (device);
+CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
 CREATE FOREIGN TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg1;
 CREATE FOREIGN TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg1;
+CREATE FOREIGN TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg1;
 CREATE FOREIGN TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg2;
 CREATE FOREIGN TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg2;
+CREATE FOREIGN TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg2;
 -- Create these partitioned tables on the servers
 SELECT * FROM test.remote_exec('{ server_pg1, server_pg2 }', $$
-CREATE TABLE pg2dim (time timestamptz, device int, temp float) PARTITION BY HASH (device);
+CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
 CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
+CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
+CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
 $$);
 NOTICE:  [server_pg1]: 
-CREATE TABLE pg2dim (time timestamptz, device int, temp float) PARTITION BY HASH (device)
+CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device)
 NOTICE:  [server_pg1]: 
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time)
 NOTICE:  [server_pg1]: 
@@ -77,8 +81,13 @@ NOTICE:  [server_pg1]:
 CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
 NOTICE:  [server_pg1]: 
 CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
+NOTICE:  [server_pg1]: 
+CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
+NOTICE:  [server_pg1]: 
+CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
+
 NOTICE:  [server_pg2]: 
-CREATE TABLE pg2dim (time timestamptz, device int, temp float) PARTITION BY HASH (device)
+CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device)
 NOTICE:  [server_pg2]: 
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time)
 NOTICE:  [server_pg2]: 
@@ -91,6 +100,11 @@ NOTICE:  [server_pg2]:
 CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
 NOTICE:  [server_pg2]: 
 CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
+NOTICE:  [server_pg2]: 
+CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
+NOTICE:  [server_pg2]: 
+CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
+
  remote_exec 
 -------------
  
@@ -111,121 +125,417 @@ NOTICE:  remote server database "server_2" already exists, skipping
  server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-CREATE TABLE hyper (time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('hyper', 'time', 'device', 2, replication_factor => 1, chunk_time_interval => '3 months'::interval);
+CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
+SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 2, chunk_time_interval => '3 months'::interval);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper      | t
 (1 row)
 
-INSERT INTO hyper VALUES
-       ('2018-01-19 13:01', 1, 2.3),
-       ('2018-01-20 15:05', 1, 5.3),
-       ('2018-02-21 13:01', 3, 1.5),
-       ('2018-02-28 15:05', 1, 5.6),
-       ('2018-02-19 13:02', 3, 3.1),
-       ('2018-02-19 13:02', 3, 6.7),
-       ('2018-04-19 13:01', 1, 7.6),
-       ('2018-04-20 15:08', 3, 8.4),
-       ('2018-05-19 13:01', 1, 5.1),
-       ('2018-05-20 15:08', 1, 9.4),
-       ('2018-05-30 13:02', 3, 9.0);
 INSERT INTO pg2dim VALUES
-       ('2018-01-19 13:01', 1, 2.3),
-       ('2018-01-20 15:05', 1, 5.3),
-       ('2018-02-21 13:01', 3, 1.5),
-       ('2018-02-28 15:05', 1, 5.6),
-       ('2018-02-19 13:02', 3, 3.1),
-       ('2018-02-19 13:02', 3, 6.7),
-       ('2018-04-19 13:01', 1, 7.6),
-       ('2018-04-20 15:08', 3, 8.4),
-       ('2018-05-19 13:01', 1, 5.1),
-       ('2018-05-20 15:08', 1, 9.4),
-       ('2018-05-30 13:02', 3, 9.0);
-SELECT * FROM test.show_subtables('hyper');
-                    Child                    | Tablespace 
----------------------------------------------+------------
- _timescaledb_internal._hyper_1_1_dist_chunk | 
- _timescaledb_internal._hyper_1_2_dist_chunk | 
- _timescaledb_internal._hyper_1_3_dist_chunk | 
- _timescaledb_internal._hyper_1_4_dist_chunk | 
-(4 rows)
+       ('2018-01-19 13:01', 1, 2, 2.3),
+       ('2018-01-20 15:05', 1, 3, 5.3),
+       ('2018-02-21 13:01', 3, 4, 1.5),
+       ('2018-02-28 15:05', 1, 1, 5.6),
+       ('2018-02-19 13:02', 3, 5, 3.1),
+       ('2018-02-19 13:02', 2, 3, 6.7),
+       ('2018-03-08 11:05', 6, 2, 8.1),
+       ('2018-03-08 11:05', 7, 4, 4.6),
+       ('2018-03-10 17:02', 5, 5, 5.1),
+       ('2018-03-10 17:02', 1, 6, 9.1),
+       ('2018-03-17 12:02', 2, 2, 6.7),
+       ('2018-04-19 13:01', 1, 2, 7.6),
+       ('2018-04-20 15:08', 5, 5, 6.4),
+       ('2018-05-19 13:01', 4, 4, 5.1),
+       ('2018-05-20 15:08', 5, 1, 9.4),
+       ('2018-05-30 13:02', 3, 2, 9.0),
+       ('2018-09-19 13:01', 1, 3, 6.1),
+       ('2018-09-20 15:08', 4, 5, 10.4),
+       ('2018-09-30 13:02', 3, 4, 9.9);
+INSERT INTO hyper VALUES
+       ('2018-01-19 13:01', 1, 2, 2.3),
+       ('2018-01-20 15:05', 1, 3, 5.3),
+       ('2018-02-21 13:01', 3, 4, 1.5),
+       ('2018-02-28 15:05', 1, 1, 5.6),
+       ('2018-02-19 13:02', 3, 5, 3.1),
+       ('2018-02-19 13:02', 2, 3, 6.7),
+       ('2018-03-08 11:05', 6, 2, 8.1),
+       ('2018-03-08 11:05', 7, 4, 4.6),
+       ('2018-03-10 17:02', 5, 5, 5.1),
+       ('2018-03-10 17:02', 1, 6, 9.1),
+       ('2018-03-17 12:02', 2, 2, 6.7),
+       ('2018-04-19 13:01', 1, 2, 7.6),
+       ('2018-04-20 15:08', 5, 5, 6.4),
+       ('2018-05-19 13:01', 4, 4, 5.1),
+       ('2018-05-20 15:08', 5, 1, 9.4),
+       ('2018-05-30 13:02', 3, 2, 9.0);
+-- Repartition and insert more data to create chunks with the new
+-- partitioning
+SELECT set_number_partitions('hyper', 3, 'device');
+ set_number_partitions 
+-----------------------
+ 
+(1 row)
+
+INSERT INTO hyper VALUES
+       ('2018-09-19 13:01', 1, 3, 6.1),
+       ('2018-09-20 15:08', 4, 5, 10.4),
+       ('2018-09-30 13:02', 3, 4, 9.9);
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('hyper');
+ chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                                            slices                                            
+----------+---------------+-----------------------+-----------------------+---------+----------------------------------------------------------------------------------------------
+        1 |             1 | _timescaledb_internal | _hyper_1_1_dist_chunk | f       | {"time": [1516320000000000, 1524096000000000], "device": [-9223372036854775808, 1073741823]}
+        2 |             1 | _timescaledb_internal | _hyper_1_2_dist_chunk | f       | {"time": [1516320000000000, 1524096000000000], "device": [1073741823, 9223372036854775807]}
+        3 |             1 | _timescaledb_internal | _hyper_1_3_dist_chunk | f       | {"time": [1524096000000000, 1531872000000000], "device": [-9223372036854775808, 1073741823]}
+        4 |             1 | _timescaledb_internal | _hyper_1_4_dist_chunk | f       | {"time": [1524096000000000, 1531872000000000], "device": [1073741823, 9223372036854775807]}
+        5 |             1 | _timescaledb_internal | _hyper_1_5_dist_chunk | f       | {"time": [1531872000000000, 1539648000000000], "device": [-9223372036854775808, 715827882]}
+        6 |             1 | _timescaledb_internal | _hyper_1_6_dist_chunk | f       | {"time": [1531872000000000, 1539648000000000], "device": [715827882, 1431655764]}
+        7 |             1 | _timescaledb_internal | _hyper_1_7_dist_chunk | f       | {"time": [1531872000000000, 1539648000000000], "device": [1431655764, 9223372036854775807]}
+(7 rows)
+
+-- Show how slices are assigned to servers. In particular, verify that
+-- there are overlapping slices in the closed "space" dimension
+SELECT * FROM test.remote_exec('{ server_pg1, server_pg2 }', $$
+       SELECT * FROM _timescaledb_catalog.dimension_slice WHERE dimension_id = 2;
+$$);
+NOTICE:  [server_pg1]: 
+       SELECT * FROM _timescaledb_catalog.dimension_slice WHERE dimension_id = 2
+NOTICE:  [server_pg1]:
+id|dimension_id|         range_start|          range_end
+--+------------+--------------------+-------------------
+ 2|           2|-9223372036854775808|         1073741823
+ 5|           2|-9223372036854775808|          715827882
+ 6|           2|          1431655764|9223372036854775807
+(3 rows)
+
+
+NOTICE:  [server_pg2]: 
+       SELECT * FROM _timescaledb_catalog.dimension_slice WHERE dimension_id = 2
+NOTICE:  [server_pg2]:
+id|dimension_id|range_start|          range_end
+--+------------+-----------+-------------------
+ 2|           2| 1073741823|9223372036854775807
+ 5|           2|  715827882|         1431655764
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
 
 SELECT * FROM pg2dim_h1_t1;
-             time             | device | temp 
-------------------------------+--------+------
- Fri Jan 19 13:01:00 2018 PST |      1 |  2.3
- Sat Jan 20 15:05:00 2018 PST |      1 |  5.3
- Wed Feb 28 15:05:00 2018 PST |      1 |  5.6
-(3 rows)
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Fri Jan 19 13:01:00 2018 PST |      1 |        2 |  2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 |        3 |  5.3
+ Wed Feb 28 15:05:00 2018 PST |      1 |        1 |  5.6
+ Mon Feb 19 13:02:00 2018 PST |      2 |        3 |  6.7
+ Sat Mar 10 17:02:00 2018 PST |      1 |        6 |  9.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 |        2 |  6.7
+(6 rows)
 
 SELECT * FROM pg2dim_h1_t2;
-             time             | device | temp 
-------------------------------+--------+------
- Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
- Sat May 19 13:01:00 2018 PDT |      1 |  5.1
- Sun May 20 15:08:00 2018 PDT |      1 |  9.4
-(3 rows)
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Thu Apr 19 13:01:00 2018 PDT |      1 |        2 |  7.6
+(1 row)
+
+SELECT * FROM pg2dim_h1_t3;
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Wed Sep 19 13:01:00 2018 PDT |      1 |        3 |  6.1
+(1 row)
 
 SELECT * FROM pg2dim_h2_t1;
-             time             | device | temp 
-------------------------------+--------+------
- Wed Feb 21 13:01:00 2018 PST |      3 |  1.5
- Mon Feb 19 13:02:00 2018 PST |      3 |  3.1
- Mon Feb 19 13:02:00 2018 PST |      3 |  6.7
-(3 rows)
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Wed Feb 21 13:01:00 2018 PST |      3 |        4 |  1.5
+ Mon Feb 19 13:02:00 2018 PST |      3 |        5 |  3.1
+ Thu Mar 08 11:05:00 2018 PST |      6 |        2 |  8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 |        4 |  4.6
+ Sat Mar 10 17:02:00 2018 PST |      5 |        5 |  5.1
+(5 rows)
 
 SELECT * FROM pg2dim_h2_t2;
-             time             | device | temp 
-------------------------------+--------+------
- Fri Apr 20 15:08:00 2018 PDT |      3 |  8.4
- Wed May 30 13:02:00 2018 PDT |      3 |    9
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Fri Apr 20 15:08:00 2018 PDT |      5 |        5 |  6.4
+ Sat May 19 13:01:00 2018 PDT |      4 |        4 |  5.1
+ Sun May 20 15:08:00 2018 PDT |      5 |        1 |  9.4
+ Wed May 30 13:02:00 2018 PDT |      3 |        2 |    9
+(4 rows)
+
+SELECT * FROM pg2dim_h2_t3;
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Thu Sep 20 15:08:00 2018 PDT |      4 |        5 | 10.4
+ Sun Sep 30 13:02:00 2018 PDT |      3 |        4 |  9.9
 (2 rows)
 
 SELECT * FROM  _timescaledb_internal._hyper_1_1_dist_chunk;
-             time             | device | temp 
-------------------------------+--------+------
- Fri Jan 19 13:01:00 2018 PST |      1 |  2.3
- Sat Jan 20 15:05:00 2018 PST |      1 |  5.3
- Wed Feb 28 15:05:00 2018 PST |      1 |  5.6
-(3 rows)
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Fri Jan 19 13:01:00 2018 PST |      1 |        2 |  2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 |        3 |  5.3
+ Wed Feb 28 15:05:00 2018 PST |      1 |        1 |  5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 |        2 |  8.1
+ Sat Mar 10 17:02:00 2018 PST |      5 |        5 |  5.1
+ Sat Mar 10 17:02:00 2018 PST |      1 |        6 |  9.1
+(6 rows)
 
 SELECT * FROM  _timescaledb_internal._hyper_1_2_dist_chunk;
-             time             | device | temp 
-------------------------------+--------+------
- Wed Feb 21 13:01:00 2018 PST |      3 |  1.5
- Mon Feb 19 13:02:00 2018 PST |      3 |  3.1
- Mon Feb 19 13:02:00 2018 PST |      3 |  6.7
-(3 rows)
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Wed Feb 21 13:01:00 2018 PST |      3 |        4 |  1.5
+ Mon Feb 19 13:02:00 2018 PST |      3 |        5 |  3.1
+ Mon Feb 19 13:02:00 2018 PST |      2 |        3 |  6.7
+ Thu Mar 08 11:05:00 2018 PST |      7 |        4 |  4.6
+ Sat Mar 17 12:02:00 2018 PDT |      2 |        2 |  6.7
+(5 rows)
 
 SELECT * FROM  _timescaledb_internal._hyper_1_3_dist_chunk;
-             time             | device | temp 
-------------------------------+--------+------
- Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
- Sat May 19 13:01:00 2018 PDT |      1 |  5.1
- Sun May 20 15:08:00 2018 PDT |      1 |  9.4
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Thu Apr 19 13:01:00 2018 PDT |      1 |        2 |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |      5 |        5 |  6.4
+ Sun May 20 15:08:00 2018 PDT |      5 |        1 |  9.4
 (3 rows)
 
 SELECT * FROM  _timescaledb_internal._hyper_1_4_dist_chunk;
-             time             | device | temp 
-------------------------------+--------+------
- Fri Apr 20 15:08:00 2018 PDT |      3 |  8.4
- Wed May 30 13:02:00 2018 PDT |      3 |    9
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Sat May 19 13:01:00 2018 PDT |      4 |        4 |  5.1
+ Wed May 30 13:02:00 2018 PDT |      3 |        2 |    9
 (2 rows)
 
----------------------------------------------------------------------
--- PARTIAL partitionwise - Not all partition keys are covered by GROUP
--- BY
----------------------------------------------------------------------
+SELECT * FROM  _timescaledb_internal._hyper_1_5_dist_chunk;
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Wed Sep 19 13:01:00 2018 PDT |      1 |        3 |  6.1
+(1 row)
+
+SELECT * FROM  _timescaledb_internal._hyper_1_6_dist_chunk;
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Thu Sep 20 15:08:00 2018 PDT |      4 |        5 | 10.4
+(1 row)
+
+SELECT * FROM  _timescaledb_internal._hyper_1_7_dist_chunk;
+             time             | device | location | temp 
+------------------------------+--------+----------+------
+ Sun Sep 30 13:02:00 2018 PDT |      3 |        4 |  9.9
+(1 row)
+
+------------------------------------------------------------------------
+-- PARTIAL partitionwise - open "time" dimension covered by GROUP BY.
+-- Note that we don't yet support pushing down partials and PG can't
+-- do it on partitioned rels.
+-----------------------------------------------------------------------
+SET enable_partitionwise_aggregate = OFF;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: pg2dim_h1_t1."time", (avg(pg2dim_h1_t1.temp))
+   Sort Key: pg2dim_h1_t1."time"
+   ->  HashAggregate
+         Output: pg2dim_h1_t1."time", avg(pg2dim_h1_t1.temp)
+         Group Key: pg2dim_h1_t1."time"
+         ->  Append
+               ->  Foreign Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
+
+SELECT time, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+             time             | avg  
+------------------------------+------
+ Fri Jan 19 13:01:00 2018 PST |  2.3
+ Sat Jan 20 15:05:00 2018 PST |  5.3
+ Mon Feb 19 13:02:00 2018 PST |  4.9
+ Wed Feb 21 13:01:00 2018 PST |  1.5
+ Wed Feb 28 15:05:00 2018 PST |  5.6
+ Thu Mar 08 11:05:00 2018 PST | 6.35
+ Sat Mar 10 17:02:00 2018 PST |  7.1
+ Sat Mar 17 12:02:00 2018 PDT |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |  6.4
+ Sat May 19 13:01:00 2018 PDT |  5.1
+ Sun May 20 15:08:00 2018 PDT |  9.4
+ Wed May 30 13:02:00 2018 PDT |    9
+(13 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper."time", (avg(hyper.temp))
+   Sort Key: hyper."time"
+   ->  HashAggregate
+         Output: hyper."time", avg(hyper.temp)
+         Group Key: hyper."time"
+         ->  Append
+               ->  Custom Scan (ServerScan) on public.hyper
+                     Output: hyper."time", hyper.temp
+                     Server: server_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                     Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                     Output: hyper_1."time", hyper_1.temp
+                     Server: server_2
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
+                     Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(17 rows)
+
+-- Show result
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+             time             | avg  
+------------------------------+------
+ Fri Jan 19 13:01:00 2018 PST |  2.3
+ Sat Jan 20 15:05:00 2018 PST |  5.3
+ Mon Feb 19 13:02:00 2018 PST |  4.9
+ Wed Feb 21 13:01:00 2018 PST |  1.5
+ Wed Feb 28 15:05:00 2018 PST |  5.6
+ Thu Mar 08 11:05:00 2018 PST | 6.35
+ Sat Mar 10 17:02:00 2018 PST |  7.1
+ Sat Mar 17 12:02:00 2018 PDT |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |  6.4
+ Sat May 19 13:01:00 2018 PDT |  5.1
+ Sun May 20 15:08:00 2018 PDT |  9.4
+ Wed May 30 13:02:00 2018 PDT |    9
+(13 rows)
+
+SET enable_partitionwise_aggregate = ON;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: pg2dim_h1_t1."time", (avg(pg2dim_h1_t1.temp))
+   Sort Key: pg2dim_h1_t1."time"
+   ->  HashAggregate
+         Output: pg2dim_h1_t1."time", avg(pg2dim_h1_t1.temp)
+         Group Key: pg2dim_h1_t1."time"
+         ->  Append
+               ->  Foreign Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.temp
+                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                                                QUERY PLAN                                                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper."time", (avg(hyper.temp))
+   Sort Key: hyper."time"
+   ->  Finalize HashAggregate
+         Output: hyper."time", avg(hyper.temp)
+         Group Key: hyper."time"
+         ->  Append
+               ->  Partial HashAggregate
+                     Output: hyper."time", PARTIAL avg(hyper.temp)
+                     Group Key: hyper."time"
+                     ->  Custom Scan (ServerScan) on public.hyper
+                           Output: hyper."time", hyper.temp
+                           Server: server_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Output: hyper_1."time", PARTIAL avg(hyper_1.temp)
+                     Group Key: hyper_1."time"
+                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                           Output: hyper_1."time", hyper_1.temp
+                           Server: server_2
+                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
+                           Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(23 rows)
+
+-- Show result
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+             time             | avg  
+------------------------------+------
+ Fri Jan 19 13:01:00 2018 PST |  2.3
+ Sat Jan 20 15:05:00 2018 PST |  5.3
+ Mon Feb 19 13:02:00 2018 PST |  4.9
+ Wed Feb 21 13:01:00 2018 PST |  1.5
+ Wed Feb 28 15:05:00 2018 PST |  5.6
+ Thu Mar 08 11:05:00 2018 PST | 6.35
+ Sat Mar 10 17:02:00 2018 PST |  7.1
+ Sat Mar 17 12:02:00 2018 PDT |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |  6.4
+ Sat May 19 13:01:00 2018 PDT |  5.1
+ Sun May 20 15:08:00 2018 PDT |  9.4
+ Wed May 30 13:02:00 2018 PDT |    9
+(13 rows)
+
+-------------------------------------------------------------------------
+-- FULL partitionwise - only closed "space" dimension covered by GROUP
+-- BY -- this is always safe to fully push down if chunks do not
+-- overlap in the space dimension.
+-------------------------------------------------------------------------
 SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1.device
@@ -235,35 +545,43 @@ ORDER BY 1;
          ->  Append
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (19 rows)
 
 SELECT device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
  device |       avg        
 --------+------------------
-      1 | 5.88333333333333
-      3 |             5.74
-(2 rows)
+      1 |             5.98
+      2 |              6.7
+      3 | 4.53333333333333
+      4 |              5.1
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
 
+SET timescaledb.enable_per_server_queries = ON;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
@@ -275,26 +593,138 @@ ORDER BY 1;
                      Output: hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (17 rows)
 
 -- Show result
 SELECT device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
  device |       avg        
 --------+------------------
-      1 | 5.88333333333333
-      3 |             5.74
-(2 rows)
+      1 |             5.98
+      2 |              6.7
+      3 | 4.53333333333333
+      4 |              5.1
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
 
 SET enable_partitionwise_aggregate = ON;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
+   Sort Key: pg2dim_h1_t1.device
+   ->  HashAggregate
+         Output: pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
+         Group Key: pg2dim_h1_t1.device
+         ->  Append
+               ->  Foreign Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper.device, (avg(hyper.temp))
+   Sort Key: hyper.device
+   ->  Append
+         ->  Custom Scan (ServerScan)
+               Output: hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+         ->  Custom Scan (ServerScan)
+               Output: hyper_1.device, (avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+               Remote SQL: SELECT device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+(16 rows)
+
+-- Show result
+SELECT device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+ device |       avg        
+--------+------------------
+      1 |             5.98
+      2 |              6.7
+      3 | 4.53333333333333
+      4 |              5.1
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
+
+-- Grouping on something which is not a partitioning dimension should
+-- not be pushed down
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT location, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1;
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize HashAggregate
+   Output: hyper.location, avg(hyper.temp)
+   Group Key: hyper.location
+   ->  Append
+         ->  Partial HashAggregate
+               Output: hyper.location, PARTIAL avg(hyper.temp)
+               Group Key: hyper.location
+               ->  Custom Scan (ServerScan) on public.hyper
+                     Output: hyper.location, hyper.temp
+                     Server: server_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                     Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+         ->  Partial HashAggregate
+               Output: hyper_1.location, PARTIAL avg(hyper_1.temp)
+               Group Key: hyper_1.location
+               ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                     Output: hyper_1.location, hyper_1.temp
+                     Server: server_2
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(20 rows)
+
+-- Expand query across repartition boundary. This makes it unsafe to
+-- push down the FULL agg, so should expect a PARTIAL agg on
+-- hypertables
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM pg2dim
@@ -322,6 +752,12 @@ ORDER BY 1;
                            ->  Foreign Scan on public.pg2dim_h1_t2
                                  Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
                                  Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2
+                     ->  Partial HashAggregate
+                           Output: pg2dim_h1_t3.device, PARTIAL avg(pg2dim_h1_t3.temp)
+                           Group Key: pg2dim_h1_t3.device
+                           ->  Foreign Scan on public.pg2dim_h1_t3
+                                 Output: pg2dim_h1_t3.device, pg2dim_h1_t3.temp
+                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t3
          ->  Finalize HashAggregate
                Output: pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
                Group Key: pg2dim_h2_t1.device
@@ -338,37 +774,61 @@ ORDER BY 1;
                            ->  Foreign Scan on public.pg2dim_h2_t2
                                  Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
                                  Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2
-(36 rows)
+                     ->  Partial HashAggregate
+                           Output: pg2dim_h2_t3.device, PARTIAL avg(pg2dim_h2_t3.temp)
+                           Group Key: pg2dim_h2_t3.device
+                           ->  Foreign Scan on public.pg2dim_h2_t3
+                                 Output: pg2dim_h2_t3.device, pg2dim_h2_t3.temp
+                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t3
+(48 rows)
+
+-- Show result
+SELECT device, avg(temp)
+FROM pg2dim
+GROUP BY 1
+ORDER BY 1;
+ device |       avg        
+--------+------------------
+      1 |                6
+      2 |              6.7
+      3 |            5.875
+      4 |             7.75
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Output: hyper.device, avg(hyper.temp)
-   Group Key: hyper.device
-   ->  Merge Append
-         Sort Key: hyper.device
-         ->  Partial GroupAggregate
-               Output: hyper.device, PARTIAL avg(hyper.temp)
-               Group Key: hyper.device
-               ->  Custom Scan (ServerScan) on public.hyper
-                     Output: hyper.device, hyper.temp
-                     Server: server_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-         ->  Partial GroupAggregate
-               Output: hyper_1.device, PARTIAL avg(hyper_1.temp)
-               Group Key: hyper_1.device
-               ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                     Output: hyper_1.device, hyper_1.temp
-                     Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-(21 rows)
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper.device, (avg(hyper.temp))
+   Sort Key: hyper.device
+   ->  Finalize HashAggregate
+         Output: hyper.device, avg(hyper.temp)
+         Group Key: hyper.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Output: hyper.device, PARTIAL avg(hyper.temp)
+                     Group Key: hyper.device
+                     ->  Custom Scan (ServerScan) on public.hyper
+                           Output: hyper.device, hyper.temp
+                           Server: server_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4])
+               ->  Partial HashAggregate
+                     Output: hyper_1.device, PARTIAL avg(hyper_1.temp)
+                     Group Key: hyper_1.device
+                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                           Output: hyper_1.device, hyper_1.temp
+                           Server: server_2
+                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3])
+(23 rows)
 
 -- Show result
 SELECT device, avg(temp)
@@ -377,11 +837,18 @@ GROUP BY 1
 ORDER BY 1;
  device |       avg        
 --------+------------------
-      1 | 5.88333333333333
-      3 |             5.74
-(2 rows)
+      1 |                6
+      2 |              6.7
+      3 |            5.875
+      4 |             7.75
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
 
--- Restriction on "time", but not including in target list
+-- Restriction on "time", but not including in target list. Again,
+-- this time interval covers a repartitioning, so hypertables should
+-- not push down FULL aggs
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM pg2dim
@@ -400,21 +867,29 @@ ORDER BY 1;
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
                      Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h1_t3
+                     Output: pg2dim_h1_t3.device, pg2dim_h1_t3.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t3 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
                      Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-(13 rows)
+               ->  Foreign Scan on public.pg2dim_h2_t3
+                     Output: pg2dim_h2_t3.device, pg2dim_h2_t3.temp
+                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t3 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+(19 rows)
 
 SELECT device, avg(temp)
 FROM pg2dim
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
- device |       avg        
---------+------------------
-      1 | 7.36666666666667
-      3 |              8.7
-(2 rows)
+ device | avg  
+--------+------
+      1 | 6.85
+      3 | 9.45
+      4 | 7.75
+      5 |  7.9
+(4 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
@@ -422,49 +897,59 @@ FROM hyper
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
-                                                                                            QUERY PLAN                                                                                            
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                  QUERY PLAN                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
-   ->  HashAggregate
+   ->  Finalize HashAggregate
          Output: hyper.device, avg(hyper.temp)
          Group Key: hyper.device
          ->  Append
-               ->  Custom Scan (ServerScan) on public.hyper
-                     Output: hyper.device, hyper.temp
-                     Server: server_1
-                     Chunks: _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-               ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                     Output: hyper_1.device, hyper_1.temp
-                     Server: server_2
-                     Chunks: _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-(17 rows)
+               ->  Partial HashAggregate
+                     Output: hyper.device, PARTIAL avg(hyper.temp)
+                     Group Key: hyper.device
+                     ->  Custom Scan (ServerScan) on public.hyper
+                           Output: hyper.device, hyper.temp
+                           Server: server_1
+                           Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3, 4]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Output: hyper_1.device, PARTIAL avg(hyper_1.temp)
+                     Group Key: hyper_1.device
+                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                           Output: hyper_1.device, hyper_1.temp
+                           Server: server_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+(23 rows)
 
 SELECT device, avg(temp)
 FROM hyper
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
- device |       avg        
---------+------------------
-      1 | 7.36666666666667
-      3 |              8.7
-(2 rows)
+ device | avg  
+--------+------
+      1 | 6.85
+      3 | 9.45
+      4 | 7.75
+      5 |  7.9
+(4 rows)
 
 --------------------------------------------------------------
 -- FULL partitionwise - All partition keys covered by GROUP BY
+-- This case is always safe to push down
 --------------------------------------------------------------
 SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
@@ -474,80 +959,245 @@ ORDER BY 1, 2;
          ->  Append
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (19 rows)
 
 SELECT time, device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
              time             | device | avg 
 ------------------------------+--------+-----
  Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
  Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
- Mon Feb 19 13:02:00 2018 PST |      3 | 4.9
+ Mon Feb 19 13:02:00 2018 PST |      2 | 6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 | 3.1
  Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
  Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 | 8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 | 4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 | 9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 | 5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 | 6.7
  Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 | 8.4
- Sat May 19 13:01:00 2018 PDT |      1 | 5.1
- Sun May 20 15:08:00 2018 PDT |      1 | 9.4
+ Fri Apr 20 15:08:00 2018 PDT |      5 | 6.4
+ Sat May 19 13:01:00 2018 PDT |      4 | 5.1
+ Sun May 20 15:08:00 2018 PDT |      5 | 9.4
  Wed May 30 13:02:00 2018 PDT |      3 |   9
-(10 rows)
+(16 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
-   Output: hyper."time", hyper.device, avg(hyper.temp)
-   Group Key: hyper."time", hyper.device
-   ->  Merge Append
-         Sort Key: hyper."time", hyper.device
-         ->  Custom Scan (ServerScan) on public.hyper
-               Output: hyper."time", hyper.device, hyper.temp
-               Server: server_1
-               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-               Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  Custom Scan (ServerScan) on public.hyper hyper_1
-               Output: hyper_1."time", hyper_1.device, hyper_1.temp
-               Server: server_2
-               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-               Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(15 rows)
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper."time", hyper.device, (avg(hyper.temp))
+   Sort Key: hyper."time", hyper.device
+   ->  HashAggregate
+         Output: hyper."time", hyper.device, avg(hyper.temp)
+         Group Key: hyper."time", hyper.device
+         ->  Append
+               ->  Custom Scan (ServerScan) on public.hyper
+                     Output: hyper."time", hyper.device, hyper.temp
+                     Server: server_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Custom Scan (ServerScan) on public.hyper hyper_1
+                     Output: hyper_1."time", hyper_1.device, hyper_1.temp
+                     Server: server_2
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(17 rows)
 
 -- Show result
 SELECT time, device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
              time             | device | avg 
 ------------------------------+--------+-----
  Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
  Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
- Mon Feb 19 13:02:00 2018 PST |      3 | 4.9
+ Mon Feb 19 13:02:00 2018 PST |      2 | 6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 | 3.1
  Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
  Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 | 8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 | 4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 | 9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 | 5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 | 6.7
  Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 | 8.4
- Sat May 19 13:01:00 2018 PDT |      1 | 5.1
- Sun May 20 15:08:00 2018 PDT |      1 | 9.4
+ Fri Apr 20 15:08:00 2018 PDT |      5 | 6.4
+ Sat May 19 13:01:00 2018 PDT |      4 | 5.1
+ Sun May 20 15:08:00 2018 PDT |      5 | 9.4
  Wed May 30 13:02:00 2018 PDT |      3 |   9
-(10 rows)
+(16 rows)
 
 SET enable_partitionwise_aggregate = ON;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, device, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
+   Sort Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
+   ->  Append
+         ->  Foreign Scan
+               Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
+               Relations: Aggregate on (public.pg2dim_h1_t1 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
+               Relations: Aggregate on (public.pg2dim_h1_t2 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, (avg(pg2dim_h2_t1.temp))
+               Relations: Aggregate on (public.pg2dim_h2_t1 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, (avg(pg2dim_h2_t2.temp))
+               Relations: Aggregate on (public.pg2dim_h2_t2 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+(20 rows)
+
+-- On hypertable, first show partitionwise aggs without per-server queries
+SET timescaledb.enable_per_server_queries = OFF;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, (avg(_hyper_1_1_dist_chunk.temp))
+   Sort Key: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device
+   ->  Append
+         ->  Foreign Scan
+               Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, (avg(_hyper_1_1_dist_chunk.temp))
+               Relations: Aggregate on (_timescaledb_internal._hyper_1_1_dist_chunk hyper)
+               Server: server_1
+               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_1_dist_chunk WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: _hyper_1_2_dist_chunk."time", _hyper_1_2_dist_chunk.device, (avg(_hyper_1_2_dist_chunk.temp))
+               Relations: Aggregate on (_timescaledb_internal._hyper_1_2_dist_chunk hyper)
+               Server: server_2
+               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_2_dist_chunk WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: _hyper_1_3_dist_chunk."time", _hyper_1_3_dist_chunk.device, (avg(_hyper_1_3_dist_chunk.temp))
+               Relations: Aggregate on (_timescaledb_internal._hyper_1_3_dist_chunk hyper)
+               Server: server_1
+               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_3_dist_chunk WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Foreign Scan
+               Output: _hyper_1_4_dist_chunk."time", _hyper_1_4_dist_chunk.device, (avg(_hyper_1_4_dist_chunk.temp))
+               Relations: Aggregate on (_timescaledb_internal._hyper_1_4_dist_chunk hyper)
+               Server: server_2
+               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_4_dist_chunk WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+(24 rows)
+
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+             time             | device | avg 
+------------------------------+--------+-----
+ Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
+ Mon Feb 19 13:02:00 2018 PST |      2 | 6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 | 3.1
+ Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
+ Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 | 8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 | 4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 | 9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 | 5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 | 6.7
+ Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
+ Fri Apr 20 15:08:00 2018 PDT |      5 | 6.4
+ Sat May 19 13:01:00 2018 PDT |      4 | 5.1
+ Sun May 20 15:08:00 2018 PDT |      5 | 9.4
+ Wed May 30 13:02:00 2018 PDT |      3 |   9
+(16 rows)
+
+-- Enable per-server queries. Aggregate should be pushed down per
+-- server instead of per chunk.
+SET timescaledb.enable_per_server_queries = ON;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                                                        QUERY PLAN                                                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: hyper."time", hyper.device, (avg(hyper.temp))
+   Sort Key: hyper."time", hyper.device
+   ->  Append
+         ->  Custom Scan (ServerScan)
+               Output: hyper."time", hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Custom Scan (ServerScan)
+               Output: hyper_1."time", hyper_1.device, (avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+(16 rows)
+
+-- Show result
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+             time             | device | avg 
+------------------------------+--------+-----
+ Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
+ Mon Feb 19 13:02:00 2018 PST |      2 | 6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 | 3.1
+ Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
+ Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 | 8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 | 4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 | 9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 | 5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 | 6.7
+ Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
+ Fri Apr 20 15:08:00 2018 PDT |      5 | 6.4
+ Sat May 19 13:01:00 2018 PDT |      4 | 5.1
+ Sun May 20 15:08:00 2018 PDT |      5 | 9.4
+ Wed May 30 13:02:00 2018 PDT |      3 |   9
+(16 rows)
+
+-- Still FULL partitionwise when crossing partitioning boundary
+-- because we now cover all partitioning keys.
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM pg2dim
@@ -568,6 +1218,10 @@ ORDER BY 1, 2;
                Relations: Aggregate on (public.pg2dim_h1_t2 pg2dim)
                Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t2 GROUP BY 1, 2
          ->  Foreign Scan
+               Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, (avg(pg2dim_h1_t3.temp))
+               Relations: Aggregate on (public.pg2dim_h1_t3 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t3 GROUP BY 1, 2
+         ->  Foreign Scan
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, (avg(pg2dim_h2_t1.temp))
                Relations: Aggregate on (public.pg2dim_h2_t1 pg2dim)
                Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t1 GROUP BY 1, 2
@@ -575,71 +1229,47 @@ ORDER BY 1, 2;
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, (avg(pg2dim_h2_t2.temp))
                Relations: Aggregate on (public.pg2dim_h2_t2 pg2dim)
                Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t2 GROUP BY 1, 2
-(20 rows)
+         ->  Foreign Scan
+               Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, (avg(pg2dim_h2_t3.temp))
+               Relations: Aggregate on (public.pg2dim_h2_t3 pg2dim)
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t3 GROUP BY 1, 2
+(28 rows)
 
--- On hypertable, first show partitionwise aggs without per-server queries
-SET timescaledb.enable_per_server_queries = OFF;
+-- Show result
+SELECT time, device, avg(temp)
+FROM pg2dim
+GROUP BY 1, 2
+ORDER BY 1, 2;
+             time             | device | avg  
+------------------------------+--------+------
+ Fri Jan 19 13:01:00 2018 PST |      1 |  2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 |  5.3
+ Mon Feb 19 13:02:00 2018 PST |      2 |  6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 |  3.1
+ Wed Feb 21 13:01:00 2018 PST |      3 |  1.5
+ Wed Feb 28 15:05:00 2018 PST |      1 |  5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 |  8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 |  4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 |  9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 |  5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |      5 |  6.4
+ Sat May 19 13:01:00 2018 PDT |      4 |  5.1
+ Sun May 20 15:08:00 2018 PDT |      5 |  9.4
+ Wed May 30 13:02:00 2018 PDT |      3 |    9
+ Wed Sep 19 13:01:00 2018 PDT |      1 |  6.1
+ Thu Sep 20 15:08:00 2018 PDT |      4 | 10.4
+ Sun Sep 30 13:02:00 2018 PDT |      3 |  9.9
+(19 rows)
+
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, (avg(_hyper_1_1_dist_chunk.temp))
-   Sort Key: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device
-   ->  Append
-         ->  Foreign Scan
-               Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, (avg(_hyper_1_1_dist_chunk.temp))
-               Relations: Aggregate on (_timescaledb_internal._hyper_1_1_dist_chunk hyper)
-               Server: server_1
-               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_1_dist_chunk GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: _hyper_1_2_dist_chunk."time", _hyper_1_2_dist_chunk.device, (avg(_hyper_1_2_dist_chunk.temp))
-               Relations: Aggregate on (_timescaledb_internal._hyper_1_2_dist_chunk hyper)
-               Server: server_2
-               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_2_dist_chunk GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: _hyper_1_3_dist_chunk."time", _hyper_1_3_dist_chunk.device, (avg(_hyper_1_3_dist_chunk.temp))
-               Relations: Aggregate on (_timescaledb_internal._hyper_1_3_dist_chunk hyper)
-               Server: server_1
-               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_3_dist_chunk GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: _hyper_1_4_dist_chunk."time", _hyper_1_4_dist_chunk.device, (avg(_hyper_1_4_dist_chunk.temp))
-               Relations: Aggregate on (_timescaledb_internal._hyper_1_4_dist_chunk hyper)
-               Server: server_2
-               Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_4_dist_chunk GROUP BY 1, 2
-(24 rows)
-
-SELECT time, device, avg(temp)
-FROM hyper
-GROUP BY 1, 2
-ORDER BY 1, 2;
-             time             | device | avg 
-------------------------------+--------+-----
- Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
- Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
- Mon Feb 19 13:02:00 2018 PST |      3 | 4.9
- Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
- Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
- Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 | 8.4
- Sat May 19 13:01:00 2018 PDT |      1 | 5.1
- Sun May 20 15:08:00 2018 PDT |      1 | 9.4
- Wed May 30 13:02:00 2018 PDT |      3 |   9
-(10 rows)
-
--- Enable per-server queries. Aggregate should be pushed down per
--- server instead of per chunk.
-SET timescaledb.enable_per_server_queries = ON;
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT time, device, avg(temp)
-FROM hyper
-GROUP BY 1, 2
-ORDER BY 1, 2;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper."time", hyper.device, (avg(hyper.temp))
    Sort Key: hyper."time", hyper.device
@@ -648,14 +1278,14 @@ ORDER BY 1, 2;
                Output: hyper."time", hyper.device, (avg(hyper.temp))
                Relations: Aggregate on (public.hyper)
                Server: server_1
-               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) GROUP BY 1, 2
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2
          ->  Custom Scan (ServerScan)
                Output: hyper_1."time", hyper_1.device, (avg(hyper_1.temp))
                Relations: Aggregate on (public.hyper)
                Server: server_2
-               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) GROUP BY 1, 2
+               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) GROUP BY 1, 2
 (16 rows)
 
 -- Show result
@@ -663,85 +1293,104 @@ SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-             time             | device | avg 
-------------------------------+--------+-----
- Fri Jan 19 13:01:00 2018 PST |      1 | 2.3
- Sat Jan 20 15:05:00 2018 PST |      1 | 5.3
- Mon Feb 19 13:02:00 2018 PST |      3 | 4.9
- Wed Feb 21 13:01:00 2018 PST |      3 | 1.5
- Wed Feb 28 15:05:00 2018 PST |      1 | 5.6
- Thu Apr 19 13:01:00 2018 PDT |      1 | 7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 | 8.4
- Sat May 19 13:01:00 2018 PDT |      1 | 5.1
- Sun May 20 15:08:00 2018 PDT |      1 | 9.4
- Wed May 30 13:02:00 2018 PDT |      3 |   9
-(10 rows)
+             time             | device | avg  
+------------------------------+--------+------
+ Fri Jan 19 13:01:00 2018 PST |      1 |  2.3
+ Sat Jan 20 15:05:00 2018 PST |      1 |  5.3
+ Mon Feb 19 13:02:00 2018 PST |      2 |  6.7
+ Mon Feb 19 13:02:00 2018 PST |      3 |  3.1
+ Wed Feb 21 13:01:00 2018 PST |      3 |  1.5
+ Wed Feb 28 15:05:00 2018 PST |      1 |  5.6
+ Thu Mar 08 11:05:00 2018 PST |      6 |  8.1
+ Thu Mar 08 11:05:00 2018 PST |      7 |  4.6
+ Sat Mar 10 17:02:00 2018 PST |      1 |  9.1
+ Sat Mar 10 17:02:00 2018 PST |      5 |  5.1
+ Sat Mar 17 12:02:00 2018 PDT |      2 |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |      5 |  6.4
+ Sat May 19 13:01:00 2018 PDT |      4 |  5.1
+ Sun May 20 15:08:00 2018 PDT |      5 |  9.4
+ Wed May 30 13:02:00 2018 PDT |      3 |    9
+ Wed Sep 19 13:01:00 2018 PDT |      1 |  6.1
+ Thu Sep 20 15:08:00 2018 PDT |      4 | 10.4
+ Sun Sep 30 13:02:00 2018 PDT |      3 |  9.9
+(19 rows)
 
 -- Only one chunk per server, still uses per-server plan.  Not
 -- choosing pushed down aggregate plan here, probably due to costing.
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM hyper
-WHERE time > '2018-04-19 00:01'
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: hyper."time", hyper.device, (avg(hyper.temp))
-   Sort Key: hyper."time", hyper.device
-   ->  HashAggregate
-         Output: hyper."time", hyper.device, avg(hyper.temp)
-         Group Key: hyper."time", hyper.device
+                                                                                                                                   QUERY PLAN                                                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: hyper."time", hyper.device, avg(hyper.temp)
+   Group Key: hyper."time", hyper.device
+   ->  Sort
+         Output: hyper."time", hyper.device, hyper.temp
+         Sort Key: hyper."time", hyper.device
          ->  Append
                ->  Custom Scan (ServerScan) on public.hyper
                      Output: hyper."time", hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Server: server_2
                      Chunks: _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
 (17 rows)
 
 -- Test HAVING qual
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp) AS temp
 FROM pg2dim
-WHERE time > '2018-04-19 00:01'
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
-                                                                                                     QUERY PLAN                                                                                                     
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
+                                                                                                            QUERY PLAN                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-   ->  Append
-         ->  Foreign Scan
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1, 2 HAVING ((avg(temp) > 4::double precision))
-         ->  Foreign Scan
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, (avg(pg2dim_h2_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1, 2 HAVING ((avg(temp) > 4::double precision))
-(12 rows)
+   ->  GroupAggregate
+         Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
+         Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+         Filter: (avg(pg2dim_h1_t2.temp) > '4'::double precision)
+         ->  Sort
+               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+               Sort Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+   ->  GroupAggregate
+         Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
+         Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
+         Filter: (avg(pg2dim_h2_t2.temp) > '4'::double precision)
+         ->  Sort
+               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+               Sort Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
+               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+(22 rows)
 
 SELECT time, device, avg(temp) AS temp
 FROM pg2dim
-WHERE time > '2018-04-19 00:01'
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
              time             | device | temp 
 ------------------------------+--------+------
  Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 |  8.4
- Sat May 19 13:01:00 2018 PDT |      1 |  5.1
- Sun May 20 15:08:00 2018 PDT |      1 |  9.4
+ Fri Apr 20 15:08:00 2018 PDT |      5 |  6.4
+ Sat May 19 13:01:00 2018 PDT |      4 |  5.1
+ Sun May 20 15:08:00 2018 PDT |      5 |  9.4
  Wed May 30 13:02:00 2018 PDT |      3 |    9
 (5 rows)
 
@@ -750,60 +1399,69 @@ ORDER BY 1, 2;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp) AS temp
 FROM hyper
-WHERE time > '2018-04-19 00:01'
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: hyper."time", hyper.device, (avg(hyper.temp))
+                                                                                                                                   QUERY PLAN                                                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: hyper."time", hyper.device
-   ->  HashAggregate
+   ->  GroupAggregate
          Output: hyper."time", hyper.device, avg(hyper.temp)
          Group Key: hyper."time", hyper.device
          Filter: (avg(hyper.temp) > '4'::double precision)
-         ->  Append
+         ->  Sort
+               Output: hyper."time", hyper.device, hyper.temp
+               Sort Key: hyper."time", hyper.device
                ->  Custom Scan (ServerScan) on public.hyper
                      Output: hyper."time", hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+   ->  GroupAggregate
+         Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp)
+         Group Key: hyper_1."time", hyper_1.device
+         Filter: (avg(hyper_1.temp) > '4'::double precision)
+         ->  Sort
+               Output: hyper_1."time", hyper_1.device, hyper_1.temp
+               Sort Key: hyper_1."time", hyper_1.device
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Server: server_2
                      Chunks: _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-(18 rows)
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+(26 rows)
 
 SELECT time, device, avg(temp) AS temp
 FROM hyper
-WHERE time > '2018-04-19 00:01'
+WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
              time             | device | temp 
 ------------------------------+--------+------
  Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
- Fri Apr 20 15:08:00 2018 PDT |      3 |  8.4
- Sat May 19 13:01:00 2018 PDT |      1 |  5.1
- Sun May 20 15:08:00 2018 PDT |      1 |  9.4
+ Fri Apr 20 15:08:00 2018 PDT |      5 |  6.4
+ Sat May 19 13:01:00 2018 PDT |      4 |  5.1
+ Sun May 20 15:08:00 2018 PDT |      5 |  9.4
  Wed May 30 13:02:00 2018 PDT |      3 |    9
 (5 rows)
 
 -------------------------------------------------------------------
--- All partition keys not covered by GROUP BY because of date_trunc
--- expression on time (partial partitionwise). This won't be pushed
--- down a.t.m., since no way to send partials
+-- date_trunc is a whitelisted bucketing function, so should be pushed
+-- down fully.
 -------------------------------------------------------------------
+-- First with partitionwise aggs disabled
 SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
@@ -813,25 +1471,50 @@ ORDER BY 1, 2;
          ->  Append
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (19 rows)
+
+-- Show reference result
+SELECT date_trunc('month', time), device, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+          date_trunc          | device | avg 
+------------------------------+--------+-----
+ Mon Jan 01 00:00:00 2018 PST |      1 | 3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 | 5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 | 2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 | 9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 | 5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 | 8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 | 4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 | 7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 | 6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |   9
+ Tue May 01 00:00:00 2018 PDT |      4 | 5.1
+ Tue May 01 00:00:00 2018 PDT |      5 | 9.4
+(14 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
@@ -843,138 +1526,212 @@ ORDER BY 1, 2;
                      Output: date_trunc('month'::text, hyper."time"), hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: date_trunc('month'::text, hyper_1."time"), hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (17 rows)
 
 -- Show result
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-          date_trunc          | device |       avg        
-------------------------------+--------+------------------
- Mon Jan 01 00:00:00 2018 PST |      1 |              3.8
- Thu Feb 01 00:00:00 2018 PST |      1 |              5.6
- Thu Feb 01 00:00:00 2018 PST |      3 | 3.76666666666667
- Sun Apr 01 00:00:00 2018 PDT |      1 |              7.6
- Sun Apr 01 00:00:00 2018 PDT |      3 |              8.4
- Tue May 01 00:00:00 2018 PDT |      1 |             7.25
- Tue May 01 00:00:00 2018 PDT |      3 |                9
-(7 rows)
+          date_trunc          | device | avg 
+------------------------------+--------+-----
+ Mon Jan 01 00:00:00 2018 PST |      1 | 3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 | 5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 | 2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 | 9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 | 5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 | 8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 | 4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 | 7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 | 6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |   9
+ Tue May 01 00:00:00 2018 PDT |      4 | 5.1
+ Tue May 01 00:00:00 2018 PDT |      5 | 9.4
+(14 rows)
 
+-- Now with partitionwise aggs enabled
 SET enable_partitionwise_aggregate = ON;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
-   ->  Finalize GroupAggregate
+   ->  HashAggregate
          Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
          Group Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
-         ->  Sort
-               Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (PARTIAL avg(pg2dim_h1_t1.temp))
-               Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
-               ->  Append
-                     ->  Partial HashAggregate
-                           Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, PARTIAL avg(pg2dim_h1_t1.temp)
-                           Group Key: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device
-                           ->  Foreign Scan on public.pg2dim_h1_t1
-                                 Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                                 Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
-                     ->  Partial HashAggregate
-                           Output: (date_trunc('month'::text, pg2dim_h1_t2."time")), pg2dim_h1_t2.device, PARTIAL avg(pg2dim_h1_t2.temp)
-                           Group Key: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device
-                           ->  Foreign Scan on public.pg2dim_h1_t2
-                                 Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                                 Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
-   ->  Finalize GroupAggregate
-         Output: (date_trunc('month'::text, pg2dim_h2_t1."time")), pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
-         Group Key: (date_trunc('month'::text, pg2dim_h2_t1."time")), pg2dim_h2_t1.device
-         ->  Sort
-               Output: (date_trunc('month'::text, pg2dim_h2_t1."time")), pg2dim_h2_t1.device, (PARTIAL avg(pg2dim_h2_t1.temp))
-               Sort Key: (date_trunc('month'::text, pg2dim_h2_t1."time")), pg2dim_h2_t1.device
-               ->  Append
-                     ->  Partial HashAggregate
-                           Output: (date_trunc('month'::text, pg2dim_h2_t1."time")), pg2dim_h2_t1.device, PARTIAL avg(pg2dim_h2_t1.temp)
-                           Group Key: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device
-                           ->  Foreign Scan on public.pg2dim_h2_t1
-                                 Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                                 Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
-                     ->  Partial HashAggregate
-                           Output: (date_trunc('month'::text, pg2dim_h2_t2."time")), pg2dim_h2_t2.device, PARTIAL avg(pg2dim_h2_t2.temp)
-                           Group Key: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device
-                           ->  Foreign Scan on public.pg2dim_h2_t2
-                                 Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                                 Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
-(40 rows)
+         ->  Append
+               ->  Foreign Scan on public.pg2dim_h1_t1
+                     Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
 
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT date_trunc('month', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                                                                     QUERY PLAN                                                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
+   Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
+   ->  Append
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, (avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+(16 rows)
+
+SELECT date_trunc('month', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+          date_trunc          | device | avg 
+------------------------------+--------+-----
+ Mon Jan 01 00:00:00 2018 PST |      1 | 3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 | 5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 | 2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 | 9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 | 5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 | 8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 | 4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 | 7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 | 6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |   9
+ Tue May 01 00:00:00 2018 PDT |      4 | 5.1
+ Tue May 01 00:00:00 2018 PDT |      5 | 9.4
+(14 rows)
+
+-- Should do FULL partitionwise also across repartition boundary since
+-- we cover all partitioning keys
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Output: (date_trunc('month'::text, hyper."time")), hyper.device, avg(hyper.temp)
-   Group Key: (date_trunc('month'::text, hyper."time")), hyper.device
-   ->  Sort
-         Output: (date_trunc('month'::text, hyper."time")), hyper.device, (PARTIAL avg(hyper.temp))
-         Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
-         ->  Append
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, hyper."time")), hyper.device, PARTIAL avg(hyper.temp)
-                     Group Key: date_trunc('month'::text, hyper."time"), hyper.device
-                     ->  Custom Scan (ServerScan) on public.hyper
-                           Output: date_trunc('month'::text, hyper."time"), hyper.device, hyper.temp
-                           Server: server_1
-                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, PARTIAL avg(hyper_1.temp)
-                     Group Key: date_trunc('month'::text, hyper_1."time"), hyper_1.device
-                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                           Output: date_trunc('month'::text, hyper_1."time"), hyper_1.device, hyper_1.temp
-                           Server: server_2
-                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
-(23 rows)
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
+   Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
+   ->  Append
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, (avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) GROUP BY 1, 2
+(16 rows)
 
--- Show result by month
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-          date_trunc          | device |       avg        
-------------------------------+--------+------------------
- Mon Jan 01 00:00:00 2018 PST |      1 |              3.8
- Thu Feb 01 00:00:00 2018 PST |      1 |              5.6
- Thu Feb 01 00:00:00 2018 PST |      3 | 3.76666666666667
- Sun Apr 01 00:00:00 2018 PDT |      1 |              7.6
- Sun Apr 01 00:00:00 2018 PDT |      3 |              8.4
- Tue May 01 00:00:00 2018 PDT |      1 |             7.25
- Tue May 01 00:00:00 2018 PDT |      3 |                9
-(7 rows)
+          date_trunc          | device | avg  
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2018 PST |      1 |  3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 |  5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 |  6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 |  2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 |  9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 |  6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 |  5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 |  8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 |  4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 |  7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 |  6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |    9
+ Tue May 01 00:00:00 2018 PDT |      4 |  5.1
+ Tue May 01 00:00:00 2018 PDT |      5 |  9.4
+ Sat Sep 01 00:00:00 2018 PDT |      1 |  6.1
+ Sat Sep 01 00:00:00 2018 PDT |      3 |  9.9
+ Sat Sep 01 00:00:00 2018 PDT |      4 | 10.4
+(17 rows)
+
+-- Reference result
+SELECT date_trunc('month', time), device, avg(temp)
+FROM pg2dim
+GROUP BY 1, 2
+ORDER BY 1, 2;
+          date_trunc          | device | avg  
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2018 PST |      1 |  3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 |  5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 |  6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 |  2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 |  9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 |  6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 |  5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 |  8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 |  4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 |  7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 |  6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |    9
+ Tue May 01 00:00:00 2018 PDT |      4 |  5.1
+ Tue May 01 00:00:00 2018 PDT |      5 |  9.4
+ Sat Sep 01 00:00:00 2018 PDT |      1 |  6.1
+ Sat Sep 01 00:00:00 2018 PDT |      3 |  9.9
+ Sat Sep 01 00:00:00 2018 PDT |      4 | 10.4
+(17 rows)
 
 -- Show result by year
 SELECT date_trunc('year', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
           date_trunc          | device |       avg        
 ------------------------------+--------+------------------
- Mon Jan 01 00:00:00 2018 PST |      1 | 5.88333333333333
- Mon Jan 01 00:00:00 2018 PST |      3 |             5.74
-(2 rows)
+ Mon Jan 01 00:00:00 2018 PST |      1 |             5.98
+ Mon Jan 01 00:00:00 2018 PST |      2 |              6.7
+ Mon Jan 01 00:00:00 2018 PST |      3 | 4.53333333333333
+ Mon Jan 01 00:00:00 2018 PST |      4 |              5.1
+ Mon Jan 01 00:00:00 2018 PST |      5 | 6.96666666666667
+ Mon Jan 01 00:00:00 2018 PST |      6 |              8.1
+ Mon Jan 01 00:00:00 2018 PST |      7 |              4.6
+(7 rows)
 
 -------------------------------------------------------
 -- Test time_bucket (only supports up to days grouping)
@@ -983,10 +1740,11 @@ SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time_bucket('1 day', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device
@@ -998,84 +1756,92 @@ ORDER BY 1, 2;
                      Output: time_bucket('@ 1 day'::interval, hyper."time"), hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: time_bucket('@ 1 day'::interval, hyper_1."time"), hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (17 rows)
 
 -- Show result
 SELECT time_bucket('1 day', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
          time_bucket          | device | avg 
 ------------------------------+--------+-----
  Thu Jan 18 16:00:00 2018 PST |      1 | 2.3
  Fri Jan 19 16:00:00 2018 PST |      1 | 5.3
- Sun Feb 18 16:00:00 2018 PST |      3 | 4.9
+ Sun Feb 18 16:00:00 2018 PST |      2 | 6.7
+ Sun Feb 18 16:00:00 2018 PST |      3 | 3.1
  Tue Feb 20 16:00:00 2018 PST |      3 | 1.5
  Tue Feb 27 16:00:00 2018 PST |      1 | 5.6
+ Wed Mar 07 16:00:00 2018 PST |      6 | 8.1
+ Wed Mar 07 16:00:00 2018 PST |      7 | 4.6
+ Sat Mar 10 16:00:00 2018 PST |      1 | 9.1
+ Sat Mar 10 16:00:00 2018 PST |      5 | 5.1
+ Fri Mar 16 17:00:00 2018 PDT |      2 | 6.7
  Wed Apr 18 17:00:00 2018 PDT |      1 | 7.6
- Thu Apr 19 17:00:00 2018 PDT |      3 | 8.4
- Fri May 18 17:00:00 2018 PDT |      1 | 5.1
- Sat May 19 17:00:00 2018 PDT |      1 | 9.4
+ Thu Apr 19 17:00:00 2018 PDT |      5 | 6.4
+ Fri May 18 17:00:00 2018 PDT |      4 | 5.1
+ Sat May 19 17:00:00 2018 PDT |      5 | 9.4
  Tue May 29 17:00:00 2018 PDT |      3 |   9
-(10 rows)
+(16 rows)
 
 SET enable_partitionwise_aggregate = ON;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time_bucket('1 day', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, avg(hyper.temp)
-   Group Key: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device
-   ->  Sort
-         Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (PARTIAL avg(hyper.temp))
-         Sort Key: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device
-         ->  Append
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, PARTIAL avg(hyper.temp)
-                     Group Key: time_bucket('@ 1 day'::interval, hyper."time"), hyper.device
-                     ->  Custom Scan (ServerScan) on public.hyper
-                           Output: time_bucket('@ 1 day'::interval, hyper."time"), hyper.device, hyper.temp
-                           Server: server_1
-                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 day'::interval, hyper_1."time")), hyper_1.device, PARTIAL avg(hyper_1.temp)
-                     Group Key: time_bucket('@ 1 day'::interval, hyper_1."time"), hyper_1.device
-                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                           Output: time_bucket('@ 1 day'::interval, hyper_1."time"), hyper_1.device, hyper_1.temp
-                           Server: server_2
-                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2])
-(23 rows)
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
+   Sort Key: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device
+   ->  Append
+         ->  Custom Scan (ServerScan)
+               Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 1 day'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+         ->  Custom Scan (ServerScan)
+               Output: (time_bucket('@ 1 day'::interval, hyper_1."time")), hyper_1.device, (avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 1 day'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
+(16 rows)
 
 -- Show result
 SELECT time_bucket('1 day', time), device, avg(temp)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
          time_bucket          | device | avg 
 ------------------------------+--------+-----
  Thu Jan 18 16:00:00 2018 PST |      1 | 2.3
  Fri Jan 19 16:00:00 2018 PST |      1 | 5.3
- Sun Feb 18 16:00:00 2018 PST |      3 | 4.9
+ Sun Feb 18 16:00:00 2018 PST |      2 | 6.7
+ Sun Feb 18 16:00:00 2018 PST |      3 | 3.1
  Tue Feb 20 16:00:00 2018 PST |      3 | 1.5
  Tue Feb 27 16:00:00 2018 PST |      1 | 5.6
+ Wed Mar 07 16:00:00 2018 PST |      6 | 8.1
+ Wed Mar 07 16:00:00 2018 PST |      7 | 4.6
+ Sat Mar 10 16:00:00 2018 PST |      1 | 9.1
+ Sat Mar 10 16:00:00 2018 PST |      5 | 5.1
+ Fri Mar 16 17:00:00 2018 PDT |      2 | 6.7
  Wed Apr 18 17:00:00 2018 PDT |      1 | 7.6
- Thu Apr 19 17:00:00 2018 PDT |      3 | 8.4
- Fri May 18 17:00:00 2018 PDT |      1 | 5.1
- Sat May 19 17:00:00 2018 PDT |      1 | 9.4
+ Thu Apr 19 17:00:00 2018 PDT |      5 | 6.4
+ Fri May 18 17:00:00 2018 PDT |      4 | 5.1
+ Sat May 19 17:00:00 2018 PDT |      5 | 9.4
  Tue May 29 17:00:00 2018 PDT |      3 |   9
-(10 rows)
+(16 rows)
 
 ---------------------------------------------------------------------
 -- Test expressions that either aren't pushed down or only pushed down
@@ -1090,6 +1856,7 @@ CREATE AGGREGATE custom_sum(int4) (
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp * (random() <= 1)::int) as sum
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
                                                                                       QUERY PLAN                                                                                       
@@ -1102,37 +1869,39 @@ LIMIT 1;
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), sum((pg2dim_h1_t2.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), sum((pg2dim_h2_t1.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), sum((pg2dim_h2_t2.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (27 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp * (random() <= 1)::int) as sum
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper."time", hyper.device, (avg(hyper.temp)), (sum((hyper.temp * (((random() <= '1'::double precision))::integer)::double precision)))
-   ->  Append
+   ->  Merge Append
+         Sort Key: hyper."time", hyper.device
          ->  GroupAggregate
                Output: hyper."time", hyper.device, avg(hyper.temp), sum((hyper.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: hyper."time", hyper.device
@@ -1140,21 +1909,22 @@ LIMIT 1;
                      Output: hyper."time", hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
          ->  GroupAggregate
                Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), sum((hyper_1.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: hyper_1."time", hyper_1.device
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(19 rows)
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+(20 rows)
 
 -- Pushed down with non-pushable expression taken out
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), random() * device as rand_dev, custom_sum(device)
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
                                                                                   QUERY PLAN                                                                                   
@@ -1167,58 +1937,60 @@ LIMIT 1;
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), (random() * (pg2dim_h1_t2.device)::double precision), custom_sum(pg2dim_h1_t2.device)
                Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), (random() * (pg2dim_h2_t1.device)::double precision), custom_sum(pg2dim_h2_t1.device)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), (random() * (pg2dim_h2_t2.device)::double precision), custom_sum(pg2dim_h2_t2.device)
                Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (27 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), random() * device as rand_dev, custom_sum(device)
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper."time", hyper.device, (avg(hyper.temp)), ((random() * (hyper.device)::double precision)), (custom_sum(hyper.device))
    ->  Append
-         ->  GroupAggregate
+         ->  HashAggregate
                Output: hyper."time", hyper.device, avg(hyper.temp), (random() * (hyper.device)::double precision), custom_sum(hyper.device)
                Group Key: hyper."time", hyper.device
                ->  Custom Scan (ServerScan) on public.hyper
                      Output: hyper."time", hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+         ->  HashAggregate
                Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), (random() * (hyper_1.device)::double precision), custom_sum(hyper_1.device)
                Group Key: hyper_1."time", hyper_1.device
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (19 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp) * random() * device as sum_temp
 FROM pg2dim
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) * custom_sum(device) > 0.8
 LIMIT 1;
@@ -1233,42 +2005,43 @@ LIMIT 1;
                Filter: ((avg(pg2dim_h1_t1.temp) * (custom_sum(pg2dim_h1_t1.device))::double precision) > '0.8'::double precision)
                ->  Foreign Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), ((sum(pg2dim_h1_t2.temp) * random()) * (pg2dim_h1_t2.device)::double precision)
                Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
                Filter: ((avg(pg2dim_h1_t2.temp) * (custom_sum(pg2dim_h1_t2.device))::double precision) > '0.8'::double precision)
                ->  Foreign Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), ((sum(pg2dim_h2_t1.temp) * random()) * (pg2dim_h2_t1.device)::double precision)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
                Filter: ((avg(pg2dim_h2_t1.temp) * (custom_sum(pg2dim_h2_t1.device))::double precision) > '0.8'::double precision)
                ->  Foreign Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), ((sum(pg2dim_h2_t2.temp) * random()) * (pg2dim_h2_t2.device)::double precision)
                Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
                Filter: ((avg(pg2dim_h2_t2.temp) * (custom_sum(pg2dim_h2_t2.device))::double precision) > '0.8'::double precision)
                ->  Foreign Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
+                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (31 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp) * random() * device as sum_temp
 FROM hyper
+WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) * custom_sum(device) > 0.8
 LIMIT 1;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper."time", hyper.device, (avg(hyper.temp)), (((sum(hyper.temp) * random()) * (hyper.device)::double precision))
    ->  Append
-         ->  GroupAggregate
+         ->  HashAggregate
                Output: hyper."time", hyper.device, avg(hyper.temp), ((sum(hyper.temp) * random()) * (hyper.device)::double precision)
                Group Key: hyper."time", hyper.device
                Filter: ((avg(hyper.temp) * (custom_sum(hyper.device))::double precision) > '0.8'::double precision)
@@ -1276,16 +2049,16 @@ LIMIT 1;
                      Output: hyper."time", hyper.device, hyper.temp
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+         ->  HashAggregate
                Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), ((sum(hyper_1.temp) * random()) * (hyper_1.device)::double precision)
                Group Key: hyper_1."time", hyper_1.device
                Filter: ((avg(hyper_1.temp) * (custom_sum(hyper_1.device))::double precision) > '0.8'::double precision)
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (21 rows)
 
 -- not pushed down because of non-shippable expression on the
@@ -1294,71 +2067,186 @@ EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM pg2dim
 WHERE (pg2dim.temp * random() <= 20)
+AND time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    ->  Append
          ->  HashAggregate
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-               ->  Foreign Scan on public.pg2dim_h1_t1
-                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Filter: ((pg2dim_h1_t1.temp * random()) <= '20'::double precision)
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
-         ->  HashAggregate
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
-               Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               ->  Foreign Scan on public.pg2dim_h1_t2
-                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Filter: ((pg2dim_h1_t2.temp * random()) <= '20'::double precision)
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
+               ->  Append
+                     ->  Foreign Scan on public.pg2dim_h1_t1
+                           Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                           Filter: ((pg2dim_h1_t1.temp * random()) <= '20'::double precision)
+                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     ->  Foreign Scan on public.pg2dim_h1_t2
+                           Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                           Filter: ((pg2dim_h1_t2.temp * random()) <= '20'::double precision)
+                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
-               ->  Foreign Scan on public.pg2dim_h2_t1
-                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Filter: ((pg2dim_h2_t1.temp * random()) <= '20'::double precision)
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
-         ->  HashAggregate
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
-               Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               ->  Foreign Scan on public.pg2dim_h2_t2
-                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Filter: ((pg2dim_h2_t2.temp * random()) <= '20'::double precision)
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
-(31 rows)
+               ->  Append
+                     ->  Foreign Scan on public.pg2dim_h2_t1
+                           Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                           Filter: ((pg2dim_h2_t1.temp * random()) <= '20'::double precision)
+                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     ->  Foreign Scan on public.pg2dim_h2_t2
+                           Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                           Filter: ((pg2dim_h2_t2.temp * random()) <= '20'::double precision)
+                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(27 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
 FROM hyper
 WHERE (hyper.temp * random() <= 20)
+AND time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper."time", hyper.device, (avg(hyper.temp))
-   ->  Append
-         ->  GroupAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp)
-               Group Key: hyper."time", hyper.device
+   ->  GroupAggregate
+         Output: hyper."time", hyper.device, avg(hyper.temp)
+         Group Key: hyper."time", hyper.device
+         ->  Merge Append
+               Sort Key: hyper."time", hyper.device
                ->  Custom Scan (ServerScan) on public.hyper
                      Output: hyper."time", hyper.device, hyper.temp
                      Filter: ((hyper.temp * random()) <= '20'::double precision)
                      Server: server_1
                      Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp)
-               Group Key: hyper_1."time", hyper_1.device
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (ServerScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Filter: ((hyper_1.temp * random()) <= '20'::double precision)
                      Server: server_2
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(21 rows)
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+(19 rows)
+
+-- Test one-dimensional push down
+CREATE TABLE hyper1d (time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('hyper1d', 'time', chunk_time_interval => '3 months'::interval);
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | hyper1d    | t
+(1 row)
+
+INSERT INTO hyper1d VALUES
+       ('2018-01-19 13:01', 1, 2.3),
+       ('2018-01-20 15:05', 1, 5.3),
+       ('2018-02-21 13:01', 3, 1.5),
+       ('2018-02-28 15:05', 1, 5.6),
+       ('2018-02-19 13:02', 3, 3.1),
+       ('2018-02-19 13:02', 3, 6.7),
+       ('2018-04-19 13:01', 1, 7.6),
+       ('2018-04-20 15:08', 3, 8.4),
+       ('2018-05-19 13:01', 1, 5.1),
+       ('2018-05-20 15:08', 1, 9.4),
+       ('2018-05-30 13:02', 3, 9.0),
+       ('2018-09-19 13:01', 1, 6.1),
+       ('2018-09-20 15:08', 2, 10.4),
+       ('2018-09-30 13:02', 3, 9.9);
+SET enable_partitionwise_aggregate = ON;
+SET timescaledb.enable_per_server_queries = ON;
+-- Covering partitioning dimension is always safe to push down.
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM hyper1d
+GROUP BY 1;
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (ServerScan)
+         Output: hyper1d."time", (avg(hyper1d.temp))
+         Relations: Aggregate on (public.hyper1d)
+         Server: server_1
+         Chunks: _hyper_2_8_dist_chunk, _hyper_2_10_dist_chunk
+         Remote SQL: SELECT "time", avg(temp) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5, 6]) GROUP BY 1
+   ->  Custom Scan (ServerScan)
+         Output: hyper1d_1."time", (avg(hyper1d_1.temp))
+         Relations: Aggregate on (public.hyper1d)
+         Server: server_2
+         Chunks: _hyper_2_9_dist_chunk
+         Remote SQL: SELECT "time", avg(temp) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4]) GROUP BY 1
+(13 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time_bucket('1 day', time), avg(temp)
+FROM hyper1d
+GROUP BY 1;
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Finalize HashAggregate
+   Output: (time_bucket('@ 1 day'::interval, hyper1d."time")), avg(hyper1d.temp)
+   Group Key: (time_bucket('@ 1 day'::interval, hyper1d."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Output: (time_bucket('@ 1 day'::interval, hyper1d."time")), PARTIAL avg(hyper1d.temp)
+               Group Key: time_bucket('@ 1 day'::interval, hyper1d."time")
+               ->  Custom Scan (ServerScan) on public.hyper1d
+                     Output: time_bucket('@ 1 day'::interval, hyper1d."time"), hyper1d.temp
+                     Server: server_1
+                     Chunks: _hyper_2_8_dist_chunk, _hyper_2_10_dist_chunk
+                     Remote SQL: SELECT "time", temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5, 6])
+         ->  Partial HashAggregate
+               Output: (time_bucket('@ 1 day'::interval, hyper1d_1."time")), PARTIAL avg(hyper1d_1.temp)
+               Group Key: time_bucket('@ 1 day'::interval, hyper1d_1."time")
+               ->  Custom Scan (ServerScan) on public.hyper1d hyper1d_1
+                     Output: time_bucket('@ 1 day'::interval, hyper1d_1."time"), hyper1d_1.temp
+                     Server: server_2
+                     Chunks: _hyper_2_9_dist_chunk
+                     Remote SQL: SELECT "time", temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4])
+(20 rows)
+
+--- Only one chunk in query => safe to fully push down although not on
+--- a partitioning dimension.
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM hyper1d
+WHERE time < '2018-04-01 00:00'
+GROUP BY 1;
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (ServerScan)
+         Output: hyper1d.device, (avg(hyper1d.temp))
+         Relations: Aggregate on (public.hyper1d)
+         Server: server_1
+         Chunks: _hyper_2_8_dist_chunk
+         Remote SQL: SELECT device, avg(temp) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5]) AND (("time" < '2018-04-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+(7 rows)
+
+-- Two chunks in query => not safe to fully push down when not
+-- grouping on partitioning dimension
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM hyper1d
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1;
+                                                                                           QUERY PLAN                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Output: hyper1d.device, avg(hyper1d.temp)
+   Group Key: hyper1d.device
+   ->  Append
+         ->  Custom Scan (ServerScan) on public.hyper1d
+               Output: hyper1d.device, hyper1d.temp
+               Server: server_1
+               Chunks: _hyper_2_8_dist_chunk
+               Remote SQL: SELECT device, temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+         ->  Custom Scan (ServerScan) on public.hyper1d hyper1d_1
+               Output: hyper1d_1.device, hyper1d_1.temp
+               Server: server_2
+               Chunks: _hyper_2_9_dist_chunk
+               Remote SQL: SELECT device, temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(14 rows)
 

@@ -64,7 +64,7 @@ extern int ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
 															 int64 range_end);
 extern DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);
-extern bool ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);
+extern TSDLLEXPORT bool ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);

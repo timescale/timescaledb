@@ -20,11 +20,13 @@
 #include <optimizer/clauses.h>
 #include <optimizer/tlist.h>
 #include <optimizer/paths.h>
+#include <optimizer/prep.h>
 #include <access/htup_details.h>
 #include <access/sysattr.h>
 #include <access/reloptions.h>
 #include <executor/executor.h>
 #include <commands/explain.h>
+#include <commands/extension.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
@@ -35,6 +37,7 @@
 #include <miscadmin.h>
 
 #include <export.h>
+#include <extension_constants.h>
 #include <hypertable_server.h>
 #include <hypertable_cache.h>
 #include <chunk_server.h>
@@ -542,7 +545,9 @@ apply_server_options(TsFdwRelationInfo *fpinfo)
 		else if (strcmp(def->defname, "fdw_tuple_cost") == 0)
 			fpinfo->fdw_tuple_cost = strtod(defGetString(def), NULL);
 		else if (strcmp(def->defname, "extensions") == 0)
-			fpinfo->shippable_extensions = option_extract_extension_list(defGetString(def), false);
+			fpinfo->shippable_extensions =
+				list_concat(fpinfo->shippable_extensions,
+							option_extract_extension_list(defGetString(def), false));
 		else if (strcmp(def->defname, "fetch_size") == 0)
 			fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
 	}
@@ -581,7 +586,7 @@ fdw_relation_info_get(RelOptInfo *baserel)
 }
 
 static TsFdwRelationInfo *
-fdw_relation_info_alloc(RelOptInfo *baserel)
+fdw_relation_info_alloc(RelOptInfo *baserel, TsFdwRelationInfoType reltype)
 {
 	TimescaleDBPrivate *rel_private;
 	TsFdwRelationInfo *fpinfo;
@@ -593,7 +598,7 @@ fdw_relation_info_alloc(RelOptInfo *baserel)
 
 	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(*fpinfo));
 	rel_private->fdw_relation_info = (void *) fpinfo;
-	fpinfo->type = TS_FDW_RELATION_INFO_FOREIGN_TABLE;
+	fpinfo->type = reltype;
 
 	return fpinfo;
 }
@@ -613,8 +618,7 @@ fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid,
 	 * We use TsFdwRelationInfo to pass various information to subsequent
 	 * functions.
 	 */
-	fpinfo = fdw_relation_info_alloc(baserel);
-	fpinfo->type = type;
+	fpinfo = fdw_relation_info_alloc(baserel, type);
 
 	if (type == TS_FDW_RELATION_INFO_HYPERTABLE)
 	{
@@ -636,7 +640,7 @@ fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid,
 	fpinfo->use_remote_estimate = false;
 	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
 	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
-	fpinfo->shippable_extensions = NIL;
+	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
 	fpinfo->fetch_size = 100;
 
 	apply_server_options(fpinfo);
@@ -792,6 +796,7 @@ static void
 get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
 	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
+
 	/* A base hypertable is a regular table and not a foreign table. It is the only
 	 * kind of regular table that will ever have this callback called on it. */
 	if (RELKIND_RELATION == rte->relkind)
@@ -2966,7 +2971,7 @@ fdw_create_upper_paths(TsFdwRelationInfo *input_fpinfo, PlannerInfo *root, Upper
 	if (stage != UPPERREL_GROUP_AGG || output_rel->fdw_private)
 		return;
 
-	input_fpinfo = fdw_relation_info_alloc(output_rel);
+	input_fpinfo = fdw_relation_info_alloc(output_rel, input_fpinfo->type);
 	input_fpinfo->pushdown_safe = false;
 
 	add_foreign_grouping_paths(root,

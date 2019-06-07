@@ -353,7 +353,7 @@ ts_func_cache_get(Oid funcid)
 	return (NULL == entry) ? NULL : entry->funcinfo;
 }
 
-FuncInfo *
+TSDLLEXPORT FuncInfo *
 ts_func_cache_get_bucketing_func(Oid funcid)
 {
 	FuncInfo *finfo = ts_func_cache_get(funcid);

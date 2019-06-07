@@ -72,6 +72,7 @@
 #include <utils/typcache.h>
 
 #include <compat.h>
+#include <func_cache.h>
 #include "deparse.h"
 #include "shippable.h"
 #include "utils.h"
@@ -221,6 +222,79 @@ classifyConditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds, Li
 }
 
 /*
+ * Check for mutable functions in an expression.
+ *
+ * This code is based on the corresponding PostgreSQL function, but with extra
+ * handling to whitelist some bucketing functions that we know are safe to
+ * push down despite mutability.
+ */
+static bool
+contain_mutable_functions_checker(Oid func_id, void *context)
+{
+	FuncInfo *finfo = ts_func_cache_get_bucketing_func(func_id);
+
+	/* We treat all bucketing functions as shippable, even date_trunc(text,
+	 * timestamptz). We do this special case for bucketing functions until we
+	 * can figure out a more consistent way to deal with functions taking,
+	 * e.g., timestamptz parameters since we ensure that all connections to
+	 * other nodes have the access node's timezone setting. */
+	if (NULL != finfo)
+		return false;
+
+	return (func_volatile(func_id) != PROVOLATILE_IMMUTABLE);
+}
+
+/*
+ * Expression walker based on the corresponding PostgreSQL function. We're
+ * using a custom checker function, so need a modifed version of this walker.
+ */
+static bool
+contain_mutable_functions_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+	/* Check for mutable functions in node itself */
+	if (check_functions_in_node(node, contain_mutable_functions_checker, context))
+		return true;
+
+	if (IsA(node, SQLValueFunction))
+	{
+		/* all variants of SQLValueFunction are stable */
+		return true;
+	}
+
+	if (IsA(node, NextValueExpr))
+	{
+		/* NextValueExpr is volatile */
+		return true;
+	}
+
+	/*
+	 * It should be safe to treat MinMaxExpr as immutable, because it will
+	 * depend on a non-cross-type btree comparison function, and those should
+	 * always be immutable.  Treating XmlExpr as immutable is more dubious,
+	 * and treating CoerceToDomain as immutable is outright dangerous.  But we
+	 * have done so historically, and changing this would probably cause more
+	 * problems than it would fix.  In practice, if you have a non-immutable
+	 * domain constraint you are in for pain anyhow.
+	 */
+
+	/* Recurse to check arguments */
+	if (IsA(node, Query))
+	{
+		/* Recurse into subselects */
+		return query_tree_walker((Query *) node, contain_mutable_functions_walker, context, 0);
+	}
+	return expression_tree_walker(node, contain_mutable_functions_walker, context);
+}
+
+static bool
+foreign_expr_contains_mutable_functions(Node *clause)
+{
+	return contain_mutable_functions_walker(clause, NULL);
+}
+
+/*
  * Returns true if given expr is safe to evaluate on the foreign server.
  */
 bool
@@ -265,7 +339,7 @@ is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 	 * be able to make this choice with more granularity.  (We check this last
 	 * because it requires a lot of expensive catalog lookups.)
 	 */
-	if (contain_mutable_functions((Node *) expr))
+	if (foreign_expr_contains_mutable_functions((Node *) expr))
 		return false;
 
 	/* OK to evaluate on the remote server */
@@ -427,6 +501,7 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 		case T_FuncExpr:
 		{
 			FuncExpr *fe = (FuncExpr *) node;
+			FuncInfo *finfo;
 
 			/*
 			 * If function used by the expression is not shippable, it
@@ -443,13 +518,28 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 				return false;
 
 			/*
-			 * If function's input collation is not derived from a foreign
-			 * Var, it can't be sent to remote.
+			 * Check if this is a bucketing function, e.g., date_trunc(). In
+			 * that case we do not care about collation because we know that,
+			 * e.g., the text parameter in date_trunc() has no effect on
+			 * ordering. This is a stop gap until we can refactor/remove the
+			 * collation code.
 			 */
-			if (fe->inputcollid == InvalidOid)
-				/* OK, inputs are all noncollatable */;
-			else if (inner_cxt.state != FDW_COLLATE_SAFE || fe->inputcollid != inner_cxt.collation)
-				return false;
+			finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+
+			if (NULL == finfo)
+			{
+				/*
+				 * If function's input collation is not derived from a foreign
+				 * Var, it can't be sent to remote.
+				 */
+				if (fe->inputcollid == InvalidOid)
+					/* OK, inputs are all noncollatable */;
+				else if (inner_cxt.state != FDW_COLLATE_SAFE ||
+						 fe->inputcollid != inner_cxt.collation)
+				{
+					return false;
+				}
+			}
 
 			/*
 			 * Detect whether node is introducing a collation not derived
@@ -848,6 +938,7 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
 	 * We require columns specified in foreignrel->reltarget->exprs and those
 	 * required for evaluating the local conditions.
 	 */
+
 	tlist = add_to_flat_tlist(tlist,
 							  pull_var_clause((Node *) foreignrel->reltarget->exprs,
 											  PVC_RECURSE_PLACEHOLDERS));

@@ -8,6 +8,8 @@
 
 #include <postgres.h>
 
+#include "export.h"
+
 #define FUNC_CACHE_MAX_FUNC_ARGS 10
 
 typedef Expr *(*sort_transform_func)(FuncExpr *func);
@@ -25,6 +27,6 @@ typedef struct FuncInfo
 } FuncInfo;
 
 extern FuncInfo *ts_func_cache_get(Oid funcid);
-extern FuncInfo *ts_func_cache_get_bucketing_func(Oid funcid);
+extern TSDLLEXPORT FuncInfo *ts_func_cache_get_bucketing_func(Oid funcid);
 
 #endif /* TIMESCALEDB_FUNC_CACHE_H */

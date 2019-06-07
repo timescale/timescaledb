@@ -556,7 +556,7 @@ ts_dimension_slice_copy(const DimensionSlice *original)
  *
  * Returns true if the slices collide, otherwise false.
  */
-bool
+TSDLLEXPORT bool
 ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
 {
 	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);

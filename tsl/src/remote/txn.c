@@ -136,6 +136,7 @@ remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user)
 	ForeignServer *server = GetForeignServer(user->serverid);
 
 	Assert(entry->user_mapping_oid == user->umid);
+	Assert(NULL != conn);
 
 	/* Reset all transient state fields, to be sure all are clean */
 	entry->xact_depth = 0;

@@ -22,6 +22,7 @@ typedef struct ServerChunkAssignment
 {
 	Oid server_oid;
 	double rows;
+	double tuples;
 	Cost startup_cost;
 	Cost total_cost;
 	Relids chunk_relids;
@@ -43,6 +44,8 @@ typedef struct ServerChunkAssignments
 	ServerChunkAssignmentStrategy strategy;
 	PlannerInfo *root;
 	HTAB *assignments;
+	unsigned long total_num_chunks;
+	unsigned long num_servers_with_chunks;
 	MemoryContext mctx;
 } ServerChunkAssignments;
 
@@ -59,5 +62,8 @@ extern ServerChunkAssignment *server_chunk_assignment_get_or_create(ServerChunkA
 extern void server_chunk_assignments_init(ServerChunkAssignments *scas,
 										  ServerChunkAssignmentStrategy strategy, PlannerInfo *root,
 										  unsigned int nrels_hint);
+
+extern bool server_chunk_assignments_are_overlapping(ServerChunkAssignments *scas,
+													 int32 partitioning_dimension_id);
 
 #endif /* TIMESCALEDB_TSL_SERVER_CHUNK_ASSIGNMENT */

@@ -130,7 +130,7 @@ ts_hypercube_slice_sort(Hypercube *hc)
 	qsort(hc->slices, hc->num_slices, sizeof(DimensionSlice *), cmp_slices_by_dimension_id);
 }
 
-DimensionSlice *
+TSDLLEXPORT DimensionSlice *
 ts_hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id)
 {
 	DimensionSlice slice = {

@@ -182,18 +182,19 @@ check_conn_params(const char **keywords, const char **values)
 void
 remote_connection_configure(TSConnection *conn)
 {
+	const char *set_timezone_cmd =
+		psprintf("SET timezone = '%s'", pg_get_timezone_name(session_timezone));
+
 	/* Force the search path to contain only pg_catalog (see deparse.c) */
 	remote_connection_exec_ok_command(conn, "SET search_path = pg_catalog");
+
 	/*
-	 * Set remote timezone; this is basically just cosmetic, since all
-	 * transmitted and returned timestamptzs should specify a zone explicitly
-	 * anyway.  However it makes the regression test outputs more predictable.
-	 *
-	 * We don't risk setting remote zone equal to ours, since the remote
-	 * server might use a different timezone database.  Instead, use UTC
-	 * (quoted, because very old servers are picky about case).
+	 * We need to enforce the same timezone setting across nodes. Otherwise,
+	 * we might get the wrong result when we push down things like
+	 * date_trunc(text, timestamptz). To safely do that, we also need the
+	 * timezone databases to be the same on all data nodes.
 	 */
-	remote_connection_exec_ok_command(conn, "SET timezone = 'UTC'");
+	remote_connection_exec_ok_command(conn, set_timezone_cmd);
 
 	/*
 	 * Set values needed to ensure unambiguous data output from remote.  (This

@@ -786,26 +786,8 @@ get_hypertable_partexprs(Hypertable *ht, Query *parse, Index varno)
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		Dimension *dim = &ht->space->dimensions[i];
-		Expr *expr;
-		HeapTuple tuple = SearchSysCacheAttNum(ht->main_table_relid, dim->column_attno);
-		Form_pg_attribute att;
 
-		if (!HeapTupleIsValid(tuple))
-			elog(ERROR, "cache lookup failed for attribute");
-
-		att = (Form_pg_attribute) GETSTRUCT(tuple);
-
-		expr = (Expr *)
-			makeVar(varno, dim->column_attno, att->atttypid, att->atttypmod, att->attcollation, 0);
-
-		ReleaseSysCache(tuple);
-
-		/* The expression on the partitioning key can be the raw key or the
-		 * partitioning function on the key */
-		if (NULL != dim->partitioning)
-			partexprs[i] = list_make2(expr, dim->partitioning->partfunc.func_fmgr.fn_expr);
-		else
-			partexprs[i] = list_make1(expr);
+		partexprs[i] = ts_dimension_get_partexprs(dim, varno);
 	}
 
 	return partexprs;

@@ -14,14 +14,18 @@
 #include <optimizer/prep.h>
 #include <optimizer/clauses.h>
 #include <optimizer/var.h>
+#include <optimizer/tlist.h>
 #include <optimizer/restrictinfo.h>
 #include <access/sysattr.h>
 #include <utils/memutils.h>
 
 #include <export.h>
 #include <chunk_server.h>
+#include <hypertable_cache.h>
 #include <planner.h>
 #include <planner_import.h>
+#include <func_cache.h>
+#include <dimension.h>
 #include <compat.h>
 
 #include "timescaledb_fdw.h"
@@ -188,7 +192,6 @@ static RelOptInfo **
 build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 {
 	TimescaleDBPrivate *priv = hyper_rel->fdw_private;
-	RangeTblEntry *hypertable_rte = planner_rt_fetch(hyper_rel->relid, root);
 	/* Update the partitioning to reflect the new per-server plan */
 	RelOptInfo **part_rels = palloc(sizeof(RelOptInfo *) * list_length(priv->serverids));
 	ListCell *lc;
@@ -216,12 +219,6 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 		appinfo = create_append_rel_info(root, server_rel, hyper_rel);
 		root->append_rel_array[server_rel->relid] = appinfo;
 		adjust_server_rel_attrs(root, server_rel, hyper_rel, appinfo);
-
-		fdw_relation_info_create(root,
-								 server_rel,
-								 server_rel->serverid,
-								 hypertable_rte->relid,
-								 TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
 	}
 
 	if (nparts != NULL)
@@ -257,6 +254,222 @@ add_server_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, server_scan_path_create);
 }
 
+typedef struct FuncExprContext
+{
+	Index varno;
+	List *funcexprs;
+} FuncExprContext;
+
+static bool
+find_bucketing_exprs_walker(Node *node, FuncExprContext *ctx)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr *fexpr = (FuncExpr *) node;
+		FuncInfo *finfo = ts_func_cache_get_bucketing_func(fexpr->funcid);
+
+		if (NULL != finfo)
+		{
+			Relids relids = pull_varnos((Node *) fexpr->args);
+
+			if (bms_is_member(ctx->varno, relids))
+				ctx->funcexprs = lappend(ctx->funcexprs, fexpr);
+		}
+
+		return false;
+	}
+
+	return expression_tree_walker(node, find_bucketing_exprs_walker, (void *) ctx);
+}
+
+/*
+ * Find function expressions that include a bucketing function.
+ *
+ * Given an expression tree, return a list of FuncExpr:s that reference a
+ * bucketing function on the given relation (varno).
+ */
+static List *
+find_bucketing_func_exprs(Node *expr, Index varno)
+{
+	FuncExprContext ctx = {
+		.varno = varno,
+		.funcexprs = NIL,
+	};
+
+	find_bucketing_exprs_walker(expr, &ctx);
+
+	return ctx.funcexprs;
+}
+
+/*
+ * Get function expressions with the given attribute (column) as argument.
+ *
+ * Given a list of FuncExpr:s, return the subset that has the given attribute
+ * as an argument.
+ */
+static List *
+get_bucketing_func_exprs_by_attno(List *funcexprs, AttrNumber varattno)
+{
+	ListCell *lc;
+	List *result = NIL;
+
+	foreach (lc, funcexprs)
+	{
+		FuncExpr *funcexpr = lfirst(lc);
+		List *vars;
+		ListCell *lc_var;
+
+		Assert(IsA(funcexpr, FuncExpr));
+
+		vars = pull_var_clause((Node *) funcexpr->args, 0);
+
+		foreach (lc_var, vars)
+		{
+			Var *var = lfirst(lc_var);
+
+			if (var->varattno == varattno)
+			{
+				result = lappend(result, funcexpr);
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
+static void
+add_bucketing_exprs_for_dimension(Dimension *dim, RelOptInfo *hyper_rel, List *funcexprs,
+								  int partexpr_index)
+{
+	List *result;
+
+	if (!IS_OPEN_DIMENSION(dim))
+		return;
+
+	result = get_bucketing_func_exprs_by_attno(funcexprs, dim->column_attno);
+
+	if (NIL != result)
+		hyper_rel->partexprs[partexpr_index] =
+			list_concat(hyper_rel->partexprs[partexpr_index], result);
+}
+
+/*
+ * Force GROUP BY aggregates to be pushed down.
+ *
+ * Push downs are forced by making the GROUP BY expression in the query become
+ * the partitioning keys, even if this is not compatible with
+ * partitioning. This makes the planner believe partitioning and GROUP BYs
+ * line up perfectly. Forcing a push down is useful because the PostgreSQL
+ * planner is not smart enough to realize it can always push things down if
+ * there's, e.g., only one partition (or server) involved in the query.
+ */
+static void
+force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
+{
+	List *groupexprs;
+	int num_group_exprs;
+	ListCell *lc;
+	int i = 0;
+
+	groupexprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
+
+	num_group_exprs = list_length(groupexprs);
+
+	if (hyper_rel->part_scheme->partnatts < num_group_exprs)
+	{
+		hyper_rel->part_scheme->partnatts = list_length(groupexprs);
+		hyper_rel->partexprs =
+			(List **) palloc0(sizeof(List *) * hyper_rel->part_scheme->partnatts);
+	}
+
+	foreach (lc, groupexprs)
+	{
+		List *expr = lfirst(lc);
+
+		hyper_rel->partexprs[i++] = list_make1(expr);
+	}
+}
+
+/*
+ * Check if it is safe to push down GROUP BYs to remote nodes. A push down is
+ * safe if the chunks that are part of the query are disjointedly partitioned
+ * on servers along the first closed "space" dimension, or all dimensions are
+ * covered in the GROUP BY expresssion.
+ *
+ * If we knew that the GROUP BY covers all partitioning keys, we would not
+ * need to check overlaps. Such a check is done in
+ * planner.c:group_by_has_partkey(), but this function is not public. We
+ * could copy it here to avoid some unnecessary work.
+ *
+ * There are other "base" cases when we can always safely push down--even if
+ * the GROUP BY does NOT cover the partitioning keys--for instance, when only
+ * one server is involved in the query. We try to account for such cases too
+ * and "trick" the PG planner to do the "right" thing.
+ *
+ * We also want to add any bucketing expression (on, e.g., time) as a "meta"
+ * partitioning key (in rel->partexprs). This will make the partitionwise
+ * planner accept the GROUP BY clause for push down even though the expression
+ * on time is a "derived" partitioning key.
+ */
+static void
+push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
+					ServerChunkAssignments *scas)
+{
+	Dimension *dim;
+	List *targetlist = root->parse->targetList;
+	bool overlaps;
+
+	Assert(hs->num_dimensions >= 1);
+	Assert(hyper_rel->part_scheme->partnatts == hs->num_dimensions);
+
+	/* Check for special case when there is only one server with chunks. This
+	 * can always be safely pushed down irrespective of partitioning */
+	if (scas->num_servers_with_chunks == 1)
+	{
+		force_group_by_push_down(root, hyper_rel);
+		return;
+	}
+
+	/* Get first closed dimension that we use for assigning chunks to
+	 * servers. If there is no closed dimension, we are done. */
+	dim = hyperspace_get_closed_dimension(hs, 0);
+
+	if (NULL == dim)
+		return;
+
+	overlaps = server_chunk_assignments_are_overlapping(scas, dim->fd.id);
+
+	if (overlaps)
+	{
+		List *funcexprs;
+		int i;
+
+		/* When server chunk assignments are overlapping we require that the
+		 * GROUP BY covers all partitioning keys. To push down GROUP BYs with
+		 * bucketing, we need to also add the bucketing expressions as
+		 * partition key expressions. */
+		funcexprs = find_bucketing_func_exprs((Node *) targetlist, hyper_rel->relid);
+
+		if (NIL == funcexprs)
+			return;
+
+		for (i = 0; i < hs->num_dimensions; i++)
+			add_bucketing_exprs_for_dimension(&hs->dimensions[i], hyper_rel, funcexprs, i);
+	}
+
+	/* If server chunk assignments are non-overlapping along the "space"
+	 * dimension, we can treat this as a one-dimensional partitioned table
+	 * since any aggregate GROUP BY that includes the server-assignment
+	 * dimension is safe to execute independently on each server. */
+	Assert(NULL != dim);
+	hyper_rel->partexprs[0] = ts_dimension_get_partexprs(dim, hyper_rel->relid);
+	hyper_rel->part_scheme->partnatts = 1;
+}
+
 /*
  * Turn chunk append paths into server append paths.
  *
@@ -272,14 +485,22 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
 	RelOptInfo **chunk_rels = hyper_rel->part_rels;
 	int nchunk_rels = hyper_rel->nparts;
+	RangeTblEntry *hyper_rte = planner_rt_fetch(hyper_rel->relid, root);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hyper_rte->relid);
+	List *server_rels_list = NIL;
 	RelOptInfo **server_rels;
 	int nserver_rels;
-	List *server_rels_list = NIL;
 	ServerChunkAssignments scas;
 	int i;
 
+	Assert(NULL != ht);
+
 	if (nchunk_rels <= 0)
+	{
+		ts_cache_release(hcache);
 		return;
+	}
 
 	/* Create the RelOptInfo for each server */
 	server_rels = build_server_part_rels(root, hyper_rel, &nserver_rels);
@@ -291,21 +512,31 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	/* Assign chunks to servers */
 	server_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
 
-	/* Create paths for each server rel and set server chunk assignments */
+	/* Try to push down GROUP BY expressions and bucketing, if possible */
+	push_down_group_bys(root, hyper_rel, ht->space, &scas);
+
+	/* Create estimates and paths for each server rel based on server chunk
+	 * assignments */
 	for (i = 0; i < nserver_rels; i++)
 	{
 		RelOptInfo *server_rel = server_rels[i];
-		TsFdwRelationInfo *fpinfo = fdw_relation_info_get(server_rel);
 		ServerChunkAssignment *sca = server_chunk_assignment_get_or_create(&scas, server_rel);
+		TsFdwRelationInfo *fpinfo;
 
+		/* Update the number of tuples and rows based on the chunk
+		 * assignments */
+		server_rel->tuples = sca->tuples;
+		server_rel->rows = sca->rows;
+
+		fpinfo = fdw_relation_info_create(root,
+										  server_rel,
+										  server_rel->serverid,
+										  hyper_rte->relid,
+										  TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
 		fpinfo->sca = sca;
 
 		if (!bms_is_empty(sca->chunk_relids))
 		{
-			server_rel->rows = sca->rows;
-			fpinfo->rows = sca->rows;
-			fpinfo->startup_cost = sca->startup_cost;
-			fpinfo->total_cost = sca->total_cost;
 			add_server_scan_paths(root, server_rel);
 			server_rels_list = lappend(server_rels_list, server_rel);
 		}
@@ -315,15 +546,17 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 		set_cheapest(server_rel);
 	}
 
+	Assert(list_length(server_rels_list) > 0);
+
+	/* Reset the pathlist since server scans are preferred */
 	hyper_rel->pathlist = NIL;
 
 	/* Must keep partitioning info consistent with the append paths we create */
 	hyper_rel->part_rels = server_rels;
 	hyper_rel->nparts = nserver_rels;
 
-	Assert(list_length(server_rels_list) > 0);
-
 	add_paths_to_append_rel(root, hyper_rel, server_rels_list);
+	ts_cache_release(hcache);
 }
 
 void
@@ -343,13 +576,13 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELATION_INFO_HYPERTABLE_SERVER)
 		return;
 
-	return fdw_create_upper_paths(fpinfo,
-								  root,
-								  stage,
-								  input_rel,
-								  output_rel,
-								  extra,
-								  server_scan_path_create);
+	fdw_create_upper_paths(fpinfo,
+						   root,
+						   stage,
+						   input_rel,
+						   output_rel,
+						   extra,
+						   server_scan_path_create);
 }
 
 static CustomScanMethods server_scan_plan_methods = {
