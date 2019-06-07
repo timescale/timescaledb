@@ -22,6 +22,13 @@ SELECT * FROM add_server('server_1', database => 'server_1', local_user => :'ROL
 SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
 SELECT * FROM add_server('server_3', database => 'server_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
 
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+\o /dev/null
+\ir include/filter_exec.sql
+\o
+\set ECHO all
+
 -- Import testsupport.sql file to servers
 \unset ECHO
 \o /dev/null
@@ -148,7 +155,9 @@ DROP TABLE non_disttable2;
 -- CREATE TABLE should fail, since remote servers has no schema
 \set ON_ERROR_STOP 0
 CREATE TABLE disttable_schema.disttable(time timestamptz, device int, color int, temp float);
-SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3);
+SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3)
+$$);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' $$);
 
 -- CREATE and DROP SCHEMA CASCADE
@@ -181,7 +190,9 @@ DROP TABLE some_dist_table;
 CREATE TABLE non_htable (id int PRIMARY KEY);
 CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(id));
 \set ON_ERROR_STOP 0
+SELECT test.execute_sql_and_filter_server_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
+$$);
 \set ON_ERROR_STOP 1
 DROP TABLE some_dist_table;
 DROP TABLE non_htable;
@@ -379,6 +390,51 @@ DROP TABLE non_htable;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP EVENT TRIGGER test_event_trigger_sqldrop;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Test DDL blocking from non-frontend session
+--
+-- We test only special corner cases since most of this functionality already
+-- been tested before.
+--
+CREATE TABLE disttable(time timestamptz, device int);
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
+CREATE INDEX disttable_device_idx ON disttable (device);
+
+\c server_1
+SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
+SELECT * FROM test.show_indexes('disttable');
+
+\set ON_ERROR_STOP 0
+
+-- Test ALTER by non-frontend session
+ALTER TABLE disttable ADD CONSTRAINT device_check CHECK (device > 0);
+
+-- Test path for delayed relid resolving
+ALTER TABLE disttable RENAME TO disttable2;
+
+-- Test for multiple hypertables
+TRUNCATE disttable, disttable;
+
+-- Test for hypertables collected during drop
+DROP INDEX disttable_device_idx;
+DROP TABLE disttable;
+
+\set ON_ERROR_STOP 1
+
+-- Explicitly allow execution
+SET timescaledb.enable_client_ddl_on_data_servers TO true;
+DROP INDEX disttable_device_idx;
+SELECT * FROM test.show_indexes('disttable');
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Should fail because of the inconsistency
+\set ON_ERROR_STOP 0
+DROP INDEX disttable_device_idx;
+\set ON_ERROR_STOP 1
+
+DROP TABLE disttable;
 
 -- cleanup
 \c :TEST_DBNAME :ROLE_SUPERUSER;

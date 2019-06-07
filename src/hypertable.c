@@ -1002,25 +1002,31 @@ hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *
 								   CStringGetDatum(name));
 }
 
-int32
-ts_hypertable_get_id_by_name(const char *schema, const char *name)
+/*
+ * Find hypertable by name and retrieve catalog form attributes.
+ *
+ * In case if some of the requested attributes marked as NULL value, nulls[] array will be
+ * modified and appropriate attribute position bit will be set to true.
+ *
+ * Return true if hypertable is found, false otherwise.
+ */
+bool
+ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
+									 FormData_hypertable *form, bool nulls[])
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
-	int32 hypertable_id = -1;
 
 	hypertable_scan_by_name(&iterator, schema, name);
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
-
-		hypertable_id = form->id;
+		hypertable_formdata_fill(form, ti->tuple, ti->desc);
 		ts_scan_iterator_close(&iterator);
-		break;
+		return true;
 	}
 
-	return hypertable_id;
+	return false;
 }
 
 Hypertable *
@@ -2557,4 +2563,13 @@ List *
 ts_hypertable_get_available_server_oids(Hypertable *ht)
 {
 	return get_hypertable_server_ids(ht, filter_non_blocked_servers);
+}
+
+HypertableType
+ts_hypertable_get_type(Hypertable *ht)
+{
+	Assert(ht->fd.replication_factor >= -1);
+	if (ht->fd.replication_factor < 1)
+		return (HypertableType) ht->fd.replication_factor;
+	return HYPERTABLE_DISTRIBUTED;
 }
