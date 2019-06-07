@@ -18,6 +18,7 @@
 #include <optimizer/restrictinfo.h>
 #include <access/sysattr.h>
 #include <utils/memutils.h>
+#include <foreign/fdwapi.h>
 
 #include <export.h>
 #include <chunk_server.h>
@@ -104,6 +105,15 @@ build_server_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *paren
 	rel->lateral_referencers = parent->lateral_referencers;
 	rel->lateral_relids = parent->lateral_relids;
 	rel->serverid = serverid;
+
+	/* We need to use the FDW interface to get called by the planner for
+	 * partial aggs. For some reason, the standard upper_paths_hook is never
+	 * called for upper rels of type UPPERREL_PARTIAL_GROUP_AGG, which is odd
+	 * (see end of PostgreSQL planner.c:create_partial_grouping_paths). Until
+	 * this gets fixed in the PostgreSQL planner, we're forced to set
+	 * fdwroutine here although we will scan this rel with a ServerScan and
+	 * not a ForeignScan. */
+	rel->fdwroutine = GetFdwRoutineByServerId(serverid);
 
 	return rel;
 }

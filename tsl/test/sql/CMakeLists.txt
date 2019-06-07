@@ -54,6 +54,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "11")
     partitionwise_distributed.sql
     hypertable_distributed.sql
     ddl_distributed.sql
+    dist_partial_agg.sql
   )
   list(APPEND TEST_FILES_DEBUG
     remote_connection.sql

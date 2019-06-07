@@ -35,6 +35,7 @@
 #include <commands/explain.h>
 #include <rewrite/rewriteManip.h>
 #include <miscadmin.h>
+#include <commands/extension.h>
 
 #include <export.h>
 #include <extension_constants.h>
@@ -56,6 +57,7 @@
 #include "remote/data_format.h"
 #include "guc.h"
 #include "server_scan_plan.h"
+#include "extension_constants.h"
 
 /* Default CPU cost to start up a foreign query. */
 #define DEFAULT_FDW_STARTUP_COST 100.0
@@ -1091,6 +1093,8 @@ get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
 	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(baserel);
 	Path *path;
+
+	Assert(fpinfo->type != TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
 
 	if (fpinfo->type == TS_FDW_RELATION_INFO_HYPERTABLE)
 	{
@@ -2901,9 +2905,6 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	if (!parse->groupClause && !parse->groupingSets && !parse->hasAggs && !root->hasHavingQual)
 		return;
 
-	Assert(extra->patype == PARTITIONWISE_AGGREGATE_NONE ||
-		   extra->patype == PARTITIONWISE_AGGREGATE_FULL);
-
 	/* save the input_rel as outerrel in fpinfo */
 	fpinfo->outerrel = input_rel;
 
@@ -2968,7 +2969,8 @@ fdw_create_upper_paths(TsFdwRelationInfo *input_fpinfo, PlannerInfo *root, Upper
 	/* Ignore stages we don't support; and skip any duplicate calls (i.e.,
 	 * output_rel->fdw_private has already been set by a previous call to this
 	 * function). */
-	if (stage != UPPERREL_GROUP_AGG || output_rel->fdw_private)
+	if ((stage != UPPERREL_GROUP_AGG && stage != UPPERREL_PARTIAL_GROUP_AGG) ||
+		output_rel->fdw_private)
 		return;
 
 	input_fpinfo = fdw_relation_info_alloc(output_rel, input_fpinfo->type);
@@ -2996,6 +2998,13 @@ get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *
 
 	if (fpinfo == NULL)
 		return;
+
+	/* We abuse the FDW API's GetForeignUpperPaths callback because, for some
+	 * reason, the regular create_upper_paths_hook is never called for
+	 * partially grouped rels, so we cannot use if for server rels. See end of
+	 * PostgreSQL planner.c:create_partial_grouping_paths(). */
+	if (fpinfo->type == TS_FDW_RELATION_INFO_HYPERTABLE_SERVER)
+		return server_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 
 	return fdw_create_upper_paths(fpinfo,
 								  root,

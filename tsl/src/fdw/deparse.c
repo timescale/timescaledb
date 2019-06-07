@@ -79,6 +79,7 @@
 #include "timescaledb_fdw.h"
 #include "extension_constants.h"
 #include "plan_expand_hypertable.h"
+#include "partialize_finalize.h"
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
@@ -740,10 +741,6 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 
 			/* Not safe to pushdown when not in grouping context */
 			if (!IS_UPPER_REL(glob_cxt->foreignrel))
-				return false;
-
-			/* Only non-split aggregates are pushable. */
-			if (agg->aggsplit != AGGSPLIT_SIMPLE)
 				return false;
 
 			/* As usual, it must be shippable. */
@@ -2744,14 +2741,16 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 {
 	StringInfo buf = context->buf;
 	bool use_variadic;
-
-	/* Only basic, non-split aggregation accepted. */
-	Assert(node->aggsplit == AGGSPLIT_SIMPLE);
+	bool partial_agg = node->aggsplit != AGGSPLIT_SIMPLE;
+	Assert(node->aggsplit == AGGSPLIT_SIMPLE || node->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
 	/* Check if need to print VARIADIC (cf. ruleutils.c) */
 	use_variadic = node->aggvariadic;
 
 	/* Find aggregate name from aggfnoid which is a pg_proc entry */
+	if (partial_agg)
+		appendStringInfoString(buf, INTERNAL_SCHEMA_NAME "." PARTIALIZE_FUNC_NAME "(");
+
 	appendFunctionName(node->aggfnoid, context);
 	appendStringInfoChar(buf, '(');
 
@@ -2825,7 +2824,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 		deparseExpr((Expr *) node->aggfilter, context);
 	}
 
-	appendStringInfoChar(buf, ')');
+	appendStringInfoString(buf, partial_agg ? "))" : ")");
 }
 
 /*

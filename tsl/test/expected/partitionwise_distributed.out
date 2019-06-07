@@ -472,8 +472,8 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                        QUERY PLAN                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper."time", (avg(hyper.temp))
    Sort Key: hyper."time"
@@ -481,23 +481,19 @@ ORDER BY 1;
          Output: hyper."time", avg(hyper.temp)
          Group Key: hyper."time"
          ->  Append
-               ->  Partial HashAggregate
-                     Output: hyper."time", PARTIAL avg(hyper.temp)
-                     Group Key: hyper."time"
-                     ->  Custom Scan (ServerScan) on public.hyper
-                           Output: hyper."time", hyper.temp
-                           Server: server_1
-                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Partial HashAggregate
-                     Output: hyper_1."time", PARTIAL avg(hyper_1.temp)
-                     Group Key: hyper_1."time"
-                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                           Output: hyper_1."time", hyper_1.temp
-                           Server: server_2
-                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
-                           Remote SQL: SELECT "time", temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(23 rows)
+               ->  Custom Scan (ServerScan)
+                     Output: hyper."time", (PARTIAL avg(hyper.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+               ->  Custom Scan (ServerScan)
+                     Output: hyper_1."time", (PARTIAL avg(hyper_1.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_2
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk
+                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+(19 rows)
 
 -- Show result
 SELECT time, avg(temp)
@@ -698,29 +694,25 @@ SELECT location, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1;
-                                                                                              QUERY PLAN                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                      QUERY PLAN                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
    Output: hyper.location, avg(hyper.temp)
    Group Key: hyper.location
    ->  Append
-         ->  Partial HashAggregate
-               Output: hyper.location, PARTIAL avg(hyper.temp)
-               Group Key: hyper.location
-               ->  Custom Scan (ServerScan) on public.hyper
-                     Output: hyper.location, hyper.temp
-                     Server: server_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  Partial HashAggregate
-               Output: hyper_1.location, PARTIAL avg(hyper_1.temp)
-               Group Key: hyper_1.location
-               ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                     Output: hyper_1.location, hyper_1.temp
-                     Server: server_2
-                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                     Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(20 rows)
+         ->  Custom Scan (ServerScan)
+               Output: hyper.location, (PARTIAL avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT location, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+         ->  Custom Scan (ServerScan)
+               Output: hyper_1.location, (PARTIAL avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Server: server_2
+               Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+               Remote SQL: SELECT location, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+(16 rows)
 
 -- Expand query across repartition boundary. This makes it unsafe to
 -- push down the FULL agg, so should expect a PARTIAL agg on
@@ -803,8 +795,8 @@ SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
@@ -812,23 +804,19 @@ ORDER BY 1;
          Output: hyper.device, avg(hyper.temp)
          Group Key: hyper.device
          ->  Append
-               ->  Partial HashAggregate
-                     Output: hyper.device, PARTIAL avg(hyper.temp)
-                     Group Key: hyper.device
-                     ->  Custom Scan (ServerScan) on public.hyper
-                           Output: hyper.device, hyper.temp
-                           Server: server_1
-                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
-                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4])
-               ->  Partial HashAggregate
-                     Output: hyper_1.device, PARTIAL avg(hyper_1.temp)
-                     Group Key: hyper_1.device
-                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                           Output: hyper_1.device, hyper_1.temp
-                           Server: server_2
-                           Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
-                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3])
-(23 rows)
+               ->  Custom Scan (ServerScan)
+                     Output: hyper.device, (PARTIAL avg(hyper.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4]) GROUP BY 1
+               ->  Custom Scan (ServerScan)
+                     Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_2
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) GROUP BY 1
+(19 rows)
 
 -- Show result
 SELECT device, avg(temp)
@@ -897,8 +885,8 @@ FROM hyper
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
-                                                                                                  QUERY PLAN                                                                                                  
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
@@ -906,23 +894,19 @@ ORDER BY 1;
          Output: hyper.device, avg(hyper.temp)
          Group Key: hyper.device
          ->  Append
-               ->  Partial HashAggregate
-                     Output: hyper.device, PARTIAL avg(hyper.temp)
-                     Group Key: hyper.device
-                     ->  Custom Scan (ServerScan) on public.hyper
-                           Output: hyper.device, hyper.temp
-                           Server: server_1
-                           Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
-                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3, 4]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-               ->  Partial HashAggregate
-                     Output: hyper_1.device, PARTIAL avg(hyper_1.temp)
-                     Group Key: hyper_1.device
-                     ->  Custom Scan (ServerScan) on public.hyper hyper_1
-                           Output: hyper_1.device, hyper_1.temp
-                           Server: server_2
-                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
-                           Remote SQL: SELECT device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-(23 rows)
+               ->  Custom Scan (ServerScan)
+                     Output: hyper.device, (PARTIAL avg(hyper.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_1
+                     Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3, 4]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1
+               ->  Custom Scan (ServerScan)
+                     Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
+                     Relations: Aggregate on (public.hyper)
+                     Server: server_2
+                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1
+(19 rows)
 
 SELECT device, avg(temp)
 FROM hyper
@@ -2183,29 +2167,25 @@ EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time_bucket('1 day', time), avg(temp)
 FROM hyper1d
 GROUP BY 1;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                          QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
    Output: (time_bucket('@ 1 day'::interval, hyper1d."time")), avg(hyper1d.temp)
    Group Key: (time_bucket('@ 1 day'::interval, hyper1d."time"))
    ->  Append
-         ->  Partial HashAggregate
-               Output: (time_bucket('@ 1 day'::interval, hyper1d."time")), PARTIAL avg(hyper1d.temp)
-               Group Key: time_bucket('@ 1 day'::interval, hyper1d."time")
-               ->  Custom Scan (ServerScan) on public.hyper1d
-                     Output: time_bucket('@ 1 day'::interval, hyper1d."time"), hyper1d.temp
-                     Server: server_1
-                     Chunks: _hyper_2_8_dist_chunk, _hyper_2_10_dist_chunk
-                     Remote SQL: SELECT "time", temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5, 6])
-         ->  Partial HashAggregate
-               Output: (time_bucket('@ 1 day'::interval, hyper1d_1."time")), PARTIAL avg(hyper1d_1.temp)
-               Group Key: time_bucket('@ 1 day'::interval, hyper1d_1."time")
-               ->  Custom Scan (ServerScan) on public.hyper1d hyper1d_1
-                     Output: time_bucket('@ 1 day'::interval, hyper1d_1."time"), hyper1d_1.temp
-                     Server: server_2
-                     Chunks: _hyper_2_9_dist_chunk
-                     Remote SQL: SELECT "time", temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4])
-(20 rows)
+         ->  Custom Scan (ServerScan)
+               Output: (time_bucket('@ 1 day'::interval, hyper1d."time")), (PARTIAL avg(hyper1d.temp))
+               Relations: Aggregate on (public.hyper1d)
+               Server: server_1
+               Chunks: _hyper_2_8_dist_chunk, _hyper_2_10_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 1 day'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5, 6]) GROUP BY 1
+         ->  Custom Scan (ServerScan)
+               Output: (time_bucket('@ 1 day'::interval, hyper1d_1."time")), (PARTIAL avg(hyper1d_1.temp))
+               Relations: Aggregate on (public.hyper1d)
+               Server: server_2
+               Chunks: _hyper_2_9_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 1 day'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4]) GROUP BY 1
+(16 rows)
 
 --- Only one chunk in query => safe to fully push down although not on
 --- a partitioning dimension.
@@ -2232,21 +2212,23 @@ SELECT device, avg(temp)
 FROM hyper1d
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- HashAggregate
+                                                                                                                      QUERY PLAN                                                                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize HashAggregate
    Output: hyper1d.device, avg(hyper1d.temp)
    Group Key: hyper1d.device
    ->  Append
-         ->  Custom Scan (ServerScan) on public.hyper1d
-               Output: hyper1d.device, hyper1d.temp
+         ->  Custom Scan (ServerScan)
+               Output: hyper1d.device, (PARTIAL avg(hyper1d.temp))
+               Relations: Aggregate on (public.hyper1d)
                Server: server_1
                Chunks: _hyper_2_8_dist_chunk
-               Remote SQL: SELECT device, temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  Custom Scan (ServerScan) on public.hyper1d hyper1d_1
-               Output: hyper1d_1.device, hyper1d_1.temp
+               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[5]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+         ->  Custom Scan (ServerScan)
+               Output: hyper1d_1.device, (PARTIAL avg(hyper1d_1.temp))
+               Relations: Aggregate on (public.hyper1d)
                Server: server_2
                Chunks: _hyper_2_9_dist_chunk
-               Remote SQL: SELECT device, temp FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(14 rows)
+               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(hyper1d, ARRAY[4]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1
+(16 rows)
 
