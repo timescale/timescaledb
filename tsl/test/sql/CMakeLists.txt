@@ -83,6 +83,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
+    dist_partial_agg.sql
   )
   list(APPEND TEST_FILES_DEBUG
     deparse.sql
