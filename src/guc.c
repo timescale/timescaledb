@@ -54,6 +54,7 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
+TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_servers = false;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -204,6 +205,17 @@ _guc_init(void)
 							 "Enable binary format for data exchanged between nodes in the cluster",
 							 &ts_guc_enable_connection_binary_data,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_servers",
+							 "Enable DDL operations on data servers by a client",
+							 "Do not restrict execution of DDL operations only by frontend server",
+							 &ts_guc_enable_client_ddl_on_data_servers,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

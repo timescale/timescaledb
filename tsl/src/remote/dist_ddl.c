@@ -8,12 +8,14 @@
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
 
+#include <guc.h>
 #include "hypertable_server.h"
 #include "chunk_index.h"
 #include "process_utility.h"
 #include "event_trigger.h"
 #include "remote/dist_commands.h"
 #include "remote/dist_ddl.h"
+#include "dist_util.h"
 
 /* DDL Query execution type */
 typedef enum
@@ -70,118 +72,165 @@ dist_ddl_error_raise_unsupported(void)
 }
 
 static void
-dist_ddl_block_hypertable_list(ProcessUtilityArgs *args)
+dist_ddl_error_raise_blocked(void)
 {
-	Cache *hcache;
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("operation is blocked on a distributed hypertable member"),
+			 errdetail("This operation should be executed on the frontend server."),
+			 errhint("Set timescaledb.enable_client_ddl_on_data_servers to TRUE, if you know what "
+					 "you are doing.")));
+}
+
+static void
+dist_ddl_inspect_hypertable_list(ProcessUtilityArgs *args, Cache *hcache, bool *has_distributed_ht,
+								 bool *has_distributed_ht_member)
+{
 	Hypertable *ht;
 	ListCell *lc;
-
-	hcache = ts_hypertable_cache_pin();
 
 	foreach (lc, args->hypertable_list)
 	{
 		ht = ts_hypertable_cache_get_entry(hcache, lfirst_oid(lc));
 		Assert(ht != NULL);
-
-		if (hypertable_is_distributed(ht))
+		switch (ts_hypertable_get_type(ht))
 		{
-			ts_cache_release(hcache);
-			dist_ddl_error_raise_unsupported();
+			case HYPERTABLE_REGULAR:
+				break;
+			case HYPERTABLE_DISTRIBUTED:
+				*has_distributed_ht = true;
+				break;
+			case HYPERTABLE_DISTRIBUTED_MEMBER:
+				*has_distributed_ht_member = true;
+				break;
 		}
 	}
-
-	ts_cache_release(hcache);
 }
 
-static void
-dist_ddl_block_hypertable_relid(void)
+static HypertableType
+dist_ddl_get_hypertable_type_from_state(void)
 {
 	Cache *hcache;
-	bool is_distributed;
 	Hypertable *ht;
+	HypertableType type;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, dist_ddl_state.relid);
 	Assert(ht != NULL);
-	is_distributed = hypertable_is_distributed(ht);
+	type = ts_hypertable_get_type(ht);
 	ts_cache_release(hcache);
+	return type;
+}
 
-	if (is_distributed)
-		dist_ddl_error_raise_unsupported();
+static void
+dist_ddl_check_session(void)
+{
+	if (dist_util_is_frontend_session())
+		return;
+
+	/* Check if this operation is allowed by user */
+	if (ts_guc_enable_client_ddl_on_data_servers)
+		return;
+
+	dist_ddl_error_raise_blocked();
 }
 
 static void
 dist_ddl_preprocess(ProcessUtilityArgs *args)
 {
 	NodeTag tag = nodeTag(args->parsetree);
+	int hypertable_list_length = list_length(args->hypertable_list);
 	Cache *hcache;
 	Hypertable *ht;
-	Oid relid;
+	Oid relid = InvalidOid;
+	bool has_distributed_ht_member = false;
+	bool has_distributed_ht = false;
 
 	/*
-	 * In most cases expect only one distributed hypertable per operation.
+	 * This function is executed for any Utility/DDL operation and for any
+	 * PostgreSQL tables been involved in the query.
+	 *
+	 * We are particulary interested in distributed hypertables and distributed
+	 * hypertable members (regular hypertables created on a data servers).
+	 *
+	 * In most cases expect and allow only one distributed hypertable per
+	 * operation to avoid query deparsing, but do not restrict the number of
+	 * other hypertable types involved.
 	 */
-	switch (list_length(args->hypertable_list))
-	{
-		case 0:
-			/*
-			 * For DROP TABLE and DROP SCHEMA operations hypertable_list will be
-			 * empty. Wait for sql_drop events.
-			 */
-			if (tag == T_DropStmt)
-			{
-				DropStmt *stmt = (DropStmt *) args->parsetree;
-
-				if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-					dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
-			}
-			return;
-
-		case 1:
-			break;
-
-		default:
-			/*
-			 * Raise an error only if at least one of hypertables is
-			 * distributed. Otherwise this makes query_string unusable for remote
-			 * execution without deparsing.
-			 */
-			dist_ddl_block_hypertable_list(args);
-			return;
-	}
-
-	relid = linitial_oid(args->hypertable_list);
-	switch (tag)
+	if (hypertable_list_length == 0)
 	{
 		/*
-		 * Hypertable oid from those commands is available in hypertable_list but
-		 * cannot be resolved here until standard utility hook will synchronize new
-		 * relation name and schema.
-		 *
-		 * Save oid for dist_ddl_end execution.
+		 * For DROP TABLE and DROP SCHEMA operations hypertable_list will be
+		 * empty. Wait for sql_drop events.
 		 */
-		case T_AlterObjectSchemaStmt:
-		case T_RenameStmt:
-			dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
-			dist_ddl_state.relid = relid;
-			return;
+		if (tag == T_DropStmt)
+		{
+			DropStmt *stmt = (DropStmt *) args->parsetree;
 
-		/* Skip COPY here, since it has its own process path using
-		 * cross module API. */
-		case T_CopyStmt:
-			return;
-		default:
-			break;
+			if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
+				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
+		}
+
+		return;
 	}
 
+	if (hypertable_list_length == 1)
+	{
+		relid = linitial_oid(args->hypertable_list);
+		switch (tag)
+		{
+			/*
+			 * Hypertable oid from those commands is available in hypertable_list but
+			 * cannot be resolved here until standard utility hook will synchronize new
+			 * relation name and schema.
+			 *
+			 * Save oid for dist_ddl_end execution.
+			 */
+			case T_AlterObjectSchemaStmt:
+			case T_RenameStmt:
+				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
+				dist_ddl_state.relid = relid;
+				return;
+
+			/* Skip COPY here, since it has its own process path using
+			 * cross module API. */
+			case T_CopyStmt:
+				return;
+			default:
+				break;
+		}
+	}
+
+	/*
+	 * Iterate over hypertable list and reason about the type of hypertables
+	 * involved in the query.
+	 */
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
-	Assert(ht != NULL);
-	if (!hypertable_is_distributed(ht))
+	dist_ddl_inspect_hypertable_list(args, hcache, &has_distributed_ht, &has_distributed_ht_member);
+
+	/*
+	 * Allow DDL operations on data nodes executed only from frontend connection.
+	 */
+	if (has_distributed_ht_member)
+		dist_ddl_check_session();
+
+	if (!has_distributed_ht)
 	{
 		ts_cache_release(hcache);
 		return;
 	}
+
+	/*
+	 * Raise an error only if at least one of hypertables is
+	 * distributed. Otherwise this makes query_string unusable for remote
+	 * execution without deparsing.
+	 */
+	if (hypertable_list_length > 1)
+		dist_ddl_error_raise_unsupported();
+
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Assert(ht != NULL);
+	Assert(hypertable_is_distributed(ht));
 
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
@@ -334,7 +383,16 @@ dist_ddl_end(EventTriggerData *command)
 	 * be updated here as well.
 	 */
 	if (OidIsValid(dist_ddl_state.relid))
-		dist_ddl_block_hypertable_relid();
+	{
+		HypertableType type = dist_ddl_get_hypertable_type_from_state();
+
+		if (type == HYPERTABLE_DISTRIBUTED)
+			dist_ddl_error_raise_unsupported();
+
+		/* Ensure this operation is executed by frontend session. */
+		if (type == HYPERTABLE_DISTRIBUTED_MEMBER)
+			dist_ddl_check_session();
+	}
 
 	/* Execute command on remote servers. */
 	dist_ddl_execute();
@@ -376,15 +434,23 @@ dist_ddl_add_server_list(List *server_list)
 static void
 dist_ddl_add_server_list_from_table(const char *schema, const char *name)
 {
-	int32 hypertable_id;
+	FormData_hypertable form;
+	bool nulls[Natts_hypertable];
 	List *server_list;
 	MemoryContext mctx;
 
-	hypertable_id = ts_hypertable_get_id_by_name(schema, name);
-	if (hypertable_id == -1)
+	if (!ts_hypertable_get_attributes_by_name(schema, name, &form, nulls))
 		return;
 
-	server_list = ts_hypertable_server_scan(hypertable_id, CurrentMemoryContext);
+	/* If hypertable is marked as distributed member then ensure this operation is
+	 * executed by frontend session. */
+	if (!nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] &&
+		form.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
+	{
+		dist_ddl_check_session();
+	}
+
+	server_list = ts_hypertable_server_scan(form.id, CurrentMemoryContext);
 	if (server_list == NIL)
 		return;
 

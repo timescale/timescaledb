@@ -455,9 +455,7 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 	appendStringInfoString(hypertable_cmd, ", if_not_exists => FALSE");
 	appendStringInfoString(hypertable_cmd, ", migrate_data => FALSE");
 	appendStringInfoString(hypertable_cmd, ", create_default_indexes => FALSE");
-	appendStringInfo(hypertable_cmd,
-					 ", replication_factor => %d",
-					 HYPERTABLE_DIST_MEMBER_REPLICATION_FACTOR);
+	appendStringInfo(hypertable_cmd, ", replication_factor => %d", HYPERTABLE_DISTRIBUTED_MEMBER);
 
 	appendStringInfoString(hypertable_cmd, ");");
 

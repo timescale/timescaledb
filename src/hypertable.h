@@ -71,8 +71,17 @@ typedef enum HypertableCreateFlags
 	HYPERTABLE_CREATE_MIGRATE_DATA = 1 << 2,
 } HypertableCreateFlags;
 
-/* Alias for no replication (regular hypertable) */
-#define REPLICATION_NONE 0
+/* Hypertable type defined by replication_factor value */
+typedef enum HypertableType
+{
+	/* Hypertable created on a data server as part of any other
+	 * distributed hypertable */
+	HYPERTABLE_DISTRIBUTED_MEMBER = -1,
+	/* Non-replicated hypertable (default for a single node) */
+	HYPERTABLE_REGULAR = 0,
+	/* Replicated hypertable (replication_factor is >= 1) */
+	HYPERTABLE_DISTRIBUTED
+} HypertableType;
 
 extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
@@ -80,7 +89,9 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, ArrayType *servers);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
-extern TSDLLEXPORT int32 ts_hypertable_get_id_by_name(const char *schema, const char *name);
+extern TSDLLEXPORT bool ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
+															 FormData_hypertable *form,
+															 bool nulls[]);
 extern TSDLLEXPORT bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 
@@ -123,6 +134,7 @@ extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_serverids_list(Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_available_servers(Hypertable *ht, bool error);
 extern TSDLLEXPORT List *ts_hypertable_get_available_server_oids(Hypertable *ht);
+extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
@@ -136,10 +148,8 @@ extern TSDLLEXPORT List *ts_hypertable_get_available_server_oids(Hypertable *ht)
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
 
-#define HYPERTABLE_DIST_MEMBER_REPLICATION_FACTOR -1
-
 #define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
 #define hypertable_is_distributed_member(ht)                                                       \
-	((ht)->fd.replication_factor == HYPERTABLE_DIST_MEMBER_REPLICATION_FACTOR)
+	((ht)->fd.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
 
 #endif /* TIMESCALEDB_HYPERTABLE_H */

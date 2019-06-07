@@ -280,7 +280,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 NULL,
 											 NULL,
 											 chunk_sizing_info,
-											 REPLICATION_NONE,
+											 HYPERTABLE_REGULAR,
 											 NULL);
 	if (!created)
 	{

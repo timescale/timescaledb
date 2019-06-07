@@ -41,6 +41,9 @@ SELECT * FROM add_server('server_3', database => 'server_3', local_user => :'ROL
  server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 -- Import testsupport.sql file to servers
 \unset ECHO
 -- This SCHEMA will not be created on servers
@@ -558,9 +561,11 @@ DROP TABLE non_disttable2;
 -- CREATE TABLE should fail, since remote servers has no schema
 \set ON_ERROR_STOP 0
 CREATE TABLE disttable_schema.disttable(time timestamptz, device int, color int, temp float);
-SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3);
+SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3)
+$$);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  remote connection error: schema "disttable_schema" does not exist
+ERROR:  [server_x]: schema "disttable_schema" does not exist
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' $$);
 NOTICE:  [server_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
 NOTICE:  [server_1]:
@@ -744,9 +749,11 @@ DROP TABLE some_dist_table;
 CREATE TABLE non_htable (id int PRIMARY KEY);
 CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(id));
 \set ON_ERROR_STOP 0
+SELECT test.execute_sql_and_filter_server_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
+$$);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  remote connection error: relation "non_htable" does not exist
+ERROR:  [server_x]: relation "non_htable" does not exist
 \set ON_ERROR_STOP 1
 DROP TABLE some_dist_table;
 DROP TABLE non_htable;
@@ -1641,6 +1648,67 @@ NOTICE:  table "unexist_table" does not exist, skipping
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP EVENT TRIGGER test_event_trigger_sqldrop;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test DDL blocking from non-frontend session
+--
+-- We test only special corner cases since most of this functionality already
+-- been tested before.
+--
+CREATE TABLE disttable(time timestamptz, device int);
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            16 | public      | disttable  | t
+(1 row)
+
+CREATE INDEX disttable_device_idx ON disttable (device);
+\c server_1
+SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
+ schemaname | tablename 
+------------+-----------
+ public     | disttable
+(1 row)
+
+SELECT * FROM test.show_indexes('disttable');
+        Index         | Columns  | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------+----------+------+--------+---------+-----------+------------
+ disttable_device_idx | {device} |      | f      | f       | f         | 
+ disttable_time_idx   | {time}   |      | f      | f       | f         | 
+(2 rows)
+
+\set ON_ERROR_STOP 0
+-- Test ALTER by non-frontend session
+ALTER TABLE disttable ADD CONSTRAINT device_check CHECK (device > 0);
+ERROR:  operation is blocked on a distributed hypertable member
+-- Test path for delayed relid resolving
+ALTER TABLE disttable RENAME TO disttable2;
+ERROR:  operation is blocked on a distributed hypertable member
+-- Test for multiple hypertables
+TRUNCATE disttable, disttable;
+ERROR:  operation is blocked on a distributed hypertable member
+-- Test for hypertables collected during drop
+DROP INDEX disttable_device_idx;
+ERROR:  operation is blocked on a distributed hypertable member
+DROP TABLE disttable;
+ERROR:  operation is blocked on a distributed hypertable member
+\set ON_ERROR_STOP 1
+-- Explicitly allow execution
+SET timescaledb.enable_client_ddl_on_data_servers TO true;
+DROP INDEX disttable_device_idx;
+SELECT * FROM test.show_indexes('disttable');
+       Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------+---------+------+--------+---------+-----------+------------
+ disttable_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Should fail because of the inconsistency
+\set ON_ERROR_STOP 0
+DROP INDEX disttable_device_idx;
+ERROR:  [server_1]: index "disttable_device_idx" does not exist
+\set ON_ERROR_STOP 1
+DROP TABLE disttable;
 -- cleanup
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP SCHEMA disttable_schema CASCADE;
