@@ -20,6 +20,7 @@ to TimescaleDB running on PostgreSQL 11.  More details below.
 * #1228 ARM32 Fix: Pass int64 using Int64GetDatum when a Datum is required
 * #1232 Allow Param as time_bucket_gapfill arguments
 * #1236 Stop preventing REFRESH in transaction blocks
+* #1283 Fix constraint exclusion for OUTER JOIN
 
 **Thanks**
 * @od0 for reporting an error with continuous aggs and JOINs
