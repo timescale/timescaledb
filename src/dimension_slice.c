@@ -89,12 +89,6 @@ ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
 	return 0;
 }
 
-typedef struct DimensionSliceScanData
-{
-	DimensionVec *slices;
-	int limit;
-} DimensionSliceScanData;
-
 static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {

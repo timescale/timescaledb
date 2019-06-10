@@ -126,6 +126,7 @@ extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, 
 extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
 extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple,
 														TupleDesc tupdesc);
+extern int ts_dimension_get_slice_ordinal(Dimension *dim, DimensionSlice *slice);
 extern Dimension *ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
 extern TSDLLEXPORT Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type,
 														  Index n);
