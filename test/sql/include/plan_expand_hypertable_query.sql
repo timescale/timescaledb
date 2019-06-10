@@ -139,6 +139,21 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 
+-- test constraint exclusion for constraints in ON clause of JOINs
+
+-- should exclude chunks on m1
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+-- should exclude chunks on m2
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+-- must not exclude on m1
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+-- should exclude chunks on m2
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+-- should exclude chunks on m1
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+-- must not exclude chunks on m2
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+
 -- time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 11::bigint ORDER BY time;

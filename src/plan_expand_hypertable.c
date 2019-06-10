@@ -497,8 +497,21 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	}
 	else if (IsA(node, JoinExpr))
 	{
+		/*
+		 * expressions from JOIN ON clause are only safe to use for
+		 * constraint exclusion for INNER JOINs
+		 * for OUTER JOIN we only process quals if they are appropriate
+		 * for our current relation
+		 */
 		JoinExpr *j = castNode(JoinExpr, node);
-		j->quals = process_quals(j->quals, ctx);
+		if (!IS_OUTER_JOIN(j->jointype))
+			j->quals = process_quals(j->quals, ctx);
+		else if (j->jointype == JOIN_LEFT && IsA(j->rarg, RangeTblRef) &&
+				 ctx->rel->relid == castNode(RangeTblRef, j->rarg)->rtindex)
+			j->quals = process_quals(j->quals, ctx);
+		else if (j->jointype == JOIN_RIGHT && IsA(j->larg, RangeTblRef) &&
+				 ctx->rel->relid == castNode(RangeTblRef, j->larg)->rtindex)
+			j->quals = process_quals(j->quals, ctx);
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
