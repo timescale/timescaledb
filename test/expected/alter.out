@@ -460,7 +460,7 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 (2 rows)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (12, 22, 1);
-INSERT INTO hyper_in_space(time, temp, device) VALUES (13, 23, 2);
+INSERT INTO hyper_in_space(time, temp, device) VALUES (13, 23, 3);
 SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
      tablename     | tablespace  

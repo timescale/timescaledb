@@ -1139,34 +1139,23 @@ static int
 hypertable_get_chunk_slice_ordinal(Hypertable *ht, Hypercube *hc)
 {
 	Dimension *dim;
-	DimensionVec *vec;
 	DimensionSlice *slice;
-	int i;
+
+	Assert(NULL != ht);
+	Assert(NULL != hc);
 
 	dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	Assert(NULL != slice);
 
 	if (NULL == dim)
 		dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	Assert(NULL != dim && (IS_OPEN_DIMENSION(dim) || dim->fd.num_slices > 0));
-
-	vec = ts_dimension_get_slices(dim);
-
-	Assert(NULL != vec && (IS_OPEN_DIMENSION(dim) || vec->num_slices > 0));
+	Assert(NULL != dim);
 
 	slice = ts_hypercube_get_slice_by_dimension_id(hc, dim->fd.id);
 
-	Assert(NULL != slice);
-
-	/*
-	 * Find the index (ordinal) of the chunk's slice in the dimension we
-	 * picked
-	 */
-	i = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
-
-	Assert(i >= 0);
-
-	return i;
+	return ts_dimension_get_slice_ordinal(dim, slice);
 }
 
 /*

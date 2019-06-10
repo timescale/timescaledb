@@ -18,6 +18,7 @@
 #include "compat.h"
 #include "dimension.h"
 #include "dimension_slice.h"
+#include "dimension_vector.h"
 #include "hypertable.h"
 #include "indexing.h"
 #include "hypertable_cache.h"
@@ -251,6 +252,7 @@ ts_dimension_calculate_open_range_default(PG_FUNCTION_ARGS)
 {
 	int64 value = PG_GETARG_INT64(0);
 	Dimension dim = {
+		.type = DIMENSION_TYPE_OPEN,
 		.fd.id = 0,
 		.fd.interval_length = PG_GETARG_INT64(1),
 	};
@@ -259,13 +261,21 @@ ts_dimension_calculate_open_range_default(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(create_range_datum(fcinfo, slice));
 }
 
+static int64
+calculate_closed_range_interval(Dimension *dim)
+{
+	Assert(NULL != dim && IS_CLOSED_DIMENSION(dim));
+
+	return DIMENSION_SLICE_CLOSED_MAX / ((int64) dim->fd.num_slices);
+}
+
 static DimensionSlice *
 calculate_closed_range_default(Dimension *dim, int64 value)
 {
 	int64 range_start, range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int64 interval = DIMENSION_SLICE_CLOSED_MAX / ((int64) dim->fd.num_slices);
+	int64 interval = calculate_closed_range_interval(dim);
 	int64 last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)
@@ -301,6 +311,7 @@ ts_dimension_calculate_closed_range_default(PG_FUNCTION_ARGS)
 {
 	int64 value = PG_GETARG_INT64(0);
 	Dimension dim = {
+		.type = DIMENSION_TYPE_CLOSED,
 		.fd.id = 0,
 		.fd.num_slices = PG_GETARG_INT16(1),
 	};
@@ -316,6 +327,111 @@ ts_dimension_calculate_default_slice(Dimension *dim, int64 value)
 		return calculate_open_range_default(dim, value);
 
 	return calculate_closed_range_default(dim, value);
+}
+
+/*
+ * Get the ordinal value of a slice in an open dimension.
+ *
+ * Note that, for an open dimension, we can only deal with already created
+ * slices and cannot account for, e.g., gaps in the dimension where future
+ * slices might be created and thus changing the ordinal value for a slice.
+ *
+ * For instance, the ordinal value of slice D below is 2 (zero indexed):
+ *
+ * ' | A | B | <gap> | D | E |
+ *
+ * but when slice C is later created the ordinal value of D will be 3:
+ *
+ * ' | A | B | C | D | E |
+ */
+static int
+ts_dimension_get_open_slice_ordinal(Dimension *dim, DimensionSlice *slice)
+{
+	DimensionVec *vec;
+	int i;
+
+	Assert(NULL != dim && IS_OPEN_DIMENSION(dim));
+	Assert(NULL != slice);
+
+	vec = ts_dimension_get_slices(dim);
+
+	Assert(NULL != vec);
+
+	/* Find the index (ordinal) of the chunk's slice in the open dimension */
+	i = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
+
+	Assert(i >= 0);
+
+	return i;
+}
+
+/*
+ * Get the ordinal value of a slice in a closed dimension.
+ *
+ * For closed dimensions, we calculate the ordinal value of a slice based on
+ * the assumption that the dimension is fully partitioned in equal size slices
+ * as given by the current partitioning configuration. In reality, though,
+ * slices are created lazily so a closed dimension might have less slices in
+ * time interval than the configuration suggests. Further, during time
+ * intervals where repartitioning happens, there might be an unexpected number
+ * of slices due to a mix of slices from both the old and the new partitioning
+ * configuration. As a result, the ordinal value of a given slice might not
+ * actually match the partitioning settings at a given point in time.
+ */
+static int
+ts_dimension_get_closed_slice_ordinal(Dimension *dim, DimensionSlice *slice)
+{
+	int64 slice_size;
+	int i;
+
+	Assert(NULL != dim && IS_CLOSED_DIMENSION(dim));
+	Assert(NULL != slice);
+	Assert(dim->fd.num_slices > 0);
+
+	if (slice->fd.range_start == DIMENSION_SLICE_MINVALUE)
+		return 0;
+
+	if (slice->fd.range_end == DIMENSION_SLICE_MAXVALUE)
+		return dim->fd.num_slices - 1;
+
+	slice_size = slice->fd.range_end - slice->fd.range_start;
+
+	Assert(slice->fd.range_start % slice_size == 0);
+
+	i = slice->fd.range_start / slice_size;
+
+	Assert(i >= 0);
+
+	return i;
+}
+
+/*
+ * Get the ordinal value of a slice in a dimension.
+ *
+ * This function returns the ordinal value of a slice (starting at 0) in the
+ * dimension it belongs to. In other words, the "earliest" slice along the
+ * dimensional axis gets the lowest ordinal value and the "latest" the largest.
+ */
+int
+ts_dimension_get_slice_ordinal(Dimension *dim, DimensionSlice *slice)
+{
+	Assert(NULL != dim);
+	Assert(NULL != slice);
+	Assert(dim->fd.id == slice->fd.dimension_id);
+
+	switch (dim->type)
+	{
+		case DIMENSION_TYPE_OPEN:
+			return ts_dimension_get_open_slice_ordinal(dim, slice);
+		case DIMENSION_TYPE_CLOSED:
+			return ts_dimension_get_closed_slice_ordinal(dim, slice);
+		default:
+			elog(ERROR, "invalid dimension type");
+	}
+
+	pg_unreachable();
+
+	return -1;
 }
 
 static Hyperspace *
