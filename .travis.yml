@@ -10,13 +10,13 @@ env:
     - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
     - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
 before_install:
-  # We need the PostgreSQL source for running the standard PostgreSQL
-  # regression tests
-  - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
-  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine
+  # We need the PostgreSQL source for running the standard PostgreSQL regression tests
+  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
 install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug /build/debug-nossl"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl && mkdir -p /build/debug /build/debug-nossl /postgres"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
+  # We need the PostgreSQL source for running the standard PostgreSQL regression tests
+  - docker exec -it pgbuild /bin/sh -c "wget -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v\$PG_VERSION/postgresql-\$PG_VERSION.tar.bz2 && tar --extract --file postgresql.tar.bz2 --directory /postgres --strip-components 1"
   # We set /usr/local as prefix so the regression tools will be able to find
   # initdb, psql, and postgres
   - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --prefix=/usr/local --enable-debug --enable-cassert --without-readline --without-zlib"
@@ -84,7 +84,7 @@ jobs:
       stage: test
       name: "Regression 9.6 ARM processors"
       env:
-        - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+        - PG_VERSION=9.6.6
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -106,7 +106,7 @@ jobs:
       stage: test
       name: "Regression 10.2 ARM processors"
       env:
-        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+        - PG_VERSION=10.2
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -128,7 +128,7 @@ jobs:
       stage: test
       name: "Regression 11.0 ARM processors"
       env:
-        - PG_VERSION=11.0 PG_GIT_TAG=REL_11_0
+        - PG_VERSION=11.0
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -149,22 +149,22 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6"
-      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+      env: PG_VERSION=9.6.6
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 10"
-      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+      env: PG_VERSION=10.2
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 11"
-      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0
+      env: PG_VERSION=11.0
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: type = cron
       stage: test
-      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+      env: PG_VERSION=9.6.6
       name: "Update tests (versions w/o constraints support) 9.6"
       before_install:
       install:
@@ -176,7 +176,7 @@ jobs:
     # This tests the ability to upgrade to the latest version from versions with constraint support
     - if: type = cron
       stage: test
-      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+      env: PG_VERSION=9.6.6
       name: "Update tests (versions w/ constraints support) 9.6"
       before_install:
       install:
@@ -188,7 +188,7 @@ jobs:
     # This tests the ability to upgrade to the latest version on pg 10
     - if: (type = pull_request) OR (type = cron)
       stage: test
-      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+      env: PG_VERSION=10.2
       name: "Update tests PostgreSQL 10"
       before_install:
       install:
@@ -233,33 +233,33 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ApacheOnly regression tests 11"
-      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ApacheOnly regression tests 10.2"
-      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+      env: PG_VERSION=10.2 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ApacheOnly regression tests 9.6.6"
-      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+      env: PG_VERSION=9.6.6 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     # Release mode regression tests
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Release regression tests 11"
-      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Release regression tests 10.2"
-      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      env: PG_VERSION=10.2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Release regression tests 9.6.6"
-      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      env: PG_VERSION=9.6.6 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
@@ -270,7 +270,7 @@ jobs:
       after_failure:
       after_script:
       env:
-        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+        - PG_VERSION=10.2
       before_script:
         - git clone --progress --verbose https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
       script:
