@@ -146,20 +146,37 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
         - docker rm -f docker_arm_emulator
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      # cron tests the earliest patch versions (ABI tests handle the latest)
+    - if: (type = cron)
       stage: test
-      name: "Regression 9.6"
+      name: "Regression 9.6.6"
       env: PG_VERSION=9.6.6
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = cron)
       stage: test
-      name: "Regression 10"
+      name: "Regression 10.2"
       env: PG_VERSION=10.2
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = cron)
+      stage: test
+      name: "Regression 11.0"
+      env: PG_VERSION=11.0
+
+      #PRs and branches get tested on the latest released patch
+    - if: (type = pull_request) OR NOT (branch = master)
+      stage: test
+      name: "Regression 9.6"
+      env: PG_VERSION=9.6.14
+
+    - if: (type = pull_request) OR NOT (branch = master)
+      stage: test
+      name: "Regression 10"
+      env: PG_VERSION=10.9
+
+    - if: (type = pull_request) OR NOT (branch = master)
       stage: test
       name: "Regression 11"
-      env: PG_VERSION=11.0
+      env: PG_VERSION=11.4
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: type = cron
