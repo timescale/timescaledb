@@ -4,7 +4,7 @@
 
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-
+\ir include/remote_exec.sql
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
@@ -48,10 +48,11 @@ SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server
 
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_distributed_hypertable('disttable', 'time');
+CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
 
--- An underreplicated table that will has a replication_factor > num_servers
+-- This table tests both 1-dimensional tables and under-replication
+-- (replication_factor > num_servers).
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
@@ -106,8 +107,12 @@ INSERT INTO disttable VALUES
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 08:01', 1, 1.2),
-       ('2018-01-02 08:01', 2, 1.3),
-       ('2019-01-01 09:11', 3, 2.1);
+       ('2017-01-02 08:01', 2, 1.3),
+       ('2017-01-01 09:11', 3, 2.1),
+       ('2018-07-01 06:01', 13, 1.4),
+       ('2018-07-01 08:01', 29, 1.5),
+       ('2018-07-02 08:01', 87, 1.6),
+       ('2018-07-01 09:11', 90, 2.7);
 
 -- Test prepared statement
 PREPARE dist_insert (timestamptz, int, float) AS
@@ -122,21 +127,15 @@ FROM show_chunks('disttable');
 -- Show that there are assigned server_chunk_id:s in chunk server mappings
 SELECT * FROM _timescaledb_catalog.chunk_server;
 
--- Show that chunks are created on remote servers
-\c server_1
+-- Show that chunks are created on remote servers and that each server
+-- has their own unique slice in the space (device) dimension.
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
+$$);
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM disttable;
-\c server_2
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('disttable');
-SELECT * FROM disttable;
-\c server_3
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('disttable');
-SELECT * FROM disttable;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
@@ -210,7 +209,7 @@ FROM test.show_subtables('disttable') st;
 
 -- Adding a new unique constraint should not recurse to foreign
 -- chunks, but a check constraint should
-ALTER TABLE disttable ADD CONSTRAINT disttable_color_unique UNIQUE (time, "Color");
+ALTER TABLE disttable ADD CONSTRAINT disttable_color_unique UNIQUE (time, device, "Color");
 ALTER TABLE disttable ADD CONSTRAINT disttable_temp_non_negative CHECK (temp > 0.0);
 
 SELECT st."Child" as chunk_relid, test.show_constraints((st)."Child")
@@ -243,15 +242,15 @@ INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
 
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('disttable');
+$$);
+
 -- Show new row and that conflicting row is not inserted
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM disttable;
-\c server_2
-SELECT * FROM disttable;
-\c server_3
-SELECT * FROM disttable;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 \set ON_ERROR_STOP 0
 -- ON CONFLICT only works with DO NOTHING
@@ -261,13 +260,13 @@ ON CONFLICT (time) DO UPDATE SET temp = 3.2;
 \set ON_ERROR_STOP 1
 
 -- Test updates
-UPDATE disttable SET device = 4 WHERE device = 3;
+UPDATE disttable SET "Color" = 4 WHERE "Color" = 3;
 SELECT * FROM disttable;
 
 WITH devices AS (
      SELECT DISTINCT device FROM disttable ORDER BY device
 )
-UPDATE disttable SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
+UPDATE disttable SET "Color" = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
 
 \set ON_ERROR_STOP 0
 -- Updates referencing non-existing column
@@ -289,14 +288,9 @@ RETURNING *;
 SELECT * FROM disttable;
 
 -- Ensure rows are deleted on the servers
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM disttable;
-\c server_2
-SELECT * FROM disttable;
-\c server_3
-SELECT * FROM disttable;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
@@ -311,54 +305,39 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 
 -- Show that chunks are created on remote servers and that all
 -- servers/chunks have the same data due to replication
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
-SELECT * FROM underreplicated;
-\c server_2
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('underreplicated');
-SELECT * FROM underreplicated;
-\c server_3
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('underreplicated');
-SELECT * FROM underreplicated;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM underreplicated;
+$$);
+
+-- Test updates
 UPDATE underreplicated SET temp = 2.0 WHERE device = 2
 RETURNING time, temp, device;
 
 SELECT * FROM underreplicated;
 
 -- Show that all replica chunks are updated
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM underreplicated;
-\c server_2
-SELECT * FROM underreplicated;
-\c server_3
-SELECT * FROM underreplicated;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 DELETE FROM underreplicated WHERE device = 2
 RETURNING *;
 
 -- Ensure deletes across all servers
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM underreplicated;
-\c server_2
-SELECT * FROM underreplicated;
-\c server_3
-SELECT * FROM underreplicated;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 -- Test hypertable creation fails on distributed error
-\c server_3
+SELECT * FROM test.remote_exec('{ server_3 }', $$
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM underreplicated;
+$$);
 
 \set ON_ERROR_STOP 0
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
@@ -394,7 +373,6 @@ CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-
 CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
 SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
@@ -411,25 +389,13 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
 
-\c server_1
-SELECT * FROM _timescaledb_catalog.hypertable;
-SELECT * FROM _timescaledb_catalog.dimension;
-SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
-FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
 
-\c server_2
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
-
-\c server_3
-SELECT * FROM _timescaledb_catalog.hypertable;
-SELECT * FROM _timescaledb_catalog.dimension;
-SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
-FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 -- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
@@ -441,15 +407,13 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM attach_server('dimented_table', 'server_2');
 
 SELECT * FROM _timescaledb_catalog.dimension;
-\c server_1
+
 -- Note that this didn't get the add_dimension
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM _timescaledb_catalog.dimension;
-\c server_2
-SELECT * FROM _timescaledb_catalog.dimension;
+$$);
 
 --test per-server queries
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Create some chunks through insertion
 CREATE TABLE disttable_replicated(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float, "Color" int);
 SELECT * FROM create_hypertable('disttable_replicated', 'time', replication_factor => 2);
@@ -589,23 +553,11 @@ ORDER BY time;
 SELECT count(*) FROM twodim;
 
 -- Show distribution across servers
-\c server_1
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
-
-\c server_2
-SELECT * FROM twodim
-ORDER BY time;
-SELECT count(*) FROM twodim;
-
-\c server_3
-SELECT * FROM twodim
-ORDER BY time;
-SELECT count(*) FROM twodim;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+$$);
 
 -- Distributed table with custom type that has no binary output
 CREATE TABLE disttable_with_ct(time timestamptz, txn_id rxid, val float, info text);
@@ -628,7 +580,7 @@ DELETE FROM disttable_with_ct WHERE info = 'a';
 -- Check if row is gone
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 -- Connect to data nodes to see if data is gone
-\c server_1
+
+SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
-\c server_2
-SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
+$$);

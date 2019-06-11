@@ -1020,14 +1020,14 @@ hypertable_get_chunk_slice_ordinal(Hypertable *ht, Hypercube *hc)
 
 	dim = hyperspace_get_closed_dimension(ht->space, 0);
 
-	Assert(NULL != slice);
-
 	if (NULL == dim)
 		dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	Assert(NULL != dim);
 
 	slice = ts_hypercube_get_slice_by_dimension_id(hc, dim->fd.id);
+
+	Assert(NULL != slice);
 
 	return ts_dimension_get_slice_ordinal(dim, slice);
 }
