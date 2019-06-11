@@ -83,7 +83,6 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
-    partitionwise_distributed.sql
   )
   list(APPEND TEST_FILES_DEBUG
     deparse.sql
@@ -91,6 +90,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_commands.sql
     dist_ddl.sql
     dist_util.sql
+    partitionwise_distributed.sql
     remote_connection.sql
     remote_connection_cache.sql
     remote_copy.sql
@@ -100,10 +100,12 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     remote_txn_resolve.sql
     server.sql
     server_bootstrap.sql
-  )
-  list(APPEND TEST_TEMPLATES
-    hypertable_distributed.sql.in
-  )
+    )
+  if (CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_TEMPLATES
+      hypertable_distributed.sql.in
+    )
+  endif ()
 endif ()
 
 # Regression tests that vary with PostgreSQL version. Generated test
