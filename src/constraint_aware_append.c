@@ -380,10 +380,14 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 	List *children = NIL;
 	ListCell *lc_child;
 
-	/* Postgres will inject Result nodes above mergeappend when target lists don't match
+	/*
+	 * Postgres will inject Result nodes above mergeappend when target lists don't match
 	 * because the nodes themselves do not perform projection. The ConstraintAwareAppend
-	 * node can do this projection itself, however, so just throw away the result node */
-	if (IsA(linitial(custom_plans), Result))
+	 * node can do this projection itself, however, so just throw away the result node
+	 * Removing the Result node is only safe if there is no one-time filter
+	 */
+	if (IsA(linitial(custom_plans), Result) &&
+		castNode(Result, linitial(custom_plans))->resconstantqual == NULL)
 	{
 		Result *result = castNode(Result, linitial(custom_plans));
 
