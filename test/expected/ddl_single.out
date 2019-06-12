@@ -99,8 +99,8 @@ psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "ti
 
 ALTER TABLE my_ht ADD COLUMN val2 integer;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -114,8 +114,8 @@ psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -126,8 +126,8 @@ SELECT * FROM test.show_columns('my_ht');
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
 psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -137,8 +137,8 @@ SELECT * FROM test.show_columns('my_ht');
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -148,8 +148,8 @@ SELECT * FROM test.show_columns('my_ht');
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -319,8 +319,8 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 13
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
 SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
-      Column      |  Type   | Nullable 
-------------------+---------+----------
+      Column      |  Type   | NotNull 
+------------------+---------+---------
  time             | bigint  | t
  Device_id        | text    | t
  humidity         | numeric | f
@@ -333,8 +333,8 @@ SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
 (9 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-      Column      |  Type   | Nullable 
-------------------+---------+----------
+      Column      |  Type   | NotNull 
+------------------+---------+---------
  time             | bigint  | t
  Device_id        | text    | t
  humidity         | numeric | f

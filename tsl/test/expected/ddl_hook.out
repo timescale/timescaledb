@@ -36,8 +36,8 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM test.show_columns('htable');
- Column |           Type           | Nullable 
---------+--------------------------+----------
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
  time   | timestamp with time zone | t
  device | integer                  | f
  color  | integer                  | f
@@ -87,8 +87,8 @@ NOTICE:  test_ddl_command_start: public.htable
 NOTICE:  test_sql_drop: constraint: public.htable.color_check
 NOTICE:  test_ddl_command_end: ALTER TABLE
 SELECT * FROM test.show_columns('htable');
- Column |           Type           | Nullable 
---------+--------------------------+----------
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
  time   | timestamp with time zone | t
  device | integer                  | f
  temp   | double precision         | f
@@ -100,8 +100,8 @@ NOTICE:  test_ddl_command_start: 1 hypertables, query: ALTER TABLE htable ADD CO
 NOTICE:  test_ddl_command_start: public.htable
 NOTICE:  test_ddl_command_end: ALTER TABLE
 SELECT * FROM test.show_columns('htable');
-   Column    |           Type           | Nullable 
--------------+--------------------------+----------
+   Column    |           Type           | NotNull 
+-------------+--------------------------+---------
  time        | timestamp with time zone | t
  device      | integer                  | f
  temp        | double precision         | f

@@ -11,8 +11,8 @@ CREATE INDEX time_color_idx ON regular_table(time, color);
 ALTER INDEX time_color_idx RENAME TO time_color_idx2;
 ALTER TABLE regular_table ALTER COLUMN color TYPE bigint;
 SELECT * FROM test.show_columns('regular_table');
- Column |            Type             | Nullable 
---------+-----------------------------+----------
+ Column |            Type             | NotNull 
+--------+-----------------------------+---------
  time   | timestamp without time zone | f
  temp   | double precision            | f
  tag    | text                        | f

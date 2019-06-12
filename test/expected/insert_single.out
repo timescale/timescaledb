@@ -46,8 +46,8 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 INSERT 0 1
 \set QUIET on
 SELECT * FROM test.show_columnsp('"one_Partition".%');
-                                  Relation                                   | Kind |   Column    |   Column type    | Nullable 
------------------------------------------------------------------------------+------+-------------+------------------+----------
+                                  Relation                                   | Kind |   Column    |   Column type    | NotNull 
+-----------------------------------------------------------------------------+------+-------------+------------------+---------
  "one_Partition"._hyper_1_1_chunk                                            | r    | timeCustom  | bigint           | t
  "one_Partition"._hyper_1_1_chunk                                            | r    | device_id   | text             | t
  "one_Partition"._hyper_1_1_chunk                                            | r    | series_0    | double precision | f

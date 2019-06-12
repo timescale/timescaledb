@@ -205,8 +205,8 @@ psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "ti
 
 ALTER TABLE my_ht ADD COLUMN val2 integer;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -220,8 +220,8 @@ psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -232,8 +232,8 @@ SELECT * FROM test.show_columns('my_ht');
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
 psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -243,8 +243,8 @@ SELECT * FROM test.show_columns('my_ht');
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
@@ -254,8 +254,8 @@ SELECT * FROM test.show_columns('my_ht');
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 SELECT * FROM test.show_columns('my_ht');
- Column |  Type   | Nullable 
---------+---------+----------
+ Column |  Type   | NotNull 
+--------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
