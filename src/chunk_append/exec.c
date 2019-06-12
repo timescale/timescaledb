@@ -15,6 +15,7 @@
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/typcache.h>
+#include <utils/memutils.h>
 
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/exec.h"
