@@ -15,7 +15,7 @@ GRANT USAGE ON SCHEMA test TO PUBLIC;
 CREATE OR REPLACE FUNCTION test.show_columns(rel regclass)
 RETURNS TABLE("Column" name,
               "Type" text,
-              "Nullable" boolean) LANGUAGE SQL STABLE AS
+              "NotNull" boolean) LANGUAGE SQL STABLE AS
 $BODY$
     SELECT a.attname,
     format_type(t.oid, t.typtypmod),
@@ -32,7 +32,7 @@ RETURNS TABLE("Relation" regclass,
               "Kind" "char",
               "Column" name,
               "Column type" text,
-              "Nullable" boolean) LANGUAGE PLPGSQL STABLE AS
+              "NotNull" boolean) LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     schema_name name = split_part(pattern, '.', 1);

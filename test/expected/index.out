@@ -89,8 +89,8 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 DROP TABLE index_test;
 CREATE TABLE index_test(id serial, time timestamptz, device integer, temp float);
 SELECT * FROM test.show_columns('index_test');
- Column |           Type           | Nullable 
---------+--------------------------+----------
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
  id     | integer                  | t
  time   | timestamp with time zone | f
  device | integer                  | f
@@ -101,8 +101,8 @@ SELECT * FROM test.show_columns('index_test');
 -- chunks by dropping the ID column
 ALTER TABLE index_test DROP COLUMN id;
 SELECT * FROM test.show_columns('index_test');
- Column |           Type           | Nullable 
---------+--------------------------+----------
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
  time   | timestamp with time zone | f
  device | integer                  | f
  temp   | double precision         | f

@@ -109,8 +109,8 @@ ERROR:  cannot change the type of a hash-partitioned column
 -- Should be able to change if not hash partitioned though
 ALTER TABLE part_new_convert1 ALTER COLUMN time TYPE timestamp;
 SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
-                Relation                | Kind | Column |         Column type         | Nullable 
-----------------------------------------+------+--------+-----------------------------+----------
+                Relation                | Kind | Column |         Column type         | NotNull 
+----------------------------------------+------+--------+-----------------------------+---------
  _timescaledb_internal._hyper_3_5_chunk | r    | time   | timestamp without time zone | t
  _timescaledb_internal._hyper_3_5_chunk | r    | temp   | double precision            | f
  _timescaledb_internal._hyper_3_5_chunk | r    | device | integer                     | f

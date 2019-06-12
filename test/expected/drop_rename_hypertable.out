@@ -35,8 +35,8 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 \set QUIET on
 \o
 SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
-                                      Relation                                      | Kind |   Column    |   Column type    | Nullable 
-------------------------------------------------------------------------------------+------+-------------+------------------+----------
+                                      Relation                                      | Kind |   Column    |   Column type    | NotNull 
+------------------------------------------------------------------------------------+------+-------------+------------------+---------
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | timeCustom  | bigint           | t
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | device_id   | text             | t
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | series_0    | double precision | f
@@ -117,8 +117,8 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
 
 -- Test that renaming hypertable works
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-   Column    |       Type       | Nullable 
--------------+------------------+----------
+   Column    |       Type       | NotNull 
+-------------+------------------+---------
  timeCustom  | bigint           | t
  device_id   | text             | t
  series_0    | double precision | f

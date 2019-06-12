@@ -93,8 +93,8 @@ SELECT count(*) as num_dependent_objects
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb')
 \gset
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
-   Column    |       Type       | Nullable 
--------------+------------------+----------
+   Column    |       Type       | NotNull 
+-------------+------------------+---------
  timeCustom  | bigint           | t
  device_id   | text             | t
  series_0    | double precision | f
@@ -104,8 +104,8 @@ SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
 (6 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-   Column    |       Type       | Nullable 
--------------+------------------+----------
+   Column    |       Type       | NotNull 
+-------------+------------------+---------
  timeCustom  | bigint           | t
  device_id   | text             | t
  series_0    | double precision | f
@@ -312,8 +312,8 @@ SELECT count(*) = :num_dependent_objects as dependent_objects_match
 
 --main table and chunk schemas should be the same
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
-   Column    |       Type       | Nullable 
--------------+------------------+----------
+   Column    |       Type       | NotNull 
+-------------+------------------+---------
  timeCustom  | bigint           | t
  device_id   | text             | t
  series_0    | double precision | f
@@ -323,8 +323,8 @@ SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
 (6 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-   Column    |       Type       | Nullable 
--------------+------------------+----------
+   Column    |       Type       | NotNull 
+-------------+------------------+---------
  timeCustom  | bigint           | t
  device_id   | text             | t
  series_0    | double precision | f
