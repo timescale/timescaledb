@@ -281,7 +281,7 @@ BEGIN;
                      ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
 (7 rows)
 
-  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
+  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric, 5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
@@ -294,7 +294,7 @@ BEGIN;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-  :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
+  :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -307,7 +307,7 @@ BEGIN;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
@@ -320,7 +320,7 @@ BEGIN;
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (7 rows)
 
-  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2)
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
