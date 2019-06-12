@@ -2,7 +2,6 @@ set(TEST_FILES
   agg_bookends_results_optimized.sql
   agg_bookends_results_diff.sql
   alter.sql
-  append.sql
   chunk_adaptive.sql
   chunk_utils.sql
   chunks.sql
@@ -131,6 +130,7 @@ endif()
 set(TEST_TEMPLATES
   #some error messages changed in PG11 from "relation" to "table" so alternate_users has different output
   agg_bookends_optimized.sql.in
+  append.sql.in
   alternate_users.sql.in
   insert_many.sql.in
   parallel.sql.in

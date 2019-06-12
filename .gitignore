@@ -19,12 +19,13 @@ typedef.list
 **/GRTAGS
 **/GSYMS
 /.vs
-/test/sql/parallel-*.sql
-/test/sql/plan_ordered_append-*.sql
-/test/sql/plan_expand_hypertable-*.sql
-/test/sql/plan_hashagg-*.sql
 /test/sql/agg_bookends_optimized-*.sql
 /test/sql/alternate_users-*.sql
+/test/sql/append-*.sql
+/test/sql/parallel-*.sql
 /test/sql/partitioning-*.sql
+/test/sql/plan_expand_hypertable-*.sql
+/test/sql/plan_hashagg-*.sql
+/test/sql/plan_ordered_append-*.sql
 /compile_commands.json
 /.DS_Store
