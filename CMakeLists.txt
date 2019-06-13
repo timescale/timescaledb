@@ -134,8 +134,7 @@ find_program(PG_CONFIG pg_config
   PATH_SUFFIXES
   bin
   DOC
-  "The path to the pg_config of the PostgreSQL version to compile against"
-  REQUIRED)
+  "The path to the pg_config of the PostgreSQL version to compile against")
 
 if (NOT PG_CONFIG)
   message(FATAL_ERROR "Unable to find 'pg_config'")
