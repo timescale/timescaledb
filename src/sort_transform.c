@@ -14,6 +14,9 @@
 #include <optimizer/paths.h>
 #include <utils/lsyscache.h>
 
+#include "func_cache.h"
+#include "sort_transform.h"
+
 /* This optimizations allows GROUP BY clauses that transform time in
  * order-preserving ways to use indexes on the time field. It works
  * by transforming sorting clauses from their more complex versions
@@ -25,61 +28,6 @@
  */
 
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
-static Expr *sort_transform_expr(Expr *orig_expr);
-
-static Expr *
-transform_date_trunc(FuncExpr *func)
-{
-	/*
-	 * date_trunc (const, var) => var
-	 *
-	 * proof: date_trunc(c, time1) >= date_trunc(c,time2) iff time1 > time2
-	 */
-	Expr *second;
-
-	if (list_length(func->args) != 2 || !IsA(linitial(func->args), Const))
-		return (Expr *) func;
-
-	second = sort_transform_expr(lsecond(func->args));
-	if (!IsA(second, Var))
-		return (Expr *) func;
-
-	return (Expr *) copyObject(second);
-}
-
-/*
- * Check that time_bucket period is Const and if an offset is supplied
- * that it is Const as well
- */
-#define time_bucket_has_const_period_and_offset(func)                                              \
-	(IsA(linitial((func)->args), Const) &&                                                         \
-	 (list_length((func)->args) == 2 || IsA(lthird((func)->args), Const)))
-
-static Expr *
-transform_time_bucket(FuncExpr *func)
-{
-	/*
-	 * time_bucket(const, var, const) => var
-	 *
-	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
-	 * > time2
-	 */
-	Expr *second;
-
-	Assert(list_length(func->args) >= 2);
-
-	/*
-	 * If period and offset are not constants we must not do the optimization
-	 */
-	if (!time_bucket_has_const_period_and_offset(func))
-		return (Expr *) func;
-
-	second = sort_transform_expr(lsecond(func->args));
-	if (!IsA(second, Var))
-		return (Expr *) func;
-
-	return (Expr *) copyObject(second);
-}
 
 static Expr *
 transform_timestamp_cast(FuncExpr *func)
@@ -98,7 +46,7 @@ transform_timestamp_cast(FuncExpr *func)
 	if (list_length(func->args) != 1)
 		return (Expr *) func;
 
-	first = sort_transform_expr(linitial(func->args));
+	first = ts_sort_transform_expr(linitial(func->args));
 	if (!IsA(first, Var))
 		return (Expr *) func;
 
@@ -125,7 +73,7 @@ transform_timestamptz_cast(FuncExpr *func)
 	if (list_length(func->args) != 1)
 		return (Expr *) func;
 
-	first = sort_transform_expr(linitial(func->args));
+	first = ts_sort_transform_expr(linitial(func->args));
 	if (!IsA(first, Var))
 		return (Expr *) func;
 
@@ -153,7 +101,7 @@ transform_time_op_const_interval(OpExpr *op)
 
 			if (strncmp(name, "-", NAMEDATALEN) == 0 || strncmp(name, "+", NAMEDATALEN) == 0)
 			{
-				Expr *first = sort_transform_expr((Expr *) linitial(op->args));
+				Expr *first = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 				if (IsA(first, Var))
 					return copyObject(first);
@@ -195,14 +143,14 @@ transform_int_op_const(OpExpr *op)
 						/* commutative cases */
 						if (IsA(linitial(op->args), Const))
 						{
-							Expr *nonconst = sort_transform_expr((Expr *) lsecond(op->args));
+							Expr *nonconst = ts_sort_transform_expr((Expr *) lsecond(op->args));
 
 							if (IsA(nonconst, Var))
 								return copyObject(nonconst);
 						}
 						else
 						{
-							Expr *nonconst = sort_transform_expr((Expr *) linitial(op->args));
+							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 							if (IsA(nonconst, Var))
 								return copyObject(nonconst);
@@ -212,7 +160,7 @@ transform_int_op_const(OpExpr *op)
 						/* only if second arg is const */
 						if (IsA(lsecond(op->args), Const))
 						{
-							Expr *nonconst = sort_transform_expr((Expr *) linitial(op->args));
+							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 							if (IsA(nonconst, Var))
 								return copyObject(nonconst);
@@ -241,18 +189,23 @@ transform_int_op_const(OpExpr *op)
  * Note that if orig_expr(X) = orig_expr(Y) then
  *			 the ordering under new_expr is unconstrained.
  * */
-static Expr *
-sort_transform_expr(Expr *orig_expr)
+Expr *
+ts_sort_transform_expr(Expr *orig_expr)
 {
 	if (IsA(orig_expr, FuncExpr))
 	{
 		FuncExpr *func = (FuncExpr *) orig_expr;
 		char *func_name = get_func_name(func->funcid);
+		FuncInfo *finfo = ts_func_cache_get_bucketing_func(func->funcid);
 
-		if (strncmp(func_name, "date_trunc", NAMEDATALEN) == 0)
-			return transform_date_trunc(func);
-		if (strncmp(func_name, "time_bucket", NAMEDATALEN) == 0)
-			return transform_time_bucket(func);
+		if (NULL != finfo)
+		{
+			if (NULL == finfo->sort_transform)
+				return orig_expr;
+
+			return finfo->sort_transform(func);
+		}
+
 		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
 			return transform_timestamp_cast(func);
 		if (strncmp(func_name, "timestamptz", NAMEDATALEN) == 0)
@@ -289,7 +242,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 	foreach (lc_member, orig->ec_members)
 	{
 		EquivalenceMember *ec_mem = (EquivalenceMember *) lfirst(lc_member);
-		Expr *transformed_expr = sort_transform_expr(ec_mem->em_expr);
+		Expr *transformed_expr = ts_sort_transform_expr(ec_mem->em_expr);
 
 		if (transformed_expr != ec_mem->em_expr)
 		{

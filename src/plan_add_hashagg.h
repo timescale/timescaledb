@@ -21,4 +21,10 @@
  * */
 
 extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
+extern double ts_custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr,
+												   double path_rows);
+extern double ts_custom_group_estimate_date_trunc(PlannerInfo *root, FuncExpr *expr,
+												  double path_rows);
+extern double ts_custom_group_estimate_expr(PlannerInfo *root, Node *expr, double path_rows);
+
 #endif /* TIMESCALEDB_PLAN_ADD_HASHAGG_H */
