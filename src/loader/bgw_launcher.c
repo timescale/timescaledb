@@ -79,6 +79,7 @@ typedef enum SchedulerState
 #define BGW_LAUNCHER_RESTART_TIME_S 60
 #endif
 
+/* WaitLatch expects a long */
 #ifdef TS_DEBUG
 #define BGW_LAUNCHER_POLL_TIME_MS 10L
 #else
