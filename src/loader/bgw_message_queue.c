@@ -24,9 +24,13 @@
 #define BGW_MQ_TRANCHE_NAME "ts_bgw_mq_tranche"
 
 #define BGW_MQ_NUM_WAITS 100
+
+/* WaitLatch expects a long */
 #define BGW_MQ_WAIT_INTERVAL 1000L
 
 #define BGW_ACK_RETRIES 20
+
+/* WaitLatch expects a long */
 #define BGW_ACK_WAIT_INTERVAL 100L
 #define BGW_ACK_QUEUE_SIZE (MAXALIGN(shm_mq_minimum_size + sizeof(int)))
 

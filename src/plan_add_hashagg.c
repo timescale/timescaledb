@@ -564,7 +564,7 @@ plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *
 	 * Tentatively produce a partial HashAgg Path, depending on if it looks as
 	 * if the hash table will fit in work_mem.
 	 */
-	if (hashagg_table_size >= work_mem * 1024L)
+	if (hashagg_table_size >= work_mem * UINT64CONST(1024))
 		return;
 
 	add_partial_path(output_rel,
@@ -641,7 +641,7 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 
 	hashaggtablesize = ts_estimate_hashagg_tablesize(cheapest_path, &agg_costs, d_num_groups);
 
-	if (hashaggtablesize >= work_mem * 1024L)
+	if (hashaggtablesize >= work_mem * UINT64CONST(1024))
 		return;
 
 	if (!output_rel->consider_parallel)

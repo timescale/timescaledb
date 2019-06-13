@@ -196,9 +196,11 @@ ts_plain_set_timeout(Connection *conn, unsigned long millis)
 	DWORD timeout = millis;
 	int optlen = sizeof(DWORD);
 #else
+	/* we deliberately use a long constant here instead of a fixed width one because tv_sec is
+	 * declared as a long */
 	struct timeval timeout = {
 		.tv_sec = millis / 1000L,
-		.tv_usec = (millis - ((millis / 1000L) * 1000L)) * 1000L,
+		.tv_usec = (millis % 1000L) * 1000L,
 	};
 	int optlen = sizeof(struct timeval);
 #endif
