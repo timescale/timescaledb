@@ -1,6 +1,7 @@
 set(SOURCES
   agg_bookend.c
   base64_compat.c
+  func_cache.c
   cache.c
   cache_invalidate.c
   catalog.c
@@ -19,6 +20,7 @@ set(SOURCES
   dimension.c
   dimension_slice.c
   dimension_vector.c
+  estimate.c
   event_trigger.c
   extension.c
   gapfill.c
