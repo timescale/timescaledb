@@ -1,8 +1,7 @@
 # Testing support
 find_program(PG_REGRESS pg_regress
   HINTS
-  "${PG_PKGLIBDIR}/pgxs/src/test/regress/"
-  REQUIRED)
+  "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
 
 message(STATUS "Using pg_regress ${PG_REGRESS}")
 
@@ -10,8 +9,7 @@ find_program(PG_ISOLATION_REGRESS pg_isolation_regress
   HINTS
   ${BINDIR}/
   ${PG_PKGLIBDIR}/pgxs/src/test/isolation/
-  ${PG_SOURCE_DIR}/src/test/isolation
-  REQUIRED)
+  ${PG_SOURCE_DIR}/src/test/isolation)
 
 message(STATUS "Using pg_isolation_regress ${PG_ISOLATION_REGRESS}")
 
