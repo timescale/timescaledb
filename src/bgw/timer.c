@@ -22,9 +22,9 @@
 #include "compat.h"
 #include "config.h"
 
-#define MAX_TIMEOUT (5 * 1000L)
-#define MILLISECS_PER_SEC 1000L
-#define USECS_PER_MILLISEC 1000L
+#define MAX_TIMEOUT (5 * INT64CONST(1000))
+#define MILLISECS_PER_SEC INT64CONST(1000)
+#define USECS_PER_MILLISEC INT64CONST(1000)
 
 static inline void
 on_postmaster_death(void)
@@ -49,12 +49,15 @@ get_timeout_millisec(TimestampTz by_time)
 	if (TIMESTAMP_IS_NOBEGIN(by_time))
 		return 0;
 
+	if (TIMESTAMP_IS_NOEND(by_time))
+		return PG_INT64_MAX;
+
 	TimestampDifference(GetCurrentTimestamp(), by_time, &timeout_sec, &timeout_usec);
 
-	if (timeout_sec <= 0 && timeout_usec <= 0)
+	if (timeout_sec < 0 || timeout_usec < 0)
 		return 0;
 
-	return timeout_sec * MILLISECS_PER_SEC + timeout_usec / USECS_PER_MILLISEC;
+	return (int64)(timeout_sec * MILLISECS_PER_SEC + ((int64) timeout_usec) / USECS_PER_MILLISEC);
 }
 
 static bool
@@ -63,6 +66,8 @@ wait_using_wait_latch(TimestampTz until)
 	int wl_rc;
 
 	int64 timeout = get_timeout_millisec(until);
+
+	Assert(timeout >= 0 && "get_timeout_millisec underflow");
 
 	if (timeout > MAX_TIMEOUT)
 		timeout = MAX_TIMEOUT;

@@ -78,6 +78,73 @@ jobs:
         - python2 ./scripts/githooks/commit_msg_tests.py
         - python3 ./scripts/githooks/commit_msg_tests.py
 
+        # This runs tests on ARM32 emulation
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 9.6 ARM processors"
+      env:
+        - PG_VERSION=9.6.6
+      before_install:
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+        - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
+        - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
+      install:
+        - docker exec docker_arm_emulator /bin/bash -c "mkdir /build && chown postgres:postgres /build"
+        - docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && CFLAGS='-Werror -O2' cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug && make"
+        - docker exec docker_arm_emulator /bin/bash -c "cd /build && make install"
+      before_script:
+      after_failure:
+      script:
+      # allow 50 mins to run
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing sql_query_results_unoptimized sql_query_results_x_diff chunk_utils bgw_db_scheduler continuous_aggs_insert plan_expand_hypertable-9.6 plan_hashagg-9.6 plan_ordered_append-9.6 sql_query_results_unoptimized-9.6 sql_query_results_x_diff-9.6 plan_expand_hypertable-10 plan_hashagg-10 plan_ordered_append-10 parallel-10 sql_query_results_unoptimized-10 sql_query_results_x_diff-10 plan_expand_hypertable-11 plan_hashagg-11 plan_ordered_append-11 parallel-11 sql_query_results_unoptimized-11 sql_query_results_x_diff-11 continuous_aggs_dump'"
+      after_script:
+        - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
+        - docker rm -f docker_arm_emulator
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 10.2 ARM processors"
+      env:
+        - PG_VERSION=10.2
+      before_install:
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+        - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
+        - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
+      install:
+        - docker exec docker_arm_emulator /bin/bash -c "mkdir /build && chown postgres:postgres /build"
+        - docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && CFLAGS='-Werror -O2' cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug && make"
+        - docker exec docker_arm_emulator /bin/bash -c "cd /build && make install"
+      before_script:
+      after_failure:
+      script:
+      # allow 50 mins to run
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing sql_query_results_unoptimized sql_query_results_x_diff chunk_utils bgw_db_scheduler continuous_aggs_insert plan_expand_hypertable-9.6 plan_hashagg-9.6 plan_ordered_append-9.6 sql_query_results_unoptimized-9.6 sql_query_results_x_diff-9.6 plan_expand_hypertable-10 plan_hashagg-10 plan_ordered_append-10 parallel-10 sql_query_results_unoptimized-10 sql_query_results_x_diff-10 plan_expand_hypertable-11 plan_hashagg-11 plan_ordered_append-11 parallel-11 sql_query_results_unoptimized-11 sql_query_results_x_diff-11 continuous_aggs_dump'"
+      after_script:
+        - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
+        - docker rm -f docker_arm_emulator
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 11.0 ARM processors"
+      env:
+        - PG_VERSION=11.0
+      before_install:
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+        - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
+        - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
+      install:
+        - docker exec docker_arm_emulator /bin/bash -c "mkdir /build && chown postgres:postgres /build"
+        - docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && CFLAGS='-Werror -O2' cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug && make"
+        - docker exec docker_arm_emulator /bin/bash -c "cd /build && make install"
+      before_script:
+      after_failure:
+      script:
+      # allow 50 mins to run
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing sql_query_results_unoptimized sql_query_results_x_diff chunk_utils bgw_db_scheduler continuous_aggs_insert plan_expand_hypertable-9.6 plan_hashagg-9.6 plan_ordered_append-9.6 sql_query_results_unoptimized-9.6 sql_query_results_x_diff-9.6 plan_expand_hypertable-10 plan_hashagg-10 plan_ordered_append-10 parallel-10 sql_query_results_unoptimized-10 sql_query_results_x_diff-10 plan_expand_hypertable-11 plan_hashagg-11 plan_ordered_append-11 parallel-11 sql_query_results_unoptimized-11 sql_query_results_x_diff-11 continuous_aggs_dump'"
+      after_script:
+        - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
+        - docker rm -f docker_arm_emulator
+
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6"
