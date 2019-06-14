@@ -142,3 +142,8 @@ SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
 
 SET enable_seqscan TO true;
 SET enable_bitmapscan TO true;
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+CREATE INDEX ON partial_index_test (time) WITH (timescaledb.transaction_per_chunk, timescaledb.max_chunks='1');
+\set ON_ERROR_STOP 1

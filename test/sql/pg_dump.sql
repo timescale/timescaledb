@@ -80,7 +80,7 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 -- vars passed to psql do not work in \! commands so we can't do it that way.
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
 
-\c :TEST_DBNAME  
+\c :TEST_DBNAME
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
 RESET client_min_messages;
@@ -166,3 +166,21 @@ SELECT get_sqlstate('SELECT timescaledb_pre_restore()');
 SELECT get_sqlstate('SELECT timescaledb_post_restore()');
 
 drop function get_sqlstate(TEXT);
+
+--use a standard dbname because :TEST_DBNAME is different on 9.6 vs 10 & 11
+--and dbname is displayed in error
+\c :TEST_DBNAME :ROLE_SUPERUSER
+--need to shutdown workers to use db as template
+SELECT _timescaledb_internal.stop_background_workers();
+CREATE DATABASE db_dump_error WITH TEMPLATE :TEST_DBNAME;
+
+--now test functions for permission errors
+\c  db_dump_error :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT timescaledb_pre_restore();
+SELECT timescaledb_post_restore();
+\set ON_ERROR_STOP 1
+
+--drop db
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE db_dump_error;

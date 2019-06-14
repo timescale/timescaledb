@@ -18,6 +18,7 @@
 #include <funcapi.h>
 #include <math.h>
 #include <parser/parse_func.h>
+#include <miscadmin.h>
 
 #include "hypertable_cache.h"
 #include "errors.h"
@@ -675,6 +676,8 @@ ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 
 	if (!OidIsValid(info->table_relid))
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("table does not exist")));
+
+	ts_hypertable_permissions_check(info->table_relid, GetUserId());
 
 	if (NULL == info->colname)
 		ereport(ERROR,
