@@ -426,7 +426,8 @@ ts_dimension_get_slice_ordinal(Dimension *dim, DimensionSlice *slice)
 		case DIMENSION_TYPE_CLOSED:
 			return ts_dimension_get_closed_slice_ordinal(dim, slice);
 		default:
-			elog(ERROR, "invalid dimension type");
+			Assert(false);
+			break;
 	}
 
 	pg_unreachable();
