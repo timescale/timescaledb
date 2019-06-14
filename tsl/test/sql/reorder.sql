@@ -301,3 +301,8 @@ SELECT reorder_chunk('_timescaledb_internal._hyper_3_5_chunk', 'coids_time_idx',
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
+\set ON_ERROR_STOP 1

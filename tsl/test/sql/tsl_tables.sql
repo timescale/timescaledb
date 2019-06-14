@@ -295,3 +295,13 @@ select remove_reorder_policy('test_table');
 select remove_drop_chunks_policy('test_table');
 select alter_job_schedule(12345);
 \set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
+select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
+select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
+\set ON_ERROR_STOP 1

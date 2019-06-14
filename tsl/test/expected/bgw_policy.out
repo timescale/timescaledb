@@ -428,8 +428,28 @@ NOTICE:  adding not-null constraint to column "time"
  (2,public,test_table_int,t)
 (1 row)
 
+CREATE TABLE test_table_perm(time timestamp PRIMARY KEY);
+SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
+WARNING:  unexpected interval: smaller than one second
+      create_hypertable       
+------------------------------
+ (3,public,test_table_perm,t)
+(1 row)
+
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time
 select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
 ERROR:  can only use "add_drop_chunks_policy" with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
+\set ON_ERROR_STOP 1
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
+WARNING:  Timescale License expired
+ERROR:  permission denied for hypertable "test_table_perm"
+select remove_reorder_policy('test_table');
+ERROR:  permission denied for hypertable "test_table"
+select add_drop_chunks_policy('test_table_perm', INTERVAL '4 months', true);
+ERROR:  permission denied for hypertable "test_table_perm"
+select remove_drop_chunks_policy('test_table');
+ERROR:  permission denied for hypertable "test_table"
 \set ON_ERROR_STOP 1
