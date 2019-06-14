@@ -2251,12 +2251,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 }
 
 static void
-process_altercontinuousagg_set_with(ContinuousAgg *cagg, const List *defelems)
+continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
+{
+	Oid ownerid = ts_rel_get_owner(view_relid);
+
+	if (!has_privs_of_role(GetUserId(), ownerid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
+}
+
+static void
+process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
 	List *pg_options = NIL, *cagg_options = NIL;
 
-	ts_hypertable_permissions_check_by_id(cagg->data.raw_hypertable_id);
+	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
 	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
 	if (list_length(pg_options) > 0)
@@ -2293,7 +2304,7 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	if (cagg == NULL)
 		return false;
 
-	ts_hypertable_permissions_check_by_id(cagg->data.raw_hypertable_id);
+	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
 	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
 	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
@@ -2312,7 +2323,7 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
 							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, (List *) cmd->def);
+				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
 			default:
 				ereport(ERROR,
@@ -2329,7 +2340,6 @@ static bool
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-
 	switch (stmt->relkind)
 	{
 		case OBJECT_TABLE:

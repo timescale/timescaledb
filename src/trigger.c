@@ -133,27 +133,17 @@ ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 {
 	int sec_ctx;
 	Oid saved_uid;
-	HeapTuple tuple;
-	Form_pg_class form;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation ID %u", ht->main_table_relid);
-
-	form = (Form_pg_class) GETSTRUCT(tuple);
+	Oid owner = ts_rel_get_owner(ht->main_table_relid);
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
-	if (saved_uid != form->relowner)
-		SetUserIdAndSecContext(form->relowner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	if (saved_uid != owner)
+		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
 	for_each_trigger(ht->main_table_relid, create_trigger_handler, chunk);
 
-	if (saved_uid != form->relowner)
+	if (saved_uid != owner)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
-
-	ReleaseSysCache(tuple);
 }
 
 #if !PG96
