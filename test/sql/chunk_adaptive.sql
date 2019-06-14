@@ -271,6 +271,12 @@ SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
                          create_default_indexes => true);
 INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::timestamptz, 0.0, 5);
 
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
+\set ON_ERROR_STOP 1
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Now make sure renaming schema gets propagated to the func_schema
 DROP TABLE test_adaptive;
 
