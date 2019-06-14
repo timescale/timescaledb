@@ -441,6 +441,7 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 				 errmsg("hypertables do not support transition tables in triggers")));
 #endif
 	/* create the trigger on the root table */
+	/* ACL permissions checks happen within this call */
 	root_trigger_addr =
 		CreateTriggerCompat(stmt, query, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
 
