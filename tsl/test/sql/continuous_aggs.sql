@@ -861,7 +861,28 @@ SELECT * FROM mat_refresh_test order by 1,2 ;
 
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job \gset
 
+CREATE TABLE conditions_for_perm_check (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable('conditions_for_perm_check', 'timec', chunk_time_interval=> 100);
+
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
+ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+DROP VIEW mat_refresh_test CASCADE;
+REFRESH MATERIALIZED VIEW mat_refresh_test;
 
+create or replace view mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity)
+from conditions_for_perm_check
+group by time_bucket(100, timec), location;

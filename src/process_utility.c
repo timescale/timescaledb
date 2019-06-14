@@ -2254,6 +2254,8 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, const List *defelems)
 	WithClauseResult *parse_results;
 	List *pg_options = NIL, *cagg_options = NIL;
 
+	ts_hypertable_permissions_check_by_id(cagg->data.raw_hypertable_id);
+
 	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
 	if (list_length(pg_options) > 0)
 		ereport(ERROR,
