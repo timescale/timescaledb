@@ -50,6 +50,8 @@ extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name 
 													Interval *retry_period);
 extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
 
+extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
+
 extern bool ts_bgw_job_execute(BgwJob *job);
 
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);

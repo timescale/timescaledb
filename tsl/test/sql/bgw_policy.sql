@@ -219,7 +219,20 @@ select * from test_reorder(:reorder_job_id) \gset  reorder_
 CREATE TABLE test_table_int(time int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
 
+CREATE TABLE test_table_perm(time timestamp PRIMARY KEY);
+SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
+
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time
 select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+\set ON_ERROR_STOP 1
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
+select remove_reorder_policy('test_table');
+
+select add_drop_chunks_policy('test_table_perm', INTERVAL '4 months', true);
+select remove_drop_chunks_policy('test_table');
+
 \set ON_ERROR_STOP 1

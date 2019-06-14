@@ -266,6 +266,30 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 	return ca;
 }
 
+ContinuousAgg *
+ts_continuous_agg_find_by_job_id(int32 job_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ContinuousAgg *ca = NULL;
+	int count = 0;
+
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+
+		if (data->job_id == job_id)
+		{
+			ca = palloc0(sizeof(*ca));
+			continuous_agg_init(ca, data);
+			count++;
+		}
+	}
+	Assert(count <= 1);
+	return ca;
+}
+
 /*
  * Drops continuous aggs and all related objects.
  *

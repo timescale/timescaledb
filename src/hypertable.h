@@ -73,7 +73,9 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hy
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
-extern Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
+extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
+
+extern TSDLLEXPORT void ts_hypertable_permissions_check_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_from_tupleinfo(TupleInfo *ti);
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,

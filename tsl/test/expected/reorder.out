@@ -1363,3 +1363,9 @@ WHERE indisclustered = true ORDER BY 1;
  _timescaledb_internal._hyper_2_4_chunk_ct2_time_idx          | t
 (5 rows)
 
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
+WARNING:  Timescale License expired
+ERROR:  permission denied for hypertable "ct2"
+\set ON_ERROR_STOP 1
