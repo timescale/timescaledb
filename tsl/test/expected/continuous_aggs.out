@@ -1185,37 +1185,3 @@ SELECT * FROM mat_refresh_test order by 1,2 ;
  POR      |  75
 (4 rows)
 
-SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job \gset
-CREATE TABLE conditions_for_perm_check (
-      timec       INT       NOT NULL,
-      location    TEXT              NOT NULL,
-      temperature DOUBLE PRECISION  NULL,
-      humidity    DOUBLE PRECISION  NULL,
-      lowp        double precision NULL,
-      highp       double precision null,
-      allnull     double precision null
-    );
-select table_name from create_hypertable('conditions_for_perm_check', 'timec', chunk_time_interval=> 100);
-        table_name         
----------------------------
- conditions_for_perm_check
-(1 row)
-
-\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-\set ON_ERROR_STOP 0
-select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
-WARNING:  Timescale License expired
-ERROR:  permission denied for hypertable "conditions"
-ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
-ERROR:  must be owner of view mat_refresh_test
-DROP VIEW mat_refresh_test CASCADE;
-ERROR:  must be owner of view mat_refresh_test
-REFRESH MATERIALIZED VIEW mat_refresh_test;
-ERROR:  permission denied for table conditions
-create or replace view mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
-as
-select location, max(humidity)
-from conditions_for_perm_check
-group by time_bucket(100, timec), location;
-ERROR:  permission denied for hypertable "conditions_for_perm_check"

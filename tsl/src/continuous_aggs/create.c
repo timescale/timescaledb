@@ -794,8 +794,6 @@ cagg_validate_query(Query *query)
 				 errmsg("can create continuous aggregate only on hypertables")));
 	}
 
-	ts_hypertable_permissions_check_by_id(ht->fd.id);
-
 	/*check row security settings for the table */
 	if (has_row_security(rte->relid))
 	{
