@@ -105,6 +105,13 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	return ownerid;
 }
 
+void
+ts_hypertable_permissions_check_by_id(int32 hypertable_id)
+{
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id);
+	ts_hypertable_permissions_check(table_relid, GetUserId());
+}
+
 static Hypertable *
 hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 {

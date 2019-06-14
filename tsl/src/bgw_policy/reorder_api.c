@@ -11,6 +11,7 @@
 #include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <miscadmin.h>
 
 #include <dimension.h>
 
@@ -110,6 +111,7 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
+	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	/* First verify that the hypertable corresponds to a valid table */
 	if (!ts_is_hypertable(ht_oid))
@@ -217,6 +219,8 @@ reorder_remove_policy(PG_FUNCTION_ARGS)
 			PG_RETURN_NULL();
 		}
 	}
+
+	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 	ts_bgw_job_delete_by_id(policy->fd.job_id);
 

@@ -1877,6 +1877,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	Chunk **chunks;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
 
+	ts_hypertable_permissions_check(table_relid, GetUserId());
+
 	switch (ts_continuous_agg_hypertable_status(hypertable_id))
 	{
 		case HypertableIsMaterialization:
@@ -1966,6 +1968,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		Oid table_relid = lfirst_oid(lc);
 		List *fk_relids = NIL;
 		ListCell *lf;
+
+		ts_hypertable_permissions_check(table_relid, GetUserId());
 
 		/* get foreign key tables associated with the hypertable */
 		{

@@ -281,6 +281,32 @@ ts_bgw_job_delete_by_id(int32 job_id)
 	return bgw_job_delete_scan(scankey);
 }
 
+void
+ts_bgw_job_permission_check(BgwJob *job)
+{
+	switch (job->bgw_type)
+	{
+		case JOB_TYPE_VERSION_CHECK:
+			return;
+		case JOB_TYPE_REORDER:
+			ts_hypertable_permissions_check_by_id(
+				ts_bgw_policy_reorder_find_by_job(job->fd.id)->fd.hypertable_id);
+			return;
+		case JOB_TYPE_DROP_CHUNKS:
+			ts_hypertable_permissions_check_by_id(
+				ts_bgw_policy_drop_chunks_find_by_job(job->fd.id)->fd.hypertable_id);
+			return;
+		case JOB_TYPE_CONTINUOUS_AGGREGATE:
+			ts_hypertable_permissions_check_by_id(
+				ts_continuous_agg_find_by_job_id(job->fd.id)->data.raw_hypertable_id);
+			return;
+		case JOB_TYPE_UNKNOWN:
+		case _MAX_JOB_TYPE:
+			break;
+	}
+	elog(ERROR, "unknown job type \"%s\" in permission check", NameStr(job->fd.job_type));
+}
+
 bool
 ts_bgw_job_execute(BgwJob *job)
 {
@@ -549,6 +575,8 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	BgwJob *updated_job = (BgwJob *) data;
 	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(tuple);
+
+	ts_bgw_job_permission_check(updated_job);
 
 	fd->schedule_interval = updated_job->fd.schedule_interval;
 	fd->max_runtime = updated_job->fd.max_runtime;

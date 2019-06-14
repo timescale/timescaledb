@@ -848,7 +848,7 @@ drop view mat_ffunc_test cascade;
 create or replace view mat_refresh_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
-select location, max(humidity) 
+select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location;
 
@@ -857,4 +857,11 @@ select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test order by 1,2 ;
+
+
+SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job \gset
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
 

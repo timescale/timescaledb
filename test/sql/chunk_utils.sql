@@ -424,3 +424,35 @@ SELECT * FROM test.show_subtables('test_weird_type_i');
 SELECT show_chunks('test_weird_type_i', older_than=>10);
 
 DROP TABLE test_weird_type_i CASCADE;
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE drop_chunk_test2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+--drop chunks 3 will have a chunk we a dependent object (a view)
+--we create the dependent object now
+INSERT INTO PUBLIC.drop_chunk_test3 VALUES(1, 1.0, 'dev1');
+
+SELECT c.schema_name as chunk_schema, c.table_name as chunk_table
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'drop_chunk_test3'
+ORDER BY c.id \gset
+
+create view dependent_view as SELECT * FROM :"chunk_schema".:"chunk_table";
+ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(table_name=>'drop_chunk_test1', older_than=>4, newer_than=>3);
+SELECT drop_chunks(2, CASCADE=>true, verbose => true);
+
+--works with modified owner tables
+SELECT drop_chunks(table_name=>'drop_chunk_test2', older_than=>4, newer_than=>3);
+
+--this fails because there is a dependent object
+SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100);
+
+--this will succeed even though there is a depenent object I don't have permission
+--to drop. This matches PostgreSQL semantics.
+SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100, cascade=>true);
+
+\set ON_ERROR_STOP 1
