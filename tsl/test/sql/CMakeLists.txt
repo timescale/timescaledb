@@ -23,6 +23,7 @@ set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   plan_gapfill.sql.in
   continuous_aggs_ddl.sql.in
+  continuous_aggs_permissions.sql.in
   )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

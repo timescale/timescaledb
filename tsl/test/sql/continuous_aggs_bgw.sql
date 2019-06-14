@@ -174,3 +174,54 @@ select view_name, view_definition from timescaledb_information.continuous_aggreg
 where view_name::text like '%test_continuous_agg_view';
 
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
+
+\x
+
+--
+-- Test creating continuous aggregate with a user that is the non-owner of the raw table
+--
+CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
+SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
+GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
+INSERT INTO test_continuous_agg_table_w_grant
+    SELECT i, i FROM
+        (SELECT generate_series(0, 10) as i) AS j;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+
+-- make sure view can be created
+CREATE VIEW test_continuous_agg_view_user_2
+    WITH ( timescaledb.continuous,
+         timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value
+        FROM test_continuous_agg_table_w_grant
+        GROUP BY 1;
+
+SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
+--view is populated
+SELECT * FROM test_continuous_agg_view_user_2;
+
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--revoke permissions from the continuous agg view owner to select from raw table
+--no further updates to cont agg should happen
+REVOKE SELECT ON test_continuous_agg_table_w_grant FROM public;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+
+--should show a failing execution because no longer has permissions (due to lack of permission on partial view owner's part)
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
+--view was NOT updated; but the old stuff is still there
+SELECT * FROM test_continuous_agg_view_user_2;

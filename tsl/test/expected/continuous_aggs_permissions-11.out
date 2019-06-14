@@ -1,0 +1,150 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- initialize the bgw mock state to prevent the materialization workers from running
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
+AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+\set WAIT_ON_JOB 0
+\set IMMEDIATELY_SET_UNTIL 1
+\set WAIT_FOR_OTHER_TO_ADVANCE 2
+-- stop the background workers from locking up the tables,
+-- and remove any default jobs, e.g., telemetry so bgw_job isn't polluted
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE conditions (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+ table_name 
+------------
+ conditions
+(1 row)
+
+create or replace view mat_refresh_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity)
+from conditions
+group by time_bucket(100, timec), location;
+NOTICE:  adding index _materialized_hypertable_2_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, time_partition_col)
+insert into conditions
+select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
+REFRESH MATERIALIZED VIEW  mat_refresh_test;
+INFO:  new materialization range for public.conditions (time column timec) (200)
+INFO:  materializing continuous aggregate public.mat_refresh_test: new range up to 200
+SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
+SELECT materialization_hypertable FROM timescaledb_information.continuous_aggregates  WHERE view_name = 'mat_refresh_test'::regclass \gset 
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
+SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table 
+FROM _timescaledb_catalog.chunk 
+WHERE hypertable_id = :mat_hypertable_id 
+ORDER BY id desc
+LIMIT 1 \gset
+CREATE TABLE conditions_for_perm_check (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable('conditions_for_perm_check', 'timec', chunk_time_interval=> 100);
+        table_name         
+---------------------------
+ conditions_for_perm_check
+(1 row)
+
+CREATE TABLE conditions_for_perm_check_w_grant (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable('conditions_for_perm_check_w_grant', 'timec', chunk_time_interval=> 100);
+            table_name             
+-----------------------------------
+ conditions_for_perm_check_w_grant
+(1 row)
+
+GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
+insert into conditions_for_perm_check_w_grant
+select generate_series(0, 30, 10), 'POR', 55, 75, 40, 70, NULL;
+--need both select and trigger permissions to create a materialized view on top of it.
+GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
+WARNING:  Timescale License expired
+ERROR:  permission denied for hypertable "conditions"
+--make sure that commands fail
+ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+ERROR:  must be owner of view mat_refresh_test
+DROP VIEW mat_refresh_test CASCADE; 
+ERROR:  must be owner of view mat_refresh_test
+REFRESH MATERIALIZED VIEW mat_refresh_test;
+ERROR:  permission denied for table conditions
+SELECT * FROM mat_refresh_test;
+ERROR:  permission denied for view mat_refresh_test
+SELECT * FROM :materialization_hypertable;
+ERROR:  permission denied for table _materialized_hypertable_2
+SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
+ERROR:  permission denied for table _hyper_2_2_chunk
+--cannot create a mat view without select and trigger grants
+create or replace view mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity)
+from conditions_for_perm_check
+group by time_bucket(100, timec), location;
+NOTICE:  adding index _materialized_hypertable_5_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_5 USING BTREE(location, time_partition_col)
+ERROR:  permission denied for table conditions_for_perm_check
+--can create a mat view on something with select and trigger grants
+create or replace view mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity)
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location;
+NOTICE:  adding index _materialized_hypertable_6_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_6 USING BTREE(location, time_partition_col)
+REFRESH MATERIALIZED VIEW mat_perm_view_test;
+INFO:  new materialization range for public.conditions_for_perm_check_w_grant (time column timec) (200)
+INFO:  materializing continuous aggregate public.mat_perm_view_test: new range up to 200
+SELECT * FROM mat_perm_view_test;
+ location | max 
+----------+-----
+ POR      |  75
+(1 row)
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--revoke select permissions from role with mat view
+REVOKE SELECT ON conditions_for_perm_check_w_grant FROM public;
+insert into conditions_for_perm_check_w_grant
+select generate_series(100, 130, 10), 'POR', 65, 85, 30, 90, NULL;
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--refresh mat view should now fail due to lack of permissions
+REFRESH MATERIALIZED VIEW mat_perm_view_test;
+ERROR:  permission denied for table conditions_for_perm_check_w_grant
+--but the old data will still be there
+SELECT * FROM mat_perm_view_test;
+ location | max 
+----------+-----
+ POR      |  75
+(1 row)
+

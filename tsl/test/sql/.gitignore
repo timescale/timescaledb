@@ -1,2 +1,3 @@
 /plan_gapfill-*.sql
 /continuous_aggs_ddl-*.sql
+/continuous_aggs_permissions-*.sql
