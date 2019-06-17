@@ -445,11 +445,11 @@ ERROR:  can only use "add_drop_chunks_policy" with an INTERVAL for TIMESTAMP, TI
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
 WARNING:  Timescale License expired
-ERROR:  permission denied for hypertable "test_table_perm"
+ERROR:  must be owner of hypertable "test_table_perm"
 select remove_reorder_policy('test_table');
-ERROR:  permission denied for hypertable "test_table"
+ERROR:  must be owner of hypertable "test_table"
 select add_drop_chunks_policy('test_table_perm', INTERVAL '4 months', true);
-ERROR:  permission denied for hypertable "test_table_perm"
+ERROR:  must be owner of hypertable "test_table_perm"
 select remove_drop_chunks_policy('test_table');
-ERROR:  permission denied for hypertable "test_table"
+ERROR:  must be owner of hypertable "test_table"
 \set ON_ERROR_STOP 1
