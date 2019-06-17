@@ -1300,9 +1300,9 @@ ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(table_name=>'drop_chunk_test1', older_than=>4, newer_than=>3);
-ERROR:  permission denied for hypertable "drop_chunk_test1"
+ERROR:  must be owner of hypertable "drop_chunk_test1"
 SELECT drop_chunks(2, CASCADE=>true, verbose => true);
-ERROR:  permission denied for hypertable "drop_chunk_test1"
+ERROR:  must be owner of hypertable "drop_chunk_test1"
 --works with modified owner tables
 SELECT drop_chunks(table_name=>'drop_chunk_test2', older_than=>4, newer_than=>3);
  drop_chunks 

@@ -397,5 +397,5 @@ SET enable_bitmapscan TO true;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 CREATE INDEX ON partial_index_test (time) WITH (timescaledb.transaction_per_chunk, timescaledb.max_chunks='1');
-ERROR:  permission denied for hypertable "partial_index_test"
+ERROR:  must be owner of hypertable "partial_index_test"
 \set ON_ERROR_STOP 1

@@ -100,7 +100,7 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	if (!has_privs_of_role(userid, ownerid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for hypertable \"%s\"", get_rel_name(hypertable_oid))));
+				 errmsg("must be owner of hypertable \"%s\"", get_rel_name(hypertable_oid))));
 
 	return ownerid;
 }
