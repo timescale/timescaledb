@@ -89,6 +89,28 @@ is_time_bucket_function(Expr *node)
 	return false;
 }
 
+static int64
+const_datum_get_int(Const *cnst)
+{
+	Assert(!cnst->constisnull);
+
+	switch (cnst->consttype)
+	{
+		case INT2OID:
+			return (int64)(DatumGetInt16(cnst->constvalue));
+		case INT4OID:
+			return (int64)(DatumGetInt32(cnst->constvalue));
+		case INT8OID:
+			return DatumGetInt64(cnst->constvalue);
+	}
+
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			 errmsg("can only use const_datum_get_int with integer types")));
+
+	pg_unreachable();
+}
+
 /*
  * Transform time_bucket calls of the following form in WHERE clause:
  *
@@ -177,6 +199,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		/* column < value + width */
 		Expr *subst;
 		Datum datum;
+		int64 integralValue, integralWidth;
 
 		/*
 		 * caller should make sure value and width are Const
@@ -189,12 +212,13 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		switch (tce->type_id)
 		{
 			case INT2OID:
-				if (DatumGetInt16(castNode(Const, value)->constvalue) >=
-					PG_INT16_MAX - DatumGetInt16(width->constvalue))
+				integralValue = const_datum_get_int(castNode(Const, value));
+				integralWidth = const_datum_get_int(width);
+
+				if (integralValue >= PG_INT16_MAX - integralWidth)
 					return op;
 
-				datum = Int16GetDatum(DatumGetInt16(castNode(Const, value)->constvalue) +
-									  DatumGetInt16(width->constvalue));
+				datum = Int16GetDatum(integralValue + integralWidth);
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -205,12 +229,13 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				break;
 
 			case INT4OID:
-				if (DatumGetInt32(castNode(Const, value)->constvalue) >=
-					PG_INT32_MAX - DatumGetInt32(width->constvalue))
+				integralValue = const_datum_get_int(castNode(Const, value));
+				integralWidth = const_datum_get_int(width);
+
+				if (integralValue >= PG_INT32_MAX - integralWidth)
 					return op;
 
-				datum = Int32GetDatum(DatumGetInt32(castNode(Const, value)->constvalue) +
-									  DatumGetInt32(width->constvalue));
+				datum = Int32GetDatum(integralValue + integralWidth);
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
@@ -220,12 +245,13 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 										   tce->typbyval);
 				break;
 			case INT8OID:
-				if (DatumGetInt64(castNode(Const, value)->constvalue) >=
-					PG_INT64_MAX - DatumGetInt64(width->constvalue))
+				integralValue = const_datum_get_int(castNode(Const, value));
+				integralWidth = const_datum_get_int(width);
+
+				if (integralValue >= PG_INT64_MAX - integralWidth)
 					return op;
 
-				datum = Int64GetDatum(DatumGetInt64(castNode(Const, value)->constvalue) +
-									  DatumGetInt64(width->constvalue));
+				datum = Int64GetDatum(integralValue + integralWidth);
 				subst = (Expr *) makeConst(tce->type_id,
 										   -1,
 										   InvalidOid,
