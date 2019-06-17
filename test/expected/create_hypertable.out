@@ -29,7 +29,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT ALL ON SCHEMA test_schema TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-ERROR:  permission denied for hypertable "test_table_no_not_null"
+ERROR:  must be owner of hypertable "test_table_no_not_null"
 \set ON_ERROR_STOP 1
 -- Should work with when granted table owner role
 RESET ROLE;
