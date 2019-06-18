@@ -12,6 +12,9 @@ accidentally triggering the load of a previous DB version.**
 **Minor features**
 * #1273 Propagate quals to joined hypertables
 
+**Bugfixes**
+* #1300 Fix telemetry report return value
+
 ## 1.3.2 (2019-06-24)
 
 This maintenance release contains bug and security fixes since the 1.3.1 release. We deem it moderate-to-high priority for upgrading.

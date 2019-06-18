@@ -283,7 +283,52 @@ WARNING:  telemetry could not connect to "noservice.timescale.com"
  f
 (1 row)
 
+-- Test error message and override for when telemetry is disabled
 SET timescaledb.telemetry_level=off;
+SELECT get_telemetry_report();
+INFO:  Telemetry is disabled. Call get_telemetry_report(always_display_report := true) to view the report locally.
+ get_telemetry_report 
+----------------------
+ 
+(1 row)
+
+SELECT get_telemetry_report(NULL);
+INFO:  Telemetry is disabled. Call get_telemetry_report(always_display_report := true) to view the report locally.
+ get_telemetry_report 
+----------------------
+ 
+(1 row)
+
+SELECT * FROM json_object_keys(get_telemetry_report(always_display_report := true)::json) AS key
+WHERE key != 'os_name_pretty';
+           key            
+--------------------------
+ db_uuid
+ license
+ os_name
+ os_release
+ os_version
+ data_volume
+ db_metadata
+ build_os_name
+ install_method
+ installed_time
+ last_tuned_time
+ num_hypertables
+ build_os_version
+ exported_db_uuid
+ instance_metadata
+ last_tuned_version
+ postgresql_version
+ related_extensions
+ num_continuous_aggs
+ timescaledb_version
+ num_reorder_policies
+ num_drop_chunks_policies
+(22 rows)
+
+-- Test telemetry report contents
+SET timescaledb.telemetry_level=basic;
 SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
 WHERE key != 'os_name_pretty';
            key            

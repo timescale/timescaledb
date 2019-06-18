@@ -2,7 +2,6 @@ ALTER TABLE _timescaledb_catalog.telemetry_metadata ADD COLUMN include_in_teleme
 ALTER TABLE _timescaledb_catalog.telemetry_metadata ALTER COLUMN include_in_telemetry DROP DEFAULT;
 ALTER TABLE _timescaledb_catalog.telemetry_metadata RENAME TO metadata;
 ALTER INDEX _timescaledb_catalog.telemetry_metadata_pkey RENAME TO metadata_pkey;
-
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
     materialization_id INTEGER PRIMARY KEY
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
@@ -16,3 +15,4 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log TO PUBLIC;
+DROP FUNCTION IF EXISTS get_telemetry_report();

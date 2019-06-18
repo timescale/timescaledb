@@ -76,9 +76,9 @@ INSERT INTO test_reorder_table VALUES (5, 5);
 
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_reorder_table';
 
-SELECT json_object_field(get_telemetry_report()::json,'num_reorder_policies');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_reorder_policies');
 select add_reorder_policy('test_reorder_table', 'test_reorder_table_time_idx') as reorder_job_id \gset
-SELECT json_object_field(get_telemetry_report()::json,'num_reorder_policies');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_reorder_policies');
 
 -- policy was created
 select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
@@ -219,9 +219,9 @@ INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '8 months', 1);
 SELECT show_chunks('test_drop_chunks_table');
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_drop_chunks_table';
 
-SELECT json_object_field(get_telemetry_report()::json,'num_drop_chunks_policies');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
 SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
-SELECT json_object_field(get_telemetry_report()::json,'num_drop_chunks_policies');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
 
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 
