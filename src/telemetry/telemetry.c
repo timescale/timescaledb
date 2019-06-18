@@ -64,6 +64,7 @@
 
 #define PG_PROMETHEUS "pg_prometheus"
 #define POSTGIS "postgis"
+#define TS_TELEMETRY_REPORT_OVERRIDE_ARG "always_display_report := true"
 
 static const char *related_extensions[] = { PG_PROMETHEUS, POSTGIS };
 
@@ -475,7 +476,21 @@ TS_FUNCTION_INFO_V1(ts_get_telemetry_report);
 Datum
 ts_get_telemetry_report(PG_FUNCTION_ARGS)
 {
-	StringInfo request = build_version_body();
+	StringInfo request;
+
+	/* Show error message if telemetry is disabled and no override argument is passed */
+	if (!ts_telemetry_on())
+	{
+		if (PG_NARGS() == 1 && (PG_ARGISNULL(0) || PG_GETARG_BOOL(0) == false))
+		{
+			elog(INFO,
+				 "Telemetry is disabled. Call get_telemetry_report(%s) to view the report locally.",
+				 TS_TELEMETRY_REPORT_OVERRIDE_ARG);
+			PG_RETURN_NULL();
+		}
+	}
+
+	request = build_version_body();
 
 	return CStringGetTextDatum(request->data);
 }

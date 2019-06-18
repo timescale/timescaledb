@@ -121,8 +121,16 @@ SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_time
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
-SET timescaledb.telemetry_level=off;
 
+-- Test error message and override for when telemetry is disabled
+SET timescaledb.telemetry_level=off;
+SELECT get_telemetry_report();
+SELECT get_telemetry_report(NULL);
+SELECT * FROM json_object_keys(get_telemetry_report(always_display_report := true)::json) AS key
+WHERE key != 'os_name_pretty';
+
+-- Test telemetry report contents
+SET timescaledb.telemetry_level=basic;
 
 SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
 WHERE key != 'os_name_pretty';
