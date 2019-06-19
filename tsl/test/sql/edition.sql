@@ -2,7 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
 select * from timescaledb_information.license;

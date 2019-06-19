@@ -11,6 +11,22 @@
 
 \o /dev/null
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_open(
+        dimension_value   BIGINT,
+        interval_length   BIGINT,
+    OUT range_start       BIGINT,
+    OUT range_end         BIGINT)
+    AS :MODULE_PATHNAME, 'ts_dimension_calculate_open_range_default' LANGUAGE C STABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
+        dimension_value   BIGINT,
+        num_slices        SMALLINT,
+    OUT range_start       BIGINT,
+    OUT range_end         BIGINT)
+    AS :MODULE_PATHNAME, 'ts_dimension_calculate_closed_range_default' LANGUAGE C STABLE;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --open
 SELECT assert_equal(0::bigint, actual_range_start), assert_equal(10::bigint, actual_range_end)
 FROM _timescaledb_internal.dimension_calculate_default_range_open(0,10) AS res(actual_range_start, actual_range_end);

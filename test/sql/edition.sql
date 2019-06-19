@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
@@ -42,6 +45,19 @@ END;
 $$
 LANGUAGE PLPGSQL;
 
+--allowed
+SELECT * FROM timescaledb_information.license;
+SELECT * FROM  _timescaledb_internal.enterprise_enabled();
+SELECT * FROM  _timescaledb_internal.tsl_loaded();
+SELECT * FROM  _timescaledb_internal.license_expiration_time();
+SELECT * FROM  _timescaledb_internal.print_license_expiration_info();
+SELECT * FROM  _timescaledb_internal.license_edition();
+
+
+--disallowd
+\set ON_ERROR_STOP 0
 SELECT get_sqlstate($$SELECT _timescaledb_internal.current_db_set_license_key('ApacheOnly')$$);
-select * from timescaledb_information.license;
+SELECT get_sqlstate($$SHOW timescaledb.license_key;$$);
+SELECT * FROM  _timescaledb_internal.current_license_key();
+\set ON_ERROR_STOP 1
 drop function get_sqlstate(TEXT);
