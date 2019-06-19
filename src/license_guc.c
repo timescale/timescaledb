@@ -7,6 +7,8 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
+#include <miscadmin.h>
+#include <catalog/pg_authid.h>
 
 #include "extension_constants.h"
 #include "export.h"
@@ -320,6 +322,15 @@ ts_enterprise_enabled(PG_FUNCTION_ARGS)
 PGDLLEXPORT Datum
 ts_current_license_key(PG_FUNCTION_ARGS)
 {
+#if PG96
+	if (!superuser())
+#else
+	if (!is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
+#endif
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be superuser or a member of pg_read_all_settings to examine the "
+						"license key")));
 	Assert(ts_guc_license_key != NULL);
 	PG_RETURN_TEXT_P(cstring_to_text(ts_guc_license_key));
 }

@@ -70,7 +70,7 @@ ts_rel_get_owner(Oid relid)
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("relation with OID %u does not exist", relid)));
+				 errmsg("unable to get owner for relation with OID %u: does not exist", relid)));
 
 	ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
 
@@ -1350,6 +1350,8 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_GETARG_OID(0);
 	Oid old_trigger;
+
+	ts_hypertable_permissions_check(relid, GetUserId());
 
 	if (table_has_tuples(relid, AccessShareLock))
 		ereport(ERROR,
