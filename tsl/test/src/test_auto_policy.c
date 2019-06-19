@@ -23,11 +23,12 @@ static Oid chunk_oid;
 static Oid index_oid;
 
 static void
-dummy_reorder_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
+dummy_reorder_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
+				   Oid destination_tablespace, Oid index_tablespace)
 {
 	chunk_oid = tableOid;
 	index_oid = indexOid;
-	reorder_chunk(tableOid, indexOid, true, wait_id);
+	reorder_chunk(tableOid, indexOid, true, wait_id, InvalidOid, InvalidOid);
 }
 
 Datum

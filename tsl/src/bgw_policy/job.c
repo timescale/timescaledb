@@ -127,6 +127,8 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 			get_relname_relid(NameStr(args->fd.hypertable_index_name),
 							  get_namespace_oid(NameStr(ht->fd.schema_name), false)),
 			false,
+			InvalidOid,
+			InvalidOid,
 			InvalidOid);
 	elog(LOG,
 		 "completed reordering chunk %s.%s",

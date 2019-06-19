@@ -60,7 +60,7 @@ extern TSDLLEXPORT bool ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk
 extern TSDLLEXPORT void ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
 
 extern TSDLLEXPORT List *ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid,
-												  List **src_index_oids);
+												  List **src_index_oids, Oid index_tablespace);
 
 /* chunk_index_recreate  is a process akin to reindex
  * except that indexes are created in 2 steps
