@@ -634,6 +634,13 @@ ts_dimension_set_type(Dimension *dim, Oid newtype)
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }
 
+TSDLLEXPORT Oid
+ts_dimension_get_partition_type(Dimension *dim)
+{
+	Assert(dim != NULL);
+	return dim->partitioning != NULL ? dim->partitioning->partfunc.rettype : dim->fd.column_type;
+}
+
 int
 ts_dimension_set_name(Dimension *dim, const char *newname)
 {
@@ -706,8 +713,7 @@ ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc
 		switch (d->type)
 		{
 			case DIMENSION_TYPE_OPEN:
-				dimtype = (d->partitioning == NULL) ? d->fd.column_type :
-													  d->partitioning->partfunc.rettype;
+				dimtype = ts_dimension_get_partition_type(d);
 
 				if (isnull)
 					ereport(ERROR,
@@ -941,7 +947,7 @@ dimension_update(FunctionCallInfo fcinfo, Oid table_relid, Name dimname, Dimensi
 	if (NULL != interval)
 	{
 		Oid intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-		Oid dimtype = dim->partitioning != NULL ? dim->partitioning->dimtype : dim->fd.column_type;
+		Oid dimtype = ts_dimension_get_partition_type(dim);
 
 		dim->fd.interval_length =
 			dimension_interval_to_internal(NameStr(dim->fd.column_name),

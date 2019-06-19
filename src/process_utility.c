@@ -62,6 +62,7 @@
 #include "with_clause_parser.h"
 #include "cross_module_fn.h"
 #include "continuous_agg.h"
+#include "partitioning.h"
 
 #include "cross_module_fn.h"
 
@@ -2019,6 +2020,13 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a hash-partitioned column")));
+
+		if (dim->partitioning != NULL &&
+			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+					 errmsg("cannot change the type of a column with a custom partitioning "
+							"function")));
 	}
 }
 

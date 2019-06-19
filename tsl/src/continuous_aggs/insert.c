@@ -111,7 +111,7 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
-	dimtype = (d->partitioning == NULL) ? d->fd.column_type : d->partitioning->partfunc.rettype;
+	dimtype = ts_dimension_get_partition_type(d);
 
 	if (isnull)
 		ereport(ERROR,
