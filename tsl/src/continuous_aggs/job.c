@@ -48,6 +48,7 @@ continuous_agg_job_get_default_schedule_interval(int32 raw_table_id, int64 bucke
 	Dimension *dim;
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Hypertable *ht = ts_hypertable_get_by_id(raw_table_id);
+	Oid partition_type;
 
 	Assert(ht != NULL);
 
@@ -57,7 +58,8 @@ continuous_agg_job_get_default_schedule_interval(int32 raw_table_id, int64 bucke
 	 */
 	dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	if (dim != NULL && IS_TIMESTAMP_TYPE(dim->fd.column_type))
+	partition_type = ts_dimension_get_partition_type(dim);
+	if (dim != NULL && IS_TIMESTAMP_TYPE(partition_type))
 	{
 		default_schedule_interval = DatumGetIntervalP(
 			DirectFunctionCall7(make_interval,

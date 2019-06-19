@@ -347,6 +347,8 @@ BEGIN;
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
 ROLLBACK;
 
+SET timezone TO '-5';
+
 CREATE TABLE chunk_id_from_relid_test(time bigint, temp float8, device_id int);
 SELECT hypertable_id FROM create_hypertable('chunk_id_from_relid_test', 'time', chunk_time_interval => 10) \gset
 
@@ -369,3 +371,56 @@ SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_re
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.chunk_id_from_relid('pg_type'::regclass);
 SELECT _timescaledb_internal.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
+
+-- test drop/show_chunks on custom partition types
+CREATE FUNCTION extract_time(a jsonb)
+RETURNS TIMESTAMPTZ
+LANGUAGE SQL
+AS $$ SELECT (a->>'time')::TIMESTAMPTZ $$ IMMUTABLE;
+
+CREATE TABLE test_weird_type(a jsonb);
+SELECT create_hypertable('test_weird_type', 'a',
+    time_partitioning_func=>'extract_time'::regproc,
+    chunk_time_interval=>'2 hours'::interval);
+
+INSERT INTO test_weird_type VALUES ('{"time":"2019/06/06 1:00+0"}'), ('{"time":"2019/06/06 5:00+0"}');
+SELECT * FROM test.show_subtables('test_weird_type');
+SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 4:00+0'::TIMESTAMPTZ);
+SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
+
+SELECT drop_chunks('2019/06/06 5:00+0'::TIMESTAMPTZ, 'test_weird_type');
+SELECT * FROM test.show_subtables('test_weird_type');
+SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 4:00+0'::TIMESTAMPTZ);
+SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
+
+SELECT drop_chunks('2019/06/06 6:00+0'::TIMESTAMPTZ, 'test_weird_type');
+SELECT * FROM test.show_subtables('test_weird_type');
+SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
+
+DROP TABLE test_weird_type;
+
+CREATE FUNCTION extract_int_time(a jsonb)
+RETURNS BIGINT
+LANGUAGE SQL
+AS $$ SELECT (a->>'time')::BIGINT $$ IMMUTABLE;
+
+CREATE TABLE test_weird_type_i(a jsonb);
+SELECT create_hypertable('test_weird_type_i', 'a',
+    time_partitioning_func=>'extract_int_time'::regproc,
+    chunk_time_interval=>5);
+
+INSERT INTO test_weird_type_i VALUES ('{"time":"0"}'), ('{"time":"5"}');
+SELECT * FROM test.show_subtables('test_weird_type_i');
+SELECT show_chunks('test_weird_type_i', older_than=>5);
+SELECT show_chunks('test_weird_type_i', older_than=>10);
+
+SELECT drop_chunks(5, 'test_weird_type_i');
+SELECT * FROM test.show_subtables('test_weird_type_i');
+SELECT show_chunks('test_weird_type_i', older_than=>5);
+SELECT show_chunks('test_weird_type_i', older_than=>10);
+
+SELECT drop_chunks(10, 'test_weird_type_i');
+SELECT * FROM test.show_subtables('test_weird_type_i');
+SELECT show_chunks('test_weird_type_i', older_than=>10);
+
+DROP TABLE test_weird_type_i CASCADE;

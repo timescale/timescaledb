@@ -101,6 +101,7 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	int32 hypertable_id = ts_hypertable_relid_to_id(ht_oid);
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
+	Oid partitioning_type;
 
 	BgwPolicyReorder policy = { .fd = {
 									.hypertable_id = hypertable_id,
@@ -157,7 +158,8 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	 */
 	dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	if (dim && IS_TIMESTAMP_TYPE(dim->fd.column_type))
+	partitioning_type = ts_dimension_get_partition_type(dim);
+	if (dim && IS_TIMESTAMP_TYPE(partitioning_type))
 		default_schedule_interval = DatumGetIntervalP(
 			DirectFunctionCall7(make_interval,
 								Int32GetDatum(0),

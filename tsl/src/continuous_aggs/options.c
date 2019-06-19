@@ -172,7 +172,8 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, agg->data.raw_hypertable_id);
 		Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
 		int64 lag =
-			continuous_agg_parse_refresh_lag(time_dimension->fd.column_type, with_clause_options);
+			continuous_agg_parse_refresh_lag(ts_dimension_get_partition_type(time_dimension),
+											 with_clause_options);
 		update_refresh_lag(agg, lag);
 		ts_cache_release(hcache);
 	}
@@ -182,7 +183,8 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, agg->data.raw_hypertable_id);
 		Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-		int64 max = continuous_agg_parse_max_interval_per_job(time_dimension->fd.column_type,
+		int64 max = continuous_agg_parse_max_interval_per_job(ts_dimension_get_partition_type(
+																  time_dimension),
 															  with_clause_options,
 															  agg->data.bucket_width);
 		update_max_interval_per_job(agg, max);

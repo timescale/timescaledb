@@ -769,6 +769,10 @@ cagg_validate_query(Query *query)
 		if (ht != NULL)
 		{
 			part_dimension = hyperspace_get_open_dimension(ht->space, 0);
+			/* NOTE: if we ever allow custom partitioning functions we'll need to
+			 *       change part_dimension->fd.column_type to partitioning_type
+			 *       below, along with any other fallout
+			 */
 			if (part_dimension->partitioning != NULL)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
