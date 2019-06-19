@@ -381,9 +381,16 @@ SELECT * FROM sorted_bgw_log;
 
 -- Test updating jobs list
 TRUNCATE bgw_log;
+
+\set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_internal.start_background_workers();
+\set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_internal.stop_background_workers();
+
 CREATE OR REPLACE FUNCTION ts_test_job_refresh() RETURNS TABLE(
 id INTEGER,
 application_name NAME,
