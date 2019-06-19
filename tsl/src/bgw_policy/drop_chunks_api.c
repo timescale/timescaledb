@@ -68,6 +68,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	bool cascade = PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_GETARG_BOOL(3);
 	bool cascade_to_materializations = PG_GETARG_BOOL(4);
+	Oid partitioning_type;
 
 	BgwPolicyDropChunks policy = { .fd = {
 									   .hypertable_id = ts_hypertable_relid_to_id(ht_oid),
@@ -124,9 +125,9 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	}
 
 	/* validate that the open dimension uses a time type */
-	ts_dimension_open_typecheck(INTERVALOID,
-								hyperspace_get_open_dimension(hypertable->space, 0)->fd.column_type,
-								"add_drop_chunks_policy");
+	partitioning_type =
+		ts_dimension_get_partition_type(hyperspace_get_open_dimension(hypertable->space, 0));
+	ts_dimension_open_typecheck(INTERVALOID, partitioning_type, "add_drop_chunks_policy");
 
 	ts_cache_release(hcache);
 

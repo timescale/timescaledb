@@ -214,6 +214,9 @@ ts_hypertable_get_time_type(PG_FUNCTION_ARGS)
 	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
 	if (time_dimension == NULL)
 		PG_RETURN_NULL();
+	/* This is deliberately column_type not partitioning_type, as that is how
+	 * the SQL function is defined
+	 */
 	time_type = time_dimension->fd.column_type;
 	ts_cache_release(hcache);
 	PG_RETURN_OID(time_type);

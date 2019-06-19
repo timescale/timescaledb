@@ -1080,10 +1080,10 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 
 	if (older_than_type != InvalidOid)
 	{
-		ts_dimension_open_typecheck(older_than_type, time_dim->fd.column_type, caller_name);
+		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
+		ts_dimension_open_typecheck(older_than_type, partitioning_type, caller_name);
 		if (older_than_type == INTERVALOID)
-			older_than =
-				ts_interval_from_now_to_internal(older_than_datum, time_dim->fd.column_type);
+			older_than = ts_interval_from_now_to_internal(older_than_datum, partitioning_type);
 		else
 			older_than = ts_time_value_to_internal(older_than_datum, older_than_type);
 		end_strategy = BTLessStrategyNumber;
@@ -1091,10 +1091,10 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 
 	if (newer_than_type != InvalidOid)
 	{
-		ts_dimension_open_typecheck(newer_than_type, time_dim->fd.column_type, caller_name);
+		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
+		ts_dimension_open_typecheck(newer_than_type, partitioning_type, caller_name);
 		if (newer_than_type == INTERVALOID)
-			newer_than =
-				ts_interval_from_now_to_internal(newer_than_datum, time_dim->fd.column_type);
+			newer_than = ts_interval_from_now_to_internal(newer_than_datum, partitioning_type);
 		else
 			newer_than = ts_time_value_to_internal(newer_than_datum, newer_than_type);
 		start_strategy = BTGreaterEqualStrategyNumber;
@@ -1267,7 +1267,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 		if (time_dim_type == InvalidOid)
-			time_dim_type = time_dim->fd.column_type;
+			time_dim_type = ts_dimension_get_partition_type(time_dim);
 
 		/*
 		 * Even though internally all time columns are represented as bigints,
@@ -1280,7 +1280,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 		 * across hypertables that is why it is not in the helper function
 		 * below.
 		 */
-		if (time_dim_type != time_dim->fd.column_type &&
+		if (time_dim_type != ts_dimension_get_partition_type(time_dim) &&
 			(older_than_type != InvalidOid || newer_than_type != InvalidOid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

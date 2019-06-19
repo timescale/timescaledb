@@ -269,7 +269,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	int64 old_completed_threshold = continuous_aggs_completed_threshold_get(materialization_id);
 	Dimension *time_column = hyperspace_get_open_dimension(raw_table->space, 0);
 	NameData time_column_name = time_column->fd.column_name;
-	Oid time_column_type = time_column->fd.column_type;
+	Oid time_column_type = ts_dimension_get_partition_type(time_column);
 	bool found_new_tuples = false;
 
 	found_new_tuples = hypertable_get_min_and_max(hypertable,
@@ -606,7 +606,7 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 	/* The materialization table always stores our internal representation of time values, so get
 	 * the real type of the time column from the original hypertable */
 	new_materialization_range.type =
-		hyperspace_get_open_dimension(raw_table->space, 0)->fd.column_type;
+		ts_dimension_get_partition_type(hyperspace_get_open_dimension(raw_table->space, 0));
 
 	time_column_name =
 		hyperspace_get_open_dimension(materialization_table->space, 0)->fd.column_name;
