@@ -786,7 +786,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_c
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
 WARNING:  Timescale License expired
-ERROR:  must be owner of hypertable "test_table"
+ERROR:  insufficient permssions to alter job 1014
 select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
-ERROR:  must be owner of hypertable "test_table"
+ERROR:  insufficient permssions to alter job 1015
 \set ON_ERROR_STOP 1

@@ -38,6 +38,7 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 };
 
 static unknown_job_type_hook_type unknown_job_type_hook = NULL;
+static unknown_job_type_owner_hook_type unknown_job_type_owner_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
 BackgroundWorkerHandle *
@@ -64,16 +65,44 @@ ts_bgw_start_worker(const char *function, const char *name, const char *extra)
 	return handle;
 }
 
-BackgroundWorkerHandle *
-ts_bgw_job_start(BgwJob *job)
+Oid
+ts_bgw_job_owner(BgwJob *job)
 {
-	char *job_id_text;
+	switch (job->bgw_type)
+	{
+		case JOB_TYPE_VERSION_CHECK:
+			return ts_catalog_database_info_get()->owner_uid;
+		case JOB_TYPE_REORDER:
+			return ts_rel_get_owner(ts_hypertable_id_to_relid(
+				ts_bgw_policy_reorder_find_by_job(job->fd.id)->fd.hypertable_id));
+		case JOB_TYPE_DROP_CHUNKS:
+			return ts_rel_get_owner(ts_hypertable_id_to_relid(
+				ts_bgw_policy_drop_chunks_find_by_job(job->fd.id)->fd.hypertable_id));
+		case JOB_TYPE_CONTINUOUS_AGGREGATE:
+			return ts_rel_get_owner(
+				ts_continuous_agg_get_user_view_oid(ts_continuous_agg_find_by_job_id(job->fd.id)));
+		case JOB_TYPE_UNKNOWN:
+			if (unknown_job_type_owner_hook != NULL)
+				return unknown_job_type_owner_hook(job);
+			break;
+		case _MAX_JOB_TYPE:
+			break;
+	}
+	elog(ERROR, "unknown job type \"%s\" in finding owner", NameStr(job->fd.job_type));
+}
 
-	job_id_text = DatumGetCString(DirectFunctionCall1(int4out, Int32GetDatum(job->fd.id)));
+BackgroundWorkerHandle *
+ts_bgw_job_start(BgwJob *job, Oid user_uid)
+{
+	int32 job_id = Int32GetDatum(job->fd.id);
+	StringInfo si = makeStringInfo();
+
+	/* Changing this requires changes to ts_bgw_job_entrypoint */
+	appendStringInfo(si, "%u %d", user_uid, job_id);
 
 	return ts_bgw_start_worker(job_entrypoint_function_name,
 							   NameStr(job->fd.application_name),
-							   job_id_text);
+							   si->data);
 }
 
 static JobType
@@ -284,29 +313,13 @@ ts_bgw_job_delete_by_id(int32 job_id)
 void
 ts_bgw_job_permission_check(BgwJob *job)
 {
-	switch (job->bgw_type)
-	{
-		case JOB_TYPE_VERSION_CHECK:
-			return;
-		case JOB_TYPE_REORDER:
-			ts_hypertable_permissions_check_by_id(
-				ts_bgw_policy_reorder_find_by_job(job->fd.id)->fd.hypertable_id);
-			return;
-		case JOB_TYPE_DROP_CHUNKS:
-			ts_hypertable_permissions_check_by_id(
-				ts_bgw_policy_drop_chunks_find_by_job(job->fd.id)->fd.hypertable_id);
-			return;
-		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-			ts_hypertable_permissions_check_by_id(
-				ts_continuous_agg_find_by_job_id(job->fd.id)->data.raw_hypertable_id);
-			return;
-		case JOB_TYPE_UNKNOWN:
-		case _MAX_JOB_TYPE:
-			break;
-	}
-	elog(ERROR, "unknown job type \"%s\" in permission check", NameStr(job->fd.job_type));
-}
+	Oid owner_oid = ts_bgw_job_owner(job);
 
+	if (!has_privs_of_role(GetUserId(), owner_oid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("insufficient permssions to alter job %d", job->fd.id)));
+}
 bool
 ts_bgw_job_execute(BgwJob *job)
 {
@@ -405,10 +418,13 @@ extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	int32 job_id =
-		Int32GetDatum(DirectFunctionCall1(int4in, CStringGetDatum(MyBgworkerEntry->bgw_extra)));
+	Oid user_uid;
+	int32 job_id;
 	BgwJob *job;
 	JobResult res = JOB_FAILURE;
+
+	if (sscanf(MyBgworkerEntry->bgw_extra, "%u %d", &user_uid, &job_id) != 2)
+		elog(ERROR, "job entrypoint got invalid bgw_extra");
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
@@ -422,7 +438,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	elog(DEBUG1, "started background job %d", job_id);
 
-	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, InvalidOid);
+	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, user_uid);
 
 	ts_license_enable_module_loading();
 
@@ -499,6 +515,12 @@ void
 ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook)
 {
 	unknown_job_type_hook = hook;
+}
+
+void
+ts_bgw_job_set_unknown_job_type_owner_hook(unknown_job_type_owner_hook_type hook)
+{
+	unknown_job_type_owner_hook = hook;
 }
 
 void
