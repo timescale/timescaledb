@@ -32,6 +32,7 @@
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
+#include <commands/tablespace.h>
 #include <commands/vacuum.h>
 #include <miscadmin.h>
 #include <nodes/pg_list.h>
@@ -61,11 +62,13 @@
 #include "license.h"
 #include "reorder.h"
 
-extern void timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id);
+extern void timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
+								  Oid destination_tablespace, Oid index_tablespace);
 
 #define REORDER_ACCESS_EXCLUSIVE_DEADLOCK_TIMEOUT "101000"
 
-static void timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id);
+static void timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
+									   Oid destination_tablespace, Oid index_tablespace);
 static void copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 						   bool *pSwapToastByContent, TransactionId *pFreezeXid,
 						   MultiXactId *pCutoffMulti);
@@ -101,12 +104,59 @@ tsl_reorder_chunk(PG_FUNCTION_ARGS)
 	if (!OidIsValid(wait_id))
 		PreventInTransactionBlock(true, "reorder");
 
-	reorder_chunk(chunk_id, index_id, verbose, wait_id);
+	reorder_chunk(chunk_id, index_id, verbose, wait_id, InvalidOid, InvalidOid);
+	PG_RETURN_VOID();
+}
+
+Datum
+tsl_move_chunk(PG_FUNCTION_ARGS)
+{
+	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid destination_tablespace =
+		PG_ARGISNULL(1) ? InvalidOid : get_tablespace_oid(PG_GETARG_NAME(1)->data, false);
+	Oid index_destination_tablespace =
+		PG_ARGISNULL(2) ? InvalidOid : get_tablespace_oid(PG_GETARG_NAME(2)->data, false);
+	Oid index_id = PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
+	bool verbose = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+
+	/* used for debugging purposes only see finish_heap_swaps */
+	Oid wait_id = PG_NARGS() < 6 || PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
+
+	license_print_expiration_warning_if_needed();
+
+	/*
+	 * Allow move in transactions for testing purposes only
+	 */
+	if (!OidIsValid(wait_id))
+		PreventInTransactionBlock(true, "move");
+
+	/*
+	 * Index_destination_tablespace is currently a required parameter in order
+	 * to avoid situations where there is ambiguity about where indexes should
+	 * be placed based on where the index was created and the new tablespace
+	 * (and avoid interactions with multi-tablespace hypertable functionality).
+	 * Eventually we may want to offer an option to keep indexes in the
+	 * tablespace of their parent if it is specified.
+	 */
+	if (!OidIsValid(chunk_id) || !OidIsValid(destination_tablespace) ||
+		!OidIsValid(index_destination_tablespace))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("valid chunk, destination_tablespace, and index_destination_tablespaces "
+						"are required")));
+
+	reorder_chunk(chunk_id,
+				  index_id,
+				  verbose,
+				  wait_id,
+				  destination_tablespace,
+				  index_destination_tablespace);
 	PG_RETURN_VOID();
 }
 
 void
-reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id)
+reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destination_tablespace,
+			  Oid index_tablespace)
 {
 	Chunk *chunk;
 	Cache *hcache;
@@ -167,6 +217,31 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id)
 							get_rel_name(chunk_id))));
 	}
 
+	if (OidIsValid(destination_tablespace) && destination_tablespace != MyDatabaseTableSpace)
+	{
+		AclResult aclresult;
+
+		aclresult = pg_tablespace_aclcheck(destination_tablespace, GetUserId(), ACL_CREATE);
+		if (aclresult != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for tablespace \"%s\"",
+							get_tablespace_name(destination_tablespace))));
+		;
+	}
+
+	if (OidIsValid(index_tablespace) && index_tablespace != MyDatabaseTableSpace)
+	{
+		AclResult aclresult;
+
+		aclresult = pg_tablespace_aclcheck(index_tablespace, GetUserId(), ACL_CREATE);
+		if (aclresult != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for tablespace \"%s\"",
+							get_tablespace_name(index_tablespace))));
+	}
+
 	Assert(cim.chunkoid == chunk_id);
 
 	/*
@@ -176,7 +251,12 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id)
 	 */
 	ts_chunk_index_mark_clustered(cim.chunkoid, cim.indexoid);
 	/* TODO allow users to set verbosity? */
-	timescale_reorder_rel(cim.chunkoid, cim.indexoid, verbose, wait_id);
+	timescale_reorder_rel(cim.chunkoid,
+						  cim.indexoid,
+						  verbose,
+						  wait_id,
+						  destination_tablespace,
+						  index_tablespace);
 	ts_cache_release(hcache);
 }
 
@@ -222,7 +302,8 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid, ChunkInde
  * Indexes are rebuilt in the same manner.
  */
 void
-timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
+timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
+					  Oid destination_tablespace, Oid index_tablespace)
 {
 	Relation OldHeap;
 	HeapTuple tuple;
@@ -327,7 +408,12 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
 	check_index_is_clusterable(OldHeap, indexOid, true, ExclusiveLock);
 
 	/* timescale_rebuild_relation does all the dirty work */
-	timescale_rebuild_relation(OldHeap, indexOid, verbose, wait_id);
+	timescale_rebuild_relation(OldHeap,
+							   indexOid,
+							   verbose,
+							   wait_id,
+							   destination_tablespace,
+							   index_tablespace);
 
 	/* NB: timescale_rebuild_relation does heap_close() on OldHeap */
 }
@@ -341,10 +427,12 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
  * NB: this routine closes OldHeap at the right time; caller should not.
  */
 static void
-timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id)
+timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
+						   Oid destination_tablespace, Oid index_tablespace)
 {
 	Oid tableOid = RelationGetRelid(OldHeap);
-	Oid tableSpace = OldHeap->rd_rel->reltablespace;
+	Oid tableSpace = OidIsValid(destination_tablespace) ? destination_tablespace :
+														  OldHeap->rd_rel->reltablespace;
 	Oid OIDNewHeap;
 	List *old_index_oids;
 	List *new_index_oids;
@@ -375,7 +463,8 @@ timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wai
 				   &cutoffMulti);
 
 	/* Create versions of the tables indexes for the new table */
-	new_index_oids = ts_chunk_index_duplicate(tableOid, OIDNewHeap, &old_index_oids);
+	new_index_oids =
+		ts_chunk_index_duplicate(tableOid, OIDNewHeap, &old_index_oids, index_tablespace);
 
 	/*
 	 * Swap the physical files of the target and transient tables, then

@@ -5,6 +5,7 @@ set(TEST_FILES
     continuous_aggs_watermark.sql
     edition.sql
     gapfill.sql
+    move.sql
     reorder.sql
     partialize_finalize.sql
 )

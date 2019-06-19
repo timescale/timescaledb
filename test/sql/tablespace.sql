@@ -10,7 +10,7 @@ DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
---test hypertable with tables space
+--test hypertable with tablespace
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

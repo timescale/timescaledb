@@ -59,6 +59,7 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_timestamptz_time_bucket;
 	PGFunction alter_job_schedule;
 	PGFunction reorder_chunk;
+	PGFunction move_chunk;
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);

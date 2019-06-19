@@ -10,3 +10,11 @@ CREATE OR REPLACE FUNCTION reorder_chunk(
     index REGCLASS=NULL,
     verbose BOOLEAN=FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_reorder_chunk' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION move_chunk(
+    chunk REGCLASS,
+    destination_tablespace Name,
+    index_destination_tablespace Name=NULL,
+    reorder_index REGCLASS=NULL,
+    verbose BOOLEAN=FALSE
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_chunk' LANGUAGE C VOLATILE;

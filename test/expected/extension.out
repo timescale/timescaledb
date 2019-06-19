@@ -36,6 +36,7 @@ ORDER BY proname;
  interpolate
  last
  locf
+ move_chunk
  remove_drop_chunks_policy
  remove_reorder_policy
  reorder_chunk
@@ -49,5 +50,5 @@ ORDER BY proname;
  time_bucket_gapfill
  timescaledb_post_restore
  timescaledb_pre_restore
-(35 rows)
+(36 rows)
 

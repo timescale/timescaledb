@@ -1,9 +1,13 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\ir include/cluster_test_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE cluster_test(time INTEGER, temp float, location int, value TEXT);
 SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
+psql:include/cluster_test_setup.sql:7: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
@@ -1292,6 +1296,15 @@ INFO:  "_hyper_2_3_chunk": found 0 removable, 5 nonremovable row versions in 1 p
  
 (1 row)
 
+-- if we drop a CLUSTERed index we still fail correctly
+DROP INDEX ct2_time_idx;
+\set ON_ERROR_STOP 0
+SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
+ERROR:  there is no previously clustered index for table "_hyper_2_3_chunk"
+\set ON_ERROR_STOP 1
+-- but re-create for future tests
+CREATE INDEX ct2_time_idx ON ct2(time DESC);
+CLUSTER ct2 USING ct2_time_idx;
 -- deleted chunks are removed correctly
 DELETE FROM ct2 where time < 2 OR val < 2;
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);

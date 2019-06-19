@@ -14,7 +14,8 @@
 #include "bgw_policy/chunk_stats.h"
 
 /* Reorder function type. Necessary for testing */
-typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id);
+typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
+							 Oid destination_tablespace, Oid index_tablespace);
 
 /* Functions exposed only for testing */
 extern bool execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue);
