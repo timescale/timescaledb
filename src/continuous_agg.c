@@ -322,9 +322,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	{
 		user_view = (ObjectAddress){
 			.classId = RelationRelationId,
-			.objectId =
-				get_relname_relid(NameStr(agg->data.user_view_name),
-								  get_namespace_oid(NameStr(agg->data.user_view_schema), false)),
+			.objectId = ts_continuous_agg_get_user_view_oid(agg),
 		};
 		LockRelationOid(user_view.objectId, AccessExclusiveLock);
 	}
@@ -634,4 +632,15 @@ ts_number_of_continuous_aggs()
 	ts_scanner_foreach(&iterator) { count++; }
 
 	return count;
+}
+
+Oid
+ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg)
+{
+	Oid view_relid =
+		get_relname_relid(NameStr(agg->data.user_view_name),
+						  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
+	if (!OidIsValid(view_relid))
+		elog(ERROR, "could not find user view for continuous agg");
+	return view_relid;
 }

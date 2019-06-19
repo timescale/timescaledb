@@ -200,6 +200,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 #endif
 
 	BgwJobStat *job_stat;
+	Oid owner_uid;
 
 	switch (new_state)
 	{
@@ -240,6 +241,8 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 					ts_bgw_job_timeout_at(&sjob->job, ts_timer_get_current_timestamp());
 			else
 				sjob->timeout_at = DT_NOEND;
+
+			owner_uid = ts_bgw_job_owner(&sjob->job);
 			CommitTransactionCommand();
 
 			sjob->reserved_worker = ts_bgw_worker_reserve();
@@ -258,7 +261,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				 sjob->job.fd.id,
 				 NameStr(sjob->job.fd.application_name));
 
-			sjob->handle = ts_bgw_job_start(&sjob->job);
+			sjob->handle = ts_bgw_job_start(&sjob->job, owner_uid);
 			if (sjob->handle == NULL)
 			{
 				elog(WARNING,
