@@ -201,10 +201,16 @@ reset enable_material;
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > now() ORDER BY time;
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time > now() ORDER BY time;
 
--- query with tablesample
+-- query with tablesample and planner exclusion
 :PREFIX
-SELECT * FROM append_test TABLESAMPLE SYSTEM(1)
-WHERE TIME > now_s() - INTERVAL '400 day'
+SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-15'
+ORDER BY time DESC;
+
+-- query with tablesample and startup exclusion
+:PREFIX
+SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-15'::text::date
 ORDER BY time DESC;
 
 -- test runtime exclusion
