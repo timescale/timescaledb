@@ -95,7 +95,7 @@ build_script:
 
     # build timescale
 
-    .\bootstrap -DPG_PATH="C:\Program Files\PostgreSQL\10" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+    .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\10" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
 
     cmake --build ./build --config Debug
 
