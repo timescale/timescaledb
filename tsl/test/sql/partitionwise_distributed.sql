@@ -156,6 +156,33 @@ FROM hyper
 GROUP BY 1
 ORDER BY 1;
 
+-- Restriction on "time", but not including in target list
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM pg2dim
+WHERE time > '2018-04-19 00:01'
+GROUP BY 1
+ORDER BY 1;
+
+SELECT device, avg(temp)
+FROM pg2dim
+WHERE time > '2018-04-19 00:01'
+GROUP BY 1
+ORDER BY 1;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, avg(temp)
+FROM hyper
+WHERE time > '2018-04-19 00:01'
+GROUP BY 1
+ORDER BY 1;
+
+SELECT device, avg(temp)
+FROM hyper
+WHERE time > '2018-04-19 00:01'
+GROUP BY 1
+ORDER BY 1;
+
 --------------------------------------------------------------
 -- FULL partitionwise - All partition keys covered by GROUP BY
 --------------------------------------------------------------

@@ -11,7 +11,8 @@
 #include <hypertable.h>
 #include "plan_expand_hypertable.h"
 
-void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
+void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
+								 void *);
 
 #if PG11_GE
 void tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
