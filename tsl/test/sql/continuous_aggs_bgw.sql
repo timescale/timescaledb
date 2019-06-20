@@ -27,6 +27,14 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 --test that this all works under the community license
 ALTER DATABASE :TEST_DBNAME SET timescaledb.license_key='Community';
 
+--create a function with no permissions to execute
+
+CREATE FUNCTION get_constant_no_perms() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT 10;
+$BODY$;
+REVOKE EXECUTE ON FUNCTION get_constant_no_perms() FROM PUBLIC;
+
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
@@ -164,7 +172,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 -- data at 4
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
-\x
+\x on
 --check the information views --
 select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
@@ -175,7 +183,28 @@ where view_name::text like '%test_continuous_agg_view';
 
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
 
-\x
+\x off
+
+DROP VIEW test_continuous_agg_view CASCADE;
+
+--create a view with a function that it has no permission to execute
+CREATE VIEW test_continuous_agg_view
+    WITH (timescaledb.continuous,
+        timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
+        FROM test_continuous_agg_table
+        GROUP BY 1;
+
+SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+-- job fails
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+
 
 --
 -- Test creating continuous aggregate with a user that is the non-owner of the raw table
@@ -214,6 +243,8 @@ SELECT * FROM test_continuous_agg_view_user_2;
 --revoke permissions from the continuous agg view owner to select from raw table
 --no further updates to cont agg should happen
 REVOKE SELECT ON test_continuous_agg_table_w_grant FROM public;
+
+INSERT INTO test_continuous_agg_table_w_grant VALUES(1,1);
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);

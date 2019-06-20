@@ -87,6 +87,17 @@ select generate_series(0, 30, 10), 'POR', 55, 75, 40, 70, NULL;
 --need both select and trigger permissions to create a materialized view on top of it.
 GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
 
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+
+create schema custom_schema;
+
+CREATE FUNCTION get_constant() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT 10;
+$BODY$;
+
+REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
+
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
@@ -107,6 +118,27 @@ as
 select location, max(humidity)
 from conditions_for_perm_check
 group by time_bucket(100, timec), location;
+
+--cannot create mat view in a schema without create privileges
+create or replace view custom_schema.mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity)
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location;
+
+--cannot use a function without EXECUTE privileges
+--you can create a VIEW but cannot refresh it
+create or replace view mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+as
+select location, max(humidity), get_constant()
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location;
+
+--this should fail
+REFRESH MATERIALIZED VIEW mat_perm_view_test;
+DROP VIEW mat_perm_view_test CASCADE;
 
 --can create a mat view on something with select and trigger grants
 create or replace view mat_perm_view_test
