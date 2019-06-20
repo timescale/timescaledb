@@ -959,34 +959,52 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
--- query with tablesample
+-- query with tablesample and planner exclusion
 :PREFIX
-SELECT * FROM append_test TABLESAMPLE SYSTEM(1)
-WHERE TIME > now_s() - INTERVAL '400 day'
+SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-15'
 ORDER BY time DESC;
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:208: NOTICE:  Stable function now_s() called!
-                               QUERY PLAN                               
-------------------------------------------------------------------------
- Sort (actual rows=0 loops=1)
-   Sort Key: append_test."time" DESC
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Sort (actual rows=17 loops=1)
+   Sort Key: _hyper_3_11_chunk."time" DESC
    Sort Method: quicksort  Memory: 25kB
-   ->  Custom Scan (ChunkAppend) on append_test (actual rows=0 loops=1)
-         Chunks excluded during startup: 0
-         ->  Sample Scan on _hyper_1_3_chunk (actual rows=0 loops=1)
-               Sampling: system ('1'::real)
-               Filter: ("time" > (now_s() - '@ 400 days'::interval))
-         ->  Sample Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
-               Sampling: system ('1'::real)
-               Filter: ("time" > (now_s() - '@ 400 days'::interval))
-         ->  Sample Scan on _hyper_1_1_chunk (actual rows=0 loops=1)
-               Sampling: system ('1'::real)
-               Filter: ("time" > (now_s() - '@ 400 days'::interval))
+   ->  Append (actual rows=17 loops=1)
+         ->  Sample Scan on _hyper_3_11_chunk (actual rows=4 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > '01-15-2000'::date)
+         ->  Sample Scan on _hyper_3_10_chunk (actual rows=8 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > '01-15-2000'::date)
+         ->  Sample Scan on _hyper_3_9_chunk (actual rows=5 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > '01-15-2000'::date)
+               Rows Removed by Filter: 3
 (14 rows)
+
+-- query with tablesample and startup exclusion
+:PREFIX
+SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-15'::text::date
+ORDER BY time DESC;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Sort (actual rows=17 loops=1)
+   Sort Key: metrics_date."time" DESC
+   Sort Method: quicksort  Memory: 25kB
+   ->  Custom Scan (ChunkAppend) on metrics_date (actual rows=17 loops=1)
+         Chunks excluded during startup: 2
+         ->  Sample Scan on _hyper_3_11_chunk (actual rows=4 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > ('2000-01-15'::cstring)::date)
+         ->  Sample Scan on _hyper_3_10_chunk (actual rows=8 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > ('2000-01-15'::cstring)::date)
+         ->  Sample Scan on _hyper_3_9_chunk (actual rows=5 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > ('2000-01-15'::cstring)::date)
+               Rows Removed by Filter: 3
+(15 rows)
 
 -- test runtime exclusion
 -- test runtime exclusion with LATERAL and 2 hypertables
