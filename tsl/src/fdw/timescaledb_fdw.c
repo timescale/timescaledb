@@ -1721,10 +1721,9 @@ fill_query_params_array(ExprContext *econtext, FmgrInfo *param_flinfo, List *par
  * Create cursor for node's query with current parameter values.
  */
 static void
-create_cursor(ForeignScanState *node)
+create_cursor(ScanState *ss, TsFdwScanState *fsstate)
 {
-	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
-	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	ExprContext *econtext = ss->ps.ps_ExprContext;
 	int num_params = fsstate->num_params;
 	const char **values = fsstate->param_values;
 	TSConnection *conn = fsstate->conn;
@@ -1780,11 +1779,12 @@ create_cursor(ForeignScanState *node)
 	pfree(buf.data);
 }
 
-static void
-begin_foreign_scan(ForeignScanState *node, int eflags)
+static TsFdwScanState *
+ts_fdw_scan_begin(ScanState *ss, Bitmapset *scanrelids, List *fdw_private, List *fdw_exprs,
+				  int eflags)
 {
-	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
-	EState *estate = node->ss.ps.state;
+	Scan *scan = (Scan *) ss->ps.plan;
+	EState *estate = ss->ps.state;
 	TsFdwScanState *fsstate;
 	RangeTblEntry *rte;
 	Oid userid;
@@ -1794,16 +1794,15 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	int server_id;
 
 	/*
-	 * Do nothing in EXPLAIN (no ANALYZE) case.  node->fdw_state stays NULL.
+	 * Do nothing in EXPLAIN (no ANALYZE) case.  fdw_state stays NULL.
 	 */
 	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
-		return;
+		return NULL;
 
 	/*
 	 * We'll save private state in node->fdw_state.
 	 */
 	fsstate = (TsFdwScanState *) palloc0(sizeof(TsFdwScanState));
-	node->fdw_state = (void *) fsstate;
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
@@ -1811,30 +1810,31 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	 * lowest-numbered member RTE as a representative; we would get the same
 	 * result from any.
 	 */
-	if (fsplan->scan.scanrelid > 0)
-		rtindex = fsplan->scan.scanrelid;
+	if (scan->scanrelid > 0)
+		rtindex = scan->scanrelid;
 	else
-		rtindex = bms_next_member(fsplan->fs_relids, -1);
+		rtindex = bms_next_member(scanrelids, -1);
+
 	rte = rt_fetch(rtindex, estate->es_range_table);
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 	/* Get info about foreign table. */
-	server_id = intVal(list_nth(fsplan->fdw_private, FdwScanPrivateServerId));
+	server_id = intVal(list_nth(fdw_private, FdwScanPrivateServerId));
 	user = GetUserMapping(userid, server_id);
 
 	/*
 	 * Get connection to the foreign server.  Connection manager will
 	 * establish new connection if necessary.
 	 */
-	fsstate->conn = remote_dist_txn_get_connection(user,
-												   list_length(fsplan->fdw_exprs) > 0 ?
-													   REMOTE_TXN_USE_PREP_STMT :
-													   REMOTE_TXN_NO_PREP_STMT);
+	fsstate->conn =
+		remote_dist_txn_get_connection(user,
+									   list_length(fdw_exprs) > 0 ? REMOTE_TXN_USE_PREP_STMT :
+																	REMOTE_TXN_NO_PREP_STMT);
 
 	/* Get private info created by planner functions. */
-	fsstate->query = strVal(list_nth(fsplan->fdw_private, FdwScanPrivateSelectSql));
-	fsstate->retrieved_attrs = (List *) list_nth(fsplan->fdw_private, FdwScanPrivateRetrievedAttrs);
-	fsstate->fetch_size = intVal(list_nth(fsplan->fdw_private, FdwScanPrivateFetchSize));
+	fsstate->query = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+	fsstate->retrieved_attrs = (List *) list_nth(fdw_private, FdwScanPrivateRetrievedAttrs);
+	fsstate->fetch_size = intVal(list_nth(fdw_private, FdwScanPrivateFetchSize));
 
 	/* Create contexts for batches of tuples and per-tuple temp workspace. */
 	fsstate->batch_cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -1848,15 +1848,15 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	 * Get info we'll need for converting data fetched from the foreign server
 	 * into local representation and error reporting during that process.
 	 */
-	if (fsplan->scan.scanrelid > 0)
+	if (scan->scanrelid > 0)
 	{
-		fsstate->rel = node->ss.ss_currentRelation;
+		fsstate->rel = ss->ss_currentRelation;
 		fsstate->tupdesc = RelationGetDescr(fsstate->rel);
 	}
 	else
 	{
 		fsstate->rel = NULL;
-		fsstate->tupdesc = node->ss.ss_ScanTupleSlot->tts_tupleDescriptor;
+		fsstate->tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
 	}
 
 	fsstate->att_conv_metadata = data_format_create_att_conv_in_metadata(fsstate->tupdesc);
@@ -1864,26 +1864,39 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.
 	 */
-	num_params = list_length(fsplan->fdw_exprs);
+	num_params = list_length(fdw_exprs);
 	fsstate->num_params = num_params;
 	if (num_params > 0)
-		prepare_query_params((PlanState *) node,
-							 fsplan->fdw_exprs,
+		prepare_query_params(&ss->ps,
+							 fdw_exprs,
 							 num_params,
 							 &fsstate->param_flinfo,
 							 &fsstate->param_exprs,
 							 &fsstate->param_values);
 
 	fsstate->cursor_exists = false;
+
+	return fsstate;
+}
+
+static void
+begin_foreign_scan(ForeignScanState *node, int eflags)
+{
+	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
+
+	node->fdw_state = ts_fdw_scan_begin(&node->ss,
+										fsplan->fs_relids,
+										fsplan->fdw_private,
+										fsplan->fdw_exprs,
+										eflags);
 }
 
 /*
  * Fetch some more rows from the node's cursor.
  */
 static void
-fetch_more_data(ForeignScanState *node)
+fetch_more_data(ScanState *ss, TsFdwScanState *fsstate)
 {
-	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
 	AsyncRequest *volatile req = NULL;
 	AsyncResponseResult *volatile rsp = NULL;
 	MemoryContext oldcontext;
@@ -1936,14 +1949,14 @@ fetch_more_data(ForeignScanState *node)
 
 		for (i = 0; i < numrows; i++)
 		{
-			Assert(IsA(node->ss.ps.plan, ForeignScan));
+			Assert(IsA(ss->ps.plan, ForeignScan));
 
 			fsstate->tuples[i] = make_tuple_from_result_row(res,
 															i,
 															fsstate->rel,
 															fsstate->att_conv_metadata,
 															fsstate->retrieved_attrs,
-															node,
+															ss,
 															fsstate->temp_cxt);
 		}
 
@@ -1975,13 +1988,12 @@ fetch_more_data(ForeignScanState *node)
 }
 
 static TupleTableSlot *
-iterate_foreign_scan(ForeignScanState *node)
+ts_fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 {
-	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
-	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
+	TupleTableSlot *slot = ss->ss_ScanTupleSlot;
 
 	if (!fsstate->cursor_exists)
-		create_cursor(node);
+		create_cursor(ss, fsstate);
 
 	/*
 	 * Get some more tuples, if we've run out.
@@ -1990,7 +2002,7 @@ iterate_foreign_scan(ForeignScanState *node)
 	{
 		/* No point in another fetch if we already detected EOF, though. */
 		if (!fsstate->eof_reached)
-			fetch_more_data(node);
+			fetch_more_data(ss, fsstate);
 		/* If we didn't get any tuples, must be end of data. */
 		if (fsstate->next_tuple >= fsstate->num_tuples)
 			return ExecClearTuple(slot);
@@ -2004,10 +2016,17 @@ iterate_foreign_scan(ForeignScanState *node)
 	return slot;
 }
 
-static void
-rescan_foreign_scan(ForeignScanState *node)
+static TupleTableSlot *
+iterate_foreign_scan(ForeignScanState *node)
 {
 	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+
+	return ts_fdw_scan_iterate(&node->ss, fsstate);
+}
+
+static void
+ts_fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
+{
 	char sql[64];
 	AsyncRequest *req;
 
@@ -2021,7 +2040,7 @@ rescan_foreign_scan(ForeignScanState *node)
 	 * be good enough.  If we've only fetched zero or one batch, we needn't
 	 * even rewind the cursor, just rescan what we have.
 	 */
-	if (node->ss.ps.chgParam != NULL)
+	if (ss->ps.chgParam != NULL)
 	{
 		fsstate->cursor_exists = false;
 		snprintf(sql, sizeof(sql), "CLOSE c%u", fsstate->cursor_number);
@@ -2057,6 +2076,12 @@ rescan_foreign_scan(ForeignScanState *node)
 	fsstate->eof_reached = false;
 }
 
+static void
+rescan_foreign_scan(ForeignScanState *node)
+{
+	ts_fdw_scan_rescan(&node->ss, (TsFdwScanState *) node->fdw_state);
+}
+
 /*
  * Utility routine to close a cursor.
  */
@@ -2083,10 +2108,8 @@ close_cursor(TSConnection *conn, unsigned int cursor_number)
 }
 
 static void
-end_foreign_scan(ForeignScanState *node)
+ts_fdw_scan_end(TsFdwScanState *fsstate)
 {
-	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
-
 	/* if fsstate is NULL, we are in EXPLAIN; nothing to do */
 	if (fsstate == NULL)
 		return;
@@ -2099,6 +2122,12 @@ end_foreign_scan(ForeignScanState *node)
 	fsstate->conn = NULL;
 
 	/* MemoryContexts will be deleted automatically. */
+}
+
+static void
+end_foreign_scan(ForeignScanState *node)
+{
+	ts_fdw_scan_end((TsFdwScanState *) node->fdw_state);
 }
 
 /*
@@ -2758,13 +2787,10 @@ is_foreign_rel_updatable(Relation rel)
 }
 
 static void
-explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
+ts_fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es)
 {
-	List *fdw_private;
-	char *sql;
-	char *relations;
-
-	fdw_private = ((ForeignScan *) node->ss.ps.plan)->fdw_private;
+	const char *sql;
+	const char *relations;
 
 	/*
 	 * Add names of relation handled by the foreign scan when the scan is an
@@ -2808,6 +2834,14 @@ explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
 		sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
 		ExplainPropertyText("Remote SQL", sql, es);
 	}
+}
+
+static void
+explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
+{
+	List *fdw_private = ((ForeignScan *) node->ss.ps.plan)->fdw_private;
+
+	ts_fdw_scan_explain(&node->ss, fdw_private, es);
 }
 
 static void

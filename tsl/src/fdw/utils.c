@@ -39,10 +39,10 @@ typedef struct ConversionLocation
 	/*
 	 * In case of foreign join push down, fdw_scan_tlist is used to identify
 	 * the Var node corresponding to the error location and
-	 * fsstate->ss.ps.state gives access to the RTEs of corresponding relation
+	 * ss->ps.state gives access to the RTEs of corresponding relation
 	 * to get the relation name and attribute name.
 	 */
-	ForeignScanState *fsstate;
+	ScanState *ss;
 } ConversionLocation;
 
 /*
@@ -75,10 +75,21 @@ conversion_error_callback(void *arg)
 	else
 	{
 		/* error occurred in a scan against a foreign join */
-		ForeignScanState *fsstate = errpos->fsstate;
-		ForeignScan *fsplan = castNode(ForeignScan, fsstate->ss.ps.plan);
-		EState *estate = fsstate->ss.ps.state;
+		ScanState *ss = errpos->ss;
+		ForeignScan *fsplan;
+		EState *estate = ss->ps.state;
 		TargetEntry *tle;
+
+		if (IsA(ss->ps.plan, ForeignScan))
+			fsplan = (ForeignScan *) ss->ps.plan;
+		else if (IsA(ss->ps.plan, CustomScan))
+		{
+			CustomScan *csplan = (CustomScan *) ss->ps.plan;
+
+			fsplan = linitial(csplan->custom_private);
+		}
+		else
+			elog(ERROR, "unknown scan node type %u in error callback", nodeTag(ss->ps.plan));
 
 		tle = list_nth_node(TargetEntry, fsplan->fdw_scan_tlist, errpos->cur_attno - 1);
 
@@ -125,7 +136,7 @@ conversion_error_callback(void *arg)
 HeapTuple
 make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 						   AttConvInMetadata *att_conv_metadata, List *retrieved_attrs,
-						   ForeignScanState *fsstate, MemoryContext temp_context)
+						   ScanState *ss, MemoryContext temp_context)
 {
 	HeapTuple tuple;
 	TupleDesc tupdesc;
@@ -154,8 +165,8 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 		tupdesc = RelationGetDescr(rel);
 	else
 	{
-		Assert(fsstate);
-		tupdesc = fsstate->ss.ss_ScanTupleSlot->tts_tupleDescriptor;
+		Assert(ss);
+		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
 	}
 
 	values = (Datum *) palloc0(tupdesc->natts * sizeof(Datum));
@@ -168,7 +179,7 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 	 */
 	errpos.rel = rel;
 	errpos.cur_attno = 0;
-	errpos.fsstate = fsstate;
+	errpos.ss = ss;
 	errcallback.callback = conversion_error_callback;
 	errcallback.arg = (void *) &errpos;
 	errcallback.previous = error_context_stack;
