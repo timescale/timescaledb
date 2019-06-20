@@ -17,7 +17,7 @@ extern void reset_transmission_modes(int nestlevel);
 extern Expr *find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 extern HeapTuple make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 											AttConvInMetadata *att_conv_metadata,
-											List *retrieved_attrs, ForeignScanState *fsstate,
+											List *retrieved_attrs, ScanState *ss,
 											MemoryContext temp_context);
 
 #endif /* TIMESCALEDB_TSL_FDW_UTILS_H */
