@@ -97,9 +97,13 @@ build_script:
 
     dir C:\OpenSSL-Win64\*
 
+    dir C:/OpenSSL-Win64\*
+
     dir C:\OpenSSL-Win64\bin\*
 
-    .\bootstrap -DOPENSSL_ROOT_DIR="C:\OpenSSL-Win64\" -DPG_PATH="C:\Program Files\PostgreSQL\10" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+    dir C:/OpenSSL-v111-Win64-temp/
+
+    .\bootstrap -DOPENSSL_ROOT_DIR="C:/OpenSSL-Win64" -DPG_PATH="C:\Program Files\PostgreSQL\10" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
 
     cmake --build ./build --config Debug
 
