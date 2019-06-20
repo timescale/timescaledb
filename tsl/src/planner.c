@@ -19,6 +19,7 @@
 #include "compat.h"
 #if PG_VERSION_SUPPORTS_MULTINODE
 #include "fdw/timescaledb_fdw.h"
+#include "fdw/server_scan_plan.h"
 #endif
 #include "guc.h"
 
@@ -26,8 +27,22 @@
 
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
-							RelOptInfo *output_rel)
+							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
+							void *extra)
 {
+#if PG_VERSION_SUPPORTS_MULTINODE
+	switch (input_reltype)
+	{
+		case TS_REL_HYPERTABLE:
+		case TS_REL_HYPERTABLE_CHILD:
+			if (hypertable_is_distributed(ht))
+				server_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
+			break;
+		default:
+			break;
+	}
+#endif
+
 	if (UPPERREL_GROUP_AGG == stage)
 		plan_add_gapfill(root, output_rel);
 	if (UPPERREL_WINDOW == stage)
