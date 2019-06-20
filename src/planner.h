@@ -48,4 +48,24 @@ ts_get_private_reloptinfo(const RelOptInfo *rel)
 	return rel->fdw_private;
 }
 
+/*
+ * TsRelType provides consistent classification of planned relations across
+ * planner hooks.
+ */
+typedef enum TsRelType
+{
+	TS_REL_HYPERTABLE,		 /* A hypertable with no parent */
+	TS_REL_CHUNK,			 /* Chunk with no parent (i.e., it's part of the
+							  * plan as a standalone table. For example,
+							  * querying the chunk directly and not via the
+							  * parent hypertable). */
+	TS_REL_HYPERTABLE_CHILD, /* Self child. With PostgreSQL's table expansion,
+							  * the root table is expanded as a child of
+							  * itself. This happens when our expansion code
+							  * is turned off. */
+	TS_REL_CHUNK_CHILD,		 /* Chunk with parent and the result of table
+							  * expansion. */
+	TS_REL_OTHER,			 /* Anything which is none of the above */
+} TsRelType;
+
 #endif /* TIMESCALEDB_PLANNER_H */

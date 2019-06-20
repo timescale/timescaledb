@@ -355,26 +355,6 @@ get_parent_rte(const PlannerInfo *root, Index rti)
 }
 
 /*
- * TsRelType provides consistent classification of planned relations across
- * planner hooks.
- */
-typedef enum TsRelType
-{
-	TS_REL_HYPERTABLE,		 /* A hypertable with no parent */
-	TS_REL_CHUNK,			 /* Chunk with no parent (i.e., it's part of the
-							  * plan as a standalone table. For example,
-							  * querying the chunk directly and not via the
-							  * parent hypertable). */
-	TS_REL_HYPERTABLE_CHILD, /* Self child. With PostgreSQL's table expansion,
-							  * the root table is expanded as a child of
-							  * itself. This happens when our expansion code
-							  * is turned off. */
-	TS_REL_CHUNK_CHILD,		 /* Chunk with parent and the result of table
-							  * expansion. */
-	TS_REL_OTHER,			 /* Anything which is none of the above */
-} TsRelType;
-
-/*
  * Classify a planned relation.
  *
  * This makes use of cache warming that happened during Query preprocessing in
@@ -979,6 +959,9 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 {
 	Query *parse = root->parse;
 	bool partials_found = false;
+	void *extra = NULL;
+	TsRelType reltype = TS_REL_OTHER;
+	Hypertable *ht = NULL;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel);
@@ -988,6 +971,8 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 {
 	Query *parse = root->parse;
 	bool partials_found = false;
+	TsRelType reltype = TS_REL_OTHER;
+	Hypertable *ht = NULL;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
@@ -996,8 +981,12 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	if (!ts_extension_is_loaded())
 		return;
 
+	if (input_rel != NULL)
+		reltype = classify_relation(root, input_rel, &ht);
+
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
-		ts_cm_functions->create_upper_paths_hook(root, stage, input_rel, output_rel);
+		ts_cm_functions
+			->create_upper_paths_hook(root, stage, input_rel, output_rel, reltype, ht, extra);
 
 	if (output_rel != NULL)
 	{
