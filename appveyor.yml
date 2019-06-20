@@ -97,7 +97,8 @@ build_script:
 
     dir C:\OpenSSL-Win64\*
 
-    dir C:/OpenSSL-Win64\*
+    dir C:/OpenSSL-Win64/
+    dir C:/
 
     dir C:\OpenSSL-Win64\bin\*
 
