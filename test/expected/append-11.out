@@ -265,7 +265,7 @@ psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 ----------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
    Sort Key: (date_trunc('year'::text, append_test."time")) DESC
-   Sort Method: quicksort  Memory: 25kB
+   Sort Method: quicksort 
    ->  HashAggregate (actual rows=1 loops=1)
          Group Key: date_trunc('year'::text, append_test."time")
          ->  Custom Scan (ChunkAppend) on append_test (actual rows=3 loops=1)
@@ -292,7 +292,7 @@ ORDER BY t DESC;
    Group Key: (date_trunc('year'::text, "time"))
    ->  Sort (actual rows=0 loops=1)
          Sort Key: (date_trunc('year'::text, "time")) DESC
-         Sort Method: quicksort  Memory: 25kB
+         Sort Method: quicksort 
          ->  Result (actual rows=0 loops=1)
                One-Time Filter: false
 (7 rows)
@@ -363,11 +363,11 @@ psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
      ->  Function Scan on generate_series "time" (actual rows=6 loops=1)
    ->  Sort (actual rows=6 loops=1)
          Sort Key: period.btime
-         Sort Method: quicksort  Memory: 25kB
+         Sort Method: quicksort 
          ->  CTE Scan on period (actual rows=6 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: data.btime
-         Sort Method: quicksort  Memory: 25kB
+         Sort Method: quicksort 
          ->  CTE Scan on data (actual rows=3 loops=1)
 (26 rows)
 
@@ -968,7 +968,7 @@ ORDER BY time DESC;
 ----------------------------------------------------------------------------------
  Sort (actual rows=17 loops=1)
    Sort Key: _hyper_3_11_chunk."time" DESC
-   Sort Method: quicksort  Memory: 25kB
+   Sort Method: quicksort 
    ->  Append (actual rows=17 loops=1)
          ->  Sample Scan on _hyper_3_11_chunk (actual rows=4 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
@@ -991,7 +991,7 @@ ORDER BY time DESC;
 ----------------------------------------------------------------------------------
  Sort (actual rows=17 loops=1)
    Sort Key: metrics_date."time" DESC
-   Sort Method: quicksort  Memory: 25kB
+   Sort Method: quicksort 
    ->  Custom Scan (ChunkAppend) on metrics_date (actual rows=17 loops=1)
          Chunks excluded during startup: 2
          ->  Sample Scan on _hyper_3_11_chunk (actual rows=4 loops=1)
@@ -1089,7 +1089,7 @@ ORDER BY time DESC;
                Heap Fetches: 129
    ->  Sort (actual rows=32 loops=1)
          Sort Key: g."time"
-         Sort Method: quicksort  Memory: 26kB
+         Sort Method: quicksort 
          ->  Function Scan on generate_series g (actual rows=32 loops=1)
 (18 rows)
 
