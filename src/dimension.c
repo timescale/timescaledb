@@ -376,33 +376,48 @@ ts_dimension_get_open_slice_ordinal(Dimension *dim, DimensionSlice *slice)
  * intervals where repartitioning happens, there might be an unexpected number
  * of slices due to a mix of slices from both the old and the new partitioning
  * configuration. As a result, the ordinal value of a given slice might not
- * actually match the partitioning settings at a given point in time.
+ * actually match the partitioning settings at a given point in time. In this case, we will return
+ * the ordinal of current slice most overlapping the given slice (or first fully overlapped slice).
  */
 static int
-ts_dimension_get_closed_slice_ordinal(Dimension *dim, DimensionSlice *slice)
+ts_dimension_get_closed_slice_ordinal(Dimension *dim, DimensionSlice *target_slice)
 {
-	int64 slice_size;
-	int i;
+	int64 current_slice_size;
+	int64 target_slice_size;
+	int candidate_slice_ordinal;
+	int64 target_overlap_with_candidate_slice;
 
 	Assert(NULL != dim && IS_CLOSED_DIMENSION(dim));
-	Assert(NULL != slice);
+	Assert(NULL != target_slice);
 	Assert(dim->fd.num_slices > 0);
 
-	if (slice->fd.range_start == DIMENSION_SLICE_MINVALUE)
+	/* Slicing assumes partitioning functions use the range [0, INT32_MAX], though the first slice
+	 * uses INT64_MIN as its lower bound, and the last slice uses INT64_MAX as its upper bound. */
+	if (target_slice->fd.range_start == DIMENSION_SLICE_MINVALUE)
 		return 0;
 
-	if (slice->fd.range_end == DIMENSION_SLICE_MAXVALUE)
+	if (target_slice->fd.range_end == DIMENSION_SLICE_MAXVALUE)
 		return dim->fd.num_slices - 1;
 
-	slice_size = slice->fd.range_end - slice->fd.range_start;
+	Assert(target_slice->fd.range_start > 0);
+	Assert(target_slice->fd.range_end < DIMENSION_SLICE_CLOSED_MAX);
 
-	Assert(slice->fd.range_start % slice_size == 0);
+	/* Given a target slice starting from some point p, determine a candidate slice in the current
+	 * partitioning configuration that contains p. If that slice contains over half of our target
+	 * slice, return it's ordinal. Otherwise return the ordinal for the next slice. */
+	current_slice_size = calculate_closed_range_interval(dim);
+	target_slice_size = target_slice->fd.range_end - target_slice->fd.range_start;
+	candidate_slice_ordinal = target_slice->fd.range_start / current_slice_size;
+	target_overlap_with_candidate_slice =
+		current_slice_size - (target_slice->fd.range_start % current_slice_size);
 
-	i = slice->fd.range_start / slice_size;
-
-	Assert(i >= 0);
-
-	return i;
+	/* Note that if the candidate slice wholly contains the target slice,
+	 * target_overlap_with_candidate_slice will actually be greater than target_slice_size.  This
+	 * doesn't affect the correctness of the following check. */
+	if (target_overlap_with_candidate_slice >= target_slice_size / 2)
+		return candidate_slice_ordinal;
+	else
+		return candidate_slice_ordinal + 1;
 }
 
 /*
