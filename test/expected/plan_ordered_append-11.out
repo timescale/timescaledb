@@ -432,7 +432,7 @@ ORDER BY device_id, time LIMIT 1;
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
+         Sort Method: top-N heapsort 
          ->  Append (actual rows=73443 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=20160 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=30240 loops=1)
@@ -932,7 +932,7 @@ ORDER BY time LIMIT 10;
          Order: ht_missing_indexes."time"
          ->  Sort (actual rows=10 loops=1)
                Sort Key: _hyper_5_16_chunk."time"
-               Sort Method: top-N heapsort  Memory: 25kB
+               Sort Method: top-N heapsort 
                ->  Seq Scan on _hyper_5_16_chunk (actual rows=24477 loops=1)
                      Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Rows Removed by Filter: 5763
@@ -1036,7 +1036,7 @@ ORDER BY time, device_id LIMIT 1;
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_7_24_chunk."time", _hyper_7_24_chunk.device_id
-         Sort Method: top-N heapsort  Memory: 25kB
+         Sort Method: top-N heapsort 
          ->  Append (actual rows=77766 loops=1)
                ->  Seq Scan on _hyper_7_24_chunk (actual rows=6720 loops=1)
                ->  Seq Scan on _hyper_7_26_chunk (actual rows=13440 loops=1)
@@ -1059,7 +1059,7 @@ ORDER BY device_id, time LIMIT 1;
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_7_23_chunk.device_id, _hyper_7_23_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
+         Sort Method: top-N heapsort 
          ->  Append (actual rows=77766 loops=1)
                ->  Seq Scan on _hyper_7_23_chunk (actual rows=6241 loops=1)
                ->  Seq Scan on _hyper_7_24_chunk (actual rows=6720 loops=1)
@@ -1353,7 +1353,7 @@ FROM ordered_append o1 INNER JOIN (SELECT max(time) AS max_time FROM ordered_app
 --------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=3 loops=1)
    Sort Key: o1."time"
-   Sort Method: quicksort  Memory: 25kB
+   Sort Method: quicksort 
    ->  Nested Loop (actual rows=3 loops=1)
          ->  Result (actual rows=1 loops=1)
                InitPlan 1 (returns $0)

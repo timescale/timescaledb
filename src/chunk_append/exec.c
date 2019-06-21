@@ -187,7 +187,7 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 		/*
 		 * make sure all params are initialized for runtime exclusion
 		 */
-		node->ss.ps.chgParam = state->subplanstates[0]->plan->allParam;
+		node->ss.ps.chgParam = bms_copy(state->subplanstates[0]->plan->allParam);
 	}
 }
 

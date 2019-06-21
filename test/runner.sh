@@ -58,6 +58,8 @@ ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATH
 
 export TEST_DBNAME
 
+# we strip out any output between <exclude_from_test></exclude_from_test>
+# and the part about memory usage in EXPLAIN ANALYZE output of Sort nodes
 ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
@@ -74,4 +76,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
-     $@ -d ${TEST_DBNAME} 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d'
+     $@ -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\+kB!!'
