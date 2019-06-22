@@ -9,9 +9,11 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
+#include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "hypertable.h"
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
 #include "compat.h"
@@ -70,7 +72,30 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			path->startup_exclusion = true;
 
 		if (ts_guc_enable_runtime_exclusion && contain_param_exec((Node *) rinfo->clause))
-			path->runtime_exclusion = true;
+		{
+			ListCell *lc_var;
+
+			/*
+			 * check the param references a partitioning column of the hypertable
+			 * otherwise we skip runtime exclusion
+			 */
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			{
+				Var *var = lfirst(lc_var);
+				/*
+				 * varattno 0 is whole row and varattno less than zero are
+				 * system columns so we skip those even though
+				 * ts_is_partitioning_column would return the correct
+				 * answer for those as well
+				 */
+				if (var->varno == rel->relid && var->varattno > 0 &&
+					ts_is_partitioning_column(ht, var->varattno))
+				{
+					path->runtime_exclusion = true;
+					break;
+				}
+			}
+		}
 	}
 
 	/*
