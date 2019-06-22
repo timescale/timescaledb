@@ -936,6 +936,29 @@ ORDER BY time DESC;
                      Index Cond: ("time" = m1."time")
 (20 rows)
 
+-- test runtime exclusion does not activate for constraints on non-partitioning columns
+-- should not use runtime exclusion
+:PREFIX SELECT * FROM append_test a LEFT JOIN LATERAL(SELECT * FROM join_test j WHERE a.colorid = j.colorid ORDER BY time DESC LIMIT 1) j ON true ORDER BY a.time LIMIT 1;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Nested Loop Left Join
+         ->  Custom Scan (ChunkAppend) on append_test a
+               Order: a."time"
+               ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk a_1
+               ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk a_2
+               ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk a_3
+         ->  Limit
+               ->  Custom Scan (ChunkAppend) on join_test j
+                     Order: j."time" DESC
+                     ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_1
+                           Filter: (a.colorid = colorid)
+                     ->  Index Scan using _hyper_2_5_chunk_join_test_time_idx on _hyper_2_5_chunk j_2
+                           Filter: (a.colorid = colorid)
+                     ->  Index Scan using _hyper_2_4_chunk_join_test_time_idx on _hyper_2_4_chunk j_3
+                           Filter: (a.colorid = colorid)
+(16 rows)
+
 -- test runtime exclusion with LATERAL and generate_series
 :PREFIX SELECT g.time FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d'::interval) g(time) LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m WHERE m.time=g.time LIMIT 1) m ON true;
                                                    QUERY PLAN                                                    
@@ -990,6 +1013,27 @@ ORDER BY time DESC;
          ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5
                Index Cond: ("time" = g."time")
 (13 rows)
+
+:PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time>g.time + '1 day' ORDER BY time LIMIT 1) m ON true;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m
+               Order: m."time"
+               Chunks excluded during startup: 0
+               ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m_1
+                     Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
+               ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m_2
+                     Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
+               ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m_3
+                     Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
+               ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m_4
+                     Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
+               ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5
+                     Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
+(16 rows)
 
 -- test runtime exclusion with subquery
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE m1.time=(SELECT max(time) FROM metrics_timestamptz);

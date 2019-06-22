@@ -1872,3 +1872,16 @@ ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext m
 
 	return data.ht_oids;
 }
+
+bool
+ts_is_partitioning_column(Hypertable *ht, Index column_attno)
+{
+	uint16 i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		if (column_attno == ht->space->dimensions[i].column_attno)
+			return true;
+	}
+	return false;
+}
