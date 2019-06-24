@@ -13,6 +13,7 @@
 #include <miscadmin.h>
 #include <utils/hsearch.h>
 #include <access/tupconvert.h>
+#include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -275,6 +276,19 @@ cache_inval_htab_write(void)
 {
 	HASH_SEQ_STATUS hash_seq;
 	ContinuousAggsCacheInvalEntry *current_entry;
+	Catalog *catalog;
+
+	if (hash_get_num_entries(continuous_aggs_cache_inval_htab) == 0)
+		return;
+
+	catalog = ts_catalog_get();
+
+	/* The invalidation threshold must remain locked until the end of
+	 * the transaction to ensure the materializer will see our updates,
+	 * so we explicitly lock it here
+	 */
+	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					AccessShareLock);
 
 	hash_seq_init(&hash_seq, continuous_aggs_cache_inval_htab);
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
