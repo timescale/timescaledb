@@ -49,6 +49,7 @@
 #include "partitioning.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "func_cache.h"
 #include "chunk.h"
 #include "planner.h"
 #include "plan_expand_hypertable.h"
@@ -240,15 +241,36 @@ should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered
 				pk = linitial_node(PathKey, path->pathkeys);
 
 				/*
-				 * check pathkey is compatible with ordered append ordering
-				 * we created when expanding hypertable
+				 * Check PathKey is compatible with Ordered Append ordering
+				 * we created when expanding hypertable.
+				 * Even though ordered is true on the RelOptInfo we have to
+				 * double check that current Path fulfills requirements for
+				 * Ordered Append transformation because the RelOptInfo may
+				 * be used for multiple Pathes.
 				 */
 				foreach (lc, pk->pk_eclass->ec_members)
 				{
 					EquivalenceMember *em = lfirst(lc);
-					if (!em->em_is_child && IsA(em->em_expr, Var) &&
-						castNode(Var, em->em_expr)->varattno == order_attno)
-						return true;
+					if (!em->em_is_child)
+					{
+						if (IsA(em->em_expr, Var) &&
+							castNode(Var, em->em_expr)->varattno == order_attno)
+							return true;
+						else if (IsA(em->em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
+						{
+							FuncExpr *func = castNode(FuncExpr, em->em_expr);
+							FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
+							Expr *transformed;
+
+							if (info != NULL)
+							{
+								transformed = info->sort_transform(func);
+								if (IsA(transformed, Var) &&
+									castNode(Var, transformed)->varattno == order_attno)
+									return true;
+							}
+						}
+					}
 				}
 				return false;
 				break;

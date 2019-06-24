@@ -75,13 +75,13 @@ ORDER BY device_id LIMIT 1;
 FROM ordered_append
 ORDER BY device_id, time LIMIT 1;
 
--- queries without LIMIT shouldnt use ordered append
+-- queries without LIMIT should use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
 ORDER BY time ASC;
 
--- queries without ORDER BY shouldnt use ordered append (still uses append though)
+-- queries without ORDER BY shouldnt use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
@@ -142,19 +142,45 @@ ORDER BY time ASC LIMIT 1;
 FROM ordered_append
 ORDER BY time ASC LIMIT 1;
 
--- test query with order by time_bucket (should not use ordered append)
+-- test query with ORDER BY time_bucket
 :PREFIX SELECT
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY 1 LIMIT 1;
 
--- test query with order by time_bucket (should not use ordered append)
+-- test query with ORDER BY time_bucket
 :PREFIX SELECT
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY time_bucket('1d',time) LIMIT 1;
 
--- test query with now() should result in ordered append with constraint aware append
+-- test query with ORDER BY time_bucket, device_id
+-- must not use ordered append
+:PREFIX SELECT
+  time_bucket('1d',time), device_id, name
+FROM dimension_last
+ORDER BY time_bucket('1d',time), device_id LIMIT 1;
+
+-- test query with ORDER BY date_trunc
+:PREFIX SELECT
+  time_bucket('1d',time), device_id, value
+FROM ordered_append
+ORDER BY date_trunc('day', time) LIMIT 1;
+
+-- test query with ORDER BY date_trunc
+:PREFIX SELECT
+  date_trunc('day',time), device_id, value
+FROM ordered_append
+ORDER BY 1 LIMIT 1;
+
+-- test query with ORDER BY date_trunc, device_id
+-- must not use ordered append
+:PREFIX SELECT
+  date_trunc('day',time), device_id, name
+FROM dimension_last
+ORDER BY 1,2 LIMIT 1;
+
+-- test query with now() should result in ordered ChunkAppend
 :PREFIX SELECT * FROM ordered_append WHERE time < now() + '1 month'
 ORDER BY time DESC limit 1;
 

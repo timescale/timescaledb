@@ -30,13 +30,12 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
- Result
-   ->  Merge Append
-         Sort Key: (time_bucket(10, _hyper_1_1_chunk."time"))
-         ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
-(4 rows)
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on order_test
+   Order: time_bucket(10, order_test."time")
+   ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
+(3 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;

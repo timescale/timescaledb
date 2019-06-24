@@ -249,19 +249,18 @@ psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
- Sort
-   Sort Key: (date_trunc('year'::text, append_test."time")) DESC
-   ->  HashAggregate
-         Group Key: (date_trunc('year'::text, append_test."time"))
-         ->  Custom Scan (ChunkAppend) on append_test
-               Chunks excluded during startup: 1
-               ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
-                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-               ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
-                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-(10 rows)
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ GroupAggregate
+   Group Key: (date_trunc('year'::text, append_test."time"))
+   ->  Custom Scan (ChunkAppend) on append_test
+         Order: date_trunc('year'::text, append_test."time") DESC
+         Chunks excluded during startup: 1
+         ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+               Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+         ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+               Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+(9 rows)
 
 -- querying outside the time range should return nothing. This tests
 -- that ConstraintAwareAppend can handle the case when an Append node
