@@ -31,6 +31,7 @@
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
+#include <utils/elog.h>
 #include <utils/rls.h>
 
 #include "hypertable.h"
@@ -110,10 +111,21 @@ on_chunk_insert_state_changed(ChunkInsertState *state, void *data)
 }
 
 /*
- * Copy FROM file to relation.
+ * Error context callback when copying from table to chunk.
+ */
+static void
+copy_table_to_chunk_error_callback(void *arg)
+{
+	TableScanDesc scandesc = (TableScanDesc) arg;
+	errcontext("copying from table %s", RelationGetRelationName(scandesc->rs_rd));
+}
+
+/*
+ * Use COPY FROM to copy data from file to relation.
  */
 static uint64
-copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
+copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*callback)(void *),
+		 void *arg)
 {
 	Datum *values;
 	bool *nulls;
@@ -123,7 +135,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	ExprContext *econtext;
 	TupleTableSlot *singleslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
-	ErrorContextCallback errcallback = { 0 };
+	ErrorContextCallback errcallback = {
+		.callback = callback,
+		.arg = arg,
+	};
 	CommandId mycid = GetCurrentCommandId(true);
 	int ti_options = 0; /* start with default options for insert */
 	BulkInsertState bistate;
@@ -268,12 +283,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	/* Set up callback to identify error line number.
 	 *
 	 * It is not necessary to add an entry to the error context stack if we do
-	 * not have a CopyState. In that case, we just use the existing error
-	 * already on the context stack. */
-	if (ccstate->cstate)
+	 * not have a CopyState or callback. In that case, we just use the existing
+	 * error already on the context stack. */
+	if (ccstate->cstate && callback)
 	{
-		errcallback.callback = CopyFromErrorCallback;
-		errcallback.arg = (void *) ccstate->cstate;
 		errcallback.previous = error_context_stack;
 		error_context_stack = &errcallback;
 	}
@@ -684,7 +697,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	if (hypertable_is_distributed(ht))
 		ts_cm_functions->distributed_copy(stmt, processed, ccstate, attnums);
 	else
-		*processed = copyfrom(ccstate, pstate->p_rtable, ht);
+		*processed = copyfrom(ccstate, pstate->p_rtable, ht, CopyFromErrorCallback, cstate);
 
 	EndCopyFrom(cstate);
 	free_parsestate(pstate);
@@ -754,7 +767,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
 	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
-	copyfrom(ccstate, pstate->p_rtable, ht);
+	copyfrom(ccstate, pstate->p_rtable, ht, copy_table_to_chunk_error_callback, scandesc);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
 	table_close(rel, lockmode);
