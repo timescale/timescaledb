@@ -12,6 +12,25 @@ accidentally triggering the load of a previous DB version.**
 **Minor features**
 * #1273 Propagate quals to joined hypertables
 
+## 1.3.2 (2019-06-24)
+
+This maintenance release contains bug and security fixes since the 1.3.1 release. We deem it moderate-to-high priority for upgrading.
+
+This release fixes some security vulnerabilities, specifically related to being able to elevate role-based permissions by database users that already have access to the database.  We strongly recommend that users who rely on role-based permissions upgrade to this release as soon as possible.
+
+**Security Fixes**
+* #1311 Fix role-based permission checking logic
+
+**Bugfixes**
+* #1315 Fix potentially lost invalidations in continuous aggs
+* #1303 Fix handling of types with custom time partitioning
+* #1299 Arm32: Fix Datum to int cast issue
+* #1297 Arm32: Fix crashes due to long handling
+* #1019 Add ARM32 tests on travis
+
+**Thanks**
+* @hedayat for reporting the error with handling of types with custom time partitioning
+
 ## 1.3.1 (2019-06-10)
 
 This maintenance release contains bugfixes since the 1.3.0 release.
