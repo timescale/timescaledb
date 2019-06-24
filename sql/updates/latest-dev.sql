@@ -3,9 +3,6 @@ ALTER TABLE _timescaledb_catalog.telemetry_metadata ALTER COLUMN include_in_tele
 ALTER TABLE _timescaledb_catalog.telemetry_metadata RENAME TO metadata;
 ALTER INDEX _timescaledb_catalog.telemetry_metadata_pkey RENAME TO metadata_pkey;
 
-DROP FUNCTION IF EXISTS _timescaledb_internal.dimension_calculate_default_range_open(bigint, bigint);
-DROP FUNCTION IF EXISTS _timescaledb_internal.dimension_calculate_default_range_closed(bigint, smallint);
-
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
     materialization_id INTEGER PRIMARY KEY
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
