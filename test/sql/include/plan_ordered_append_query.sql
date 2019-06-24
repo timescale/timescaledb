@@ -57,6 +57,12 @@ ORDER BY time DESC, device_id LIMIT 1;
 FROM ordered_append
 ORDER BY time DESC, device_id LIMIT 1;
 
+-- test sort column not in targetlist
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM ordered_append
+ORDER BY time DESC LIMIT 1;
+
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX SELECT
   time, device_id, value
