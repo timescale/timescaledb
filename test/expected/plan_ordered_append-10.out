@@ -407,6 +407,24 @@ ORDER BY time DESC, device_id LIMIT 1;
          ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
 (6 rows)
 
+-- test sort column not in targetlist
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM ordered_append
+ORDER BY time DESC LIMIT 1;
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: ordered_append."time" DESC
+         ->  Index Only Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (never executed)
+               Heap Fetches: 0
+(9 rows)
+
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX SELECT
   time, device_id, value
