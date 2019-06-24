@@ -35,11 +35,11 @@ In other words, TimescaleDB exposes what look like regular tables, but
 are actually only an
 abstraction (or a virtual view) of many individual tables comprising the
 actual data. This single-table view, which we call a
-[hypertable](https://docs.timescale.com/latest/introduction/architecture#hypertables),
+[hypertable](https://docs.timescale.com/introduction/architecture#hypertables),
 is comprised of many chunks, which are created by partitioning
 the hypertable's data in either one or two dimensions: by a time
 interval, and by an (optional) "partition key" such as
-device id, location, user id, etc. ([Architecture discussion](https://docs.timescale.com/latest/introduction/architecture))
+device id, location, user id, etc. ([Architecture discussion](https://docs.timescale.com/introduction/architecture))
 
 Virtually all user interactions with TimescaleDB are with
 hypertables. Creating tables and indexes, altering tables, inserting
@@ -74,8 +74,8 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
 ```
 
-- [Quick start: Creating hypertables](https://docs.timescale.com/latest/getting-started/creating-hypertables)
-- [Reference examples](https://docs.timescale.com/latest/using-timescaledb/schema-management)
+- [Quick start: Creating hypertables](https://docs.timescale.com/getting-started/creating-hypertables)
+- [Reference examples](https://docs.timescale.com/using-timescaledb/schema-management)
 
 #### Inserting and querying data
 
@@ -100,9 +100,9 @@ SELECT time_bucket('15 minutes', time) AS fifteen_min,
 In addition, TimescaleDB includes additional functions for time-series
 analysis that are not present in vanilla PostgreSQL. (For example, the `time_bucket` function above.)
 
-- [Quick start: Basic operations](https://docs.timescale.com/latest/getting-started/basic-operations)
-- [Reference examples](https://docs.timescale.com/latest/using-timescaledb/writing-data)
-- [TimescaleDB API](https://docs.timescale.com/latest/api)
+- [Quick start: Basic operations](https://docs.timescale.com/using-timescaledb/hypertables)
+- [Reference examples](https://docs.timescale.com/using-timescaledb/writing-data)
+- [TimescaleDB API](https://docs.timescale.com/api)
 
 ### Installation
 
@@ -116,7 +116,7 @@ TimescaleDB is available pre-packaged for several platforms:
 - [MacOS (Homebrew)](https://docs.timescale.com/getting-started/installation/macos/installation-homebrew)
 - [Windows](https://docs.timescale.com/getting-started/installation/windows/installation-windows)
 
-We recommend following our detailed [installation instructions](https://docs.timescale.com/latest/getting-started/installation).
+We recommend following our detailed [installation instructions](https://docs.timescale.com/getting-started/installation).
 
 #### Building from source (Unix-based systems)
 
@@ -148,7 +148,7 @@ make install
 
 Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config` that should be used by using `./bootstrap -DPG_CONFIG=/path/to/pg_config`.
 
-Please see our [additional configuration instructions](https://docs.timescale.com/latest/getting-started/installation#update-postgresql-conf).
+Please see our [additional configuration instructions](https://docs.timescale.com/getting-started/installation).
 
 #### Building from source (Windows)
 
@@ -197,11 +197,11 @@ set your PostgreSQL configuration settings based on your system's resources.
 
 ### Additional documentation
 
-- [Why use TimescaleDB?](https://docs.timescale.com/latest/introduction)
-- [Migrating from PostgreSQL](https://docs.timescale.com/latest/getting-started/setup/migrate-from-postgresql)
-- [Writing data](https://docs.timescale.com/latest/using-timescaledb/writing-data)
-- [Querying and data analytics](https://docs.timescale.com/latest/using-timescaledb/reading-data)
-- [Tutorials and sample data](https://docs.timescale.com/latest/tutorials)
+- [Why use TimescaleDB?](https://docs.timescale.com/introduction)
+- [Migrating from PostgreSQL](https://docs.timescale.com/getting-started/setup/migrate-from-postgresql)
+- [Writing data](https://docs.timescale.com/using-timescaledb/writing-data)
+- [Querying and data analytics](https://docs.timescale.com/using-timescaledb/reading-data)
+- [Tutorials and sample data](https://docs.timescale.com/tutorials)
 
 ### Support
 
