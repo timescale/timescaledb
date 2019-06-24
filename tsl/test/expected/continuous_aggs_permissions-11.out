@@ -3,11 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- initialize the bgw mock state to prevent the materialization workers from running
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-\set WAIT_ON_JOB 0
-\set IMMEDIATELY_SET_UNTIL 1
-\set WAIT_FOR_OTHER_TO_ADVANCE 2
 -- stop the background workers from locking up the tables,
 -- and remove any default jobs, e.g., telemetry so bgw_job isn't polluted
 SELECT _timescaledb_internal.stop_background_workers();
