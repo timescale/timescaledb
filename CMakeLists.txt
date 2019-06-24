@@ -241,7 +241,9 @@ install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
   DESTINATION "${PG_SHAREDIR}/extension")
 
-find_program(CLANG_FORMAT clang-format DOC "The path to clang-format")
+find_program(CLANG_FORMAT
+  NAMES clang-format-9 clang-format-8 clang-format-7 clang-format
+  DOC "The path to clang-format")
 
 if (CLANG_FORMAT)
   execute_process(
@@ -267,13 +269,13 @@ if (NOT CLANG_FORMAT)
   else ()
     message(STATUS "Using docker based clang-format")
     add_custom_target(format
-      COMMAND docker run -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
+      COMMAND docker run -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh ${CLANG_FORMAT}
     )
   endif()
 else()
-  message(STATUS "Using local clang-format")
+  message(STATUS "Using local clang-format named '${CLANG_FORMAT}'")
   add_custom_target(format
-    COMMAND ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh
+    COMMAND ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh ${CLANG_FORMAT}
   )
 endif ()
 
