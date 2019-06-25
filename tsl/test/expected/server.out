@@ -50,6 +50,7 @@ ERROR:  invalid server name
 RESET ROLE;
 -- Should not generate error with if_not_exists option
 SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
+NOTICE:  server "server_2" already exists, skipping
 NOTICE:  remote server database "server_2" already exists, skipping
  server_name |   host    | port  | database |     username      |  server_username  | created 
 -------------+-----------+-------+----------+-------------------+-------------------+---------
@@ -69,6 +70,7 @@ OPTIONS (host 'localhost', port '15432', dbname 'server_4');
 -- User mapping should be added with NOTICE
 RESET ROLE;
 SELECT * FROM add_server('server_4', database => 'server_4', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
+NOTICE:  server "server_4" already exists, skipping
 NOTICE:  adding user mapping for "default_perm_user" to server "server_4"
  server_name |   host    | port  | database |     username      |  server_username  | created 
 -------------+-----------+-------+----------+-------------------+-------------------+---------

@@ -142,7 +142,6 @@ dist_util_is_frontend_session(void)
 	return uuid_matches(UUIDPGetDatum(peer_dist_id), dist_id);
 }
 
-#if !PG96
 Datum
 dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 {
@@ -199,4 +198,3 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 	ts_dist_cmd_close_response(funcctx->user_fctx);
 	SRF_RETURN_DONE(funcctx);
 }
-#endif

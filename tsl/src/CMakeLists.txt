@@ -1,6 +1,4 @@
 set(SOURCES
-  chunk_api.c
-  deparse.c
   hypertable.c
   init.c
   license.c
@@ -8,11 +6,16 @@ set(SOURCES
   telemetry.c
   partialize_finalize.c
   planner.c
-  server.c
 )
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
-  list(APPEND SOURCES server_dispatch.c process_utility.c dist_util.c)
+if (PG_VERSION_SUPPORTS_MULTINODE)
+  list(APPEND SOURCES
+       deparse.c
+       server.c
+       server_dispatch.c
+       chunk_api.c
+       process_utility.c
+       dist_util.c)
 endif()
 
 # Add test source code in Debug builds

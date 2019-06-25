@@ -12,8 +12,6 @@
 #include "remote/dist_commands.h"
 #include "remote/dist_ddl.h"
 
-#if !PG96
-
 void
 tsl_ddl_command_start(ProcessUtilityArgs *args)
 {
@@ -77,5 +75,3 @@ _tsl_process_utility_fini(void)
 	UnregisterXactCallback(tsl_process_utility_xact_abort, NULL);
 	UnregisterSubXactCallback(tsl_process_utility_subxact_abort, NULL);
 }
-
-#endif /* PG9.6*/
