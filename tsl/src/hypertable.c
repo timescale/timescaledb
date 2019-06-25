@@ -52,7 +52,6 @@ server_append(List *servers, int32 hypertable_id, const char *servername,
 static List *
 hypertable_create_backend_tables(int32 hypertable_id, List *servers)
 {
-#if !PG96
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 	ListCell *cell;
 	List *remote_ids = NIL;
@@ -80,12 +79,6 @@ hypertable_create_backend_tables(int32 hypertable_id, List *servers)
 		ts_dist_cmd_run_on_servers(lfirst(cell), servers);
 
 	return remote_ids;
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("unable to distribute hypertables in older versions of Postgres (<10)")));
-	return NIL;
-#endif
 }
 
 /*

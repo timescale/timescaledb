@@ -79,20 +79,6 @@
 #include "extension_constants.h"
 #include "plan_expand_hypertable.h"
 
-#if PG96
-#define IS_SIMPLE_REL(rel)                                                                         \
-	((rel)->reloptkind == RELOPT_BASEREL || (rel)->reloptkind == RELOPT_OTHER_MEMBER_REL)
-
-/* Is the given relation a join relation? */
-#define IS_JOIN_REL(rel) ((rel)->reloptkind == RELOPT_JOINREL)
-
-/* Is the given relation an upper relation? */
-#define IS_UPPER_REL(rel) ((rel)->reloptkind == RELOPT_UPPER_REL)
-
-/* Is the given relation an "other" relation? */
-#define IS_OTHER_REL(rel) ((rel)->reloptkind == RELOPT_OTHER_MEMBER_REL)
-#endif /* PG96 */
-
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
  */
@@ -829,19 +815,12 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 static char *
 deparse_type_name(Oid type_oid, int32 typemod)
 {
-#if (PG96 || PG10)
-	if (is_builtin(type_oid))
-		return format_type_with_typemod(type_oid, typemod);
-	else
-		return format_type_with_typemod_qualified(type_oid, typemod);
-#else
 	bits16 flags = FORMAT_TYPE_TYPEMOD_GIVEN;
 
 	if (!is_builtin(type_oid))
 		flags |= FORMAT_TYPE_FORCE_QUALIFY;
 
 	return format_type_extended(type_oid, typemod, flags);
-#endif
 }
 
 /*

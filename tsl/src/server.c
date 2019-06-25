@@ -29,11 +29,9 @@
 #include <catalog.h>
 
 #include "fdw/timescaledb_fdw.h"
-#if !PG96
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
-#endif
 #include "server.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -46,9 +44,7 @@
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
-#if !PG96
 static const char *ping_query = "SELECT 1";
-#endif
 
 /*
  * Create a user mapping.
@@ -70,12 +66,8 @@ create_user_mapping(const char *username, const char *server_username, const cha
 	};
 	CreateUserMappingStmt stmt = {
 		.type = T_CreateUserMappingStmt,
-#if PG96
-		.user = (Node *) &rolespec,
-#else
 		.user = &rolespec,
 		.if_not_exists = if_not_exists,
-#endif
 		.servername = (char *) servername,
 		.options = NIL,
 	};
@@ -121,9 +113,7 @@ create_foreign_server(const char *servername, const char *host, int32 port, cons
 			list_make3(makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1),
 					   makeDefElemCompat("port", (Node *) makeInteger(port), -1),
 					   makeDefElemCompat("dbname", (Node *) makeString(pstrdup(dbname)), -1)),
-#if !PG96
 		.if_not_exists = if_not_exists,
-#endif
 	};
 
 	if (NULL == host)
@@ -227,8 +217,6 @@ get_user_mapping(Oid userid, Oid serverid)
 
 	return um;
 }
-
-#if !PG96 /* Remote server bootstrapping only supported on PG10 and above */
 
 static List *
 create_server_options(const char *host, int32 port, const char *dbname, const char *user,
@@ -439,8 +427,6 @@ remove_distributed_id_from_backend(const char *servername)
 	remote_connection_close(conn);
 }
 
-#endif /* !PG96 */
-
 /* set_distid may need to be false for some otherwise invalid configurations that are useful for
  * testing */
 static Datum
@@ -459,7 +445,6 @@ server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	const char *bootstrap_database = PG_ARGISNULL(8) ? NULL : PG_GETARG_CSTRING(8);
 	const char *bootstrap_user = NULL;
 	const char *bootstrap_password = NULL;
-	ForeignServer *server;
 	UserMapping *um;
 	const char *username;
 	Oid serverid = InvalidOid;
@@ -477,12 +462,10 @@ server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		bootstrap_password = PG_ARGISNULL(10) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(10));
 	}
 
-#if !PG96
 	if (set_distid && dist_util_membership() == DIST_MEMBER_BACKEND)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_SERVERS_ASSIGNMENT_ALREADY_EXISTS),
 				 (errmsg("unable to assign backends to an existing backend database"))));
-#endif
 
 	if (NULL == bootstrap_database)
 		ereport(ERROR,
@@ -505,25 +488,17 @@ server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	 */
 	PreventInTransactionBlock(true, "add_server");
 
-	/*
-	 * First check for existing foreign server. We could rely on
-	 * if_not_exists, but it is not supported in PostgreSQL 9.6 for foreign
-	 * servers or user mappings. We still pass use this argument in the create
-	 * statement for newer versions in case we drop support 9.6 in the future.
-	 */
-	server = GetForeignServerByName(servername, true);
-
-	if (NULL == server)
+	/* First check for existing foreign server */
+	serverid = create_foreign_server(servername, host, port, dbname, if_not_exists);
+	if (!OidIsValid(serverid))
 	{
-		serverid = create_foreign_server(servername, host, port, dbname, if_not_exists);
+		Assert(if_not_exists);
+		serverid = GetForeignServerByName(servername, true)->serverid;
+	}
+	else
+	{
 		created = true;
 	}
-	else if (if_not_exists)
-		serverid = server->serverid;
-	else
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("server \"%s\" already exists", servername)));
 
 	/*
 	 * Make the foreign server visible in current transaction so that we can
@@ -554,8 +529,7 @@ server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 						username,
 						servername)));
 
-		/* Try to create database and extension on remote server */
-#if !PG96
+	/* Try to create database and extension on remote server */
 	server_bootstrap(servername,
 					 host,
 					 port,
@@ -578,16 +552,6 @@ server_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 									  bootstrap_user,
 									  bootstrap_password);
 	}
-
-#else
-	/* Those arguments are unused in 9.6, disable compiler warning */
-	(void) bootstrap_database;
-	(void) bootstrap_user;
-	(void) bootstrap_password;
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 (errmsg("remote server bootstrapping only supported on PG10 and above"))));
-#endif
 
 	PG_RETURN_DATUM(create_server_datum(fcinfo,
 										servername,
@@ -981,10 +945,8 @@ server_delete(PG_FUNCTION_ARGS)
 	ObjectAddress address;
 	ObjectAddress secondaryObject = InvalidObjectAddress;
 	Node *parsetree = NULL;
-#if !PG96
 	UserMapping *um = NULL;
 	Cache *conn_cache;
-#endif
 
 	if (server_name == NULL)
 		ereport(ERROR,
@@ -994,7 +956,6 @@ server_delete(PG_FUNCTION_ARGS)
 	if (server == NULL)
 		PG_RETURN_BOOL(false);
 
-#if !PG96
 	um = get_user_mapping(GetUserId(), server->serverid);
 	if (um != NULL)
 	{
@@ -1002,22 +963,18 @@ server_delete(PG_FUNCTION_ARGS)
 		remote_connection_cache_remove(conn_cache, um);
 		ts_cache_release(conn_cache);
 	}
-#endif
+
 	/* detach server */
 	hypertable_servers =
 		ts_hypertable_server_scan_by_server_name(server_name, CurrentMemoryContext);
 
 	server_detach_hypertable_servers(server_name, hypertable_servers, true, force, DELETE);
 
-	stmt = (DropStmt)
-	{
+	stmt = (DropStmt){
 		.type = T_DropStmt,
-#if PG96
-		.objects = list_make1(list_make1(makeString(pstrdup(server_name)))),
-#else
 		.objects = list_make1(makeString(pstrdup(server_name))),
-#endif
-		.removeType = OBJECT_FOREIGN_SERVER, .behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
+		.removeType = OBJECT_FOREIGN_SERVER,
+		.behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
 		.missing_ok = if_exists,
 	};
 
@@ -1028,9 +985,7 @@ server_delete(PG_FUNCTION_ARGS)
 	 * objects get cleaned up. */
 	EventTriggerBeginCompleteQuery();
 
-#if !PG96
 	remove_distributed_id_from_backend(server_name);
-#endif
 
 	PG_TRY();
 	{
@@ -1047,11 +1002,9 @@ server_delete(PG_FUNCTION_ARGS)
 	}
 	PG_END_TRY();
 
-#if !PG96
 	/* Remove self from dist db if no longer have backends */
 	if (server_get_servername_list() == NIL)
 		dist_util_remove_from_db();
-#endif
 
 	EventTriggerEndCompleteQuery();
 	CommandCounterIncrement();
@@ -1096,7 +1049,6 @@ server_get_servername_list(void)
 Datum
 server_ping(PG_FUNCTION_ARGS)
 {
-#if !PG96
 	char *server_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	volatile TSConnection *conn = NULL;
 	volatile PGresult *res = NULL;
@@ -1140,11 +1092,6 @@ server_ping(PG_FUNCTION_ARGS)
 	if (res)
 		remote_connection_result_close((PGresult *) res);
 	PG_RETURN_DATUM(BoolGetDatum(success));
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 (errmsg("server ping is only supported on PG10 and above"))));
-#endif
 }
 
 Datum

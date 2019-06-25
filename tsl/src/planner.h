@@ -13,10 +13,8 @@
 
 void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
 
-#if !PG96
+#if PG11_GE
 void tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
-bool tsl_hypertable_should_be_expanded(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
-									   List *chunk_oids);
 #endif
 
 #endif /* TIMESCALEDB_TSL_PLANNER_H */

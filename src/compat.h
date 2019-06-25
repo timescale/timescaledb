@@ -28,6 +28,7 @@
 #define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
 #define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
 #define PG11 is_supported_pg_version_11(PG_VERSION_NUM)
+#define PG11_GE !(PG96 || PG10)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"

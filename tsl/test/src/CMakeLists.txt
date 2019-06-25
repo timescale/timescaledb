@@ -3,9 +3,14 @@ set(SOURCES
   test_chunk_stats.c
   test_ddl_hook.c
   test_continuous_aggs.c
-  server.c
-  deparse.c
 )
+
+if (NOT ${PG_VERSION} VERSION_LESS "11")
+  list(APPEND SOURCES
+       server.c
+       deparse.c)
+endif ()
+
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
 add_library(${TSL_TESTS_LIB_NAME} OBJECT ${SOURCES})
@@ -17,6 +22,6 @@ set_target_properties(${TSL_TESTS_LIB_NAME} PROPERTIES POSITION_INDEPENDENT_CODE
 
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
+if (NOT ${PG_VERSION} VERSION_LESS "11")
   add_subdirectory(remote)
 endif ()

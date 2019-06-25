@@ -1151,9 +1151,7 @@ add_append_rel_info_to_plannerinfo(PlannerInfo *root, RelOptInfo *childrel, RelO
 	AppendRelInfo *appinfo = create_append_rel_info(root, childrel, parentrel);
 
 	root->append_rel_list = lappend(root->append_rel_list, appinfo);
-#if !(PG96 || PG10)
 	root->append_rel_array[childrel->relid] = appinfo;
-#endif
 }
 
 /*
@@ -1250,88 +1248,6 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hypertable_rel, int *npart
 }
 
 /*
- * Get all chunk rels in an array.
- *
- * This provides backwards compatibility for PG10, which does not maintain a
- * part_rels array for partitioned rels.
- */
-static RelOptInfo **
-get_chunk_part_rels(RelOptInfo *hypertable_rel, int *nrels)
-{
-	RelOptInfo **part_rels = NULL;
-	int nparts = 0;
-#if PG10
-	ListCell *lc;
-	List *chunk_paths = NIL;
-
-	foreach (lc, hypertable_rel->pathlist)
-	{
-		Path *path = lfirst(lc);
-
-		switch (path->type)
-		{
-			case T_AppendPath:
-				chunk_paths = ((AppendPath *) path)->subpaths;
-				break;
-			case T_MergeAppendPath:
-				chunk_paths = ((MergeAppendPath *) path)->subpaths;
-				break;
-			default:
-				break;
-		}
-
-		if (chunk_paths != NIL)
-		{
-			ListCell *lc_path;
-
-			part_rels = palloc(sizeof(RelOptInfo *) * list_length(chunk_paths));
-
-			foreach (lc_path, chunk_paths)
-			{
-				Path *path = lfirst(lc_path);
-				part_rels[nparts++] = path->parent;
-			}
-			break;
-		}
-	}
-#else
-	part_rels = hypertable_rel->part_rels;
-	nparts = hypertable_rel->nparts;
-#endif
-
-	if (nrels != NULL)
-		*nrels = nparts;
-
-	return part_rels;
-}
-
-#if PG10
-/*
- * Naive implementation of PG11-only add_paths_to_append_rel().
- *
- * This version only produces a basic append plan, while the PG11 equivalent
- * produces append, merge append, partial and parallel append plans.
- */
-static void
-add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *parent, List *childrels)
-{
-	AppendPath *appendpath;
-	List *subpaths = NIL;
-	ListCell *lc;
-
-	foreach (lc, childrels)
-	{
-		RelOptInfo *rel = lfirst(lc);
-
-		subpaths = lappend(subpaths, rel->cheapest_total_path);
-	}
-
-	appendpath = create_append_path_compat(root, parent, subpaths, NIL, NULL, 0, false, NIL, -1);
-	add_path(parent, (Path *) appendpath);
-}
-#endif /* PG10 */
-
-/*
  * Turn chunk append paths into server append paths.
  *
  * By default, a hypertable produces append plans where each child is a chunk
@@ -1353,7 +1269,8 @@ add_per_server_paths(PlannerInfo *root, RelOptInfo *hypertable_rel, Oid hypertab
 	int i;
 
 	/* Get all chunks rels */
-	chunk_rels = get_chunk_part_rels(hypertable_rel, &nchunk_rels);
+	chunk_rels = hypertable_rel->part_rels;
+	nchunk_rels = hypertable_rel->nparts;
 
 	if (nchunk_rels <= 0)
 		return;
@@ -1395,11 +1312,9 @@ add_per_server_paths(PlannerInfo *root, RelOptInfo *hypertable_rel, Oid hypertab
 
 	hypertable_rel->pathlist = NIL;
 
-#if !PG10
 	/* Must keep partitioning info consistent with the append paths we create */
 	hypertable_rel->part_rels = server_rels;
 	hypertable_rel->nparts = nserver_rels;
-#endif
 
 	Assert(list_length(server_rels_list) > 0);
 
@@ -2913,7 +2828,6 @@ analyze_foreign_table(Relation relation, AcquireSampleRowsFunc *func, BlockNumbe
 	return false;
 }
 
-#if !PG10
 /*
  * Merge FDW options from input relations into a new set of options for a join
  * or an upper rel.
@@ -3261,7 +3175,6 @@ get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *
 
 	add_foreign_grouping_paths(root, input_rel, output_rel, (GroupPathExtraData *) extra);
 }
-#endif /* !PG10 */
 
 static FdwRoutine timescaledb_fdw_routine = {
 	.type = T_FdwRoutine,
@@ -3273,9 +3186,7 @@ static FdwRoutine timescaledb_fdw_routine = {
 	.IterateForeignScan = iterate_foreign_scan,
 	.EndForeignScan = end_foreign_scan,
 	.ReScanForeignScan = rescan_foreign_scan,
-#if !PG10
 	.GetForeignUpperPaths = get_foreign_upper_paths,
-#endif
 	/* update */
 	.IsForeignRelUpdatable = is_foreign_rel_updatable,
 	.PlanForeignModify = plan_foreign_modify,

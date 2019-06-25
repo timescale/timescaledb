@@ -47,9 +47,13 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
+if (NOT ${PG_VERSION} VERSION_LESS "11")
   list(APPEND TEST_FILES
     chunk_api.sql
+    timescaledb_fdw.sql
+    partitionwise_distributed.sql
+    hypertable_distributed.sql
+    ddl_distributed.sql
   )
   list(APPEND TEST_FILES_DEBUG
     remote_connection.sql
@@ -66,15 +70,6 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_copy.sql
     dist_util.sql
   )
-endif ()
-
-if (NOT ${PG_VERSION} VERSION_LESS "11")
-  list(APPEND TEST_FILES
-    timescaledb_fdw.sql
-    partitionwise_distributed.sql
-    hypertable_distributed.sql
-    ddl_distributed.sql
-    )
 endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
