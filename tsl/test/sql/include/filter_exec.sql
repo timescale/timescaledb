@@ -5,7 +5,7 @@
 CREATE SCHEMA IF NOT EXISTS test;
 GRANT USAGE ON SCHEMA test TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION test.execute_sql_and_filter_server_name_on_error(cmd TEXT)
+CREATE OR REPLACE FUNCTION test.execute_sql_and_filter_data_node_name_on_error(cmd TEXT)
 RETURNS VOID LANGUAGE PLPGSQL AS $BODY$
 DECLARE
   original_error_text TEXT;
@@ -15,7 +15,7 @@ BEGIN
 EXCEPTION
   WHEN others THEN
      GET STACKED DIAGNOSTICS original_error_text = MESSAGE_TEXT;
-     SELECT regexp_replace(original_error_text, '\[server_.+\]', '[server_x]', 'g') INTO error_text;
+     SELECT regexp_replace(original_error_text, '\[data_node_.+\]', '[data_node_x]', 'g') INTO error_text;
      RAISE '%', error_text;
 END
 $BODY$;

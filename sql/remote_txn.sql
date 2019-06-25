@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE FUNCTION _timescaledb_internal.remote_txn_heal_server(foreign_server_oid oid)
+CREATE FUNCTION _timescaledb_internal.remote_txn_heal_data_node(foreign_server_oid oid)
 RETURNS INT
-AS '@MODULE_PATHNAME@', 'ts_remote_txn_heal_server'
+AS '@MODULE_PATHNAME@', 'ts_remote_txn_heal_data_node'
 LANGUAGE C STRICT;

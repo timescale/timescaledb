@@ -9,7 +9,7 @@ and make synchronous requests on those connections.
 
 The `async` module allows you to make asynchronous requests on connections and manage those requests.
 
-The (backend-local) `connection_cache` maintains a cache of connections to remote servers that survive
+The (backend-local) `connection_cache` maintains a cache of connections to data nodes that survive
 transaction boundaries. This prevents each transaction from having to incur the overhead of creating new
 connections.
 
@@ -27,11 +27,11 @@ for every remote connection that is part of a `dist_txn`. Thus a `dist_txn` cont
 a `txn` represents a remote connection and a txn on the remote side, it maintains a consistent snapshot throughout
 its lifetime. We make sure that there is a unique `txn` for each `user_mapping` so that each local user maintains a
 consistent snapshot to each remote node within one distributed txn. However, snapshots are not consistent across user
-mappings, even to the same server.
+mappings, even to the same data node.
 
 For 2-pc transactions, two other objects are used:
 - `txn_id` represents the GID used in `PREPARE TRANSACTION`, `COMMIT PREPARED`, and `ROLLBACK PREPARED` SQL commands used in the 2-pc protocol.
 - `txn_resolve` allows you to get the status of a distributed transaction based on a `txn_id`. It is used to recover the state of nodes
-  that failed in the middle of the 2-pc protocol (see the `ts_remote_txn_heal_server` function).
+  that failed in the middle of the 2-pc protocol (see the `ts_remote_txn_heal_data_node` function).
 
 txn_resolve.h has a good description of the 2-pc protocol variant we use.

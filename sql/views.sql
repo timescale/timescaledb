@@ -247,17 +247,17 @@ AS
  where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
  group by srcht.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.server AS
-  SELECT s.server_name, s.owner, s.options, s.server_up,
-    COUNT(s.server_name) AS num_dist_tables,
+CREATE OR REPLACE VIEW timescaledb_information.data_node AS
+  SELECT s.node_name, s.owner, s.options, s.node_up,
+    COUNT(s.node_name) AS num_dist_tables,
     SUM(size.num_chunks) AS num_dist_chunks,
     pg_size_pretty(SUM(size.total_bytes)) AS total_dist_size
-  FROM (SELECT srvname AS server_name, srvowner::regrole::name AS owner, srvoptions AS options, _timescaledb_internal.server_ping(srvname) AS server_up
+  FROM (SELECT srvname AS node_name, srvowner::regrole::name AS owner, srvoptions AS options, _timescaledb_internal.ping_data_node(srvname) AS node_up
         FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
         WHERE srv.srvfdw = fdw.oid
         AND fdw.fdwname = 'timescaledb_fdw') AS s
-    LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(CASE WHEN s.server_up THEN s.server_name ELSE NULL END) size ON TRUE
-  GROUP BY s.server_name, s.server_up, s.owner, s.options;
+    LEFT OUTER JOIN LATERAL @extschema@.data_node_hypertable_info(CASE WHEN s.node_up THEN s.node_name ELSE NULL END) size ON TRUE
+  GROUP BY s.node_name, s.node_up, s.owner, s.options;
 
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

@@ -30,7 +30,7 @@
  * This enum describes what's kept in the fdw_private list for a ModifyTable
  * node referencing a timescaledb_fdw foreign table.  We store:
  *
- * 1) INSERT/UPDATE/DELETE statement text to be sent to the remote server
+ * 1) INSERT/UPDATE/DELETE statement text to be sent to the data node
  * 2) Integer list of target attribute numbers for INSERT/UPDATE
  *	  (NIL for a DELETE)
  * 3) Boolean flag showing if the remote query has a RETURNING clause
@@ -46,20 +46,20 @@ enum FdwModifyPrivateIndex
 	FdwModifyPrivateHasReturning,
 	/* Integer list of attribute numbers retrieved by RETURNING */
 	FdwModifyPrivateRetrievedAttrs,
-	/* The servers for the current chunk */
-	FdwModifyPrivateServers,
+	/* The data nodes for the current chunk */
+	FdwModifyPrivateDataNodes,
 	/* Insert state for the current chunk */
 	FdwModifyPrivateChunkInsertState,
 };
 
-typedef struct TsFdwServerState
+typedef struct TsFdwDataNodeState
 {
-	Oid serverid;
+	Oid node_serverid;
 	UserMapping *user;
 	/* for remote query execution */
 	TSConnection *conn;   /* connection for the scan */
 	PreparedStmt *p_stmt; /* prepared statement handle, if created */
-} TsFdwServerState;
+} TsFdwDataNodeState;
 
 /*
  * Execution state of a foreign insert/update/delete operation.
@@ -79,21 +79,22 @@ typedef struct TsFdwModifyState
 	AttrNumber ctid_attno; /* attnum of input resjunk ctid column */
 
 	bool prepared;
-	int num_servers;
+	int num_data_nodes;
 	StmtParams *stmt_params; /* prepared statement paremeters */
-	TsFdwServerState servers[FLEXIBLE_ARRAY_MEMBER];
+	TsFdwDataNodeState data_nodes[FLEXIBLE_ARRAY_MEMBER];
 } TsFdwModifyState;
 
-#define TS_FDW_MODIFY_STATE_SIZE(num_servers)                                                      \
-	(sizeof(TsFdwModifyState) + (sizeof(TsFdwServerState) * num_servers))
+#define TS_FDW_MODIFY_STATE_SIZE(num_data_nodes)                                                   \
+	(sizeof(TsFdwModifyState) + (sizeof(TsFdwDataNodeState) * num_data_nodes))
 
 static void
-initialize_fdw_server_state(TsFdwServerState *fdw_server, UserMapping *um)
+initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, UserMapping *um)
 {
-	fdw_server->user = um;
-	fdw_server->serverid = um->serverid;
-	fdw_server->conn = remote_dist_txn_get_connection(fdw_server->user, REMOTE_TXN_USE_PREP_STMT);
-	fdw_server->p_stmt = NULL;
+	fdw_data_node->user = um;
+	fdw_data_node->node_serverid = um->serverid;
+	fdw_data_node->conn =
+		remote_dist_txn_get_connection(fdw_data_node->user, REMOTE_TXN_USE_PREP_STMT);
+	fdw_data_node->p_stmt = NULL;
 }
 
 /*
@@ -110,10 +111,10 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	ListCell *lc;
 	int i = 0;
-	int num_servers = usermappings == NIL ? 1 : list_length(usermappings);
+	int num_data_nodes = usermappings == NIL ? 1 : list_length(usermappings);
 
 	/* Begin constructing TsFdwModifyState. */
-	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_servers));
+	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_data_nodes));
 	fmstate->rel = rel;
 
 	/*
@@ -125,9 +126,9 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	{
 		/*
 		 * This is either (1) an INSERT on a hypertable chunk, or (2) an
-		 * UPDATE or DELETE on a chunk. In the former case (1), the servers
+		 * UPDATE or DELETE on a chunk. In the former case (1), the data nodes
 		 * were passed on from the INSERT path via the chunk insert state, and
-		 * in the latter case (2), the servers were resolved at planning time
+		 * in the latter case (2), the data nodes were resolved at planning time
 		 * in the FDW planning callback.
 		 */
 
@@ -135,21 +136,21 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 		{
 			UserMapping *um = lfirst(lc);
 
-			initialize_fdw_server_state(&fmstate->servers[i++], um);
+			initialize_fdw_data_node_state(&fmstate->data_nodes[i++], um);
 		}
 	}
 	else
 	{
 		/*
-		 * If there is no chunk insert state and no servers from planning,
+		 * If there is no chunk insert state and no data nodes from planning,
 		 * this is an INSERT, UPDATE, or DELETE on a standalone foreign table.
-		 * We must get the server from the foreign table's metadata.
+		 * We must get the data node from the foreign table's metadata.
 		 */
 		ForeignTable *table = GetForeignTable(rel->rd_id);
 		Oid userid = OidIsValid(check_as_user) ? check_as_user : GetUserId();
 		UserMapping *um = GetUserMapping(userid, table->serverid);
 
-		initialize_fdw_server_state(&fmstate->servers[0], um);
+		initialize_fdw_data_node_state(&fmstate->data_nodes[0], um);
 	}
 
 	/* Set up remote query information. */
@@ -157,7 +158,7 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	fmstate->target_attrs = target_attrs;
 	fmstate->has_returning = has_returning;
 	fmstate->prepared = false; /* PREPARE will happen later */
-	fmstate->num_servers = num_servers;
+	fmstate->num_data_nodes = num_data_nodes;
 
 	/* Prepare for input conversion of RETURNING results. */
 	if (fmstate->has_returning)
@@ -244,12 +245,12 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 
 	Assert(NULL != rte);
 
-	if (list_length(fdw_private) > FdwModifyPrivateServers)
+	if (list_length(fdw_private) > FdwModifyPrivateDataNodes)
 	{
-		List *servers = (List *) list_nth(fdw_private, FdwModifyPrivateServers);
+		List *data_nodes = (List *) list_nth(fdw_private, FdwModifyPrivateDataNodes);
 		ListCell *lc;
 
-		foreach (lc, servers)
+		foreach (lc, data_nodes)
 		{
 			Oid serverid = lfirst_oid(lc);
 			Oid userid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
@@ -285,7 +286,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 
 		/*
 		 * If there's a chunk insert state, then it has the authoritative
-		 * server list.
+		 * data node list.
 		 */
 		usermappings = cis->usermappings;
 	}
@@ -306,13 +307,13 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 }
 
 static PreparedStmt *
-prepare_foreign_modify_server(TsFdwModifyState *fmstate, TsFdwServerState *fdw_server)
+prepare_foreign_modify_data_node(TsFdwModifyState *fmstate, TsFdwDataNodeState *fdw_data_node)
 {
 	AsyncRequest *req;
 
-	Assert(NULL == fdw_server->p_stmt);
+	Assert(NULL == fdw_data_node->p_stmt);
 
-	req = async_request_send_prepare(fdw_server->conn,
+	req = async_request_send_prepare(fdw_data_node->conn,
 									 fmstate->query,
 									 stmt_params_num_params(fmstate->stmt_params));
 
@@ -334,11 +335,11 @@ prepare_foreign_modify(TsFdwModifyState *fmstate)
 {
 	int i;
 
-	for (i = 0; i < fmstate->num_servers; i++)
+	for (i = 0; i < fmstate->num_data_nodes; i++)
 	{
-		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		TsFdwDataNodeState *fdw_data_node = &fmstate->data_nodes[i];
 
-		fdw_server->p_stmt = prepare_foreign_modify_server(fmstate, fdw_server);
+		fdw_data_node->p_stmt = prepare_foreign_modify_data_node(fmstate, fdw_data_node);
 	}
 
 	fmstate->prepared = true;
@@ -395,12 +396,12 @@ fdw_exec_foreign_insert(TsFdwModifyState *fmstate, EState *estate, TupleTableSlo
 
 	stmt_params_convert_values(params, slot, NULL);
 
-	for (i = 0; i < fmstate->num_servers; i++)
+	for (i = 0; i < fmstate->num_data_nodes; i++)
 	{
-		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		TsFdwDataNodeState *fdw_data_node = &fmstate->data_nodes[i];
 		AsyncRequest *req = NULL;
 		int type = response_type(fmstate->att_conv_metadata);
-		req = async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params, type);
+		req = async_request_send_prepared_stmt_with_params(fdw_data_node->p_stmt, params, type);
 		Assert(NULL != req);
 		async_request_set_add(reqset, req);
 	}
@@ -462,7 +463,7 @@ fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmstate, EState *estate, Tup
 	int n_rows = -1;
 	int i;
 
-	/* Set up the prepared statement on the remote server, if we didn't yet */
+	/* Set up the prepared statement on the data node, if we didn't yet */
 	if (!fmstate->prepared)
 		prepare_foreign_modify(fmstate);
 
@@ -478,26 +479,26 @@ fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmstate, EState *estate, Tup
 							   (ItemPointer) DatumGetPointer(datum));
 	reqset = async_request_set_create();
 
-	for (i = 0; i < fmstate->num_servers; i++)
+	for (i = 0; i < fmstate->num_data_nodes; i++)
 	{
 		AsyncRequest *req = NULL;
-		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		TsFdwDataNodeState *fdw_data_node = &fmstate->data_nodes[i];
 		int type = response_type(fmstate->att_conv_metadata);
-		req = async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params, type);
+		req = async_request_send_prepared_stmt_with_params(fdw_data_node->p_stmt, params, type);
 
 		Assert(NULL != req);
 
-		async_request_attach_user_data(req, fdw_server);
+		async_request_attach_user_data(req, fdw_data_node);
 		async_request_set_add(reqset, req);
 	}
 
 	while ((rsp = async_request_set_wait_any_result(reqset)))
 	{
 		PGresult *res = async_response_result_get_pg_result(rsp);
-		TsFdwServerState *fdw_server = async_response_result_get_user_data(rsp);
+		TsFdwDataNodeState *fdw_data_node = async_response_result_get_user_data(rsp);
 
 		if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
-			remote_connection_report_error(ERROR, res, fdw_server->conn, false, fmstate->query);
+			remote_connection_report_error(ERROR, res, fdw_data_node->conn, false, fmstate->query);
 
 		/*
 		 * If we update multiple replica chunks, we should only return the
@@ -545,18 +546,18 @@ fdw_finish_foreign_modify(TsFdwModifyState *fmstate)
 
 	Assert(fmstate != NULL);
 
-	for (i = 0; i < fmstate->num_servers; i++)
+	for (i = 0; i < fmstate->num_data_nodes; i++)
 	{
-		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		TsFdwDataNodeState *fdw_data_node = &fmstate->data_nodes[i];
 
 		/* If we created a prepared statement, destroy it */
-		if (NULL != fdw_server->p_stmt)
+		if (NULL != fdw_data_node->p_stmt)
 		{
-			prepared_stmt_close(fdw_server->p_stmt);
-			fdw_server->p_stmt = NULL;
+			prepared_stmt_close(fdw_data_node->p_stmt);
+			fdw_data_node->p_stmt = NULL;
 		}
 
-		fdw_server->conn = NULL;
+		fdw_data_node->conn = NULL;
 	}
 
 	stmt_params_free(fmstate->stmt_params);

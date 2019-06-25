@@ -45,7 +45,7 @@
  * Vars only from the given relation.  For example, given ft1 JOIN t1 ON
  * ft1.x + t1.x = 0, this function will say that the equivalence class
  * containing ft1.x + t1.x is potentially useful.  Supposing ft1 is remote and
- * t1 is local (or on a different server), it will turn out that no useful
+ * t1 is local (or on a different data node), it will turn out that no useful
  * ORDER BY clause can be generated.  It's not our job to figure that out
  * here; we're only interested in identifying relevant ECs.
  */
@@ -153,7 +153,7 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 	ListCell *lc;
 
 	/*
-	 * Pushing the query_pathkeys to the remote server is always worth
+	 * Pushing the query_pathkeys to the data node is always worth
 	 * considering, because it might let us avoid a local sort.
 	 */
 	if (root->query_pathkeys)
@@ -401,7 +401,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 		 * locally.
 		 */
 
-		/* Build the list of columns to be fetched from the foreign server. */
+		/* Build the list of columns to be fetched from the data node. */
 		fdw_scan_tlist = build_tlist_to_deparse(rel);
 	}
 
@@ -444,7 +444,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	scaninfo->local_exprs = local_exprs;
 	scaninfo->params_list = params_list;
 	scaninfo->scan_relid = scan_relid;
-	scaninfo->serverid = rel->serverid;
+	scaninfo->data_node_serverid = rel->serverid;
 }
 
 /*
@@ -483,7 +483,7 @@ merge_fdw_options(TsFdwRelInfo *fpinfo, const TsFdwRelInfo *fpinfo_o, const TsFd
 
 /*
  * Assess whether the aggregation, grouping and having operations can be pushed
- * down to the foreign server.  As a side effect, save information we obtain in
+ * down to the data node.  As a side effect, save information we obtain in
  * this function to TsFdwRelInfo of the input relation.
  */
 static bool
@@ -515,10 +515,10 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual
 
 	/*
 	 * Examine grouping expressions, as well as other expressions we'd need to
-	 * compute, and check whether they are safe to push down to the foreign
-	 * server.  All GROUP BY expressions will be part of the grouping target
+	 * compute, and check whether they are safe to push down to the data
+	 * node.  All GROUP BY expressions will be part of the grouping target
 	 * and thus there is no need to search for them separately.  Add grouping
-	 * expressions into target list which will be passed to foreign server.
+	 * expressions into target list which will be passed to data node.
 	 */
 	i = 0;
 	foreach (lc, grouping_target->exprs)
@@ -534,7 +534,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual
 
 			/*
 			 * If any GROUP BY expression is not shippable, then we cannot
-			 * push down aggregation to the foreign server.
+			 * push down aggregation to the data node.
 			 */
 			if (!is_foreign_expr(root, grouped_rel, expr))
 				return false;
@@ -568,7 +568,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual
 
 				/*
 				 * If any aggregate expression is not shippable, then we
-				 * cannot push down aggregation to the foreign server.
+				 * cannot push down aggregation to the data node.
 				 */
 				if (!is_foreign_expr(root, grouped_rel, (Expr *) aggvars))
 					return false;
@@ -580,7 +580,7 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual
 				 * BY expression.  In either case, they are already part of
 				 * the targetlist and thus no need to add them again.  In fact
 				 * including plain Vars in the tlist when they do not match a
-				 * GROUP BY column would cause the foreign server to complain
+				 * GROUP BY column would cause the data node to complain
 				 * that the shipped query is invalid.
 				 */
 				foreach (l, aggvars)
@@ -718,7 +718,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	fpinfo->outerrel = input_rel;
 
 	/*
-	 * Copy foreign table, foreign server, user mapping, FDW options etc.
+	 * Copy foreign table, data node, user mapping, FDW options etc.
 	 * details from the input relation's fpinfo.
 	 */
 	fpinfo->table = ifpinfo->table;
@@ -776,7 +776,7 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 
 	/*
 	 * If input rel is not safe to pushdown, then simply return as we cannot
-	 * perform any post-join operations on the foreign server.
+	 * perform any post-join operations on the data node.
 	 */
 	if (!input_fpinfo->pushdown_safe)
 		return;

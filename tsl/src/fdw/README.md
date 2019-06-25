@@ -19,7 +19,7 @@ various utilities:
   is just a thin layer that calls into other code.
 * `modify_(plan|exec).c`: Planning and execution of inserts, updates,
   deletes. Note, however, that inserts are mainly handled by
-  `server_dispatch.c`, which optimizes for batched inserts on
+  `data_node_dispatch.c`, which optimizes for batched inserts on
   distributed hypertables.
 * `scan_(plan|exec).c`: General planning and execution of remote
   relation scans.
@@ -37,7 +37,7 @@ various utilities:
 * `shippable.c`: Determines whether expressions in queries are
   shippable to the remote end. Certain functions are not safe to
   execute on a remote data node or might not exist there.
-* `server_scan_(plan|exec).c`: Code to turn per-chunk plans into
+* `data_node_scan_(plan|exec).c`: Code to turn per-chunk plans into
   per-server plans for more efficient execution.
-* `server_chunk_assignment.c`: Methods to assign/schedule chunks on
+* `data_node_chunk_assignment.c`: Methods to assign/schedule chunks on
   data node servers.

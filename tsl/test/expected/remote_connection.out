@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- ===================================================================
--- create fake fdw to create server and user mapping
+-- create fake fdw to create data node and user mapping
 -- ===================================================================
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE FUNCTION _timescaledb_internal.test_remote_connection()

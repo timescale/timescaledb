@@ -6,32 +6,32 @@ ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created this database
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS data_node_1;
 SET client_min_messages TO NOTICE;
-SELECT * FROM add_server('server_1', database => 'server_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_1 | localhost | 15432 | data_node_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-ALTER SERVER server_1 OWNER TO :ROLE_DEFAULT_CLUSTER_USER;
+ALTER SERVER data_node_1 OWNER TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Set FDW and libpq options to make sure they are validated correctly
-ALTER SERVER server_1 OPTIONS (ADD use_remote_estimate 'true');
-ALTER SERVER server_1 OPTIONS (ADD fdw_startup_cost '110.0');
-ALTER SERVER server_1 OPTIONS (ADD connect_timeout '3');
+ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
+ALTER SERVER data_node_1 OPTIONS (ADD fdw_startup_cost '110.0');
+ALTER SERVER data_node_1 OPTIONS (ADD connect_timeout '3');
 -- Test a bad option
 \set ON_ERROR_STOP 0
-ALTER SERVER server_1 OPTIONS (ADD invalid_option '3');
+ALTER SERVER data_node_1 OPTIONS (ADD invalid_option '3');
 ERROR:  invalid option "invalid_option"
 \set ON_ERROR_STOP 1
-\c server_1
+\c data_node_1
 SET client_min_messages TO ERROR;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE test_ft (c0 int, c1 varchar(10));
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER server_1;
+CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER data_node_1;
 SELECT * FROM test_ft;
  c0 | c1 
 ----+----
@@ -52,8 +52,8 @@ INSERT INTO test_ft VALUES (1, 'value1'), (2, 'value2'), (2, 'value1') RETURNING
  value1 |  2
 (3 rows)
 
--- Show tuples inserted on remote server
-\c server_1
+-- Show tuples inserted on remote data node
+\c data_node_1
 SELECT * FROM test_ft;
  c0 |   c1   
 ----+--------
@@ -70,7 +70,7 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT * FROM test_ft;
 -------------------------------------------------
  Foreign Scan on public.test_ft
    Output: c0, c1
-   Server: server_1
+   Data node: data_node_1
    Remote SQL: SELECT c0, c1 FROM public.test_ft
 (4 rows)
 
@@ -80,7 +80,7 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
  Foreign Scan
    Output: (avg(c0)), c1
    Relations: Aggregate on (public.test_ft)
-   Server: server_1
+   Data node: data_node_1
    Remote SQL: SELECT avg(c0), c1 FROM public.test_ft GROUP BY 2
 (5 rows)
 
@@ -110,7 +110,7 @@ RETURNING c1, c0;
    Remote SQL: UPDATE public.test_ft SET c1 = $2 WHERE ctid = $1 RETURNING c0, c1
    ->  Foreign Scan on public.test_ft
          Output: c0, 'new_test'::character varying(10), ctid
-         Server: server_1
+         Data node: data_node_1
          Remote SQL: SELECT c0, ctid FROM public.test_ft WHERE ((c0 = 2)) FOR UPDATE
 (7 rows)
 
@@ -133,7 +133,7 @@ SELECT * FROM test_ft;
 
 -- Test deletes
 DELETE FROM test_ft WHERE c0 = 1;
--- Show tuples deleted locally and on remote server
+-- Show tuples deleted locally and on remote data node
 SELECT * FROM test_ft;
  c0 |    c1    
 ----+----------
@@ -141,7 +141,7 @@ SELECT * FROM test_ft;
   2 | new_test
 (2 rows)
 
-\c server_1
+\c data_node_1
 SELECT * FROM test_ft;
  c0 |    c1    
 ----+----------

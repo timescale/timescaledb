@@ -927,7 +927,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 /*
  *  We need to ensure that DROP INDEX uses only one hypertable per query,
  *  otherwise query string might not be reusable for execution on a
- *  remote server.
+ *  data node.
  */
 static void
 process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
@@ -3360,8 +3360,8 @@ process_drop_foreign_server(EventTriggerDropObject *obj)
 	EventTriggerDropForeignServer *server = (EventTriggerDropForeignServer *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_FOREIGN_SERVER);
-	ts_hypertable_server_delete_by_servername(server->servername);
-	ts_chunk_server_delete_by_servername(server->servername);
+	ts_hypertable_data_node_delete_by_node_name(server->servername);
+	ts_chunk_data_node_delete_by_node_name(server->servername);
 }
 
 static void

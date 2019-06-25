@@ -41,9 +41,9 @@ static unsigned int prep_stmt_number = 0;
 
 typedef struct TSConnection
 {
-	PGconn *pg_conn;	  /* PostgreSQL connection */
-	bool processing;	  /* TRUE if there is ongoin Async request processing */
-	NameData server_name; /* Associated server name */
+	PGconn *pg_conn;		 /* PostgreSQL connection */
+	bool processing;		 /* TRUE if there is ongoin Async request processing */
+	NameData data_node_name; /* Associated data node name */
 } TSConnection;
 
 static PQconninfoOption *
@@ -99,12 +99,12 @@ remote_connection_option_type(const char *keyword)
 
 	/*
 	 * "user" and any secret options are allowed only on user mappings.
-	 * Everything else is a server option.
+	 * Everything else is a data node option.
 	 */
 	if (strchr(display_option, '*') || strcmp(keyword, "user") == 0)
 		return CONN_OPTION_TYPE_USER;
 
-	return CONN_OPTION_TYPE_SERVER;
+	return CONN_OPTION_TYPE_DATA_NODE;
 }
 
 bool
@@ -114,9 +114,9 @@ remote_connection_valid_user_option(const char *keyword)
 }
 
 bool
-remote_connection_valid_server_option(const char *keyword)
+remote_connection_valid_data_node_option(const char *keyword)
 {
-	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_SERVER;
+	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_DATA_NODE;
 }
 
 static int
@@ -207,12 +207,12 @@ remote_connection_configure(TSConnection *conn)
 }
 
 static TSConnection *
-remote_connection_create(PGconn *pg_conn, bool processing, const char *server_name)
+remote_connection_create(PGconn *pg_conn, bool processing, const char *data_node_name)
 {
 	TSConnection *conn = malloc(sizeof(TSConnection));
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
-	namestrcpy(&conn->server_name, server_name);
+	namestrcpy(&conn->data_node_name, data_node_name);
 	return conn;
 }
 
@@ -241,7 +241,7 @@ remote_connection_set_processing(TSConnection *conn, bool processing)
  * Configure remote connection using current instance UUID.
  *
  * This allows remote side to reason about whether this connection has been
- * originated by frontend server.
+ * originated by access node.
  */
 static void
 remote_connection_set_peer_dist_id(TSConnection *conn)
@@ -267,7 +267,7 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
  * that if you can.
  */
 TSConnection *
-remote_connection_open(const char *server_name, List *server_options, List *user_options,
+remote_connection_open(const char *data_node_name, List *data_node_options, List *user_options,
 					   bool set_dist_id)
 {
 	TSConnection *conn = NULL;
@@ -288,12 +288,12 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 		 * which case we'll just waste a few array slots.)  Add 3 extra slots
 		 * for fallback_application_name, client_encoding, end marker.
 		 */
-		n = list_length(server_options) + list_length(user_options) + 3;
+		n = list_length(data_node_options) + list_length(user_options) + 3;
 		keywords = (const char **) palloc(n * sizeof(char *));
 		values = (const char **) palloc(n * sizeof(char *));
 
 		n = 0;
-		n += extract_connection_options(server_options, keywords + n, values + n);
+		n += extract_connection_options(data_node_options, keywords + n, values + n);
 		n += extract_connection_options(user_options, keywords + n, values + n);
 
 		/* Use "timescaledb_fdw" as fallback_application_name. */
@@ -315,7 +315,7 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 		if (!pg_conn || PQstatus(pg_conn) != CONNECTION_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
-					 errmsg("could not connect to server \"%s\"", server_name),
+					 errmsg("could not connect to data node \"%s\"", data_node_name),
 					 errdetail_internal("%s", pchomp(PQerrorMessage(pg_conn)))));
 
 		/*
@@ -327,16 +327,16 @@ remote_connection_open(const char *server_name, List *server_options, List *user
 			ereport(ERROR,
 					(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
 					 errmsg("password is required"),
-					 errdetail(
-						 "Non-superuser cannot connect if the server does not request a password."),
-					 errhint("Target server's authentication method must be changed.")));
+					 errdetail("Non-superuser cannot connect if the data node does not request a "
+							   "password."),
+					 errhint("Target data node's authentication method must be changed.")));
 
-		conn = remote_connection_create(pg_conn, false, server_name);
+		conn = remote_connection_create(pg_conn, false, data_node_name);
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
 
-		/* Inform remote server about instance UUID */
+		/* Inform remote data node about instance UUID */
 		if (set_dist_id)
 			remote_connection_set_peer_dist_id(conn);
 
@@ -360,9 +360,9 @@ remote_connection_open(const char *server_name, List *server_options, List *user
  * it might succeed opening a connection if a current user is a superuser.
  */
 TSConnection *
-remote_connection_open_default(const char *server_name)
+remote_connection_open_default(const char *data_node_name)
 {
-	ForeignServer *fs = GetForeignServerByName(server_name, false);
+	ForeignServer *fs = GetForeignServerByName(data_node_name, false);
 	volatile UserMapping *um = NULL;
 
 	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
@@ -375,7 +375,7 @@ remote_connection_open_default(const char *server_name)
 	PG_CATCH();
 	{
 		elog(DEBUG1,
-			 "UserMapping not found for user id `%u` and server `%s`. Trying to open remote "
+			 "UserMapping not found for user id `%u` and data node `%s`. Trying to open remote "
 			 "connection as superuser",
 			 GetUserId(),
 			 fs->servername);
@@ -384,7 +384,7 @@ remote_connection_open_default(const char *server_name)
 	}
 	PG_END_TRY();
 
-	return remote_connection_open(server_name, fs->options, um ? um->options : NULL, true);
+	return remote_connection_open(data_node_name, fs->options, um ? um->options : NULL, true);
 }
 
 void
@@ -436,7 +436,7 @@ remote_connection_get_prep_stmt_number()
 }
 
 /*
- * Report an error we got from the remote server.
+ * Report an error we got from the remote data node.
  *
  * elevel: error level to use (typically ERROR, but might be less)
  * res: PGresult containing the error
@@ -482,7 +482,7 @@ remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn, bo
 		ereport(elevel,
 				(errcode(sqlstate),
 				 message_primary ?
-					 errmsg_internal("[%s]: %s", NameStr(conn->server_name), message_primary) :
+					 errmsg_internal("[%s]: %s", NameStr(conn->data_node_name), message_primary) :
 					 errmsg("could not obtain message string for remote error"),
 				 message_detail ? errdetail_internal("%s", message_detail) : 0,
 				 message_hint ? errhint("%s", message_hint) : 0,

@@ -117,29 +117,29 @@ error_not_supported_default_fn(PG_FUNCTION_ARGS)
 }
 
 static List *
-error_get_serverlist_not_supported(void)
+error_get_data_node_list_not_supported(void)
 {
 	error_not_supported();
 	pg_unreachable();
 }
 
 static void
-error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *servers)
+error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *data_nodes)
 {
 	error_not_supported();
 	pg_unreachable();
 }
 
 static void
-error_create_chunk_on_servers_not_supported(Chunk *chunk, Hypertable *ht)
+error_create_chunk_on_data_nodes_not_supported(Chunk *chunk, Hypertable *ht)
 {
 	error_not_supported();
 	pg_unreachable();
 }
 
 static Path *
-error_server_dispatch_path_create_not_supported(PlannerInfo *root, ModifyTablePath *mtpath,
-												Index hypertable_rti, int subpath_index)
+error_data_node_dispatch_path_create_not_supported(PlannerInfo *root, ModifyTablePath *mtpath,
+												   Index hypertable_rti, int subpath_index)
 {
 	error_not_supported();
 	pg_unreachable();
@@ -154,7 +154,7 @@ error_distributed_copy_not_supported(const CopyStmt *stmt, uint64 *processed,
 }
 
 static Datum
-error_server_set_block_new_chunks_not_supported(PG_FUNCTION_ARGS, bool block)
+error_data_node_set_block_new_chunks_not_supported(PG_FUNCTION_ARGS, bool block)
 {
 	error_not_supported();
 	pg_unreachable();
@@ -226,23 +226,23 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 #if !PG_VERSION_SUPPORTS_MULTINODE
-	.add_server = error_not_supported_default_fn,
-	.delete_server = error_not_supported_default_fn,
-	.attach_server = error_not_supported_default_fn,
-	.detach_server = error_not_supported_default_fn,
-	.server_set_block_new_chunks = error_server_set_block_new_chunks_not_supported,
-	.set_chunk_default_server = error_not_supported_default_fn,
+	.add_data_node = error_not_supported_default_fn,
+	.delete_data_node = error_not_supported_default_fn,
+	.attach_data_node = error_not_supported_default_fn,
+	.detach_data_node = error_not_supported_default_fn,
+	.data_node_set_block_new_chunks = error_data_node_set_block_new_chunks_not_supported,
+	.set_chunk_default_data_node = error_not_supported_default_fn,
 	.show_chunk = error_not_supported_default_fn,
 	.create_chunk = error_not_supported_default_fn,
-	.create_chunk_on_servers = error_create_chunk_on_servers_not_supported,
-	.get_servername_list = error_get_serverlist_not_supported,
+	.create_chunk_on_data_nodes = error_create_chunk_on_data_nodes_not_supported,
+	.get_node_name_list = error_get_data_node_list_not_supported,
 	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
 	.timescaledb_fdw_handler = error_not_supported_default_fn,
 	.timescaledb_fdw_validator = empty_fn,
 	.remote_txn_id_in = error_not_supported_default_fn,
 	.remote_txn_id_out = error_not_supported_default_fn,
 	.set_rel_pathlist = NULL,
-	.server_dispatch_path_create = error_server_dispatch_path_create_not_supported,
+	.data_node_dispatch_path_create = error_data_node_dispatch_path_create_not_supported,
 	.distributed_copy = error_distributed_copy_not_supported,
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
@@ -253,25 +253,25 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remove_from_distributed_db = NULL,
 	.remote_hypertable_info = error_not_supported_default_fn,
 #else
-	.add_server = server_add,
-	.delete_server = server_delete,
-	.attach_server = server_attach,
-	.server_ping = server_ping,
-	.detach_server = server_detach,
-	.server_set_block_new_chunks = server_set_block_new_chunks,
-	.set_chunk_default_server = server_set_chunk_default_server,
+	.add_data_node = data_node_add,
+	.delete_data_node = data_node_delete,
+	.attach_data_node = data_node_attach,
+	.data_node_ping = data_node_ping,
+	.detach_data_node = data_node_detach,
+	.data_node_set_block_new_chunks = data_node_set_block_new_chunks,
+	.set_chunk_default_data_node = data_node_set_chunk_default_data_node,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
-	.create_chunk_on_servers = chunk_api_create_on_servers,
-	.get_servername_list = server_get_servername_list,
+	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
+	.get_node_name_list = data_node_get_node_name_list,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
-	.remote_txn_heal_server = remote_txn_heal_server,
+	.remote_txn_heal_data_node = remote_txn_heal_data_node,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.server_dispatch_path_create = server_dispatch_path_create,
+	.data_node_dispatch_path_create = data_node_dispatch_path_create,
 	.distributed_copy = remote_distributed_copy,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,

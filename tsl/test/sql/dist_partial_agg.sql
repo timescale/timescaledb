@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 -- Need explicit password for non-super users to connect
@@ -13,24 +13,24 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_3;
+CREATE DATABASE data_node_1;
+CREATE DATABASE data_node_2;
+CREATE DATABASE data_node_3;
 
-\c server_1
+\c data_node_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 CREATE TYPE custom_type AS (high int, low int);
-\c server_2
+\c data_node_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 CREATE TYPE custom_type AS (high int, low int);
-\c server_3
+\c data_node_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 CREATE TYPE custom_type AS (high int, low int);
@@ -40,10 +40,10 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set TEST_TABLE 'conditions'
 \ir 'include/aggregate_table_create.sql'
 
--- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
-SELECT * FROM add_server('server_3', database => 'server_3', password => 'pass', if_not_exists => true);
+-- Add data nodes using the TimescaleDB data node management API
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', password => 'pass', if_not_exists => true);
 
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
 

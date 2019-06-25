@@ -30,7 +30,7 @@
 
 typedef enum
 {
-	TS_FDW_RELINFO_HYPERTABLE_SERVER = 0,
+	TS_FDW_RELINFO_HYPERTABLE_DATA_NODE = 0,
 	TS_FDW_RELINFO_HYPERTABLE,
 	TS_FDW_RELINFO_FOREIGN_TABLE,
 } TsFdwRelInfoType;
@@ -55,7 +55,7 @@ typedef struct TsFdwRelInfo
 	/* Actual remote restriction clauses for scan (sans RestrictInfos) */
 	List *final_remote_exprs;
 
-	/* Bitmap of attr numbers we need to fetch from the remote server. */
+	/* Bitmap of attr numbers we need to fetch from the remote data node. */
 	Bitmapset *attrs_used;
 
 	/* Cost and selectivity of local_conds. */
@@ -71,7 +71,7 @@ typedef struct TsFdwRelInfo
 	Cost startup_cost;
 	Cost total_cost;
 
-	/* Costs excluding costs for transferring data from the foreign server */
+	/* Costs excluding costs for transferring data from the data node */
 	Cost rel_startup_cost;
 	Cost rel_total_cost;
 	double rel_retrieved_rows;
@@ -121,7 +121,7 @@ typedef struct TsFdwRelInfo
 	 * representing the relation.
 	 */
 	int relation_index;
-	ServerChunkAssignment *sca;
+	DataNodeChunkAssignment *sca;
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,

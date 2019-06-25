@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
@@ -15,18 +15,18 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
 SET client_min_messages TO NOTICE;
 
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
+CREATE DATABASE data_node_1;
+CREATE DATABASE data_node_2;
 
 -- Creating extension is only possible as super-user
-\c server_1 :ROLE_SUPERUSER
+\c data_node_1 :ROLE_SUPERUSER
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_2 :ROLE_SUPERUSER
+\c data_node_2 :ROLE_SUPERUSER
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -35,9 +35,9 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT inet_server_port() AS "port" \gset
 
 CREATE SERVER IF NOT EXISTS server_pg1 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'server_1', port :'port');
+OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
 CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'server_2', port :'port');
+OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg1
 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
@@ -68,9 +68,9 @@ CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00
 $$);
 
 
--- Add servers using the TimescaleDB server management AP
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
+-- Add data nodes using the TimescaleDB data node management AP
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
 
 
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
@@ -127,7 +127,7 @@ INSERT INTO hyper VALUES
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('hyper');
 
--- Show how slices are assigned to servers. In particular, verify that
+-- Show how slices are assigned to data nodes. In particular, verify that
 -- there are overlapping slices in the closed "space" dimension
 SELECT * FROM test.remote_exec('{ server_pg1, server_pg2 }', $$
        SELECT * FROM _timescaledb_catalog.dimension_slice WHERE dimension_id = 2;
@@ -222,7 +222,7 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
 
-SET timescaledb.enable_per_server_queries = ON;
+SET timescaledb.enable_per_data_node_queries = ON;
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
 FROM hyper
@@ -364,8 +364,8 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- On hypertable, first show partitionwise aggs without per-server queries
-SET timescaledb.enable_per_server_queries = OFF;
+-- On hypertable, first show partitionwise aggs without per-data node queries
+SET timescaledb.enable_per_data_node_queries = OFF;
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
@@ -380,9 +380,9 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- Enable per-server queries. Aggregate should be pushed down per
--- server instead of per chunk.
-SET timescaledb.enable_per_server_queries = ON;
+-- Enable per-data node queries. Aggregate should be pushed down per
+-- data node instead of per chunk.
+SET timescaledb.enable_per_data_node_queries = ON;
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
@@ -425,7 +425,7 @@ GROUP BY 1, 2
 ORDER BY 1, 2;
 
 
--- Only one chunk per server, still uses per-server plan.  Not
+-- Only one chunk per data node, still uses per-data node plan.  Not
 -- choosing pushed down aggregate plan here, probably due to costing.
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
@@ -592,7 +592,7 @@ CREATE AGGREGATE custom_sum(int4) (
     SFUNC = int4_sum,
     STYPE = int8
 );
--- sum contains random(), so not pushed down to servers
+-- sum contains random(), so not pushed down to data nodes
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp * (random() <= 1)::int) as sum
 FROM pg2dim
@@ -677,7 +677,7 @@ INSERT INTO hyper1d VALUES
        ('2018-09-30 13:02', 3, 9.9);
 
 SET enable_partitionwise_aggregate = ON;
-SET timescaledb.enable_per_server_queries = ON;
+SET timescaledb.enable_per_data_node_queries = ON;
 
 -- Covering partitioning dimension is always safe to push down.
 EXPLAIN (VERBOSE, COSTS OFF)

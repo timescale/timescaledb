@@ -14,10 +14,10 @@
 /*-------------------------------------------------------------------------
  *
  * shippable.c
- *	  Determine which database objects are shippable to a remote server.
+ *	  Determine which database objects are shippable to a data node.
  *
  * We need to determine whether particular functions, operators, and indeed
- * data types are shippable to a remote server for execution --- that is,
+ * data types are shippable to a data node for execution --- that is,
  * do they exist and have the same behavior remotely as they do locally?
  * Built-in objects are generally considered shippable.  Other objects can
  * be shipped if they are white-listed by the user.
@@ -154,7 +154,7 @@ lookup_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
  *
  * XXX there is a problem with this, which is that the set of built-in
  * objects expands over time.  Something that is built-in to us might not
- * be known to the remote server, if it's of an older version.  But keeping
+ * be known to the data node, if it's of an older version.  But keeping
  * track of that would be a huge exercise.
  */
 bool
@@ -165,7 +165,7 @@ is_builtin(Oid objectId)
 
 /*
  * is_shippable
- *	   Is this object (function/operator/type) shippable to foreign server?
+ *	   Is this object (function/operator/type) shippable to data node?
  */
 bool
 is_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)

@@ -45,10 +45,10 @@ typedef struct Hypertable
 	int64 max_ignore_invalidation_older_than; /* lazy-loaded, do not access directly, use
 											ts_hypertable_get_ignore_invalidation_older_than */
 	/*
-	 * Allows restricting the servers to use for the hypertable. Default is to
-	 * use all available servers.
+	 * Allows restricting the data nodes to use for the hypertable. Default is to
+	 * use all available data nodes.
 	 */
-	List *servers;
+	List *data_nodes;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -80,7 +80,7 @@ typedef enum HypertableCreateFlags
 /* Hypertable type defined by replication_factor value */
 typedef enum HypertableType
 {
-	/* Hypertable created on a data server as part of any other
+	/* Hypertable created on a data node as part of any other
 	 * distributed hypertable */
 	HYPERTABLE_DISTRIBUTED_MEMBER = -1,
 	/* Non-replicated hypertable (default for a single node) */
@@ -92,7 +92,7 @@ typedef enum HypertableType
 extern TSDLLEXPORT bool ts_hypertable_create_from_info(
 	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
 	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
-	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, ArrayType *servers);
+	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, ArrayType *data_nodes);
 extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
@@ -144,11 +144,12 @@ extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed_id(Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
 																	  List *constraint_list);
-extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
-extern TSDLLEXPORT List *ts_hypertable_get_servername_list(Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_serverids_list(Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_available_servers(Hypertable *ht, bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_server_oids(Hypertable *ht);
+extern List *ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube);
+extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(Hypertable *ht);
+extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(Hypertable *ht);
+extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(Hypertable *ht,
+																bool error_if_missing);
+extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(Hypertable *ht);
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \

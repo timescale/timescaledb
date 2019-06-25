@@ -2,31 +2,31 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_server('server1', 'localhost', 'server1', port=>current_setting('port')::integer);
- server_name |   host    | port  | database |  username  | server_username | created 
--------------+-----------+-------+----------+------------+-----------------+---------
- server1     | localhost | 15432 | server1  | super_user | super_user      | t
+SELECT * FROM add_data_node('data_node1', 'localhost', 'data_node1', port=>current_setting('port')::integer);
+ node_name  |   host    | port  |  database  |  username  | node_username | created 
+------------+-----------+-------+------------+------------+---------------+---------
+ data_node1 | localhost | 15432 | data_node1 | super_user | super_user    | t
 (1 row)
 
-SELECT * FROM add_server('server2', 'localhost', 'server2', port=>current_setting('port')::integer);
- server_name |   host    | port  | database |  username  | server_username | created 
--------------+-----------+-------+----------+------------+-----------------+---------
- server2     | localhost | 15432 | server2  | super_user | super_user      | t
+SELECT * FROM add_data_node('data_node2', 'localhost', 'data_node2', port=>current_setting('port')::integer);
+ node_name  |   host    | port  |  database  |  username  | node_username | created 
+------------+-----------+-------+------------+------------+---------------+---------
+ data_node2 | localhost | 15432 | data_node2 | super_user | super_user    | t
 (1 row)
 
-SELECT * FROM add_server('server3', 'localhost', 'server3', port=>current_setting('port')::integer);
- server_name |   host    | port  | database |  username  | server_username | created 
--------------+-----------+-------+----------+------------+-----------------+---------
- server3     | localhost | 15432 | server3  | super_user | super_user      | t
+SELECT * FROM add_data_node('data_node3', 'localhost', 'data_node3', port=>current_setting('port')::integer);
+ node_name  |   host    | port  |  database  |  username  | node_username | created 
+------------+-----------+-------+------------+------------+---------------+---------
+ data_node3 | localhost | 15432 | data_node3 | super_user | super_user    | t
 (1 row)
 
 \des+
-                                                               List of foreign servers
-  Name   |   Owner    | Foreign-data wrapper | Access privileges | Type | Version |                    FDW options                     | Description 
----------+------------+----------------------+-------------------+------+---------+----------------------------------------------------+-------------
- server1 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server1') | 
- server2 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server2') | 
- server3 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server3') | 
+                                                                  List of foreign servers
+    Name    |   Owner    | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                      | Description 
+------------+------------+----------------------+-------------------+------+---------+-------------------------------------------------------+-------------
+ data_node1 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node1') | 
+ data_node2 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node2') | 
+ data_node3 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node3') | 
 (3 rows)
 
 CREATE FUNCTION _timescaledb_internal.invoke_distributed_commands()
@@ -38,19 +38,19 @@ RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
 SELECT _timescaledb_internal.invoke_distributed_commands();
-INFO:  server1 result: PGRES_COMMAND_OK
-INFO:  server2 result: PGRES_COMMAND_OK
-INFO:  server3 result: PGRES_COMMAND_OK
-INFO:  server1 result: PGRES_COMMAND_OK
-INFO:  server3 result: PGRES_COMMAND_OK
-INFO:  server1 result: PGRES_COMMAND_OK
-INFO:  server3 result: PGRES_COMMAND_OK
+INFO:  data_node1 result: PGRES_COMMAND_OK
+INFO:  data_node2 result: PGRES_COMMAND_OK
+INFO:  data_node3 result: PGRES_COMMAND_OK
+INFO:  data_node1 result: PGRES_COMMAND_OK
+INFO:  data_node3 result: PGRES_COMMAND_OK
+INFO:  data_node1 result: PGRES_COMMAND_OK
+INFO:  data_node3 result: PGRES_COMMAND_OK
  invoke_distributed_commands 
 -----------------------------
  
 (1 row)
 
-\c server1
+\c data_node1
 \dt
             List of relations
  Schema |    Name    | Type  |   Owner    
@@ -65,7 +65,7 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c server2
+\c data_node2
 \dt
             List of relations
  Schema |    Name    | Type  |   Owner    
@@ -78,7 +78,7 @@ SELECT * FROM disttable1;
 ------+--------+------
 (0 rows)
 
-\c server3
+\c data_node3
 \dt
             List of relations
  Schema |    Name    | Type  |   Owner    
@@ -99,13 +99,13 @@ SELECT * FROM disttable1;
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 ERROR:  schema "_timescaledb_internal" does not exist at character 8
 \set ON_ERROR_STOP 1
-\c server1
+\c data_node1
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
 (0 rows)
 
-\c server3
+\c data_node3
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
@@ -121,7 +121,7 @@ psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
-\c server1
+\c data_node1
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
@@ -131,7 +131,7 @@ SELECT is_frontend_session();
  f
 (1 row)
 
-\c server2
+\c data_node2
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
@@ -141,7 +141,7 @@ SELECT is_frontend_session();
  f
 (1 row)
 
-\c server3
+\c data_node3
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
@@ -160,31 +160,31 @@ SELECT is_frontend_session();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec('{server1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
-NOTICE:  [server1]:  SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec')
-ERROR:  [server1]: distributed peer ID already set
+SELECT * FROM test.remote_exec('{data_node1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
+NOTICE:  [data_node1]:  SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec')
+ERROR:  [data_node1]: distributed peer ID already set
 \set ON_ERROR_STOP 1
 -- Repeat is_frontend_session() test again, but this time using connections openned from frontend
 -- to backend nodes. Must return true.
 SELECT * FROM test.remote_exec(NULL, $$ SELECT is_frontend_session(); $$);
-NOTICE:  [server1]:  SELECT is_frontend_session()
-NOTICE:  [server1]:
+NOTICE:  [data_node1]:  SELECT is_frontend_session()
+NOTICE:  [data_node1]:
 is_frontend_session
 -------------------
 t                  
 (1 row)
 
 
-NOTICE:  [server2]:  SELECT is_frontend_session()
-NOTICE:  [server2]:
+NOTICE:  [data_node2]:  SELECT is_frontend_session()
+NOTICE:  [data_node2]:
 is_frontend_session
 -------------------
 t                  
 (1 row)
 
 
-NOTICE:  [server3]:  SELECT is_frontend_session()
-NOTICE:  [server3]:
+NOTICE:  [data_node3]:  SELECT is_frontend_session()
+NOTICE:  [data_node3]:
 is_frontend_session
 -------------------
 t                  
@@ -197,6 +197,6 @@ t
 (1 row)
 
 \c single
-DROP DATABASE server1;
-DROP DATABASE server2;
-DROP DATABASE server3;
+DROP DATABASE data_node1;
+DROP DATABASE data_node2;
+DROP DATABASE data_node3;

@@ -47,7 +47,7 @@ extern void remote_txn_report_prepare_transaction_result(RemoteTxn *txn, bool su
 /* Persitent record */
 extern RemoteTxnId *remote_txn_persistent_record_write(Oid server_oid, Oid user_mapping_oid);
 extern bool remote_txn_persistent_record_exists(const RemoteTxnId *gid);
-extern int remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid);
+extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid);
 
 #if DEBUG
 /* Debugging functions used in testing */
