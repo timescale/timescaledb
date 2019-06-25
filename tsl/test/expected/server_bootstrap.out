@@ -144,6 +144,7 @@ WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+NOTICE:  server "bootstrap_test" already exists, skipping
 NOTICE:  remote server database "bootstrap_test" already exists, skipping
   server_name   |   host    | port  |    database    |  username  | server_username | created 
 ----------------+-----------+-------+----------------+------------+-----------------+---------
@@ -203,6 +204,7 @@ WHERE e.extnamespace = n.oid;
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 SELECT * FROM bootstrap_schema.add_server('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+NOTICE:  server "bootstrap_test" already exists, skipping
 NOTICE:  remote server database "bootstrap_test" already exists, skipping
   server_name   |   host    | port  |    database    |  username  | server_username | created 
 ----------------+-----------+-------+----------------+------------+-----------------+---------
@@ -268,6 +270,7 @@ SELECT true FROM add_server('bootstrap_test1', database => 'Unusual Name', passw
 (1 row)
 
 SELECT true FROM add_server('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass', if_not_exists => true);
+NOTICE:  server "bootstrap_test1" already exists, skipping
 NOTICE:  remote server database "Unusual Name" already exists, skipping
  bool 
 ------
@@ -281,6 +284,7 @@ SELECT true FROM add_server('bootstrap_test2', database => U&'\0441\043B\043E\04
 (1 row)
 
 SELECT true FROM add_server('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass', if_not_exists => true);
+NOTICE:  server "bootstrap_test2" already exists, skipping
 NOTICE:  remote server database "слон" already exists, skipping
  bool 
 ------

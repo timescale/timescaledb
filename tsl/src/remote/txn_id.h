@@ -7,9 +7,7 @@
 #define TIMESCALEDB_TSL_REMOTE_TXN_ID_H
 
 #include <postgres.h>
-#if !PG96
 #include <utils/fmgrprotos.h>
-#endif
 
 /* This is the datanode dist txn id to be used in PREPARE TRANSACTION and friends.
    From the datanode perspective it has to be unique with regard to any concurrent

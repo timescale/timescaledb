@@ -17,6 +17,7 @@
 #include <utils/rel.h>
 #include <access/relscan.h>
 #include <utils/fmgroids.h>
+#include <utils/lsyscache.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_index.h>
 #include <nodes/pg_list.h>
@@ -29,7 +30,6 @@
 #include "utils.h"
 #include "deparse.h"
 #include <extension.h>
-#include <utils/lsyscache.h>
 
 /*
  * Deparse a table into a set of SQL commands that can be used to recreate it.

@@ -17,7 +17,7 @@
 #include "hypertable_compression.h"
 #include "hypertable_cache.h"
 #include "compat.h"
-#if !PG96
+#if PG_VERSION_SUPPORTS_MULTINODE
 #include "fdw/timescaledb_fdw.h"
 #endif
 #include "guc.h"

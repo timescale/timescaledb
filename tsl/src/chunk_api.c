@@ -319,7 +319,6 @@ chunk_create(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 #define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
 #define CHUNK_CREATE_STMT                                                                          \
 	"SELECT * FROM " INTERNAL_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4)"
@@ -445,5 +444,3 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_create_chunk_id)]);
 	}
 }
-
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */

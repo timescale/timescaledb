@@ -15,10 +15,8 @@ void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *,
 void tsl_set_rel_pathlist_query(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 void tsl_set_rel_pathlist_dml(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 
-#if !PG96
+#if PG_VERSION_SUPPORTS_MULTINODE
 void tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
-bool tsl_hypertable_should_be_expanded(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
-									   List *chunk_oids);
 #endif
 
 #endif /* TIMESCALEDB_TSL_PLANNER_H */

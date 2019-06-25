@@ -5,6 +5,13 @@ set(SOURCES
   test_ddl_hook.c
   test_continuous_aggs.c
 )
+
+if (PG_VERSION_SUPPORTS_MULTINODE)
+  list(APPEND SOURCES
+       server.c
+       deparse.c)
+endif ()
+
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
