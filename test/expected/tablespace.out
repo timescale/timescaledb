@@ -68,7 +68,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TAB
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --attach without permissions on the table should fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
-ERROR:  permission denied for hypertable "tspace_2dim"
+ERROR:  must be owner of hypertable "tspace_2dim"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --attach without permissions on the tablespace should also fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
@@ -193,7 +193,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 --detach tablespace1 from tspace_2dim should fail due to lack of permissions
 SELECT detach_tablespace('tablespace1', 'tspace_2dim');
-ERROR:  permission denied for hypertable "tspace_2dim"
+ERROR:  must be owner of hypertable "tspace_2dim"
 --detach tablespace1 from all tables. Should only detach from
 --'tspace_1dim' (1 tablespace) due to lack of permissions
 SELECT detach_tablespace('tablespace1');
@@ -256,9 +256,9 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 
 --detaching tablespace2 from a table without permissions should fail
 SELECT detach_tablespace('tablespace2', 'tspace_2dim');
-ERROR:  permission denied for hypertable "tspace_2dim"
+ERROR:  must be owner of hypertable "tspace_2dim"
 SELECT detach_tablespaces('tspace_2dim');
-ERROR:  permission denied for hypertable "tspace_2dim"
+ERROR:  must be owner of hypertable "tspace_2dim"
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- PERM_USER_2 owns tablespace2, and PERM_USER owns the table
 -- 'tspace_2dim', which has tablespace2 attached. Revoking PERM_USER_2

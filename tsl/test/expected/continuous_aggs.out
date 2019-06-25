@@ -808,6 +808,12 @@ select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidatio
      0
 (1 row)
 
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ count 
+-------
+     0
+(1 row)
+
 SELECT * FROM _timescaledb_config.bgw_job;
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ----+------------------+----------+-------------------+-------------+-------------+--------------
@@ -1167,7 +1173,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_68_chunk
 create or replace view mat_refresh_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
-select location, max(humidity) 
+select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location;
 NOTICE:  adding index _materialized_hypertable_29_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_29 USING BTREE(location, time_partition_col)

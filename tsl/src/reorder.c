@@ -136,6 +136,9 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id)
 				 errmsg("cannot find hypertable for chunk \"%s\"", get_rel_name(chunk_id))));
 	}
 
+	/* Our check gives better error messages, but keep the original one too. */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+
 	if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
 	{
 		Oid main_table_relid = ht->main_table_relid;

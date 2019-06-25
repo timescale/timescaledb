@@ -20,6 +20,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <catalog/index.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_aggregate.h>
 #include <catalog/toasting.h>
@@ -287,6 +288,38 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 	}
 }
 
+static bool
+check_trigger_exists_hypertable(Oid relid, char *trigname)
+{
+	Relation tgrel;
+	ScanKeyData skey[1];
+	SysScanDesc tgscan;
+	HeapTuple tuple;
+	bool trg_found = false;
+
+	tgrel = heap_open(TriggerRelationId, AccessShareLock);
+	ScanKeyInit(&skey[0],
+				Anum_pg_trigger_tgrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
+	{
+		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
+		if (namestrcmp(&(trig->tgname), trigname) == 0)
+		{
+			trg_found = true;
+			break;
+		}
+	}
+	systable_endscan(tgscan);
+	heap_close(tgrel, AccessShareLock);
+	return trg_found;
+}
+
 /* add continuous agg invalidation trigger to hypertable
  * relid - oid of hypertable
  * trigarg - argument to pass to trigger (the hypertable id from timescaledb catalog as a string)
@@ -298,8 +331,8 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	char *relname = get_rel_name(relid);
 	Oid schemaid = get_rel_namespace(relid);
 	char *schema = get_namespace_name(schemaid);
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Cache *hcache;
+	Hypertable *ht;
 
 	CreateTrigStmt stmt = {
 		.type = T_CreateTrigStmt,
@@ -312,13 +345,15 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		.args = list_make1(makeString(trigarg)),
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
+	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
+		return;
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
-
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create continuous aggregate trigger")));
-
 	ts_cache_release(hcache);
 }
 
@@ -793,6 +828,7 @@ cagg_validate_query(Query *query)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("can create continuous aggregate only on hypertables")));
 	}
+
 	/*check row security settings for the table */
 	if (has_row_security(rte->relid))
 	{
@@ -1566,6 +1602,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *
  * Notes: ViewStmt->query is the raw parse tree
  * panquery is the output of running parse_anlayze( ViewStmt->query)
+ *               so don't recreate invalidation trigger.
  */
 static void
 cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
@@ -1695,7 +1732,6 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 #if !PG96
 	PlannedStmt *pstmt_info = (PlannedStmt *) pstmt;
 	RawStmt *rawstmt = NULL;
-
 	/* we have a continuous aggregate query. convert to Query structure
 	 */
 	rawstmt = makeNode(RawStmt);
@@ -1724,6 +1760,7 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 	switch (ts_continuous_agg_hypertable_status(timebucket_exprinfo.htid))
 	{
 		case HypertableIsMaterialization:
+		case HypertableIsMaterializationAndRaw:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertable is a continuous aggregate materialization table"),
@@ -1731,13 +1768,7 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 							 "yet supported")));
 			return false;
 		case HypertableIsRawTable:
-		case HypertableIsMaterializationAndRaw:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertable already has a continuous aggregate"),
-					 errhint("hypertables currently only support a single continuous aggregate. "
-							 "Drop the other continuous aggreagate to add a new one.")));
-			return false;
+			break;
 		case HypertableIsNotContinuousAgg:
 			break;
 		default:

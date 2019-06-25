@@ -51,6 +51,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -973,6 +974,46 @@ typedef enum Anum_continuous_aggs_invalidation_threshold_pkey
 
 #define Natts_continuous_aggs_invalidation_threshold_pkey                                          \
 	(_Anum_continuous_aggs_invalidation_threshold_pkey_max - 1)
+
+/****** CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE definitions*/
+#define CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME                                \
+	"continuous_aggs_materialization_invalidation_log"
+typedef enum Anum_continuous_aggs_materialization_invalidation_log
+{
+	Anum_continuous_aggs_materialization_invalidation_log_materialization_id = 1,
+	Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
+	Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+	_Anum_continuous_aggs_materialization_invalidation_log_max,
+} Anum_continuous_aggs_materialization_invalidation_log;
+
+#define Natts_continuous_aggs_materialization_invalidation_log                                     \
+	(_Anum_continuous_aggs_materialization_invalidation_log_max - 1)
+
+typedef struct FormData_continuous_aggs_materialization_invalidation_log
+{
+	int32 materialization_id;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+} FormData_continuous_aggs_materialization_invalidation_log;
+
+typedef FormData_continuous_aggs_materialization_invalidation_log
+	*Form_continuous_aggs_materialization_invalidation_log;
+
+enum
+{
+	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
+};
+typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
+{
+	Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id = 1,
+	Anum_continuous_aggs_materialization_invalidation_log_idx_lowest_modified_value,
+	_Anum_continuous_aggs_materialization_invalidation_log_idx_max,
+} Anum_continuous_aggs_materialization_invalidation_log_idx;
+
+#define Natts_continuous_aggs_materialization_invalidation_log_idx                                 \
+	(_Anum_continuous_aggs_materialization_invalidation_log_idx_max - 1)
+
 /*
  * The maximum number of indexes a catalog table can have.
  * This needs to be bumped in case of new catalog tables that have more indexes.

@@ -92,6 +92,12 @@ deserialize_test_parameters(char *params, int32 *ttl)
 	*ttl = DatumGetInt32(DirectFunctionCall1(numeric_int4, NumericGetDatum(ttl_numeric)));
 }
 
+static Oid
+test_job_owner(BgwJob *job)
+{
+	return InvalidOid;
+}
+
 extern Datum
 ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 {
@@ -120,6 +126,7 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	ts_timer_set(&ts_mock_timer);
 
+	ts_bgw_job_set_unknown_job_type_owner_hook(test_job_owner);
 	ts_bgw_job_set_job_entrypoint_function_name("ts_bgw_job_execute_test");
 
 	pgstat_report_appname("DB Scheduler Test");

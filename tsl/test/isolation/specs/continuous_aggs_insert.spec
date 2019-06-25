@@ -40,29 +40,36 @@ setup { SET lock_timeout = '50ms'; SET deadlock_timeout = '10ms';  }
 step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 teardown { SET lock_timeout TO default; SET deadlock_timeout to default; }
 
-# the invalidation log is grabbed in the second materialization tranasction
-# not the first, so it serves as a good sequencing point
+# the invalidation log is copied in the first materialization tranasction
 session "L"
 step "LockInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log; }
 step "UnlockInval" { ROLLBACK; }
 
-#the completed threshold will block the REFRESH but not the INSERT
+# the invalidation threshold lock will block both INSERT and REFRESH
+session "L"
+step "LockInvalThr" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold IN SHARE MODE; }
+step "UnlockInvalThr" { ROLLBACK; }
+
+#the completed threshold will block the REFRESH in the second materialization
+# txn , but not the INSERT
 session "LC"
 step "LockCompleted" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold; }
 step "UnlockCompleted" { ROLLBACK; }
 
-#only one rereshe
-permutation "LockInval" "Refresh2" "Refresh"  "UnlockInval"
+#only one refresh
+permutation "LockCompleted" "Refresh2" "Refresh"  "UnlockCompleted"
 
-#refresh and insert/select do not block each other
+#refresh and insert do not block each other
 permutation "Ib" "LockCompleted" "I1" "Refresh" "Ic" "UnlockCompleted"
 permutation "Ib" "LockCompleted" "Refresh" "I1" "Ic" "UnlockCompleted"
-permutation "Sb" "LockInval" "Refresh" "S1" "Sc" "UnlockInval"
-permutation "Sb" "LockInval" "S1" "Refresh" "Sc" "UnlockInval"
+#refresh and select can run concurrently. refresh blocked only by lock on
+# completed. Needs RowExclusive for 2nd txn.
+permutation "Sb" "LockCompleted" "Refresh" "S1" "Sc" "UnlockCompleted"
+permutation "Sb" "LockCompleted" "S1" "Refresh" "Sc" "UnlockCompleted"
 
-#insert will see new invalidations (you can tell since they are waiting on the invalidation log lock)
-permutation "Ib" "LockInval" "Refresh" "I1" "Ic" "UnlockInval"
-permutation "Ib" "LockInval" "I1" "Refresh" "Ic" "UnlockInval"
+#refresh will see new invalidations (you can tell since they are waiting on the invalidation log lock)
+permutation "Ib" "LockInvalThr" "Refresh" "I1" "Ic" "UnlockInvalThr"
+permutation "Ib" "LockInvalThr" "I1" "Refresh" "Ic" "UnlockInvalThr"
 
 #with no invalidation threshold, inserts will not write to the invalidation log
 permutation "Ib" "LockInval" "I1" "Ic" "Refresh" "UnlockInval"

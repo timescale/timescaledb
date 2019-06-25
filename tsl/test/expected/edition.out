@@ -1,12 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SELECT _timescaledb_internal.current_license_key();
-                                                                            current_license_key                                                                             
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
-(1 row)
-
 SELECT _timescaledb_internal.tsl_loaded();
  tsl_loaded 
 ------------
@@ -30,11 +24,7 @@ select * from timescaledb_information.license;
 SET timescaledb.license_key='CommunityLicense';
 ERROR:  permission denied to set parameter "timescaledb.license_key"
 SELECT _timescaledb_internal.current_license_key();
-                                                                            current_license_key                                                                             
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
-(1 row)
-
+ERROR:  must be superuser or a member of pg_read_all_settings to examine the license key
 SELECT _timescaledb_internal.tsl_loaded();
  tsl_loaded 
 ------------

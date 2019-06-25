@@ -609,6 +609,7 @@ WHERE user_view_name = 'mat_drop_test';
 select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
@@ -848,7 +849,7 @@ drop view mat_ffunc_test cascade;
 create or replace view mat_refresh_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
-select location, max(humidity) 
+select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location;
 
@@ -857,4 +858,3 @@ select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test order by 1,2 ;
-

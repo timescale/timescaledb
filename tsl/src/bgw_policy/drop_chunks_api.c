@@ -10,6 +10,7 @@
 #include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <miscadmin.h>
 
 #include <hypertable_cache.h>
 
@@ -79,6 +80,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
+	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	hcache = ts_hypertable_cache_pin();
 	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
@@ -160,6 +162,7 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
+	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 	if (policy == NULL)
 	{

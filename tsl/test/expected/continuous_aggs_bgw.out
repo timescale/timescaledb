@@ -19,6 +19,12 @@ CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BO
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 --test that this all works under the community license
 ALTER DATABASE :TEST_DBNAME SET timescaledb.license_key='Community';
+--create a function with no permissions to execute
+CREATE FUNCTION get_constant_no_perms() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT 10;
+$BODY$;
+REVOKE EXECUTE ON FUNCTION get_constant_no_perms() FROM PUBLIC;
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
@@ -290,7 +296,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
            4 |     9
 (3 rows)
 
-\x
+\x on
 --check the information views --
 select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
@@ -319,4 +325,106 @@ completed_threshold    | 6
 invalidation_threshold | 6
 job_status             | scheduled
 last_run_duration      | 
+
+\x off
+DROP VIEW test_continuous_agg_view CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
+--create a view with a function that it has no permission to execute
+CREATE VIEW test_continuous_agg_view
+    WITH (timescaledb.continuous,
+        timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
+        FROM test_continuous_agg_table
+        GROUP BY 1;
+NOTICE:  adding index _materialized_hypertable_4_get_constant_no_perms_time_bucke_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(get_constant_no_perms, time_bucket)
+SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+-- job fails
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
+   1002 | Sat Jan 01 04:00:00.075 2000 PST | Fri Dec 31 16:00:00.075 1999 PST | f                |          1 |               0 |              1 |             0
+(1 row)
+
+--
+-- Test creating continuous aggregate with a user that is the non-owner of the raw table
+--
+CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
+SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
+NOTICE:  adding not-null constraint to column "time"
+               create_hypertable                
+------------------------------------------------
+ (5,public,test_continuous_agg_table_w_grant,t)
+(1 row)
+
+GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
+INSERT INTO test_continuous_agg_table_w_grant
+    SELECT i, i FROM
+        (SELECT generate_series(0, 10) as i) AS j;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+-- make sure view can be created
+CREATE VIEW test_continuous_agg_view_user_2
+    WITH ( timescaledb.continuous,
+         timescaledb.max_interval_per_job='2',
+        timescaledb.refresh_lag='-2')
+    AS SELECT time_bucket('2', time), SUM(data) as value
+        FROM test_continuous_agg_table_w_grant
+        GROUP BY 1;
+SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |           next_start           |           until_next           | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------
+   1003 | Fri Dec 31 16:00:00.1 1999 PST | Fri Dec 31 16:00:00.1 1999 PST | t                |          1 |               1 |              0 |             0
+(1 row)
+
+--view is populated
+SELECT * FROM test_continuous_agg_view_user_2;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--revoke permissions from the continuous agg view owner to select from raw table
+--no further updates to cont agg should happen
+REVOKE SELECT ON test_continuous_agg_table_w_grant FROM public;
+INSERT INTO test_continuous_agg_table_w_grant VALUES(1,1);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+--should show a failing execution because no longer has permissions (due to lack of permission on partial view owner's part)
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
+   1003 | Sat Jan 01 04:00:00.125 2000 PST | Fri Dec 31 16:00:00.125 1999 PST | f                |          2 |               1 |              1 |             0
+(1 row)
+
+--view was NOT updated; but the old stuff is still there
+SELECT * FROM test_continuous_agg_view_user_2;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+(1 row)
 

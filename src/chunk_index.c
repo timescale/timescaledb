@@ -22,6 +22,7 @@
 #include <commands/tablecmds.h>
 #include <commands/cluster.h>
 #include <access/xact.h>
+#include <miscadmin.h>
 
 #include "export.h"
 #include "chunk_index.h"
@@ -1094,6 +1095,8 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
 	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
 
+	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
+
 	hypertable_rel = heap_open(cim.hypertableoid, AccessShareLock);
 
 	/* Need ShareLock on the heap relation we are creating indexes on */
@@ -1123,11 +1126,18 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	Oid chunk_index_oid_old = PG_GETARG_OID(0);
 	Oid chunk_index_oid_new = PG_GETARG_OID(1);
 	Relation index_rel;
+	Chunk *chunk;
+	ChunkIndexMapping cim;
 
 	Oid constraint_oid;
 	char *name;
 
 	index_rel = relation_open(chunk_index_oid_old, ShareLock);
+
+	/* check permissions */
+	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, 0, true);
+	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid_old, &cim);
+	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
 
 	name = pstrdup(RelationGetRelationName(index_rel));
 	constraint_oid = get_index_constraint(chunk_index_oid_old);

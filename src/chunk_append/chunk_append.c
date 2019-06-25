@@ -17,6 +17,7 @@
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
 #include "compat.h"
+#include "func_cache.h"
 #include "guc.h"
 
 static bool contain_param_exec(Node *node);
@@ -261,11 +262,58 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	 */
 	Assert(root->parse->sortClause != NIL);
 
-	/* we only support direct column references here */
-	if (!IsA(tle->expr, Var))
+	if (IsA(tle->expr, Var))
+	{
+		/* direct column reference */
+		sort_var = castNode(Var, tle->expr);
+	}
+	else if (IsA(tle->expr, FuncExpr) && list_length(root->parse->sortClause) == 1)
+	{
+		/*
+		 * check for bucketing functions
+		 *
+		 * If ORDER BY clause only has 1 expression and the expression is a
+		 * bucketing function we can still do Ordered Append, the 1 expression
+		 * limit could only be safely removed if we ensure chunk boundaries
+		 * are not crossed.
+		 *
+		 * The following example demonstrates this requirement:
+		 *
+		 * Chunk 1 has (time, device_id)
+		 * 0 1
+		 * 0 2
+		 *
+		 * Chunk 2 has (time, device_id)
+		 * 10 1
+		 * 10 2
+		 *
+		 * The ORDER BY clause is time_bucket(100,time), device_id
+		 * The result when transforming to an ordered append would be the following:
+		 * (time_bucket(100, time), device_id)
+		 * 0 1
+		 * 0 2
+		 * 0 1
+		 * 0 2
+		 *
+		 * The order of the device_ids is wrong so we cannot safely remove the MergeAppend
+		 * unless we eliminate the possibility that a bucket spans multiple chunks.
+		 */
+		FuncInfo *info = ts_func_cache_get_bucketing_func(castNode(FuncExpr, tle->expr)->funcid);
+		Expr *transformed;
+
+		if (info == NULL)
+			return false;
+
+		transformed = info->sort_transform(castNode(FuncExpr, tle->expr));
+
+		if (!IsA(transformed, Var))
+			return false;
+
+		sort_var = castNode(Var, transformed);
+	}
+	else
 		return false;
 
-	sort_var = castNode(Var, tle->expr);
 	sort_relid = sort_var->varno;
 	tce = lookup_type_cache(sort_var->vartype,
 							TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);

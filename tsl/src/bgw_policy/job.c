@@ -291,6 +291,8 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
 	}
 
+	ts_bgw_job_permission_check(job);
+
 	if (!PG_ARGISNULL(1))
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
 	if (!PG_ARGISNULL(2))

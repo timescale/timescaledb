@@ -121,6 +121,22 @@ init_hypertable_invalidation_log_scan_by_hypertable_id(ScanIterator *iterator,
 		Int32GetDatum(raw_hypertable_id));
 }
 
+static void
+init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *iterator,
+																 const int32 materialization_id)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+											CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX);
+
+	ts_scan_iterator_scan_key_init(
+		iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(materialization_id));
+}
+
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -178,6 +194,23 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 													CurrentMemoryContext);
 
 	init_hypertable_invalidation_log_scan_by_hypertable_id(&iterator, raw_hypertable_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete(ti->scanrel, ti->tuple);
+	}
+}
+
+static void
+materialization_invalidation_log_delete(int32 materialization_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+								RowExclusiveLock,
+								CurrentMemoryContext);
+
+	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, materialization_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -266,6 +299,30 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 	return ca;
 }
 
+ContinuousAgg *
+ts_continuous_agg_find_by_job_id(int32 job_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ContinuousAgg *ca = NULL;
+	int count = 0;
+
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+
+		if (data->job_id == job_id)
+		{
+			ca = palloc0(sizeof(*ca));
+			continuous_agg_init(ca, data);
+			count++;
+		}
+	}
+	Assert(count <= 1);
+	return ca;
+}
+
 /*
  * Drops continuous aggs and all related objects.
  *
@@ -298,9 +355,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	{
 		user_view = (ObjectAddress){
 			.classId = RelationRelationId,
-			.objectId =
-				get_relname_relid(NameStr(agg->data.user_view_name),
-								  get_namespace_oid(NameStr(agg->data.user_view_schema), false)),
+			.objectId = ts_continuous_agg_get_user_view_oid(agg),
 		};
 		LockRelationOid(user_view.objectId, AccessExclusiveLock);
 	}
@@ -386,6 +441,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 
 		if (!raw_hypertable_has_other_caggs)
 			invalidation_threshold_delete(form->raw_hypertable_id);
+		materialization_invalidation_log_delete(form->mat_hypertable_id);
 		count++;
 	}
 	Assert(count == 1);
@@ -610,4 +666,15 @@ ts_number_of_continuous_aggs()
 	ts_scanner_foreach(&iterator) { count++; }
 
 	return count;
+}
+
+Oid
+ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg)
+{
+	Oid view_relid =
+		get_relname_relid(NameStr(agg->data.user_view_name),
+						  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
+	if (!OidIsValid(view_relid))
+		elog(ERROR, "could not find user view for continuous agg");
+	return view_relid;
 }

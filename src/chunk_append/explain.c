@@ -85,7 +85,8 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 	{
 		/* find key expression in tlist */
 		AttrNumber keyresno = list_nth_oid(sort_indexes, keyno);
-		TargetEntry *target = get_tle_by_resno(plan->targetlist, keyresno);
+		TargetEntry *target =
+			get_tle_by_resno(castNode(CustomScan, plan)->custom_scan_tlist, keyresno);
 		char *exprstr;
 
 		if (!target)

@@ -94,6 +94,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -216,6 +220,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY] = "continuous_aggs_invalidation_threshold_pkey",
 		},
 	},
+    [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
+        .length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
+        .names = (char *[]) {
+            [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
+        },
+    },
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -233,6 +243,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
+	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
 };
 
 typedef struct InternalFunctionDef

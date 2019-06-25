@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.current_license_key();
  current_license_key 
 ---------------------
@@ -60,16 +61,54 @@ BEGIN
 END;
 $$
 LANGUAGE PLPGSQL;
+SELECT * FROM timescaledb_information.license;
+  edition  | expired | expiration_time 
+-----------+---------+-----------------
+ community | f       | infinity
+(1 row)
+
+SELECT * FROM  _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ f
+(1 row)
+
+SELECT * FROM  _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT * FROM  _timescaledb_internal.license_expiration_time();
+ license_expiration_time 
+-------------------------
+ infinity
+(1 row)
+
+SELECT * FROM  _timescaledb_internal.print_license_expiration_info();
+ print_license_expiration_info 
+-------------------------------
+ 
+(1 row)
+
+SELECT * FROM  _timescaledb_internal.license_edition();
+ license_edition 
+-----------------
+ community
+(1 row)
+
 SELECT get_sqlstate($$SELECT _timescaledb_internal.current_db_set_license_key('ApacheOnly')$$);
  get_sqlstate 
 --------------
  42501
 (1 row)
 
-select * from timescaledb_information.license;
-  edition  | expired | expiration_time 
------------+---------+-----------------
- community | f       | infinity
+SELECT get_sqlstate($$SHOW timescaledb.license_key;$$);
+ get_sqlstate 
+--------------
+ 42501
 (1 row)
 
+SELECT * FROM  _timescaledb_internal.current_license_key();
+ERROR:  must be superuser or a member of pg_read_all_settings to examine the license key
 drop function get_sqlstate(TEXT);

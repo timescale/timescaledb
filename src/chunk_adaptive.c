@@ -17,6 +17,7 @@
 #include <funcapi.h>
 #include <math.h>
 #include <parser/parse_func.h>
+#include <miscadmin.h>
 
 #include "hypertable_cache.h"
 #include "errors.h"
@@ -420,6 +421,7 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	int num_undersized_intervals = 0;
 	double interval_diff;
 	double undersized_fillfactor = 0.0;
+	AclResult acl_result;
 
 	if (PG_NARGS() != CHUNK_SIZING_FUNC_NARGS)
 		elog(ERROR, "invalid number of arguments");
@@ -433,6 +435,12 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find a matching hypertable for dimension %u", dimension_id);
 
 	ht = ts_hypertable_get_by_id(hypertable_id);
+
+	acl_result = pg_class_aclcheck(ht->main_table_relid, GetUserId(), ACL_SELECT);
+	if (acl_result != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for table %s", ht->fd.table_name.data)));
 
 	Assert(ht != NULL);
 
@@ -675,6 +683,8 @@ ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 	if (!OidIsValid(info->table_relid))
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("table does not exist")));
 
+	ts_hypertable_permissions_check(info->table_relid, GetUserId());
+
 	if (NULL == info->colname)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
@@ -745,6 +755,8 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	if (!OidIsValid(info.table_relid))
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("table does not exist")));
+
+	ts_hypertable_permissions_check(info.table_relid, GetUserId());
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, info.table_relid);

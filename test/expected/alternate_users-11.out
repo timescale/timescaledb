@@ -64,9 +64,9 @@ GRANT CREATE ON SCHEMA "one_Partition" TO :ROLE_DEFAULT_PERM_USER_2;
 SELECT * FROM "one_Partition";
 ERROR:  permission denied for table one_Partition
 SELECT set_chunk_time_interval('"one_Partition"', 1::bigint);
-ERROR:  permission denied for hypertable "one_Partition"
+ERROR:  must be owner of hypertable "one_Partition"
 select add_dimension('"one_Partition"', 'device_id', 2);
-ERROR:  permission denied for hypertable "one_Partition"
+ERROR:  must be owner of hypertable "one_Partition"
 select attach_tablespace('tablespace1', '"one_Partition"');
 ERROR:  tablespace "tablespace1" does not exist
 \set ON_ERROR_STOP 1
@@ -447,11 +447,11 @@ INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 --all of the following should produce errors
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('plain_table_su', 'time');
-ERROR:  permission denied for hypertable "plain_table_su"
+ERROR:  must be owner of hypertable "plain_table_su"
 CREATE INDEX ON plain_table_su (time, temp);
 ERROR:  must be owner of table plain_table_su
 CREATE INDEX ON hypertable_su (time, temp);
-ERROR:  must be owner of table hypertable_su
+ERROR:  must be owner of hypertable "hypertable_su"
 DROP INDEX "ind_1";
 ERROR:  must be owner of index ind_1
 ALTER INDEX "ind_1" RENAME TO "ind_2";
@@ -460,7 +460,7 @@ ERROR:  must be owner of index ind_1
 --test that I can't do anything to a non-owned hypertable.
 \set ON_ERROR_STOP 0
 CREATE INDEX ON hypertable_su (time, temp);
-ERROR:  must be owner of table hypertable_su
+ERROR:  must be owner of hypertable "hypertable_su"
 SELECT * FROM hypertable_su;
 ERROR:  permission denied for table hypertable_su
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
@@ -480,7 +480,7 @@ SELECT * FROM hypertable_su;
 
 \set ON_ERROR_STOP 0
 CREATE INDEX ON hypertable_su (time, temp);
-ERROR:  must be owner of table hypertable_su
+ERROR:  must be owner of hypertable "hypertable_su"
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 ERROR:  permission denied for table hypertable_su
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
@@ -500,7 +500,7 @@ SELECT * FROM hypertable_su;
 
 \set ON_ERROR_STOP 0
 CREATE INDEX ON hypertable_su (time, temp);
-ERROR:  must be owner of table hypertable_su
+ERROR:  must be owner of hypertable "hypertable_su"
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of table hypertable_su
 \set ON_ERROR_STOP 1

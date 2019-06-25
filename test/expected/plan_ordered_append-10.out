@@ -407,6 +407,24 @@ ORDER BY time DESC, device_id LIMIT 1;
          ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
 (6 rows)
 
+-- test sort column not in targetlist
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM ordered_append
+ORDER BY time DESC LIMIT 1;
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: ordered_append."time" DESC
+         ->  Index Only Scan using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (never executed)
+               Heap Fetches: 0
+(9 rows)
+
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX SELECT
   time, device_id, value
@@ -439,7 +457,7 @@ ORDER BY device_id, time LIMIT 1;
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=23043 loops=1)
 (8 rows)
 
--- queries without LIMIT shouldnt use ordered append
+-- queries without LIMIT should use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
@@ -453,7 +471,7 @@ ORDER BY time ASC;
    ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=23043 loops=1)
 (5 rows)
 
--- queries without ORDER BY shouldnt use ordered append (still uses append though)
+-- queries without ORDER BY shouldnt use ordered append
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
@@ -661,39 +679,107 @@ ORDER BY time ASC LIMIT 1;
          ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
 (6 rows)
 
--- test query with order by time_bucket (should not use ordered append)
+-- test query with ORDER BY time_bucket
 :PREFIX SELECT
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY 1 LIMIT 1;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Result (actual rows=1 loops=1)
-         ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
-               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(7 rows)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: time_bucket('@ 1 day'::interval, ordered_append."time")
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(6 rows)
 
--- test query with order by time_bucket (should not use ordered append)
+-- test query with ORDER BY time_bucket
 :PREFIX SELECT
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY time_bucket('1d',time) LIMIT 1;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Result (actual rows=1 loops=1)
-         ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
-               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-(7 rows)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: time_bucket('@ 1 day'::interval, ordered_append."time")
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(6 rows)
 
--- test query with now() should result in ordered append with constraint aware append
+-- test query with ORDER BY time_bucket, device_id
+-- must not use ordered append
+:PREFIX SELECT
+  time_bucket('1d',time), device_id, name
+FROM dimension_last
+ORDER BY time_bucket('1d',time), device_id LIMIT 1;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_3_7_chunk."time")), _hyper_3_7_chunk.device_id
+         Sort Method: top-N heapsort 
+         ->  Result (actual rows=5760 loops=1)
+               ->  Append (actual rows=5760 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_10_chunk (actual rows=1440 loops=1)
+(10 rows)
+
+-- test query with ORDER BY date_trunc
+:PREFIX SELECT
+  time_bucket('1d',time), device_id, value
+FROM ordered_append
+ORDER BY date_trunc('day', time) LIMIT 1;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: date_trunc('day'::text, ordered_append."time")
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(6 rows)
+
+-- test query with ORDER BY date_trunc
+:PREFIX SELECT
+  date_trunc('day',time), device_id, value
+FROM ordered_append
+ORDER BY 1 LIMIT 1;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on ordered_append (actual rows=1 loops=1)
+         Order: date_trunc('day'::text, ordered_append."time")
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_idx on _hyper_1_3_chunk (never executed)
+(6 rows)
+
+-- test query with ORDER BY date_trunc, device_id
+-- must not use ordered append
+:PREFIX SELECT
+  date_trunc('day',time), device_id, name
+FROM dimension_last
+ORDER BY 1,2 LIMIT 1;
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: (date_trunc('day'::text, _hyper_3_7_chunk."time")), _hyper_3_7_chunk.device_id
+         Sort Method: top-N heapsort 
+         ->  Result (actual rows=5760 loops=1)
+               ->  Append (actual rows=5760 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on _hyper_3_10_chunk (actual rows=1440 loops=1)
+(10 rows)
+
+-- test query with now() should result in ordered ChunkAppend
 :PREFIX SELECT * FROM ordered_append WHERE time < now() + '1 month'
 ORDER BY time DESC limit 1;
                                                     QUERY PLAN                                                     

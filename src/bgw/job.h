@@ -30,11 +30,12 @@ typedef struct BgwJob
 
 typedef bool job_main_func(void);
 typedef bool (*unknown_job_type_hook_type)(BgwJob *job);
+typedef Oid (*unknown_job_type_owner_hook_type)(BgwJob *job);
 
 extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *function, const char *name,
 												   const char *extra);
 
-extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job);
+extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 
 extern List *ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx);
 
@@ -50,10 +51,14 @@ extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name 
 													Interval *retry_period);
 extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
 
+extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
+
 extern bool ts_bgw_job_execute(BgwJob *job);
 
+extern Oid ts_bgw_job_owner(BgwJob *job);
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook);
+extern void ts_bgw_job_set_unknown_job_type_owner_hook(unknown_job_type_owner_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
 extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
 											  Interval *next_interval);

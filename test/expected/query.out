@@ -143,16 +143,15 @@ SHOW timescaledb.disable_optimizations;
 
 --Aggregates use MergeAppend only in optimized
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
 
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
                                                       QUERY PLAN                                                      
@@ -180,28 +179,26 @@ SHOW timescaledb.disable_optimizations;
 
 --the minute and second results should be diff
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
 
 :PREFIX SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('second'::text, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('second'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (date_trunc('second'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('second'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
 
 --test that when index on time used by constraint, still works correctly
 :PREFIX
@@ -211,19 +208,17 @@ WHERE time < to_timestamp(900)
 GROUP BY t
 ORDER BY t DESC
 LIMIT 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: hyper_1
-               Chunks left after exclusion: 1
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(10 rows)
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+                     Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(8 rows)
 
 --test on table with time partitioning function. Currently not
 --optimized to use index for ordering since the index is an expression
@@ -255,44 +250,41 @@ BEGIN;
   CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
   ANALYZE hyper_1;
   :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
+(6 rows)
 
   --test that works with both indexes
   CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
   ANALYZE hyper_1;
   :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
+(6 rows)
 
   :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric, 5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (time_bucket('@ 1 min'::interval, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: time_bucket('@ 1 min'::interval, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
 
   :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -309,16 +301,15 @@ BEGIN;
 
   :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval))) DESC
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(7 rows)
+         Group Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
 
   :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
   FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -335,16 +326,15 @@ BEGIN;
 
   :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
   FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (time_bucket('@ 1 min'::interval, _hyper_2_2_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_2_chunk."time")) DESC
-                     ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
-(7 rows)
+         Group Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1_tz
+               Order: time_bucket('@ 1 min'::interval, hyper_1_tz."time") DESC
+               ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
+(6 rows)
 
   :PREFIX SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
   FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
@@ -361,33 +351,31 @@ BEGIN;
 
   :PREFIX SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
   FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (time_bucket(10, _hyper_3_3_chunk."time"))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket(10, _hyper_3_3_chunk."time")) DESC
-                     ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
-                     ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
-                     ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
-(9 rows)
+         Group Key: (time_bucket(10, hyper_1_int."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1_int
+               Order: time_bucket(10, hyper_1_int."time") DESC
+               ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
+               ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+               ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+(8 rows)
 
   :PREFIX SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
   FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (time_bucket(10, _hyper_3_3_chunk."time", 2))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket(10, _hyper_3_3_chunk."time", 2)) DESC
-                     ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
-                     ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
-                     ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
-(9 rows)
+         Group Key: (time_bucket(10, hyper_1_int."time", 2))
+         ->  Custom Scan (ChunkAppend) on hyper_1_int
+               Order: time_bucket(10, hyper_1_int."time", 2) DESC
+               ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
+               ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+               ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+(8 rows)
 
 ROLLBACK;
 --plain tables shouldnt be optimized by default

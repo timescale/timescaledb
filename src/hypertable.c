@@ -70,7 +70,7 @@ ts_rel_get_owner(Oid relid)
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("relation with OID %u does not exist", relid)));
+				 errmsg("unable to get owner for relation with OID %u: does not exist", relid)));
 
 	ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
 
@@ -100,9 +100,16 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	if (!has_privs_of_role(userid, ownerid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for hypertable \"%s\"", get_rel_name(hypertable_oid))));
+				 errmsg("must be owner of hypertable \"%s\"", get_rel_name(hypertable_oid))));
 
 	return ownerid;
+}
+
+void
+ts_hypertable_permissions_check_by_id(int32 hypertable_id)
+{
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id);
+	ts_hypertable_permissions_check(table_relid, GetUserId());
 }
 
 static Hypertable *
@@ -426,6 +433,10 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 	ObjectAddress root_trigger_addr;
 	List *chunks;
 	ListCell *lc;
+	int sec_ctx;
+	Oid saved_uid;
+	Oid owner;
+
 	Assert(ht != NULL);
 #if !PG96
 	if (stmt->transitionRels != NIL)
@@ -434,6 +445,7 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 				 errmsg("hypertables do not support transition tables in triggers")));
 #endif
 	/* create the trigger on the root table */
+	/* ACL permissions checks happen within this call */
 	root_trigger_addr =
 		CreateTriggerCompat(stmt, query, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
 
@@ -442,6 +454,13 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 
 	if (!stmt->row)
 		return root_trigger_addr;
+
+	/* switch to the hypertable owner's role -- note that this logic must be the same as
+	 * `ts_trigger_create_all_on_chunk` */
+	owner = ts_rel_get_owner(ht->main_table_relid);
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+	if (saved_uid != owner)
+		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 	foreach (lc, chunks)
@@ -452,6 +471,9 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 
 		ts_trigger_create_on_chunk(root_trigger_addr.objectId, relschema, relname);
 	}
+
+	if (saved_uid != owner)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	return root_trigger_addr;
 }
@@ -1328,6 +1350,8 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_GETARG_OID(0);
 	Oid old_trigger;
+
+	ts_hypertable_permissions_check(relid, GetUserId());
 
 	if (table_has_tuples(relid, AccessShareLock))
 		ereport(ERROR,

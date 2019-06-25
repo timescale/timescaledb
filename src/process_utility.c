@@ -321,6 +321,7 @@ process_copy(ProcessUtilityArgs *args)
 		return false;
 	}
 
+	/* Performs acl check in here inside `copy_security_check` */
 	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
 
 	if (args->completion_tag)
@@ -557,6 +558,7 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	stmt->rels = list_concat(ctx.chunk_rels, stmt->rels);
 	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
+	/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 	ExecVacuum(stmt, is_toplevel);
 	return true;
 }
@@ -622,6 +624,9 @@ process_truncate(ProcessUtilityArgs *args)
 			{
 				ContinuousAggHypertableStatus agg_status =
 					ts_continuous_agg_hypertable_status(ht->fd.id);
+
+				ts_hypertable_permissions_check_by_id(ht->fd.id);
+
 				if ((agg_status & HypertableIsMaterialization) != 0)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -952,6 +957,7 @@ process_reindex(ProcessUtilityArgs *args)
 			if (NULL != ht)
 			{
 				PreventCommandDuringRecovery("REINDEX");
+				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 				if (foreach_chunk(ht, reindex_chunk, stmt) >= 0)
 					ret = true;
@@ -965,6 +971,7 @@ process_reindex(ProcessUtilityArgs *args)
 			if (NULL != ht)
 			{
 				process_add_hypertable(args, ht);
+				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 				/*
 				 * Recursing to chunks is currently not supported. Need to
@@ -1655,6 +1662,7 @@ process_index_start(ProcessUtilityArgs *args)
 		return false;
 	}
 
+	ts_hypertable_permissions_check_by_id(ht->fd.id);
 	process_add_hypertable(args, ht);
 
 	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
@@ -1827,14 +1835,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		MemoryContext old, mcxt;
 		LockRelId cluster_index_lockid;
 
-		if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
-			aclcheck_error(ACLCHECK_NOT_OWNER,
-#if PG96 || PG10
-						   ACL_KIND_CLASS,
-#else
-						   OBJECT_TABLE,
-#endif
-						   get_rel_name(ht->main_table_relid));
+		ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 		/*
 		 * If CLUSTER is run inside a user transaction block; we bail out or
@@ -2159,6 +2160,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	ht = ts_hypertable_cache_get_entry(hcache, relid);
 	if (ht != NULL)
 	{
+		ts_hypertable_permissions_check_by_id(ht->fd.id);
 		check_continuous_agg_alter_table_allowed(ht, stmt);
 		relation_not_only(stmt->relation);
 		process_add_hypertable(args, ht);
@@ -2249,10 +2251,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 }
 
 static void
-process_altercontinuousagg_set_with(ContinuousAgg *cagg, const List *defelems)
+continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
+{
+	Oid ownerid = ts_rel_get_owner(view_relid);
+
+	if (!has_privs_of_role(GetUserId(), ownerid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
+}
+
+static void
+process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
 	List *pg_options = NIL, *cagg_options = NIL;
+
+	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
 	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
 	if (list_length(pg_options) > 0)
@@ -2289,6 +2304,8 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	if (cagg == NULL)
 		return false;
 
+	continuous_agg_with_clause_perm_check(cagg, view_relid);
+
 	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
 	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
 		ereport(ERROR,
@@ -2306,7 +2323,7 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
 							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, (List *) cmd->def);
+				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
 			default:
 				ereport(ERROR,
@@ -2323,7 +2340,6 @@ static bool
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-
 	switch (stmt->relkind)
 	{
 		case OBJECT_TABLE:
@@ -2787,7 +2803,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handled = process_cluster_start(args);
 			break;
 		case T_ViewStmt:
-			handled = process_viewstmt(args); //->parsetree);
+			handled = process_viewstmt(args);
 			break;
 		case T_RefreshMatViewStmt:
 			handled = process_refresh_mat_view_start(args, args->parsetree);
