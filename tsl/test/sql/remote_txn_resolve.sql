@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
-AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_server'
+AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 
 SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
@@ -49,9 +49,9 @@ SELECT * FROM table_modified_by_txns;
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT count(*) FROM _timescaledb_catalog.remote_txn;
 
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
 
 SELECT * FROM table_modified_by_txns;
 SELECT count(*) FROM pg_prepared_xacts;
@@ -69,9 +69,9 @@ BEGIN;
     INSERT INTO public.table_modified_by_txns VALUES ('non-ts-txn');
 PREPARE TRANSACTION 'non-ts-txn';
 
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
 
 COMMIT PREPARED 'non-ts-txn';
 SELECT * FROM table_modified_by_txns;

@@ -59,10 +59,10 @@ test_options()
 	TestAssertTrue(!remote_connection_valid_user_option("xxx"));
 	TestAssertTrue(!remote_connection_valid_user_option("fallback_application_name"));
 
-	TestAssertTrue(remote_connection_valid_server_option("port"));
-	TestAssertTrue(!remote_connection_valid_server_option("user"));
-	TestAssertTrue(!remote_connection_valid_server_option("xxx"));
-	TestAssertTrue(!remote_connection_valid_server_option("fallback_application_name"));
+	TestAssertTrue(remote_connection_valid_data_node_option("port"));
+	TestAssertTrue(!remote_connection_valid_data_node_option("user"));
+	TestAssertTrue(!remote_connection_valid_data_node_option("xxx"));
+	TestAssertTrue(!remote_connection_valid_data_node_option("fallback_application_name"));
 }
 
 static void

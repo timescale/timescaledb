@@ -4,9 +4,9 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SELECT * FROM add_server('server1', 'localhost', 'server1', port=>current_setting('port')::integer);
-SELECT * FROM add_server('server2', 'localhost', 'server2', port=>current_setting('port')::integer);
-SELECT * FROM add_server('server3', 'localhost', 'server3', port=>current_setting('port')::integer);
+SELECT * FROM add_data_node('data_node1', 'localhost', 'data_node1', port=>current_setting('port')::integer);
+SELECT * FROM add_data_node('data_node2', 'localhost', 'data_node2', port=>current_setting('port')::integer);
+SELECT * FROM add_data_node('data_node3', 'localhost', 'data_node3', port=>current_setting('port')::integer);
 
 \des+
 
@@ -22,13 +22,13 @@ LANGUAGE C STRICT;
 
 SELECT _timescaledb_internal.invoke_distributed_commands();
 
-\c server1
+\c data_node1
 \dt
 SELECT * FROM disttable1;
-\c server2
+\c data_node2
 \dt
 SELECT * FROM disttable1;
-\c server3
+\c data_node3
 \dt
 SELECT * FROM disttable1;
 \c single
@@ -38,9 +38,9 @@ SELECT * FROM disttable1;
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 \set ON_ERROR_STOP 1
 
-\c server1
+\c data_node1
 SELECT * from disttable2;
-\c server3
+\c data_node3
 SELECT * from disttable2;
 
 -- Test connection session identity
@@ -58,19 +58,19 @@ CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
 
-\c server1
+\c data_node1
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
-\c server2
+\c data_node2
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
-\c server3
+\c data_node3
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
@@ -81,7 +81,7 @@ SELECT is_frontend_session();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec('{server1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
+SELECT * FROM test.remote_exec('{data_node1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
 \set ON_ERROR_STOP 1
 
 -- Repeat is_frontend_session() test again, but this time using connections openned from frontend
@@ -89,6 +89,6 @@ SELECT * FROM test.remote_exec('{server1}', $$ SELECT * FROM _timescaledb_intern
 SELECT * FROM test.remote_exec(NULL, $$ SELECT is_frontend_session(); $$);
 
 \c single
-DROP DATABASE server1;
-DROP DATABASE server2;
-DROP DATABASE server3;
+DROP DATABASE data_node1;
+DROP DATABASE data_node2;
+DROP DATABASE data_node3;

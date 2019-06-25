@@ -13,14 +13,14 @@
 #include "data_node.h"
 #include "export.h"
 
-TS_FUNCTION_INFO_V1(test_server_show);
-TS_FUNCTION_INFO_V1(tsl_unchecked_add_server);
+TS_FUNCTION_INFO_V1(test_data_node_show);
+TS_FUNCTION_INFO_V1(tsl_unchecked_add_data_node);
 
 /*
- * Tests the ts_server_get_servername_list() function.
+ * Tests the ts_data_node_get_node_name_list() function.
  */
 Datum
-test_server_show(PG_FUNCTION_ARGS)
+test_data_node_show(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 
@@ -28,8 +28,7 @@ test_server_show(PG_FUNCTION_ARGS)
 	{
 		MemoryContext oldcontext;
 		TupleDesc tupdesc;
-		List *servernames;
-		;
+		List *node_names;
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
@@ -40,8 +39,8 @@ test_server_show(PG_FUNCTION_ARGS)
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
 
-		servernames = server_get_servername_list();
-		funcctx->user_fctx = servernames;
+		node_names = data_node_get_node_name_list();
+		funcctx->user_fctx = node_names;
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -53,15 +52,15 @@ test_server_show(PG_FUNCTION_ARGS)
 		Datum values[4];
 		bool nulls[4] = { true };
 		HeapTuple tuple;
-		List *servernames = funcctx->user_fctx;
-		const char *servername = linitial(servernames);
-		ForeignServer *server = GetForeignServerByName(servername, false);
+		List *node_names = funcctx->user_fctx;
+		const char *node_name = linitial(node_names);
+		ForeignServer *server = GetForeignServerByName(node_name, false);
 		ListCell *lc;
 
-		funcctx->user_fctx = list_delete_first(servernames);
+		funcctx->user_fctx = list_delete_first(node_names);
 		funcctx->call_cntr++;
 
-		values[0] = CStringGetDatum(servername);
+		values[0] = CStringGetDatum(node_name);
 		nulls[0] = false;
 
 		foreach (lc, server->options)
@@ -99,10 +98,10 @@ test_server_show(PG_FUNCTION_ARGS)
 }
 
 /*
- * Performs a server add without setting distributed id or enforcing topolgy constraints.
+ * Performs a data node add without setting distributed id or enforcing topolgy constraints.
  */
 Datum
-tsl_unchecked_add_server(PG_FUNCTION_ARGS)
+tsl_unchecked_add_data_node(PG_FUNCTION_ARGS)
 {
-	return server_add_without_dist_id(fcinfo);
+	return data_node_add_without_dist_id(fcinfo);
 }

@@ -37,17 +37,17 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
-AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_server'
+AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
-NOTICE:  remote server database "db_remote_txn" already exists, skipping
+NOTICE:  remote node database "db_remote_txn" already exists, skipping
  server_name |   host    | port  |   database    |  username  | server_username | created 
 -------------+-----------+-------+---------------+------------+-----------------+---------
  loopback    | localhost | 15432 | db_remote_txn | super_user | super_user      | t
 (1 row)
 
 SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
-NOTICE:  remote server database "db_remote_txn" already exists, skipping
+NOTICE:  remote node database "db_remote_txn" already exists, skipping
  server_name |   host    | port  |   database    |  username  | server_username | created 
 -------------+-----------+-------+---------------+------------+-----------------+---------
  loopback2   | localhost | 15432 | db_remote_txn | super_user | super_user      | t
@@ -349,7 +349,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
 
 --during waiting-prepare-transaction the data node process could die before or after
 --executing the prepare transaction. To be safe to either case rollback using heal_server.
-SELECT true FROM _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  bool 
 ------
  t
@@ -405,8 +405,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --this fails because heal cannot run inside txn block
 BEGIN;
-	SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
-ERROR:  remote_txn_heal_server cannot run inside a transaction block
+	SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ERROR:  remote_txn_heal_data_node cannot run inside a transaction block
 COMMIT;
 select count(*) from _timescaledb_catalog.remote_txn;
  count 
@@ -415,10 +415,10 @@ select count(*) from _timescaledb_catalog.remote_txn;
 (1 row)
 
 --this resolves the previous txn
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
- remote_txn_heal_server 
-------------------------
-                      1
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ remote_txn_heal_data_node 
+---------------------------
+                         1
 (1 row)
 
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10004;
@@ -475,10 +475,10 @@ SELECT count(*) FROM pg_prepared_xacts;
 (1 row)
 
 --this resolves the previous txn
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
- remote_txn_heal_server 
-------------------------
-                      1
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ remote_txn_heal_data_node 
+---------------------------
+                         1
 (1 row)
 
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10006;
@@ -523,7 +523,7 @@ WARNING:  error while performing second phase of 2-pc
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
-SELECT true FROM _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
  bool 
 ------
  t
@@ -683,10 +683,10 @@ SELECT count(*) FROM pg_prepared_xacts;
      1
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
- remote_txn_heal_server 
-------------------------
-                      1
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ remote_txn_heal_data_node 
+---------------------------
+                         1
 (1 row)
 
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
@@ -790,7 +790,7 @@ WARNING:  [loopback]: server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-ERROR:  connection to server "loopback" was lost
+ERROR:  connection to data node "loopback" was lost
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;

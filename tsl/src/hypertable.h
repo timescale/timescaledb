@@ -17,9 +17,9 @@
 extern Datum hypertable_valid_ts_interval(PG_FUNCTION_ARGS);
 
 #if PG_VERSION_SUPPORTS_MULTINODE
-extern void hypertable_make_distributed(Hypertable *ht, ArrayType *servers);
-extern List *hypertable_assign_servers(int32 hypertable_id, List *servers);
-extern List *hypertable_server_array_to_list(ArrayType *serverarr);
+extern void hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes);
+extern List *hypertable_assign_data_nodes(int32 hypertable_id, List *nodes);
+extern List *hypertable_data_node_array_to_list(ArrayType *nodearr);
 #endif /*  PG_VERSION_SUPPORTS_MULTINODE */
 
 #endif /* _TIMESCALEDB_TSL_HYPERTABLE_H */

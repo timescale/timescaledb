@@ -61,6 +61,6 @@ typedef enum RemoteTxnResolution
 
 extern RemoteTxnResolution remote_txn_resolution(Oid foreign_server,
 												 const RemoteTxnId *transaction_id);
-extern Datum remote_txn_heal_server(PG_FUNCTION_ARGS);
+extern Datum remote_txn_heal_data_node(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TSL_REMOTE_TXN_RESOLVE_H */

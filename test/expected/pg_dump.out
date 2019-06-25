@@ -535,7 +535,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         ORDER BY objid::text DESC;
                         objid                        
 -----------------------------------------------------
- timescaledb_information.server
+ timescaledb_information.data_node
  timescaledb_information.compressed_hypertable_stats
  timescaledb_information.compressed_chunk_stats
  timescaledb_information.continuous_aggregate_stats

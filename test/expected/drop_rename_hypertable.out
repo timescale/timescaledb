@@ -196,8 +196,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 ----------------------+--------------------------------------------------+-------+------------
  _timescaledb_catalog | chunk                                            | table | super_user
  _timescaledb_catalog | chunk_constraint                                 | table | super_user
+ _timescaledb_catalog | chunk_data_node                                  | table | super_user
  _timescaledb_catalog | chunk_index                                      | table | super_user
- _timescaledb_catalog | chunk_server                                     | table | super_user
  _timescaledb_catalog | compression_algorithm                            | table | super_user
  _timescaledb_catalog | compression_chunk_size                           | table | super_user
  _timescaledb_catalog | continuous_agg                                   | table | super_user
@@ -209,7 +209,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | dimension_slice                                  | table | super_user
  _timescaledb_catalog | hypertable                                       | table | super_user
  _timescaledb_catalog | hypertable_compression                           | table | super_user
- _timescaledb_catalog | hypertable_server                                | table | super_user
+ _timescaledb_catalog | hypertable_data_node                             | table | super_user
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user

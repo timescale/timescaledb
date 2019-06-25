@@ -60,15 +60,15 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_server (
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
-    server_hypertable_id   INTEGER NULL,
-    server_name            NAME NOT NULL,
+    node_hypertable_id   INTEGER NULL,
+    node_name            NAME NOT NULL,
     block_chunks           BOOLEAN NOT NULL,
-    UNIQUE (server_hypertable_id, server_name),
-    UNIQUE (hypertable_id, server_name)
+    UNIQUE (node_hypertable_id, node_name),
+    UNIQUE (hypertable_id, node_name)
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_server', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data_node', '');
 
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
@@ -173,14 +173,14 @@ CREATE INDEX IF NOT EXISTS chunk_index_hypertable_id_hypertable_index_name_idx
 ON _timescaledb_catalog.chunk_index(hypertable_id, hypertable_index_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_server (
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_data_node (
     chunk_id               INTEGER NOT NULL     REFERENCES _timescaledb_catalog.chunk(id),
-    server_chunk_id        INTEGER NOT NULL,
-    server_name            NAME NOT NULL,
-    UNIQUE (server_chunk_id, server_name),
-    UNIQUE (chunk_id, server_name)
+    node_chunk_id        INTEGER NOT NULL,
+    node_name            NAME NOT NULL,
+    UNIQUE (node_chunk_id, node_name),
+    UNIQUE (chunk_id, node_name)
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_server', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
 
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
@@ -373,17 +373,17 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_compress_chunks(
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_compress_chunks', '');
 
 --This stores commit decisions for 2pc remote txns. Abort decisions are never stored.
---If a PREPARE TRANSACTION fails for any server then the entire
+--If a PREPARE TRANSACTION fails for any data node then the entire
 --frontend transaction will be rolled back and no rows will be stored.
 --the frontend_transaction_id represents the entire distributed transaction
 --each datanode will have a unique remote_transaction_id.
 CREATE TABLE _timescaledb_catalog.remote_txn (
-    server_name              NAME, --this is really only to allow us to cleanup stuff on a per-server basis.
+    data_node_name           NAME, --this is really only to allow us to cleanup stuff on a per-node basis.
     remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
     PRIMARY KEY (remote_transaction_id)
 );
-CREATE INDEX IF NOT EXISTS remote_txn_server_name_idx
-ON _timescaledb_catalog.remote_txn(server_name);
+CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx
+ON _timescaledb_catalog.remote_txn(data_node_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
 -- Set table permissions

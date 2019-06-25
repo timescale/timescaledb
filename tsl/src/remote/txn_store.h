@@ -16,7 +16,7 @@
 /* Maps a UserMapping to a RemoteTxn. Used by the distributed txn to store the remote txns
  * associated with a distributed txn. Note that this forces a distributed txn to contain a single
  * RemoteTxn per UserMapping. This is actually required to maintain a consistent snapshot for each
- * local user on a per-remote-server basis. */
+ * local user on a per-data-node basis. */
 typedef struct RemoteTxnStore
 {
 	HTAB *hashtable;
