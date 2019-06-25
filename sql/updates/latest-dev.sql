@@ -22,30 +22,30 @@ DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,a
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
--- Table for hypertable -> servers mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_server (
+-- Table for hypertable -> node mappings
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
-    server_hypertable_id   INTEGER NULL,
-    server_name            NAME NOT NULL,
+    node_hypertable_id   INTEGER NULL,
+    node_name            NAME NOT NULL,
     block_chunks           BOOLEAN NOT NULL,
-    UNIQUE(server_hypertable_id, server_name),
-    UNIQUE(hypertable_id, server_name)
+    UNIQUE(node_hypertable_id, node_name),
+    UNIQUE(hypertable_id, node_name)
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_server', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data_node', '');
 
-GRANT SELECT ON _timescaledb_catalog.hypertable_server TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.hypertable_data_node TO PUBLIC;
 
--- Table for chunk -> servers mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_server (
+-- Table for chunk -> nodes mappings
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_data_node (
     chunk_id               INTEGER NOT NULL     REFERENCES _timescaledb_catalog.chunk(id),
-    server_chunk_id        INTEGER NOT NULL,
-    server_name            NAME NOT NULL,
-    UNIQUE(server_chunk_id, server_name),
-    UNIQUE(chunk_id, server_name)
+    node_chunk_id        INTEGER NOT NULL,
+    node_name            NAME NOT NULL,
+    UNIQUE(node_chunk_id, node_name),
+    UNIQUE(chunk_id, node_name)
 );
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_server', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
 
-GRANT SELECT ON _timescaledb_catalog.chunk_server TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.chunk_data_node TO PUBLIC;
 
 --placeholder to allow creation of functions below
 CREATE TYPE rxid;
@@ -63,12 +63,12 @@ CREATE TYPE rxid (
 );
 
 CREATE TABLE _timescaledb_catalog.remote_txn (
-    server_name              NAME, --this is really only to allow us to cleanup stuff on a per-server basis.
+    data_node_name              NAME, --this is really only to allow us to cleanup stuff on a per-node basis.
     remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
     PRIMARY KEY (remote_transaction_id)
 );
-CREATE INDEX IF NOT EXISTS remote_txn_server_name_idx
-ON _timescaledb_catalog.remote_txn(server_name);
+CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx
+ON _timescaledb_catalog.remote_txn(data_node_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
 

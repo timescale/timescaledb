@@ -2,14 +2,14 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 
--- Support for execute_sql_and_filter_server_name_on_error()
+-- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 \o /dev/null
 \ir include/filter_exec.sql
@@ -20,31 +20,31 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_3;
+CREATE DATABASE data_node_1;
+CREATE DATABASE data_node_2;
+CREATE DATABASE data_node_3;
 
-\c server_1
+\c data_node_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_2
+\c data_node_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_3
+\c data_node_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
--- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
-SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
+-- Add data nodes using the TimescaleDB data node management API
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
 
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
@@ -52,7 +52,7 @@ CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color in
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
 
 -- This table tests both 1-dimensional tables and under-replication
--- (replication_factor > num_servers).
+-- (replication_factor > num_data_nodes).
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
@@ -79,8 +79,8 @@ CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 
-SELECT * FROM _timescaledb_catalog.hypertable_server;
-SELECT * FROM _timescaledb_catalog.chunk_server;
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- The constraints, indexes, and triggers on the hypertable
 SELECT * FROM test.show_constraints('disttable');
@@ -153,21 +153,21 @@ EXECUTE dist_insert ('2017-01-01 06:05', 1, 1.4);
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 
--- Show that there are assigned server_chunk_id:s in chunk server mappings
-SELECT * FROM _timescaledb_catalog.chunk_server;
+-- Show that there are assigned node_chunk_id:s in chunk data node mappings
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
--- Show that chunks are created on remote servers and that each server
+-- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
-SELECT * FROM timescaledb_information.server;
-SELECT * FROM hypertable_server_relation_size('disttable');
+SELECT * FROM timescaledb_information.data_node;
+SELECT * FROM hypertable_data_node_relation_size('disttable');
 
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
@@ -210,8 +210,8 @@ FROM test.show_subtables('disttable') st;
 SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
 FROM test.show_subtables('disttable') st;
 
--- Check that the chunks are assigned servers
-SELECT * FROM _timescaledb_catalog.chunk_server;
+-- Check that the chunks are assigned data nodes
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Adding a new trigger should not recurse to foreign chunks
 CREATE TRIGGER _1_test_trigger_insert
@@ -274,13 +274,13 @@ INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
 
 -- Show new row and that conflicting row is not inserted
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
@@ -319,8 +319,8 @@ RETURNING *;
 -- Query to show that rows are deleted
 SELECT * FROM disttable;
 
--- Ensure rows are deleted on the servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Ensure rows are deleted on the data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
@@ -328,21 +328,21 @@ $$);
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
 
-SELECT * FROM _timescaledb_catalog.chunk_server;
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 
--- Show chunk server mappings
-SELECT * FROM _timescaledb_catalog.chunk_server;
+-- Show chunk data node mappings
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
--- Show that chunks are created on remote servers and that all
--- servers/chunks have the same data due to replication
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Show that chunks are created on remote data nodes and that all
+-- data nodes/chunks have the same data due to replication
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 $$);
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
 
@@ -353,20 +353,20 @@ RETURNING time, temp, device;
 SELECT * FROM underreplicated;
 
 -- Show that all replica chunks are updated
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
 
 DELETE FROM underreplicated WHERE device = 2
 RETURNING *;
 
--- Ensure deletes across all servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Ensure deletes across all data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
 
 -- Test hypertable creation fails on distributed error
-SELECT * FROM test.remote_exec('{ server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_3 }', $$
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
 SELECT * FROM underreplicated;
 $$);
@@ -384,17 +384,17 @@ SELECT * FROM timescaledb_information.hypertable
 ORDER BY table_schema, table_name;
 
 -- Test distributed hypertable creation with many parameters
-\c server_1
+\c data_node_1
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-\c server_2
+\c data_node_2
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-\c server_3
+\c data_node_3
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
@@ -410,20 +410,20 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
-servers => '{ "server_2", "server_3" }');
+data_nodes => '{ "data_node_2", "data_node_3" }');
 
--- Test attach_server
-SELECT * FROM _timescaledb_catalog.hypertable_server;
-SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
-SELECT * FROM _timescaledb_catalog.hypertable_server;
+-- Test attach_data_node
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_1');
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
--- Verify hypertables on all servers
+-- Verify hypertables on all data nodes
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
 
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
@@ -432,21 +432,21 @@ $$);
 
 -- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
-SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, servers => '{ "server_1" }');
+SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
 SELECT * FROM _timescaledb_catalog.dimension;
-SELECT * FROM attach_server('dimented_table', 'server_2');
+SELECT * FROM attach_data_node('dimented_table', 'data_node_2');
 
 SELECT * FROM _timescaledb_catalog.dimension;
 
 -- Note that this didn't get the add_dimension
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM _timescaledb_catalog.dimension;
 $$);
 
---test per-server queries
+--test per-data node queries
 -- Create some chunks through insertion
 CREATE TABLE disttable_replicated(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float, "Color" int);
 SELECT * FROM create_hypertable('disttable_replicated', 'time', replication_factor => 2);
@@ -466,10 +466,10 @@ EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
 SELECT * FROM disttable_replicated;
 
 --guc disables the optimization
-SET timescaledb.enable_per_server_queries = FALSE;
+SET timescaledb.enable_per_data_node_queries = FALSE;
 EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
 SELECT * FROM disttable_replicated;
-SET timescaledb.enable_per_server_queries = TRUE;
+SET timescaledb.enable_per_data_node_queries = TRUE;
 
 --test WHERE clause
 EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
@@ -509,14 +509,14 @@ SET timescaledb.max_insert_batch_size=4;
 CREATE TABLE twodim (time timestamptz DEFAULT '2019-02-10 10:11', "Color" int DEFAULT 11 CHECK ("Color" > 0), temp float DEFAULT 22.1);
 -- Create a replicated table to ensure we handle that case correctly
 -- with batching
-SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, servers => '{ "server_1", "server_2", "server_3" }');
+SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, data_nodes => '{ "data_node_1", "data_node_2", "data_node_3" }');
 
 SELECT * FROM twodim
 ORDER BY time;
 
 -- INSERT enough data to stretch across multiple batches per
--- server. Also return a system column. Although we write tuples to
--- multiple servers, the returned tuple should only be the ones in the
+-- data node. Also return a system column. Although we write tuples to
+-- multiple data nodes, the returned tuple should only be the ones in the
 -- original insert statement (without the replica tuples).
 WITH result AS (
      INSERT INTO twodim VALUES
@@ -556,7 +556,7 @@ SET timescaledb.max_insert_batch_size=4;
 --
 -- Execute and filter mentioned server name in the error message.
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_server_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
 \set ON_ERROR_STOP 1
 
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
@@ -585,8 +585,8 @@ ORDER BY time;
 
 SELECT count(*) FROM twodim;
 
--- Show distribution across servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Show distribution across data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
@@ -614,6 +614,6 @@ DELETE FROM disttable_with_ct WHERE info = 'a';
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 -- Connect to data nodes to see if data is gone
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 $$);

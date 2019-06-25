@@ -112,11 +112,11 @@ create_cursor(ScanState *ss, TsFdwScanState *fsstate)
 		fill_query_params_array(econtext, fsstate->param_flinfo, fsstate->param_exprs, values);
 
 		/*
-		 * Notice that we do not specify param types, thus forcing the remote
-		 * server to infer types for all parameters.  Since we explicitly cast
+		 * Notice that we do not specify param types, thus forcing the data
+		 * node to infer types for all parameters.  Since we explicitly cast
 		 * every parameter (see deparse.c), the "inference" is trivial and
 		 * will produce the desired result.  This allows us to avoid assuming
-		 * that the remote server has the same OIDs we do for the parameters'
+		 * that the data node has the same OIDs we do for the parameters'
 		 * types.
 		 */
 		params = stmt_params_create_from_values(values, num_params);
@@ -325,7 +325,7 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es)
 	}
 
 	/*
-	 * Add remote query, server name, and chunks when VERBOSE option is specified.
+	 * Add remote query, data node name, and chunks when VERBOSE option is specified.
 	 */
 	if (es->verbose)
 	{
@@ -333,7 +333,7 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es)
 		ForeignServer *server = GetForeignServer(server_id);
 		List *chunk_oids = (List *) list_nth(fdw_private, FdwScanPrivateChunkOids);
 
-		ExplainPropertyText("Server", server->servername, es);
+		ExplainPropertyText("Data node", server->servername, es);
 
 		if (chunk_oids != NIL)
 		{

@@ -370,10 +370,10 @@ get_result_datums(Datum *values, bool *nulls, unsigned int numvals, AttInMetadat
 }
 
 /*
- * Create a replica of a chunk on all its assigned servers.
+ * Create a replica of a chunk on all its assigned data nodes.
  */
 void
-chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
+chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 {
 	AsyncRequestSet *reqset = async_request_set_create();
 	JsonbParseState *ps = NULL;
@@ -393,10 +393,10 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 	get_create_chunk_result_type(&tupdesc);
 	attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		ChunkServer *cs = lfirst(lc);
-		UserMapping *um = GetUserMapping(GetUserId(), cs->foreign_server_oid);
+		ChunkDataNode *cdn = lfirst(lc);
+		UserMapping *um = GetUserMapping(GetUserId(), cdn->foreign_server_oid);
 		TSConnection *conn = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
 		AsyncRequest *req;
 
@@ -405,14 +405,14 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 											 stmt_params_create_from_values(params, 4),
 											 FORMAT_TEXT);
 
-		async_request_attach_user_data(req, cs);
+		async_request_attach_user_data(req, cdn);
 		async_request_set_add(reqset, req);
 	}
 
 	while ((res = async_request_set_wait_ok_result(reqset)) != NULL)
 	{
 		PGresult *pgres = async_response_result_get_pg_result(res);
-		ChunkServer *cs = async_response_result_get_user_data(res);
+		ChunkDataNode *cdn = async_response_result_get_user_data(res);
 		Datum values[tupdesc->natts];
 		bool nulls[tupdesc->natts];
 		const char *schema_name, *table_name;
@@ -424,16 +424,16 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 
 		/*
 		 * Sanity check the result. Use error rather than an assert since this
-		 * is the result of a remote call to a server that could potentially
+		 * is the result of a remote call to a data node that could potentially
 		 * run a different version of the remote function than we'd expect.
 		 */
 		if (!created)
-			elog(ERROR, "chunk creation failed on server \"%s\"", NameStr(cs->fd.server_name));
+			elog(ERROR, "chunk creation failed on data node \"%s\"", NameStr(cdn->fd.node_name));
 
 		if (nulls[AttrNumberGetAttrOffset(Anum_create_chunk_id)] ||
 			nulls[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] ||
 			nulls[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)])
-			elog(ERROR, "unexpected chunk creation result on remote server");
+			elog(ERROR, "unexpected chunk creation result on data node");
 
 		schema_name =
 			DatumGetCString(values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)]);
@@ -443,7 +443,7 @@ chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
 			namestrcmp(&chunk->fd.table_name, table_name) != 0)
 			elog(ERROR, "remote chunk has mismatching schema or table name");
 
-		cs->fd.server_chunk_id =
+		cdn->fd.node_chunk_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_create_chunk_id)]);
 	}
 }

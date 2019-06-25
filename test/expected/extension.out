@@ -12,23 +12,24 @@ WHERE OID IN (
     deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
 ) AND pronamespace = 'public'::regnamespace
 ORDER BY proname;
-             proname              
-----------------------------------
+              proname               
+------------------------------------
+ add_data_node
  add_dimension
  add_drop_chunks_policy
  add_reorder_policy
- add_server
- allow_new_chunks_on_server
+ allow_new_chunks
  alter_job_schedule
- attach_server
+ attach_data_node
  attach_tablespace
- block_new_chunks_on_server
+ block_new_chunks
  chunk_relation_size
  chunk_relation_size_pretty
  create_distributed_hypertable
  create_hypertable
- delete_server
- detach_server
+ data_node_hypertable_info
+ delete_data_node
+ detach_data_node
  detach_tablespace
  detach_tablespaces
  drop_chunks
@@ -36,9 +37,9 @@ ORDER BY proname;
  get_telemetry_report
  histogram
  hypertable_approximate_row_count
+ hypertable_data_node_relation_size
  hypertable_relation_size
  hypertable_relation_size_pretty
- hypertable_server_relation_size
  indexes_relation_size
  indexes_relation_size_pretty
  interpolate
@@ -47,7 +48,6 @@ ORDER BY proname;
  remove_drop_chunks_policy
  remove_reorder_policy
  reorder_chunk
- server_hypertable_info
  set_adaptive_chunking
  set_chunk_time_interval
  set_number_partitions

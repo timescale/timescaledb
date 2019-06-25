@@ -3,16 +3,16 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_SERVER_SCAN_H
-#define TIMESCALEDB_TSL_FDW_SERVER_SCAN_H
+#ifndef TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H
+#define TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H
 
 #include <postgres.h>
 #include <nodes/plannodes.h>
 #include <optimizer/cost.h>
 
-extern void server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
-extern void server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage,
-										   RelOptInfo *input_rel, RelOptInfo *output_rel,
-										   void *extra);
+extern void data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
+extern void data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage,
+											  RelOptInfo *input_rel, RelOptInfo *output_rel,
+											  void *extra);
 
-#endif /* TIMESCALEDB_TSL_FDW_SERVER_SCAN_H */
+#endif /* TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H */

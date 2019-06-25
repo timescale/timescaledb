@@ -428,7 +428,7 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
  */
 static void
 push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
-					ServerChunkAssignments *scas)
+					DataNodeChunkAssignments *scas)
 {
 	Dimension *dim;
 	List *targetlist = root->parse->targetList;
@@ -439,7 +439,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 
 	/* Check for special case when there is only one server with chunks. This
 	 * can always be safely pushed down irrespective of partitioning */
-	if (scas->num_servers_with_chunks == 1)
+	if (scas->num_nodes_with_chunks == 1)
 	{
 		force_group_by_push_down(root, hyper_rel);
 		return;
@@ -452,7 +452,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 	if (NULL == dim)
 		return;
 
-	overlaps = server_chunk_assignments_are_overlapping(scas, dim->fd.id);
+	overlaps = data_node_chunk_assignments_are_overlapping(scas, dim->fd.id);
 
 	if (overlaps)
 	{
@@ -492,7 +492,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
  * append paths and have the cost optimizer pick the best one.
  */
 void
-server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
+data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
 	RelOptInfo **chunk_rels = hyper_rel->part_rels;
 	int nchunk_rels = hyper_rel->nparts;
@@ -502,7 +502,7 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	List *server_rels_list = NIL;
 	RelOptInfo **server_rels;
 	int nserver_rels;
-	ServerChunkAssignments scas;
+	DataNodeChunkAssignments scas;
 	int i;
 
 	Assert(NULL != ht);
@@ -518,10 +518,10 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 
 	Assert(nserver_rels > 0);
 
-	server_chunk_assignments_init(&scas, SCA_STRATEGY_ATTACHED_SERVER, root, nserver_rels);
+	data_node_chunk_assignments_init(&scas, SCA_STRATEGY_ATTACHED_DATA_NODE, root, nserver_rels);
 
 	/* Assign chunks to servers */
-	server_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
+	data_node_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
 
 	/* Try to push down GROUP BY expressions and bucketing, if possible */
 	push_down_group_bys(root, hyper_rel, ht->space, &scas);
@@ -531,7 +531,7 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	for (i = 0; i < nserver_rels; i++)
 	{
 		RelOptInfo *server_rel = server_rels[i];
-		ServerChunkAssignment *sca = server_chunk_assignment_get_or_create(&scas, server_rel);
+		DataNodeChunkAssignment *sca = data_node_chunk_assignment_get_or_create(&scas, server_rel);
 		TsFdwRelInfo *fpinfo;
 
 		/* Update the number of tuples and rows based on the chunk
@@ -543,7 +543,7 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 									server_rel,
 									server_rel->serverid,
 									hyper_rte->relid,
-									TS_FDW_RELINFO_HYPERTABLE_SERVER);
+									TS_FDW_RELINFO_HYPERTABLE_DATA_NODE);
 		fpinfo->sca = sca;
 
 		if (!bms_is_empty(sca->chunk_relids))
@@ -571,8 +571,8 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 }
 
 void
-server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
-							   RelOptInfo *output_rel, void *extra)
+data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
+								  RelOptInfo *output_rel, void *extra)
 {
 	TimescaleDBPrivate *rel_private = input_rel->fdw_private;
 	TsFdwRelInfo *fpinfo;
@@ -584,7 +584,7 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 	fpinfo = fdw_relinfo_get(input_rel);
 
 	/* Verify that this is a server rel */
-	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_SERVER)
+	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
 		return;
 
 	fdw_create_upper_paths(fpinfo,
@@ -598,7 +598,7 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 
 static CustomScanMethods server_scan_plan_methods = {
 	.CustomName = "ServerScan",
-	.CreateCustomScanState = server_scan_state_create,
+	.CreateCustomScanState = data_node_scan_state_create,
 };
 
 typedef struct ServerScanPath

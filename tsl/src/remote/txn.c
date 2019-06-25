@@ -42,7 +42,7 @@
 typedef struct RemoteTxn
 {
 	Oid user_mapping_oid; /* hash key (must be first) */
-	TSConnection *conn;   /* connection to foreign server, or NULL */
+	TSConnection *conn;   /* connection to data node, or NULL */
 	/* Remaining fields are invalid when conn is NULL: */
 	int xact_depth;			/* 0 = no xact open, 1 = main xact open, 2 =
 							 * one level of subxact open, etc */
@@ -58,7 +58,7 @@ typedef struct RemoteTxn
  *
  * We always use at least REPEATABLE READ in the remote session.
  * This is important even for cases where we use the a single connection to
- * a remote server. This is because a single frontend command may cause multiple
+ * a data node. This is because a single frontend command may cause multiple
  * remote commands to be executed (e.g. a join of two tables on one remote
  * node might not be pushed down and instead two different queries are sent
  * to the remote node, one for each table in the join). Since in READ
@@ -70,8 +70,8 @@ typedef struct RemoteTxn
  * control which remote queries share a snapshot or when a snapshot is refreshed.
  *
  * NOTE: this does not guarantee any kind of snapshot isolation to different connections
- * to the same server. That only happens if we use multiple user-mapping to the same server
- * in one frontend transaction. Thus, such connections that use different users will potentially
+ * to the same data node. That only happens if we use multiple user-mapping to the same data node
+ * in one access node transaction. Thus, such connections that use different users will potentially
  * see inconsistent results. To solve this problem of inconsistent results, we could export the
  * snapshot of the first connection to a remote node using pg_export_snapshot() and then use that
  * using SET TRANSACTION SNAPSHOT xxxx across all other connections to that node during the
@@ -150,7 +150,7 @@ remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user)
 	entry->conn = conn;
 
 	elog(DEBUG3,
-		 "new connection %p for server \"%s\" (user mapping "
+		 "new connection %p for data node \"%s\" (user mapping "
 		 "oid %u, userid %u)",
 		 entry->conn,
 		 server->servername,
@@ -335,8 +335,8 @@ remote_txn_abort(RemoteTxn *entry)
 		case PQTRANS_ACTIVE:
 
 			/*
-			 * We are here if a command has been submitted to the remote
-			 * server by using an asynchronous execution function and the
+			 * We are here if a command has been submitted to the data node
+			 * by using an asynchronous execution function and the
 			 * command had not yet completed.  If so, request cancellation of
 			 * the command.
 			 */
@@ -481,10 +481,10 @@ remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 	entry->have_subtxn_error = true;
 
 	/*
-	 * If a command has been submitted to the remote server by using an
+	 * If a command has been submitted to the data node by using an
 	 * asynchronous execution function, the command might not have yet
 	 * completed.  Check to see if a command is still being processed by the
-	 * remote server, and if so, request cancellation of the command.
+	 * data node, and if so, request cancellation of the command.
 	 */
 	if (PQtransactionStatus(pg_conn) == PQTRANS_ACTIVE &&
 		!remote_connection_cancel_query(entry->conn))
@@ -583,7 +583,7 @@ persistent_record_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid)
+remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScanKeyData scankey[1];
@@ -591,14 +591,14 @@ remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid)
 	ForeignServer *server = GetForeignServer(foreign_server_oid);
 
 	ScanKeyInit(&scankey[0],
-				Anum_remote_txn_server_name_idx_server_name,
+				Anum_remote_txn_data_node_name_idx_data_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
 
 	scanctx = (ScannerCtx){
 		.table = catalog->tables[REMOTE_TXN].id,
-		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_SERVER_NAME_IDX),
+		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_DATA_NODE_NAME_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = persistent_record_tuple_delete,
@@ -618,7 +618,7 @@ persistent_record_insert_relation(Relation rel, Oid server_oid, RemoteTxnId *id)
 	CatalogSecurityContext sec_ctx;
 	ForeignServer *server = GetForeignServer(server_oid);
 
-	values[AttrNumberGetAttrOffset(Anum_remote_txn_server_name)] =
+	values[AttrNumberGetAttrOffset(Anum_remote_txn_data_node_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(server->servername));
 	values[AttrNumberGetAttrOffset(Anum_remote_txn_remote_transaction_id)] =
 		CStringGetTextDatum(remote_txn_id_out(id));

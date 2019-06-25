@@ -883,10 +883,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the
-	 * children to them. We include potential server rels we might need to
+	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	root->simple_rel_array_size += (list_length(inh_oids) + list_length(ht->servers));
+	root->simple_rel_array_size += (list_length(inh_oids) + list_length(ht->data_nodes));
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
 	root->simple_rte_array =
@@ -965,16 +965,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 	heap_close(oldrelation, NoLock);
 
-	priv->serverids = ts_hypertable_get_serverids_list(ht);
+	priv->serverids = ts_hypertable_get_data_node_serverids_list(ht);
 
 	/* For distributed hypertables, we'd like to turn per-chunk plans into
-	 * per-server plans. We proactively add RTEs for the per-server rels here
+	 * per-data_node plans. We proactively add RTEs for the per-data_node rels here
 	 * because the PostgreSQL planning code that we call to replan the
-	 * per-server queries assumes there are RTEs for each rel that is considered
+	 * per-data_node queries assumes there are RTEs for each rel that is considered
 	 * a "partition."
 	 *
-	 * Note that each per-server RTE reuses the relid (OID) of the parent
-	 * hypertable relation. This makes sense since each remote server's
+	 * Note that each per-data_node RTE reuses the relid (OID) of the parent
+	 * hypertable relation. This makes sense since each data node's
 	 * hypertable is an identical (albeit partial) version of the frontend's
 	 * hypertable. The upside of this is that the planner can plan remote
 	 * queries to take into account the indexes on the hypertable to produce
@@ -983,15 +983,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	 */
 	foreach (l, priv->serverids)
 	{
-		RangeTblEntry *server_rte = copyObject(rte);
+		RangeTblEntry *data_node_rte = copyObject(rte);
 
-		server_rte->inh = false;
-		server_rte->ctename = NULL;
-		server_rte->requiredPerms = 0;
-		server_rte->securityQuals = NIL;
-		parse->rtable = lappend(parse->rtable, server_rte);
+		data_node_rte->inh = false;
+		data_node_rte->ctename = NULL;
+		data_node_rte->requiredPerms = 0;
+		data_node_rte->securityQuals = NIL;
+		parse->rtable = lappend(parse->rtable, data_node_rte);
 		rti = list_length(parse->rtable);
-		root->simple_rte_array[rti] = server_rte;
+		root->simple_rte_array[rti] = data_node_rte;
 		root->simple_rel_array[rti] = NULL;
 		priv->server_relids = bms_add_member(priv->server_relids, rti);
 	}

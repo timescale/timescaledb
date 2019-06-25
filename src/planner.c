@@ -187,8 +187,8 @@ should_optimize_append(Hypertable *ht, const Path *path)
 		/* Constraint-aware append currently expects children that scans a real
 		 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
 		 * distributed hypertable because the append children are typically
-		 * per-server relations without a corresponding "real" table in the
-		 * system. Further, per-server appends shouldn't need runtime pruning in
+		 * per-data_node relations without a corresponding "real" table in the
+		 * system. Further, per-data_node appends shouldn't need runtime pruning in
 		 * any case. */
 		hypertable_is_distributed(ht))
 		return false;

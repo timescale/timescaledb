@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -18,35 +18,35 @@ ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
--- Add test servers
-SELECT * FROM add_server('server_1', database => 'server_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+-- Add test data nodes
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_1 | localhost | 15432 | data_node_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_2 | localhost | 15432 | data_node_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_3', database => 'server_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_3 | localhost | 15432 | data_node_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
--- Support for execute_sql_and_filter_server_name_on_error()
+-- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
--- Import testsupport.sql file to servers
+-- Import testsupport.sql file to data nodes
 \unset ECHO
--- This SCHEMA will not be created on servers
+-- This SCHEMA will not be created on data nodes
 CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -93,9 +93,9 @@ SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
 SELECT * FROM test.show_triggers('disttable');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_columns('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -105,36 +105,36 @@ temp  |double precision        |f
 (4 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------+-------+----+------+-------+---------+----------
 disttable_pk|{time} |    |t     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_triggers('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Trigger          |Type|Function                            |Definition                                                                                                         
 -----------------+----+------------------------------------+-------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|   7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_columns('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -144,36 +144,36 @@ temp  |double precision        |f
 (4 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------+-------+----+------+-------+---------+----------
 disttable_pk|{time} |    |t     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_triggers('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Trigger          |Type|Function                            |Definition                                                                                                         
 -----------------+----+------------------------------------+-------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|   7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_columns('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -183,27 +183,27 @@ temp  |double precision        |f
 (4 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------+-------+----+------+-------+---------+----------
 disttable_pk|{time} |    |t     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_triggers('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Trigger          |Type|Function                            |Definition                                                                                                         
 -----------------+----+------------------------------------+-------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|   7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
@@ -225,8 +225,8 @@ SELECT * FROM test.show_constraints('disttable');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_1]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 color_check |c   |{color} |-    |(color > 0) |f         |f       |t        
@@ -234,8 +234,8 @@ device_check|c   |{device}|-    |(device > 0)|f         |f       |t
 (2 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_2]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 color_check |c   |{color} |-    |(color > 0) |f         |f       |t        
@@ -243,8 +243,8 @@ device_check|c   |{device}|-    |(device > 0)|f         |f       |t
 (2 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_3]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 color_check |c   |{color} |-    |(color > 0) |f         |f       |t        
@@ -266,24 +266,24 @@ SELECT * FROM test.show_constraints('disttable');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_1]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_2]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_3]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
 -----------+----+-------+-----+-----------+----------+--------+---------
 color_check|c   |{color}|-    |(color > 0)|f         |f       |t        
@@ -298,22 +298,22 @@ color_check|c   |{color}|-    |(color > 0)|f         |f       |t
 -- DROP CONSTRAINT pre-created
 ALTER TABLE disttable DROP CONSTRAINT color_check;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_constraints('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_constraints('disttable') 
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -327,8 +327,8 @@ Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 -- DROP COLUMN
 ALTER TABLE disttable DROP COLUMN color;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_columns('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_1]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -337,8 +337,8 @@ temp  |double precision        |f
 (3 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_2]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -347,8 +347,8 @@ temp  |double precision        |f
 (3 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_3]:
 Column|Type                    |NotNull
 ------+------------------------+-------
 time  |timestamp with time zone|t      
@@ -365,8 +365,8 @@ temp  |double precision        |f
 -- ADD COLUMN
 ALTER TABLE disttable ADD COLUMN description text;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_columns('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_1]:
 Column     |Type                    |NotNull
 -----------+------------------------+-------
 time       |timestamp with time zone|t      
@@ -376,8 +376,8 @@ description|text                    |f
 (4 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_2]:
 Column     |Type                    |NotNull
 -----------+------------------------+-------
 time       |timestamp with time zone|t      
@@ -387,8 +387,8 @@ description|text                    |f
 (4 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_columns('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_columns('disttable') 
+NOTICE:  [data_node_3]:
 Column     |Type                    |NotNull
 -----------+------------------------+-------
 time       |timestamp with time zone|t      
@@ -406,8 +406,8 @@ description|text                    |f
 -- CREATE INDEX
 CREATE INDEX disttable_description_idx ON disttable (description);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_1]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
@@ -415,8 +415,8 @@ disttable_pk             |{time}       |    |t     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_2]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
@@ -424,8 +424,8 @@ disttable_pk             |{time}       |    |t     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_3]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
@@ -498,22 +498,22 @@ SELECT * FROM test.show_indexes('disttable');
 (0 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_1]:
 Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
 -----+-------+----+------+-------+---------+----------
 (0 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_2]:
 Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
 -----+-------+----+------+-------+---------+----------
 (0 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('disttable') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('disttable') 
+NOTICE:  [data_node_3]:
 Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
 -----+-------+----+------+-------+---------+----------
 (0 rows)
@@ -527,22 +527,22 @@ Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
 -- DROP TABLE
 DROP TABLE disttable;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 FROM pg_tables WHERE tablename = 'disttable' $$);
-NOTICE:  [server_1]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_1]:
 ?column?
 --------
 (0 rows)
 
 
-NOTICE:  [server_2]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_2]:
 ?column?
 --------
 (0 rows)
 
 
-NOTICE:  [server_3]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_3]:
 ?column?
 --------
 (0 rows)
@@ -556,31 +556,31 @@ NOTICE:  [server_3]:
 DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
 -- Test current SCHEMA limitations
--- CREATE TABLE should fail, since remote servers has no schema
+-- CREATE TABLE should fail, since remote data nodes has no schema
 \set ON_ERROR_STOP 0
 CREATE TABLE disttable_schema.disttable(time timestamptz, device int, color int, temp float);
-SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3)
 $$);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  [server_x]: schema "disttable_schema" does not exist
+ERROR:  [data_node_x]: schema "disttable_schema" does not exist
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' $$);
-NOTICE:  [server_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_1]:
 schemaname|tablename
 ----------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_2]:
 schemaname|tablename
 ----------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' 
+NOTICE:  [data_node_3]:
 schemaname|tablename
 ----------+---------
 (0 rows)
@@ -592,11 +592,11 @@ schemaname|tablename
 (1 row)
 
 -- CREATE and DROP SCHEMA CASCADE
-\c server_1
+\c data_node_1
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-\c server_2
+\c data_node_2
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-\c server_3
+\c data_node_3
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -609,24 +609,24 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
-NOTICE:  [server_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_1]:
 schemaname |tablename      
 -----------+---------------
 some_schema|some_dist_table
 (1 row)
 
 
-NOTICE:  [server_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_2]:
 schemaname |tablename      
 -----------+---------------
 some_schema|some_dist_table
 (1 row)
 
 
-NOTICE:  [server_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_3]:
 schemaname |tablename      
 -----------+---------------
 some_schema|some_dist_table
@@ -641,22 +641,22 @@ some_schema|some_dist_table
 DROP SCHEMA some_schema CASCADE;
 NOTICE:  drop cascades to table some_schema.some_dist_table
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
-NOTICE:  [server_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_1]:
 schemaname|tablename
 ----------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_2]:
 schemaname|tablename
 ----------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_3]:
 schemaname|tablename
 ----------+---------
 (0 rows)
@@ -678,8 +678,8 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE INDEX some_dist_device_idx ON some_dist_table (device);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -687,8 +687,8 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_2]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -696,8 +696,8 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_3]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -712,24 +712,24 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 
 ALTER TABLE some_dist_table DROP COLUMN device;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
@@ -747,11 +747,11 @@ DROP TABLE some_dist_table;
 CREATE TABLE non_htable (id int PRIMARY KEY);
 CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(id));
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
 $$);
 NOTICE:  adding not-null constraint to column "time"
-ERROR:  [server_x]: relation "non_htable" does not exist
+ERROR:  [data_node_x]: relation "non_htable" does not exist
 \set ON_ERROR_STOP 1
 DROP TABLE some_dist_table;
 DROP TABLE non_htable;
@@ -777,8 +777,8 @@ SELECT * FROM test.show_indexes('some_dist_table');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -786,8 +786,8 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_2]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -795,8 +795,8 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_3]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -829,24 +829,24 @@ SELECT * FROM test.show_indexes('some_dist_table');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
-NOTICE:  [server_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('some_dist_table') 
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
@@ -890,9 +890,9 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -900,18 +900,18 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -919,18 +919,18 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -938,9 +938,9 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
@@ -981,52 +981,52 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -1071,9 +1071,9 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1081,18 +1081,18 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1100,18 +1100,18 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1119,9 +1119,9 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
 ------------+----+--------+-----+------------+----------+--------+---------
 device_check|c   |{device}|-    |(device > 0)|f         |f       |t        
@@ -1166,9 +1166,9 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1176,17 +1176,17 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1194,17 +1194,17 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+--------+----+------+-------+---------+----------
 some_dist_device_idx    |{device}|    |f     |f      |f        |          
@@ -1212,9 +1212,9 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -1257,52 +1257,52 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -1346,52 +1346,52 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -1439,52 +1439,52 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
 ------------------------+-------+----+------+-------+---------+----------
 some_dist_table_time_idx|{time} |    |f     |f      |f        |          
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('some_dist_table')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
@@ -1543,78 +1543,78 @@ SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT show_chunks('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._hyper_15_1_dist_chunk
 (1 row)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
 constraint_1|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT show_chunks('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._hyper_15_1_dist_chunk
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
 constraint_1|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT show_chunks('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 show_chunks                                 
 --------------------------------------------
 _timescaledb_internal._hyper_15_1_dist_chunk
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 ----------+----+-------+-----+----+----------+--------+---------
 (0 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
 constraint_1|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
@@ -1660,7 +1660,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 CREATE INDEX disttable_device_idx ON disttable (device);
-\c server_1
+\c data_node_1
 SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
  schemaname | tablename 
 ------------+-----------
@@ -1691,7 +1691,7 @@ DROP TABLE disttable;
 ERROR:  operation is blocked on a distributed hypertable member
 \set ON_ERROR_STOP 1
 -- Explicitly allow execution
-SET timescaledb.enable_client_ddl_on_data_servers TO true;
+SET timescaledb.enable_client_ddl_on_data_nodes TO true;
 DROP INDEX disttable_device_idx;
 SELECT * FROM test.show_indexes('disttable');
        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
@@ -1704,13 +1704,13 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Should fail because of the inconsistency
 \set ON_ERROR_STOP 0
 DROP INDEX disttable_device_idx;
-ERROR:  [server_1]: index "disttable_device_idx" does not exist
+ERROR:  [data_node_1]: index "disttable_device_idx" does not exist
 \set ON_ERROR_STOP 1
 DROP TABLE disttable;
 -- cleanup
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP SCHEMA disttable_schema CASCADE;
 NOTICE:  drop cascades to table disttable_schema.disttable
-DROP DATABASE server_1;
-DROP DATABASE server_2;
-DROP DATABASE server_3;
+DROP DATABASE data_node_1;
+DROP DATABASE data_node_2;
+DROP DATABASE data_node_3;

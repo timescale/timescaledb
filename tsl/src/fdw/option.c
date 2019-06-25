@@ -195,7 +195,7 @@ is_valid_option(const char *keyword, Oid context)
 
 	switch (remote_connection_option_type(keyword))
 	{
-		case CONN_OPTION_TYPE_SERVER:
+		case CONN_OPTION_TYPE_DATA_NODE:
 			return true;
 		case CONN_OPTION_TYPE_USER:
 			return true;

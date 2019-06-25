@@ -27,9 +27,9 @@
 --TS140 - tablespace already attached
 --TS150 - tablespace not attached
 --TS160 - duplicate dimension
---TS170 - no servers
---TS180 - server assignment already exists
---TS190 - server not attached
+--TS170 - no data nodes
+--TS180 - data node assignment already exists
+--TS190 - data node not attached
 */
 #define ERRCODE_TS_DDL_ERRORS MAKE_SQLSTATE('T', 'S', '1', '0', '0')
 #define ERRCODE_TS_OPERATION_NOT_SUPPORTED MAKE_SQLSTATE('T', 'S', '1', '0', '1')
@@ -41,9 +41,9 @@
 #define ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '4', '0')
 #define ERRCODE_TS_TABLESPACE_NOT_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '5', '0')
 #define ERRCODE_TS_DUPLICATE_DIMENSION MAKE_SQLSTATE('T', 'S', '1', '6', '0')
-#define ERRCODE_TS_NO_SERVERS MAKE_SQLSTATE('T', 'S', '1', '7', '0')
-#define ERRCODE_TS_SERVERS_ASSIGNMENT_ALREADY_EXISTS MAKE_SQLSTATE('T', 'S', '1', '8', '0')
-#define ERRCODE_TS_SERVER_NOT_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '9', '0')
+#define ERRCODE_TS_NO_DATA_NODES MAKE_SQLSTATE('T', 'S', '1', '7', '0')
+#define ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS MAKE_SQLSTATE('T', 'S', '1', '8', '0')
+#define ERRCODE_TS_DATA_NODE_NOT_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '9', '0')
 
 /*
 --IO500 - GROUP: internal error
@@ -54,4 +54,4 @@
 #define ERRCODE_TS_UNEXPECTED MAKE_SQLSTATE('T', 'S', '5', '0', '1')
 #define ERRCODE_TS_COMMUNICATION_ERROR MAKE_SQLSTATE('T', 'S', '5', '0', '2')
 #define ERRCODE_TS_CHUNK_COLLISION MAKE_SQLSTATE('T', 'S', '5', '0', '3')
-#define ERRCODE_TS_SERVER_IN_USE MAKE_SQLSTATE('T', 'S', '5', '0', '4')
+#define ERRCODE_TS_DATA_NODE_IN_USE MAKE_SQLSTATE('T', 'S', '5', '0', '4')

@@ -3,35 +3,36 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_SERVER_H
-#define TIMESCALEDB_CHUNK_SERVER_H
+#ifndef TIMESCALEDB_CHUNK_DATA_NODE_H
+#define TIMESCALEDB_CHUNK_DATA_NODE_H
 
 #include "catalog.h"
 #include "export.h"
 
-typedef struct ChunkServer
+typedef struct ChunkDataNode
 {
-	FormData_chunk_server fd;
+	FormData_chunk_data_node fd;
 	Oid foreign_server_oid;
-} ChunkServer;
+} ChunkDataNode;
 
-extern List *ts_chunk_server_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
-extern TSDLLEXPORT ChunkServer *
-ts_chunk_server_scan_by_chunk_id_and_servername(int32 chunk_id, const char *servername,
-												MemoryContext mctx);
-extern TSDLLEXPORT void ts_chunk_server_insert(ChunkServer *server);
-extern void ts_chunk_server_insert_multi(List *chunk_servers);
-extern int ts_chunk_server_delete_by_chunk_id(int32 chunk_id);
-extern TSDLLEXPORT int ts_chunk_server_delete_by_chunk_id_and_server_name(int32 chunk_id,
-																		  const char *server_name);
-extern int ts_chunk_server_delete_by_servername(const char *servername);
+extern List *ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
+extern TSDLLEXPORT ChunkDataNode *
+ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
+												  MemoryContext mctx);
+extern TSDLLEXPORT void ts_chunk_data_node_insert(ChunkDataNode *node);
+extern void ts_chunk_data_node_insert_multi(List *chunk_data_nodes);
+extern int ts_chunk_data_node_delete_by_chunk_id(int32 chunk_id);
+extern TSDLLEXPORT int ts_chunk_data_node_delete_by_chunk_id_and_node_name(int32 chunk_id,
+																		   const char *node_name);
+extern int ts_chunk_data_node_delete_by_node_name(const char *node_name);
 extern TSDLLEXPORT List *
-ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, int32 hypertable_id,
-													 MemoryContext mctx);
-extern TSDLLEXPORT bool ts_chunk_server_contains_non_replicated_chunks(List *chunk_servers);
+ts_chunk_data_node_scan_by_node_name_and_hypertable_id(const char *node_name, int32 hypertable_id,
+													   MemoryContext mctx);
+extern TSDLLEXPORT bool ts_chunk_data_node_contains_non_replicated_chunks(List *chunk_data_nodes);
 
-extern TSDLLEXPORT void ts_chunk_server_update_foreign_table_server(Oid relid, Oid new_server_id);
+extern TSDLLEXPORT void ts_chunk_data_node_update_foreign_table_server(Oid relid,
+																	   Oid new_server_id);
 extern TSDLLEXPORT void
-ts_chunk_server_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id);
+ts_chunk_data_node_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id);
 
-#endif /* TIMESCALEDB_CHUNK_SERVER_H */
+#endif /* TIMESCALEDB_CHUNK_DATA_NODE_H */

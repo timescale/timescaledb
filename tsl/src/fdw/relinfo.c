@@ -132,7 +132,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	apply_server_options(fpinfo);
 
 	/*
-	 * If the table or the server is configured to use remote estimates,
+	 * If the table or the data node is configured to use remote estimates,
 	 * identify which user to do remote access as during planning.  This
 	 * should match what ExecCheckRTEPerms() does.  If we fail due to lack of
 	 * permissions, the query would have failed at runtime anyway.
@@ -147,8 +147,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 		fpinfo->user = NULL;
 
 	/*
-	 * Identify which baserestrictinfo clauses can be sent to the remote
-	 * server and which can't.
+	 * Identify which baserestrictinfo clauses can be sent to the data
+	 * node and which can't.
 	 */
 	classify_conditions(root,
 						rel,
@@ -157,8 +157,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 						&fpinfo->local_conds);
 
 	/*
-	 * Identify which attributes will need to be retrieved from the remote
-	 * server.  These include all attrs needed for joins or final output, plus
+	 * Identify which attributes will need to be retrieved from the data
+	 * node.  These include all attrs needed for joins or final output, plus
 	 * all attrs used in the local_conds.  (Note: if we end up using a
 	 * parameterized scan, it's possible that some of the join clauses will be
 	 * sent to the remote and thus we wouldn't really need to retrieve the
@@ -193,8 +193,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->rel_retrieved_rows = -1;
 
 	/*
-	 * If the table or the server is configured to use remote estimates,
-	 * connect to the foreign server and execute EXPLAIN to estimate the
+	 * If the table or the data node is configured to use remote estimates,
+	 * connect to the data node and execute EXPLAIN to estimate the
 	 * number of rows selected by the restriction clauses, as well as the
 	 * average row width.  Otherwise, estimate using whatever statistics we
 	 * have locally, in a way similar to ordinary tables.
@@ -202,7 +202,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	if (fpinfo->use_remote_estimate)
 	{
 		/*
-		 * Get cost/size estimates with help of remote server.  Save the
+		 * Get cost/size estimates with help of data node.  Save the
 		 * values in fpinfo so we don't need to do it again to generate the
 		 * basic foreign path.
 		 */
@@ -225,7 +225,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 		 * If the foreign table has never been ANALYZEd, it will have relpages
 		 * and reltuples equal to zero, which most likely has nothing to do
 		 * with reality.  We can't do a whole lot about that if we're not
-		 * allowed to consult the remote server, but we can use a hack similar
+		 * allowed to consult the data node, but we can use a hack similar
 		 * to plancat.c's treatment of empty relations: use a minimum size
 		 * estimate of 10 pages, and divide by the column-datatype-based width
 		 * estimate to get the corresponding number of tuples.

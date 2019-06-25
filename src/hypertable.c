@@ -129,7 +129,7 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
-	h->servers = ts_hypertable_server_scan(h->fd.id, mctx);
+	h->data_nodes = ts_hypertable_data_node_scan(h->fd.id, mctx);
 
 	datum = heap_getattr(tuple, Anum_hypertable_replication_factor, desc, &isnull);
 
@@ -546,7 +546,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
-	ts_hypertable_server_delete_by_hypertable_id(hypertable_id);
+	ts_hypertable_data_node_delete_by_hypertable_id(hypertable_id);
 
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
@@ -1570,7 +1570,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
  * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
  * replication_factor      INTEGER = NULL
- * servers                 NAME[] = NULL
+ * data nodes              NAME[] = NULL
  */
 static Datum
 ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
@@ -1598,7 +1598,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	DimensionInfo *space_dim_info = NULL;
 	int32 replication_factor_in = PG_ARGISNULL(14) ? 0 : PG_GETARG_INT32(14);
 	int16 replication_factor;
-	ArrayType *servers = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+	ArrayType *data_nodes = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
 		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
@@ -1657,7 +1657,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 											 associated_table_prefix,
 											 &chunk_sizing_info,
 											 replication_factor,
-											 servers);
+											 data_nodes);
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
@@ -1691,7 +1691,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
 							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
-							   ArrayType *servers)
+							   ArrayType *data_nodes)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1940,12 +1940,12 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		ts_indexing_create_default_indexes(ht);
 
 	if (replication_factor > 0)
-		ts_cm_functions->hypertable_make_distributed(ht, servers);
-	else if (servers != NULL && ARR_DIMS(servers)[0] > 0)
+		ts_cm_functions->hypertable_make_distributed(ht, data_nodes);
+	else if (data_nodes != NULL && ARR_DIMS(data_nodes)[0] > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication_factor for non-empty server list"),
-				 errhint("The replication_factor should be 1 or greater with a non-empty server "
+				 errmsg("invalid replication_factor for non-empty data node list"),
+				 errhint("The replication_factor should be 1 or greater with a non-empty data node "
 						 "list")));
 
 	ts_cache_release(hcache);
@@ -2093,147 +2093,148 @@ ts_is_partitioning_column(Hypertable *ht, Index column_attno)
 
 #if defined(USE_ASSERT_CHECKING)
 static void
-assert_chunk_servers_is_a_set(List *chunk_servers)
+assert_chunk_data_nodes_is_a_set(List *chunk_data_nodes)
 {
-	Bitmapset *chunk_server_oids = NULL;
+	Bitmapset *chunk_data_node_oids = NULL;
 	ListCell *lc;
 
-	foreach (lc, chunk_servers)
+	foreach (lc, chunk_data_nodes)
 	{
-		HypertableServer *server = lfirst(lc);
-		chunk_server_oids = bms_add_member(chunk_server_oids, server->foreign_server_oid);
+		HypertableDataNode *node = lfirst(lc);
+		chunk_data_node_oids = bms_add_member(chunk_data_node_oids, node->foreign_server_oid);
 	}
 
-	Assert(list_length(chunk_servers) == bms_num_members(chunk_server_oids));
+	Assert(list_length(chunk_data_nodes) == bms_num_members(chunk_data_node_oids));
 }
 #endif
 
 /*
- * Assign servers to a chunk.
+ * Assign data nodes to a chunk.
  *
- * A chunk is assigned up to replication_factor number of servers. Assignment
+ * A chunk is assigned up to replication_factor number of data nodes. Assignment
  * happens similar to tablespaces, i.e., based on dimension type.
  */
 List *
-ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube)
+ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube)
 {
-	List *chunk_servers = NIL;
-	List *available_servers = ts_hypertable_get_available_servers(ht, true);
-	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_servers));
+	List *chunk_data_nodes = NIL;
+	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, true);
+	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
 	int n, i;
 
 	n = hypertable_get_chunk_slice_ordinal(ht, cube);
 
 	for (i = 0; i < num_assigned; i++)
 	{
-		int j = (n + i) % list_length(available_servers);
+		int j = (n + i) % list_length(available_nodes);
 
-		chunk_servers = lappend(chunk_servers, list_nth(available_servers, j));
+		chunk_data_nodes = lappend(chunk_data_nodes, list_nth(available_nodes, j));
 	}
 
-	if (list_length(chunk_servers) < ht->fd.replication_factor)
+	if (list_length(chunk_data_nodes) < ht->fd.replication_factor)
 		ereport(WARNING,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR),
 				 errmsg("new chunks for hypertable \"%s\" will be under-replicated due to "
-						"insufficient available server, lacks %d server(s)",
+						"insufficient available data nodes, lacks %d data node(s)",
 						NameStr(ht->fd.table_name),
-						ht->fd.replication_factor - list_length(chunk_servers)),
-				 errhint("attach more servers or allow new chunks on blocked servers")));
+						ht->fd.replication_factor - list_length(chunk_data_nodes)),
+				 errhint("attach more data nodes or allow new chunks on blocked data nodes")));
 
 #if defined(USE_ASSERT_CHECKING)
-	assert_chunk_servers_is_a_set(chunk_servers);
+	assert_chunk_data_nodes_is_a_set(chunk_data_nodes);
 #endif
 
-	return chunk_servers;
+	return chunk_data_nodes;
 }
 
-typedef bool (*hypertable_server_filter)(HypertableServer *hs);
+typedef bool (*hypertable_data_node_filter)(HypertableDataNode *hdn);
 
 static bool
-filter_non_blocked_servers(HypertableServer *server)
+filter_non_blocked_data_nodes(HypertableDataNode *node)
 {
-	return !server->fd.block_chunks;
+	return !node->fd.block_chunks;
 }
 
-typedef void *(*get_value)(HypertableServer *hs);
+typedef void *(*get_value)(HypertableDataNode *hdn);
 
 static void *
-get_hypertable_server_name(HypertableServer *server)
+get_hypertable_data_node_name(HypertableDataNode *node)
 {
-	return pstrdup(NameStr(server->fd.server_name));
+	return pstrdup(NameStr(node->fd.node_name));
 }
 
 static void *
-get_hypertable_server(HypertableServer *server)
+get_hypertable_data_node(HypertableDataNode *node)
 {
-	return server;
+	return node;
 }
 
 static List *
-get_hypertable_server_values(Hypertable *ht, hypertable_server_filter filter, get_value value)
+get_hypertable_data_node_values(Hypertable *ht, hypertable_data_node_filter filter, get_value value)
 {
 	List *list = NULL;
 	ListCell *cell;
 
-	foreach (cell, ht->servers)
+	foreach (cell, ht->data_nodes)
 	{
-		HypertableServer *server = lfirst(cell);
-		if (filter == NULL || filter(server))
-			list = lappend(list, value(server));
+		HypertableDataNode *node = lfirst(cell);
+		if (filter == NULL || filter(node))
+			list = lappend(list, value(node));
 	}
 
 	return list;
 }
 
 List *
-ts_hypertable_get_servername_list(Hypertable *ht)
+ts_hypertable_get_data_node_name_list(Hypertable *ht)
 {
-	return get_hypertable_server_values(ht, NULL, get_hypertable_server_name);
+	return get_hypertable_data_node_values(ht, NULL, get_hypertable_data_node_name);
 }
 
 TSDLLEXPORT List *
-ts_hypertable_get_available_servers(Hypertable *ht, bool error_if_missing)
+ts_hypertable_get_available_data_nodes(Hypertable *ht, bool error_if_missing)
 {
-	List *available_servers =
-		get_hypertable_server_values(ht, filter_non_blocked_servers, get_hypertable_server);
-	if (available_servers == NIL && error_if_missing)
+	List *available_nodes = get_hypertable_data_node_values(ht,
+															filter_non_blocked_data_nodes,
+															get_hypertable_data_node);
+	if (available_nodes == NIL && error_if_missing)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_NO_SERVERS),
-				 (errmsg("no available servers (detached or blocked for new chunks) for "
+				(errcode(ERRCODE_TS_NO_DATA_NODES),
+				 (errmsg("no available data nodes (detached or blocked for new chunks) for "
 						 "hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)),
-				  errhint("attach more servers or allow new chunks for existing servers for "
+				  errhint("attach more data nodes or allow new chunks for existing data nodes for "
 						  "hypertable \"%s\"",
 						  get_rel_name(ht->main_table_relid)))));
-	return available_servers;
+	return available_nodes;
 }
 
 static List *
-get_hypertable_server_ids(Hypertable *ht, hypertable_server_filter filter)
+get_hypertable_data_node_ids(Hypertable *ht, hypertable_data_node_filter filter)
 {
-	List *serverids = NIL;
+	List *nodeids = NIL;
 	ListCell *lc;
 
-	foreach (lc, ht->servers)
+	foreach (lc, ht->data_nodes)
 	{
-		HypertableServer *server = lfirst(lc);
-		if (filter == NULL || filter(server))
-			serverids = lappend_oid(serverids, server->foreign_server_oid);
+		HypertableDataNode *node = lfirst(lc);
+		if (filter == NULL || filter(node))
+			nodeids = lappend_oid(nodeids, node->foreign_server_oid);
 	}
 
-	return serverids;
+	return nodeids;
 }
 
 List *
-ts_hypertable_get_serverids_list(Hypertable *ht)
+ts_hypertable_get_data_node_serverids_list(Hypertable *ht)
 {
-	return get_hypertable_server_ids(ht, NULL);
+	return get_hypertable_data_node_ids(ht, NULL);
 }
 
 TSDLLEXPORT List *
-ts_hypertable_get_available_server_oids(Hypertable *ht)
+ts_hypertable_get_available_data_node_server_oids(Hypertable *ht)
 {
-	return get_hypertable_server_ids(ht, filter_non_blocked_servers);
+	return get_hypertable_data_node_ids(ht, filter_non_blocked_data_nodes);
 }
 
 HypertableType

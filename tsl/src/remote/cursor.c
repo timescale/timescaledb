@@ -22,7 +22,7 @@
 #define DEFAULT_FETCH_SIZE 100
 
 /*
- * Cursor for fetching data from a remote server.
+ * Cursor for fetching data from a data node.
  */
 typedef struct Cursor
 {
@@ -125,7 +125,7 @@ remote_cursor_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved
 	Assert(NULL != ss);
 
 	/*
-	 * Get info we'll need for converting data fetched from the foreign server
+	 * Get info we'll need for converting data fetched from the data node
 	 * into local representation and error reporting during that process.
 	 */
 	if (scan->scanrelid > 0)

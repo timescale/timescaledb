@@ -151,10 +151,10 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 	{
 		/*
 		 * We intentionally do not specify parameter types here, but leave the
-		 * remote server to derive them by default.  This avoids possible problems
-		 * with the remote server using different type OIDs than we do.  All of
+		 * data node to derive them by default.  This avoids possible problems
+		 * with the data node using different type OIDs than we do.  All of
 		 * the prepared statements we use in this module are simple enough that
-		 * the remote server will make the right choices.
+		 * the data node will make the right choices.
 		 */
 		if (!PQsendPrepare(remote_connection_get_pg_conn(req->conn),
 						   req->stmt_name,

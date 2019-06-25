@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 \ir include/remote_exec.sql
@@ -12,37 +12,37 @@ GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USE
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
--- Add test servers
-SELECT * FROM add_server('server_1', database => 'server_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-SELECT * FROM add_server('server_3', database => 'server_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+-- Add test data nodes
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
 
--- Support for execute_sql_and_filter_server_name_on_error()
+-- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 \o /dev/null
 \ir include/filter_exec.sql
 \o
 \set ECHO all
 
--- Import testsupport.sql file to servers
+-- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
-\c server_1
+\c data_node_1
 \ir :TEST_SUPPORT_FILE
-\c server_2
+\c data_node_2
 \ir :TEST_SUPPORT_FILE
-\c server_3
+\c data_node_3
 \ir :TEST_SUPPORT_FILE
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \o
 \set ECHO all
 
--- This SCHEMA will not be created on servers
+-- This SCHEMA will not be created on data nodes
 CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 
@@ -151,20 +151,20 @@ DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
 
 -- Test current SCHEMA limitations
--- CREATE TABLE should fail, since remote servers has no schema
+-- CREATE TABLE should fail, since remote data nodes has no schema
 \set ON_ERROR_STOP 0
 CREATE TABLE disttable_schema.disttable(time timestamptz, device int, color int, temp float);
-SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3)
 $$);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' $$);
 
 -- CREATE and DROP SCHEMA CASCADE
-\c server_1
+\c data_node_1
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-\c server_2
+\c data_node_2
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-\c server_3
+\c data_node_3
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -189,7 +189,7 @@ DROP TABLE some_dist_table;
 CREATE TABLE non_htable (id int PRIMARY KEY);
 CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(id));
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_server_name_on_error($$
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
 $$);
 \set ON_ERROR_STOP 1
@@ -399,7 +399,7 @@ CREATE TABLE disttable(time timestamptz, device int);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 CREATE INDEX disttable_device_idx ON disttable (device);
 
-\c server_1
+\c data_node_1
 SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
 SELECT * FROM test.show_indexes('disttable');
 
@@ -421,7 +421,7 @@ DROP TABLE disttable;
 \set ON_ERROR_STOP 1
 
 -- Explicitly allow execution
-SET timescaledb.enable_client_ddl_on_data_servers TO true;
+SET timescaledb.enable_client_ddl_on_data_nodes TO true;
 DROP INDEX disttable_device_idx;
 SELECT * FROM test.show_indexes('disttable');
 
@@ -438,6 +438,6 @@ DROP TABLE disttable;
 -- cleanup
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP SCHEMA disttable_schema CASCADE;
-DROP DATABASE server_1;
-DROP DATABASE server_2;
-DROP DATABASE server_3;
+DROP DATABASE data_node_1;
+DROP DATABASE data_node_2;
+DROP DATABASE data_node_3;

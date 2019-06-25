@@ -196,8 +196,8 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		ts_hypercube_slice_sort(chunk_stub->cube);
 
 	if (chunk_stub->relkind == RELKIND_FOREIGN_TABLE)
-		chunk_stub->servers =
-			ts_chunk_server_scan_by_chunk_id(chunk_stub->fd.id, CurrentMemoryContext);
+		chunk_stub->data_nodes =
+			ts_chunk_data_node_scan_by_chunk_id(chunk_stub->fd.id, CurrentMemoryContext);
 
 	return chunk_stub;
 }
@@ -730,21 +730,21 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 	}
 	else if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
-		ChunkServer *cs;
+		ChunkDataNode *cdn;
 
-		if (list_length(chunk->servers) == 0)
+		if (list_length(chunk->data_nodes) == 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_NO_SERVERS),
-					 (errmsg("no servers associated with chunk \"%s\"",
+					(errcode(ERRCODE_TS_NO_DATA_NODES),
+					 (errmsg("no data nodes associated with chunk \"%s\"",
 							 get_rel_name(chunk->table_id)))));
 
 		/*
-		 * Use the first chunk server as the "primary" to put in the foreign
+		 * Use the first chunk data node as the "primary" to put in the foreign
 		 * table
 		 */
-		cs = linitial(chunk->servers);
+		cdn = linitial(chunk->data_nodes);
 		stmt.base.type = T_CreateForeignServerStmt;
-		stmt.servername = NameStr(cs->fd.server_name);
+		stmt.servername = NameStr(cdn->fd.node_name);
 
 		/* Create the foreign table catalog information */
 		CreateForeignTable(&stmt, objaddr.objectId);
@@ -756,11 +756,11 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 		if (uid != saved_uid)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 
-		/* Create the corresponding chunk replicas on the remote servers */
-		ts_cm_functions->create_chunk_on_servers(chunk, ht);
+		/* Create the corresponding chunk replicas on the remote data nodes */
+		ts_cm_functions->create_chunk_on_data_nodes(chunk, ht);
 
-		/* Record the remote server chunk ID mappings */
-		ts_chunk_server_insert_multi(chunk->servers);
+		/* Record the remote data node chunk ID mappings */
+		ts_chunk_data_node_insert_multi(chunk->data_nodes);
 	}
 	else
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
@@ -773,46 +773,46 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 }
 
 static List *
-chunk_assign_servers(Chunk *chunk, Hypertable *ht)
+chunk_assign_data_nodes(Chunk *chunk, Hypertable *ht)
 {
-	List *htservers;
-	List *chunk_servers = NIL;
+	List *htnodes;
+	List *chunk_data_nodes = NIL;
 	ListCell *lc;
 
 	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 		return NIL;
 
-	if (ht->servers == NIL)
+	if (ht->data_nodes == NIL)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_NO_SERVERS),
-				 (errmsg("no servers associated with hypertable \"%s\"",
+				(errcode(ERRCODE_TS_NO_DATA_NODES),
+				 (errmsg("no data nodes associated with hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
 	Assert(chunk->cube != NULL);
 
-	htservers = ts_hypertable_assign_chunk_servers(ht, chunk->cube);
-	Assert(htservers != NIL);
+	htnodes = ts_hypertable_assign_chunk_data_nodes(ht, chunk->cube);
+	Assert(htnodes != NIL);
 
-	foreach (lc, htservers)
+	foreach (lc, htnodes)
 	{
-		HypertableServer *htserver = lfirst(lc);
+		HypertableDataNode *htnode = lfirst(lc);
 		ForeignServer *foreign_server =
-			GetForeignServerByName(NameStr(htserver->fd.server_name), false);
-		ChunkServer *chunk_server = palloc0(sizeof(ChunkServer));
+			GetForeignServerByName(NameStr(htnode->fd.node_name), false);
+		ChunkDataNode *chunk_data_node = palloc0(sizeof(ChunkDataNode));
 
 		/*
-		 * Create a stub server (partially filled in entry). This will be
+		 * Create a stub data node (partially filled in entry). This will be
 		 * fully filled in and persisted to metadata tables once we create the
 		 * remote tables during insert
 		 */
-		chunk_server->fd.chunk_id = chunk->fd.id;
-		chunk_server->fd.server_chunk_id = -1;
-		namestrcpy(&chunk_server->fd.server_name, foreign_server->servername);
-		chunk_server->foreign_server_oid = foreign_server->serverid;
-		chunk_servers = lappend(chunk_servers, chunk_server);
+		chunk_data_node->fd.chunk_id = chunk->fd.id;
+		chunk_data_node->fd.node_chunk_id = -1;
+		namestrcpy(&chunk_data_node->fd.node_name, foreign_server->servername);
+		chunk_data_node->foreign_server_oid = foreign_server->serverid;
+		chunk_data_nodes = lappend(chunk_data_nodes, chunk_data_node);
 	}
 
-	return chunk_servers;
+	return chunk_data_nodes;
 }
 
 static inline const char *
@@ -886,9 +886,9 @@ ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema
 	/* Add metadata for dimensional and inheritable constraints */
 	chunk_add_constraints(chunk);
 
-	/* If this is a remote chunk we assign servers */
+	/* If this is a remote chunk we assign data nodes */
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-		chunk->servers = chunk_assign_servers(chunk, ht);
+		chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
 
 	/* Create the actual table relation for the chunk */
 	chunk->table_id = chunk_create_table(chunk, ht);
@@ -1634,17 +1634,17 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 }
 
 List *
-ts_chunk_servers_copy(Chunk *chunk)
+ts_chunk_data_nodes_copy(Chunk *chunk)
 {
 	List *lcopy = NIL;
 	ListCell *lc;
 
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		ChunkServer *server = lfirst(lc);
-		ChunkServer *copy = palloc(sizeof(ChunkServer));
+		ChunkDataNode *node = lfirst(lc);
+		ChunkDataNode *copy = palloc(sizeof(ChunkDataNode));
 
-		memcpy(copy, server, sizeof(ChunkServer));
+		memcpy(copy, node, sizeof(ChunkDataNode));
 
 		lcopy = lappend(lcopy, copy);
 	}
@@ -1666,7 +1666,7 @@ ts_chunk_copy(Chunk *chunk)
 	if (NULL != chunk->cube)
 		copy->cube = ts_hypercube_copy(chunk->cube);
 
-	copy->servers = ts_chunk_servers_copy(chunk);
+	copy->data_nodes = ts_chunk_data_nodes_copy(chunk);
 
 	return copy;
 }
@@ -1806,7 +1806,7 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, int16 num_constra
 			}
 
 			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-				chunk->servers = ts_chunk_server_scan_by_chunk_id(chunk->fd.id, mctx);
+				chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, mctx);
 
 			break;
 		default:
@@ -2017,7 +2017,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 
 	ts_chunk_constraint_delete_by_chunk_id(form->id, ccs);
 	ts_chunk_index_delete_by_chunk_id(form->id, true);
-	ts_chunk_server_delete_by_chunk_id(form->id);
+	ts_chunk_data_node_delete_by_chunk_id(form->id);
 
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (i = 0; i < ccs->num_constraints; i++)

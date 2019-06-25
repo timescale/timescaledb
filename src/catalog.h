@@ -35,13 +35,13 @@
 typedef enum CatalogTable
 {
 	HYPERTABLE = 0,
-	HYPERTABLE_SERVER,
+	HYPERTABLE_DATA_NODE,
 	DIMENSION,
 	DIMENSION_SLICE,
 	CHUNK,
 	CHUNK_CONSTRAINT,
 	CHUNK_INDEX,
-	CHUNK_SERVER,
+	CHUNK_DATA_NODE,
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
@@ -158,60 +158,60 @@ enum
 	_MAX_HYPERTABLE_INDEX,
 };
 
-#define HYPERTABLE_SERVER_TABLE_NAME "hypertable_server"
+#define HYPERTABLE_DATA_NODE_TABLE_NAME "hypertable_data_node"
 
-enum Anum_hypertable_server
+enum Anum_hypertable_data_node
 {
-	Anum_hypertable_server_hypertable_id = 1,
-	Anum_hypertable_server_server_hypertable_id,
-	Anum_hypertable_server_server_name,
-	Anum_hypertable_server_block_chunks,
-	_Anum_hypertable_server_max,
+	Anum_hypertable_data_node_hypertable_id = 1,
+	Anum_hypertable_data_node_node_hypertable_id,
+	Anum_hypertable_data_node_node_name,
+	Anum_hypertable_data_node_block_chunks,
+	_Anum_hypertable_data_node_max,
 };
 
-#define Natts_hypertable_server (_Anum_hypertable_server_max - 1)
+#define Natts_hypertable_data_node (_Anum_hypertable_data_node_max - 1)
 
-typedef struct FormData_hypertable_server
+typedef struct FormData_hypertable_data_node
 {
 	int32 hypertable_id;
-	int32 server_hypertable_id;
-	NameData server_name;
+	int32 node_hypertable_id;
+	NameData node_name;
 	bool block_chunks;
-} FormData_hypertable_server;
+} FormData_hypertable_data_node;
 
-typedef FormData_hypertable_server *Form_hypertable_server;
+typedef FormData_hypertable_data_node *Form_hypertable_data_node;
 
 enum
 {
-	HYPERTABLE_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX,
-	HYPERTABLE_SERVER_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX,
-	_MAX_HYPERTABLE_SERVER_INDEX,
+	HYPERTABLE_DATA_NODE_HYPERTABLE_ID_NODE_NAME_IDX,
+	HYPERTABLE_DATA_NODE_NODE_HYPERTABLE_ID_NODE_NAME_IDX,
+	_MAX_HYPERTABLE_DATA_NODE_INDEX,
 };
 
-enum Anum_hypertable_server_hypertable_id_server_name_idx
+enum Anum_hypertable_data_node_hypertable_id_node_name_idx
 {
-	Anum_hypertable_server_hypertable_id_server_name_idx_hypertable_id = 1,
-	Anum_hypertable_server_hypertable_id_server_name_idx_server_name,
-	_Anum_hypertable_server_hypertable_id_server_name_idx_max,
+	Anum_hypertable_data_node_hypertable_id_node_name_idx_hypertable_id = 1,
+	Anum_hypertable_data_node_hypertable_id_node_name_idx_node_name,
+	_Anum_hypertable_data_node_hypertable_id_node_name_idx_max,
 };
 
-struct FormData_hypertable_server_hypertable_id_server_name_idx
+struct FormData_hypertable_data_node_hypertable_id_node_name_idx
 {
 	int32 hypertable_id;
-	NameData server_name;
+	NameData node_name;
 };
 
-enum Anum_hypertable_server_server_hypertable_id_server_name_idx
+enum Anum_hypertable_data_node_node_hypertable_id_node_name_idx
 {
-	Anum_hypertable_server_server_hypertable_id_server_name_idx_hypertable_id = 1,
-	Anum_hypertable_server_server_hypertable_id_server_name_idx_server_name,
-	_Anum_hypertable_server_server_hypertable_id_server_name_idx_max,
+	Anum_hypertable_data_node_node_hypertable_id_node_name_idx_hypertable_id = 1,
+	Anum_hypertable_data_node_node_hypertable_id_node_name_idx_node_name,
+	_Anum_hypertable_data_node_node_hypertable_id_node_name_idx_max,
 };
 
-struct FormData_hypertable_server_server_hypertable_id_server_name_idx
+struct FormData_hypertable_data_node_node_hypertable_id_node_name_idx
 {
-	int32 server_hypertable_id;
-	NameData server_name;
+	int32 node_hypertable_id;
+	NameData node_name;
 };
 
 /******************************
@@ -490,62 +490,62 @@ enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
 
 /************************************
  *
- * Chunk server table definitions
+ * Chunk data node table definitions
  *
  ************************************/
 
-#define CHUNK_SERVER_TABLE_NAME "chunk_server"
+#define CHUNK_DATA_NODE_TABLE_NAME "chunk_data_node"
 
-enum Anum_chunk_server
+enum Anum_chunk_data_node
 {
-	Anum_chunk_server_chunk_id = 1,
-	Anum_chunk_server_server_chunk_id,
-	Anum_chunk_server_server_name,
-	_Anum_chunk_server_max,
+	Anum_chunk_data_node_chunk_id = 1,
+	Anum_chunk_data_node_node_chunk_id,
+	Anum_chunk_data_node_node_name,
+	_Anum_chunk_data_node_max,
 };
 
-#define Natts_chunk_server (_Anum_chunk_server_max - 1)
+#define Natts_chunk_data_node (_Anum_chunk_data_node_max - 1)
 
-typedef struct FormData_chunk_server
+typedef struct FormData_chunk_data_node
 {
 	int32 chunk_id;
-	int32 server_chunk_id;
-	NameData server_name;
-} FormData_chunk_server;
+	int32 node_chunk_id;
+	NameData node_name;
+} FormData_chunk_data_node;
 
-typedef FormData_chunk_server *Form_chunk_server;
+typedef FormData_chunk_data_node *Form_chunk_data_node;
 
 enum
 {
-	CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
-	CHUNK_SERVER_SERVER_CHUNK_ID_SERVER_NAME_IDX,
-	_MAX_CHUNK_SERVER_INDEX,
+	CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX,
+	CHUNK_DATA_NODE_NODE_CHUNK_ID_NODE_NAME_IDX,
+	_MAX_CHUNK_DATA_NODE_INDEX,
 };
 
-enum Anum_chunk_server_chunk_id_server_name_idx
+enum Anum_chunk_data_node_chunk_id_node_name_idx
 {
-	Anum_chunk_server_chunk_id_server_name_idx_chunk_id = 1,
-	Anum_chunk_server_chunk_id_server_name_idx_server_name,
-	_Anum_chunk_server_chunk_id_server_name_idx_max,
+	Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id = 1,
+	Anum_chunk_data_node_chunk_id_node_name_idx_node_name,
+	_Anum_chunk_data_node_chunk_id_node_name_idx_max,
 };
 
-struct FormData_chunk_server_chunk_id_server_name_idx
+struct FormData_chunk_data_node_chunk_id_node_name_idx
 {
 	int32 chunk_id;
-	NameData server_name;
+	NameData node_name;
 };
 
-enum Anum_chunk_server_server_chunk_id_server_name_idx
+enum Anum_chunk_data_node_node_chunk_id_node_name_idx
 {
-	Anum_chunk_server_server_chunk_id_server_name_idx_chunk_id = 1,
-	Anum_chunk_server_server_chunk_id_server_name_idx_server_name,
-	_Anum_chunk_server_server_chunk_id_server_name_idx_max,
+	Anum_chunk_data_node_node_chunk_id_node_name_idx_chunk_id = 1,
+	Anum_chunk_data_node_node_chunk_id_node_name_idx_node_name,
+	_Anum_chunk_data_node_node_chunk_id_node_name_idx_max,
 };
 
-struct FormData_chunk_server_server_chunk_id_server_name_idx
+struct FormData_chunk_data_node_node_chunk_id_node_name_idx
 {
-	int32 server_chunk_id;
-	NameData server_name;
+	int32 node_chunk_id;
+	NameData node_name;
 };
 
 /************************************
@@ -1150,7 +1150,7 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 
 enum Anum_remote_txn
 {
-	Anum_remote_txn_server_name = 1,
+	Anum_remote_txn_data_node_name = 1,
 	Anum_remote_txn_remote_transaction_id,
 	_Anum_remote_txn_max,
 };
@@ -1159,7 +1159,7 @@ enum Anum_remote_txn
 
 typedef struct FormData_remote_txn
 {
-	NameData server_name;
+	NameData data_node_name;
 	text *remote_transaction_id;
 	;
 } FormData_remote_txn;
@@ -1169,7 +1169,7 @@ typedef FormData_remote_txn *Form_remote_txn;
 enum
 {
 	REMOTE_TXN_PKEY_IDX = 0,
-	REMOTE_TXN_SERVER_NAME_IDX,
+	REMOTE_TXN_DATA_NODE_NAME_IDX,
 	_MAX_REMOTE_TXN_INDEX,
 };
 
@@ -1179,10 +1179,10 @@ enum Anum_remote_txn_pkey_idx
 	_Anum_remote_txn_pkey_idx_max,
 };
 
-enum Anum_remote_server_name_idx
+enum Anum_remote_data_node_name_idx
 {
-	Anum_remote_txn_server_name_idx_server_name = 1,
-	_Anum_remote_txn_server_name_idx_max,
+	Anum_remote_txn_data_node_name_idx_data_node_name = 1,
+	_Anum_remote_txn_data_node_name_idx_max,
 };
 
 typedef enum CacheType

@@ -18,7 +18,7 @@ extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
-extern TSDLLEXPORT bool ts_guc_enable_per_server_queries;
+extern TSDLLEXPORT bool ts_guc_enable_per_data_node_queries;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -30,7 +30,7 @@ extern char *ts_telemetry_cloud;
 extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT int ts_guc_max_insert_batch_size;
 extern TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
-extern TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_servers;
+extern TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes;
 
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;

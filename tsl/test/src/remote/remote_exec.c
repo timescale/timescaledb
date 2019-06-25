@@ -107,7 +107,7 @@ split_query_and_execute(TSConnection *conn, const char *server_name, const char 
 	pfree(sql_copy);
 }
 
-extern List *hypertable_server_array_to_list(ArrayType *serverarr);
+extern List *hypertable_data_node_array_to_list(ArrayType *serverarr);
 
 Datum
 ts_remote_exec(PG_FUNCTION_ARGS)
@@ -118,12 +118,12 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 	ListCell *lc;
 
 	if (servers == NULL)
-		servername_list = server_get_servername_list();
+		servername_list = data_node_get_node_name_list();
 	else
-		servername_list = hypertable_server_array_to_list(servers);
+		servername_list = hypertable_data_node_array_to_list(servers);
 
 	if (list_length(servername_list) == 0)
-		ereport(ERROR, (errcode(ERRCODE_TS_NO_SERVERS), errmsg("no servers defined")));
+		ereport(ERROR, (errcode(ERRCODE_TS_NO_DATA_NODES), errmsg("no servers defined")));
 
 	foreach (lc, servername_list)
 	{

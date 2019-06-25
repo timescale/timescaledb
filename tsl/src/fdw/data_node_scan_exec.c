@@ -16,26 +16,26 @@
 #include "data_node_scan_exec.h"
 
 /*
- * The execution stage of a ServerScan.
+ * The execution stage of a DataNodeScan.
  *
- * This implements the execution stage CustomScan interface for a ServerScan
+ * This implements the execution stage CustomScan interface for a DataNodeScan
  * plan. This is heavily based on the ForeignScan implementation, but allow
  * scans of remote relations that doesn't have a corresponding local foreign
- * table, which is the case fo a server relation.
+ * table, which is the case for a data node relation.
  */
 
-typedef struct ServerScanState
+typedef struct DataNodeScanState
 {
 	CustomScanState css;
 	TsFdwScanState fsstate;
 	ExprState *recheck_quals;
 	bool systemcol;
-} ServerScanState;
+} DataNodeScanState;
 
 static void
-server_scan_begin(CustomScanState *node, EState *estate, int eflags)
+data_node_scan_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	ServerScanState *sss = (ServerScanState *) node;
+	DataNodeScanState *sss = (DataNodeScanState *) node;
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	List *fdw_exprs = linitial(cscan->custom_exprs);
 	List *recheck_quals = lsecond(cscan->custom_exprs);
@@ -50,9 +50,9 @@ server_scan_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 static TupleTableSlot *
-server_scan_next(CustomScanState *node)
+data_node_scan_next(CustomScanState *node)
 {
-	ServerScanState *sss = (ServerScanState *) node;
+	DataNodeScanState *sss = (DataNodeScanState *) node;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	MemoryContext oldcontext;
 	TupleTableSlot *slot;
@@ -82,9 +82,9 @@ server_scan_next(CustomScanState *node)
  * Access method routine to recheck a tuple in EvalPlanQual
  */
 static bool
-server_scan_recheck(CustomScanState *node, TupleTableSlot *slot)
+data_node_scan_recheck(CustomScanState *node, TupleTableSlot *slot)
 {
-	ServerScanState *sss = (ServerScanState *) node;
+	DataNodeScanState *sss = (DataNodeScanState *) node;
 	ExprContext *econtext;
 
 	/*
@@ -101,27 +101,27 @@ server_scan_recheck(CustomScanState *node, TupleTableSlot *slot)
 }
 
 static TupleTableSlot *
-server_scan_exec(CustomScanState *node)
+data_node_scan_exec(CustomScanState *node)
 {
 	return ExecScan(&node->ss,
-					(ExecScanAccessMtd) server_scan_next,
-					(ExecScanRecheckMtd) server_scan_recheck);
+					(ExecScanAccessMtd) data_node_scan_next,
+					(ExecScanRecheckMtd) data_node_scan_recheck);
 }
 
 static void
-server_scan_rescan(CustomScanState *node)
+data_node_scan_rescan(CustomScanState *node)
 {
-	fdw_scan_rescan(&node->ss, &((ServerScanState *) node)->fsstate);
+	fdw_scan_rescan(&node->ss, &((DataNodeScanState *) node)->fsstate);
 }
 
 static void
-server_scan_end(CustomScanState *node)
+data_node_scan_end(CustomScanState *node)
 {
-	fdw_scan_end(&((ServerScanState *) node)->fsstate);
+	fdw_scan_end(&((DataNodeScanState *) node)->fsstate);
 }
 
 static void
-server_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+data_node_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	CustomScan *scan = (CustomScan *) node->ss.ps.plan;
 	List *fdw_private = list_nth(scan->custom_private, 0);
@@ -129,21 +129,22 @@ server_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	fdw_scan_explain(&node->ss, fdw_private, es);
 }
 
-static CustomExecMethods server_scan_state_methods = {
-	.CustomName = "ServerScanState",
-	.BeginCustomScan = server_scan_begin,
-	.EndCustomScan = server_scan_end,
-	.ExecCustomScan = server_scan_exec,
-	.ReScanCustomScan = server_scan_rescan,
-	.ExplainCustomScan = server_scan_explain,
+static CustomExecMethods data_node_scan_state_methods = {
+	.CustomName = "DataNodeScanState",
+	.BeginCustomScan = data_node_scan_begin,
+	.EndCustomScan = data_node_scan_end,
+	.ExecCustomScan = data_node_scan_exec,
+	.ReScanCustomScan = data_node_scan_rescan,
+	.ExplainCustomScan = data_node_scan_explain,
 };
 
 Node *
-server_scan_state_create(CustomScan *cscan)
+data_node_scan_state_create(CustomScan *cscan)
 {
-	ServerScanState *sss = (ServerScanState *) newNode(sizeof(ServerScanState), T_CustomScanState);
+	DataNodeScanState *sss =
+		(DataNodeScanState *) newNode(sizeof(DataNodeScanState), T_CustomScanState);
 
-	sss->css.methods = &server_scan_state_methods;
+	sss->css.methods = &data_node_scan_state_methods;
 	sss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
 
 	return (Node *) sss;

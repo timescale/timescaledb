@@ -92,12 +92,12 @@ dist_txn_state_throw_deferred_error()
 
 	ereport(ERROR,
 			(errcode(ERRCODE_CONNECTION_EXCEPTION),
-			 errmsg("connection to server \"%s\" was lost", server->servername)));
+			 errmsg("connection to data node \"%s\" was lost", server->servername)));
 }
 
 /*
  * Get a connection which can be used to execute queries on the remote PostgreSQL
- * server with the user's authorization.  A new connection is established
+ * data node with the user's authorization.  A new connection is established
  * if we don't already have a suitable one, and a transaction is opened at
  * the right subtransaction nesting depth if we didn't do that already.
  *

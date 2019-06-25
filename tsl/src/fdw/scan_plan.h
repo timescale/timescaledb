@@ -21,7 +21,7 @@ typedef struct TsFdwRelInfo TsFdwRelInfo;
 
 typedef struct ScanInfo
 {
-	Oid serverid;
+	Oid data_node_serverid;
 	Index scan_relid;
 	List *local_exprs;
 	List *fdw_private;

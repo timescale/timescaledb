@@ -124,7 +124,7 @@ get_remote_estimate(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds, 
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("foreign joins are not supported")));
 
-	/* Build the list of columns to be fetched from the foreign server. */
+	/* Build the list of columns to be fetched from the data node. */
 	if (IS_UPPER_REL(rel))
 		fdw_scan_tlist = build_tlist_to_deparse(rel);
 	else
@@ -229,7 +229,7 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 									 NULL);
 
 	/*
-	 * Number of rows expected from foreign server will be same as
+	 * Number of rows expected from data node will be same as
 	 * that of number of groups.
 	 */
 	ce->rows = ce->retrieved_rows = num_groups;
@@ -322,8 +322,8 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *param_join
 				 errmsg("foreign joins are not supported")));
 
 	/*
-	 * If the table or the server is configured to use remote estimates,
-	 * connect to the foreign server and execute EXPLAIN to estimate the
+	 * If the table or the data node is configured to use remote estimates,
+	 * connect to the data node and execute EXPLAIN to estimate the
 	 * number of rows selected by the restriction+join clauses.  Otherwise,
 	 * estimate rows using whatever statistics we have locally, in a way
 	 * similar to ordinary tables.
@@ -376,11 +376,11 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *param_join
 
 	/*
 	 * Cache the costs for scans without any pathkeys or parameterization
-	 * before adding the costs for transferring data from the foreign server.
+	 * before adding the costs for transferring data from the data node.
 	 * These costs are useful for costing the join between this relation and
 	 * another foreign relation or to calculate the costs of paths with
 	 * pathkeys for this relation, when the costs can not be obtained from the
-	 * foreign server. This function will be called at least once for every
+	 * data node. This function will be called at least once for every
 	 * foreign relation without pathkeys and parameterization.
 	 */
 	if (!REL_HAS_CACHED_COSTS(fpinfo) && pathkeys == NIL && param_join_conds == NIL)

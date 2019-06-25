@@ -10,9 +10,9 @@
 
 #include "catalog.h"
 
-extern void hypertable_make_distributed(Hypertable *ht, ArrayType *servers);
+extern void hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes);
 
-List *hypertable_assign_servers(int32 hypertable_id, List *servers);
-extern List *hypertable_server_array_to_list(ArrayType *serverarr);
+List *hypertable_assign_data_nodes(int32 hypertable_id, List *nodes);
+extern List *hypertable_data_node_array_to_list(ArrayType *nodearr);
 
 #endif /* _TIMESCALEDB_TSL_HYPERTABLE_H */

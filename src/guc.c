@@ -42,7 +42,7 @@ bool ts_guc_enable_ordered_append = true;
 bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
-bool ts_guc_enable_per_server_queries = true;
+bool ts_guc_enable_per_data_node_queries = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
@@ -54,7 +54,7 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
-TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_servers = false;
+TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -171,11 +171,11 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_per_server_queries",
-							 "Enable the per-server query optimization for hypertables",
+	DefineCustomBoolVariable("timescaledb.enable_per_data_node_queries",
+							 "Enable the per data node query optimization for hypertables",
 							 "Enable the optimization that combines different chunks belonging to "
-							 "the same hypertable into a single query per server",
-							 &ts_guc_enable_per_server_queries,
+							 "the same hypertable into a single query per data_node",
+							 &ts_guc_enable_per_data_node_queries,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -184,10 +184,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomIntVariable("timescaledb.max_insert_batch_size",
-							"The max number of tuples to batch before sending to a remote server",
-							"When acting as a frontend server, TimescaleDB splits batches of "
-							"inserted tuples across multiple servers. It will batch up to the "
-							"configured batch size tuples per datastore server before flushing. "
+							"The max number of tuples to batch before sending to a data node",
+							"When acting as a access node, TimescaleDB splits batches of "
+							"inserted tuples across multiple data nodes. It will batch up to the "
+							"configured batch size tuples per data node before flushing. "
 							"Setting this to 0 disables batching, reverting to tuple-by-tuple "
 							"inserts",
 							&ts_guc_max_insert_batch_size,
@@ -211,10 +211,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_servers",
-							 "Enable DDL operations on data servers by a client",
-							 "Do not restrict execution of DDL operations only by frontend server",
-							 &ts_guc_enable_client_ddl_on_data_servers,
+	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_nodes",
+							 "Enable DDL operations on data nodes by a client",
+							 "Do not restrict execution of DDL operations only by access node",
+							 &ts_guc_enable_client_ddl_on_data_nodes,
 							 false,
 							 PGC_USERSET,
 							 0,

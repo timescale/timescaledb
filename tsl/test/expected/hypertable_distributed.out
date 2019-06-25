@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -17,50 +17,50 @@ LANGUAGE C;
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
--- Support for execute_sql_and_filter_server_name_on_error()
+-- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_3;
-\c server_1
+CREATE DATABASE data_node_1;
+CREATE DATABASE data_node_2;
+CREATE DATABASE data_node_3;
+\c data_node_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_2
+\c data_node_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_3
+\c data_node_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
--- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_1" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+-- Add data nodes using the TimescaleDB data node management API
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_1" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_1 | localhost | 15432 | data_node_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_2" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_2" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_2 | localhost | 15432 | data_node_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_3" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_3" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_3 | localhost | 15432 | data_node_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 -- Create distributed hypertables. Add a trigger and primary key
@@ -73,7 +73,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
 (1 row)
 
 -- This table tests both 1-dimensional tables and under-replication
--- (replication_factor > num_servers).
+-- (replication_factor > num_data_nodes).
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 NOTICE:  adding not-null constraint to column "time"
@@ -102,20 +102,20 @@ $BODY$;
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
-SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name | block_chunks 
----------------+----------------------+-------------+--------------
-             1 |                    1 | server_1    | f
-             1 |                    1 | server_2    | f
-             1 |                    1 | server_3    | f
-             2 |                    2 | server_1    | f
-             2 |                    2 | server_2    | f
-             2 |                    2 | server_3    | f
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             1 |                  1 | data_node_1 | f
+             1 |                  1 | data_node_2 | f
+             1 |                  1 | data_node_3 | f
+             2 |                  2 | data_node_1 | f
+             2 |                  2 | data_node_2 | f
+             2 |                  2 | data_node_3 | f
 (6 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id | node_name 
+----------+---------------+-----------
 (0 rows)
 
 -- The constraints, indexes, and triggers on the hypertable
@@ -156,7 +156,7 @@ INSERT INTO disttable VALUES
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
-         ->  Custom Scan (ServerDispatch)
+         ->  Custom Scan (DataNodeDispatch)
                Batch size: 1000
                ->  Custom Scan (ChunkDispatch)
                      ->  Result
@@ -169,9 +169,9 @@ INSERT INTO disttable VALUES
 ---------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.disttable
-   Servers: server_1, server_2, server_3
+   Data nodes: data_node_1, data_node_2, data_node_3
    ->  Insert on public.disttable
-         ->  Custom Scan (ServerDispatch)
+         ->  Custom Scan (DataNodeDispatch)
                Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
                Batch size: 1000
                Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3), ..., ($2998, $2999, $3000)
@@ -263,28 +263,28 @@ FROM show_chunks('disttable');
         6 |             1 | _timescaledb_internal | _hyper_1_6_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (6 rows)
 
--- Show that there are assigned server_chunk_id:s in chunk server mappings
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_1
-        2 |               1 | server_3
-        3 |               1 | server_2
-        4 |               2 | server_1
-        5 |               2 | server_2
-        6 |               2 | server_3
+-- Show that there are assigned node_chunk_id:s in chunk data node mappings
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_1
+        2 |             1 | data_node_3
+        3 |             1 | data_node_2
+        4 |             2 | data_node_1
+        5 |             2 | data_node_2
+        6 |             2 | data_node_3
 (6 rows)
 
--- Show that chunks are created on remote servers and that each server
+-- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                                     
 --------+-------------+---------------------+---------------------+-------+-------------------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_1_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
@@ -292,10 +292,10 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                           
 --------+-------------+---------------------+---------------------+-------+---------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_3_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}
@@ -303,10 +303,10 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                                     
 --------+-------------+---------------------+---------------------+-------+-------------------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_2_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
@@ -319,12 +319,12 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
  
 (1 row)
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM disttable
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -334,9 +334,9 @@ Mon Jul 02 08:01:00 2018 PDT|    87| 1.6
 (4 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM disttable
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp
 ----------------------------+------+----
 Mon Jan 02 08:01:00 2017 PST|     2| 1.3
@@ -344,9 +344,9 @@ Sun Jul 01 06:01:00 2018 PDT|    13| 1.4
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM disttable
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 09:11:00 2017 PST|     3| 2.1
@@ -360,20 +360,20 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
  
 (1 row)
 
-SELECT * FROM timescaledb_information.server;
- server_name | owner |                   options                   | server_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+-------+---------------------------------------------+-----------+-----------------+-----------------+-----------------
- server_2    | 16388 | {host=localhost,port=15432,dbname=server_2} | t         |               1 |               2 | 112 kB
- server_3    | 16388 | {host=localhost,port=15432,dbname=server_3} | t         |               1 |               2 | 112 kB
- server_1    | 16388 | {host=localhost,port=15432,dbname=server_1} | t         |               1 |               2 | 112 kB
+SELECT * FROM timescaledb_information.data_node;
+  node_name  | owner |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_2 | 16388 | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |               2 | 112 kB
+ data_node_3 | 16388 | {host=localhost,port=15432,dbname=data_node_3} | t       |               1 |               2 | 112 kB
+ data_node_1 | 16388 | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |               2 | 112 kB
 (3 rows)
 
-SELECT * FROM hypertable_server_relation_size('disttable');
- server_name | num_chunks | table_size | index_size | toast_size | total_size 
+SELECT * FROM hypertable_data_node_relation_size('disttable');
+  node_name  | num_chunks | table_size | index_size | toast_size | total_size 
 -------------+------------+------------+------------+------------+------------
- server_2    |          2 | 16 kB      | 96 kB      |            | 112 kB
- server_3    |          2 | 16 kB      | 96 kB      |            | 112 kB
- server_1    |          2 | 16 kB      | 96 kB      |            | 112 kB
+ data_node_2 |          2 | 16 kB      | 96 kB      |            | 112 kB
+ data_node_3 |          2 | 16 kB      | 96 kB      |            | 112 kB
+ data_node_1 |          2 | 16 kB      | 96 kB      |            | 112 kB
 (3 rows)
 
 -- Show what some queries would look like on the frontend
@@ -384,17 +384,17 @@ SELECT * FROM disttable;
  Append
    ->  Custom Scan (ServerScan) on public.disttable
          Output: disttable."time", disttable.device, disttable.temp
-         Server: server_1
+         Data node: data_node_1
          Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
          Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
    ->  Custom Scan (ServerScan) on public.disttable disttable_1
          Output: disttable_1."time", disttable_1.device, disttable_1.temp
-         Server: server_2
+         Data node: data_node_2
          Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
          Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
    ->  Custom Scan (ServerScan) on public.disttable disttable_2
          Output: disttable_2."time", disttable_2.device, disttable_2.temp
-         Server: server_3
+         Data node: data_node_3
          Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
          Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
 (16 rows)
@@ -426,17 +426,17 @@ ORDER BY 1;
          Sort Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
          ->  Custom Scan (ServerScan) on public.disttable
                Output: time_bucket('@ 3 hours'::interval, disttable."time"), disttable.device, disttable.temp
-               Server: server_1
+               Data node: data_node_1
                Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
                Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
          ->  Custom Scan (ServerScan) on public.disttable disttable_1
                Output: time_bucket('@ 3 hours'::interval, disttable_1."time"), disttable_1.device, disttable_1.temp
-               Server: server_2
+               Data node: data_node_2
                Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
                Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
          ->  Custom Scan (ServerScan) on public.disttable disttable_2
                Output: time_bucket('@ 3 hours'::interval, disttable_2."time"), disttable_2.device, disttable_2.temp
-               Server: server_3
+               Data node: data_node_3
                Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
                Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (20 rows)
@@ -538,16 +538,16 @@ FROM test.show_subtables('disttable') st;
 -------------+---------------
 (0 rows)
 
--- Check that the chunks are assigned servers
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_1
-        2 |               1 | server_3
-        3 |               1 | server_2
-        4 |               2 | server_1
-        5 |               2 | server_2
-        6 |               2 | server_3
+-- Check that the chunks are assigned data nodes
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_1
+        2 |             1 | data_node_3
+        3 |             1 | data_node_2
+        4 |             2 | data_node_1
+        5 |             2 | data_node_2
+        6 |             2 | data_node_3
 (6 rows)
 
 -- Adding a new trigger should not recurse to foreign chunks
@@ -720,14 +720,14 @@ RETURNING 1;
 INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                                     
 --------+-------------+---------------------+---------------------+-------+-------------------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_1_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
@@ -736,10 +736,10 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 (3 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                           
 --------+-------------+---------------------+---------------------+-------+---------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_3_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}
@@ -748,10 +748,10 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 (3 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 chunk_id|hypertable_id|schema_name          |table_name           |relkind|slices                                                                                     
 --------+-------------+---------------------+---------------------+-------+-------------------------------------------------------------------------------------------
        1|            1|_timescaledb_internal|_hyper_1_2_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
@@ -766,12 +766,12 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 (1 row)
 
 -- Show new row and that conflicting row is not inserted
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM disttable
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1|     
@@ -782,9 +782,9 @@ Sat Sep 02 06:09:00 2017 PDT|     6|10.5|    2
 (5 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM disttable
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Mon Jan 02 08:01:00 2017 PST|     2| 1.3|     
@@ -793,9 +793,9 @@ Sat Sep 02 06:09:00 2017 PDT|     4| 9.8|    1
 (3 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM disttable
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Sun Jan 01 09:11:00 2017 PST|     3| 2.1|     
@@ -882,13 +882,13 @@ SELECT * FROM disttable;
  Sun Sep 03 06:18:00 2017 PDT |      9 |  8.7 |     4
 (10 rows)
 
--- Ensure rows are deleted on the servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Ensure rows are deleted on the data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM disttable
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1|    2
@@ -899,9 +899,9 @@ Sat Sep 02 06:09:00 2017 PDT|     6|10.5|    2
 (5 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM disttable
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Mon Jan 02 08:01:00 2017 PST|     2| 1.3|     
@@ -909,9 +909,9 @@ Sun Jul 01 06:01:00 2018 PDT|    13| 1.4|
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM disttable
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp|Color
 ----------------------------+------+----+-----
 Sun Jul 01 09:11:00 2018 PDT|    90| 2.7|     
@@ -928,22 +928,22 @@ Sun Sep 03 06:18:00 2017 PDT|     9| 8.7|    4
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
-WARNING:  new chunks for hypertable "underreplicated" will be under-replicated due to insufficient available server, lacks 1 server(s)
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_1
-        2 |               1 | server_3
-        3 |               1 | server_2
-        4 |               2 | server_1
-        5 |               2 | server_2
-        6 |               2 | server_3
-        7 |               3 | server_2
-        8 |               3 | server_3
-        9 |               3 | server_1
-       10 |               4 | server_1
-       10 |               4 | server_2
-       10 |               4 | server_3
+WARNING:  new chunks for hypertable "underreplicated" will be under-replicated due to insufficient available data nodes, lacks 1 data node(s)
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_1
+        2 |             1 | data_node_3
+        3 |             1 | data_node_2
+        4 |             2 | data_node_1
+        5 |             2 | data_node_2
+        6 |             2 | data_node_3
+        7 |             3 | data_node_2
+        8 |             3 | data_node_3
+        9 |             3 | data_node_1
+       10 |             4 | data_node_1
+       10 |             4 | data_node_2
+       10 |             4 | data_node_3
 (12 rows)
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
@@ -953,54 +953,54 @@ FROM show_chunks('underreplicated');
        10 |             2 | _timescaledb_internal | _hyper_2_10_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000]}
 (1 row)
 
--- Show chunk server mappings
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_1
-        2 |               1 | server_3
-        3 |               1 | server_2
-        4 |               2 | server_1
-        5 |               2 | server_2
-        6 |               2 | server_3
-        7 |               3 | server_2
-        8 |               3 | server_3
-        9 |               3 | server_1
-       10 |               4 | server_1
-       10 |               4 | server_2
-       10 |               4 | server_3
+-- Show chunk data node mappings
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_1
+        2 |             1 | data_node_3
+        3 |             1 | data_node_2
+        4 |             2 | data_node_1
+        5 |             2 | data_node_2
+        6 |             2 | data_node_3
+        7 |             3 | data_node_2
+        8 |             3 | data_node_3
+        9 |             3 | data_node_1
+       10 |             4 | data_node_1
+       10 |             4 | data_node_2
+       10 |             4 | data_node_3
 (12 rows)
 
--- Show that chunks are created on remote servers and that all
--- servers/chunks have the same data due to replication
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Show that chunks are created on remote data nodes and that all
+-- data nodes/chunks have the same data due to replication
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated')
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 chunk_id|hypertable_id|schema_name          |table_name            |relkind|slices                                        
 --------+-------------+---------------------+----------------------+-------+----------------------------------------------
        4|            2|_timescaledb_internal|_hyper_2_10_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000]}
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated')
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 chunk_id|hypertable_id|schema_name          |table_name            |relkind|slices                                        
 --------+-------------+---------------------+----------------------+-------+----------------------------------------------
        4|            2|_timescaledb_internal|_hyper_2_10_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000]}
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated')
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 chunk_id|hypertable_id|schema_name          |table_name            |relkind|slices                                        
 --------+-------------+---------------------+----------------------+-------+----------------------------------------------
        4|            2|_timescaledb_internal|_hyper_2_10_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000]}
@@ -1012,12 +1012,12 @@ chunk_id|hypertable_id|schema_name          |table_name            |relkind|slic
  
 (1 row)
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1025,9 +1025,9 @@ Mon Jan 02 07:01:00 2017 PST|     2| 3.5
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1035,9 +1035,9 @@ Mon Jan 02 07:01:00 2017 PST|     2| 3.5
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1066,12 +1066,12 @@ SELECT * FROM underreplicated;
 (2 rows)
 
 -- Show that all replica chunks are updated
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1079,9 +1079,9 @@ Mon Jan 02 07:01:00 2017 PST|     2|   2
 (2 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1089,9 +1089,9 @@ Mon Jan 02 07:01:00 2017 PST|     2|   2
 (2 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1111,31 +1111,31 @@ RETURNING *;
  Mon Jan 02 07:01:00 2017 PST |      2 |    2
 (1 row)
 
--- Ensure deletes across all servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Ensure deletes across all data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM underreplicated;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1148,15 +1148,15 @@ Sun Jan 01 06:01:00 2017 PST|     1| 1.1
 (1 row)
 
 -- Test hypertable creation fails on distributed error
-SELECT * FROM test.remote_exec('{ server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_3 }', $$
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
 SELECT * FROM underreplicated;
 $$);
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float)
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM underreplicated
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |device|temp
 ----------------------------+------+----
 Sun Jan 01 06:01:00 2017 PST|     1| 1.1
@@ -1171,7 +1171,7 @@ Sun Jan 01 06:01:00 2017 PST|     1| 1.1
 \set ON_ERROR_STOP 0
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('remotetable', 'time', replication_factor => 1);
-ERROR:  [server_3]: relation "remotetable" already exists
+ERROR:  [data_node_3]: relation "remotetable" already exists
 -- Test distributed_hypertable creation fails with replication factor 0
 CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
@@ -1186,17 +1186,17 @@ ORDER BY table_schema, table_name;
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters
-\c server_1
+\c data_node_1
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-\c server_2
+\c data_node_2
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-\c server_3
+\c data_node_3
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
@@ -1212,48 +1212,48 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
-servers => '{ "server_2", "server_3" }');
+data_nodes => '{ "data_node_2", "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
  hypertable_id |  schema_name  | table_name  | created 
 ---------------+---------------+-------------+---------
              4 | Table\\Schema | Param_Table | t
 (1 row)
 
--- Test attach_server
-SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name | block_chunks 
----------------+----------------------+-------------+--------------
-             1 |                    1 | server_1    | f
-             1 |                    1 | server_2    | f
-             1 |                    1 | server_3    | f
-             2 |                    2 | server_1    | f
-             2 |                    2 | server_2    | f
-             2 |                    2 | server_3    | f
-             4 |                    3 | server_2    | f
-             4 |                    3 | server_3    | f
+-- Test attach_data_node
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             1 |                  1 | data_node_1 | f
+             1 |                  1 | data_node_2 | f
+             1 |                  1 | data_node_3 | f
+             2 |                  2 | data_node_1 | f
+             2 |                  2 | data_node_2 | f
+             2 |                  2 | data_node_3 | f
+             4 |                  3 | data_node_2 | f
+             4 |                  3 | data_node_3 | f
 (8 rows)
 
-SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             4 |                    3 | server_1
+SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_1');
+ hypertable_id | node_hypertable_id |  node_name  
+---------------+--------------------+-------------
+             4 |                  3 | data_node_1
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name | block_chunks 
----------------+----------------------+-------------+--------------
-             1 |                    1 | server_1    | f
-             1 |                    1 | server_2    | f
-             1 |                    1 | server_3    | f
-             2 |                    2 | server_1    | f
-             2 |                    2 | server_2    | f
-             2 |                    2 | server_3    | f
-             4 |                    3 | server_2    | f
-             4 |                    3 | server_3    | f
-             4 |                    3 | server_1    | f
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             1 |                  1 | data_node_1 | f
+             1 |                  1 | data_node_2 | f
+             1 |                  1 | data_node_3 | f
+             2 |                  2 | data_node_1 | f
+             2 |                  2 | data_node_2 | f
+             2 |                  2 | data_node_3 | f
+             4 |                  3 | data_node_2 | f
+             4 |                  3 | data_node_3 | f
+             4 |                  3 | data_node_1 | f
 (9 rows)
 
--- Verify hypertables on all servers
+-- Verify hypertables on all data nodes
 SELECT * FROM _timescaledb_catalog.hypertable;
  id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
 ----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
@@ -1278,15 +1278,15 @@ SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
  ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM _timescaledb_catalog.hypertable
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|replication_factor
 --+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+------------------
  1|public       |disttable      |_timescaledb_internal |_hyper_1               |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                -1
@@ -1295,9 +1295,9 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 (3 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000
@@ -1308,19 +1308,19 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
 (5 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 tgname           |tgtype|tgfoid                              |substring                                                                                                                              
 -----------------+------+------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|     7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM _timescaledb_catalog.hypertable
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|replication_factor
 --+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+------------------
  1|public       |disttable      |_timescaledb_internal |_hyper_1               |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                -1
@@ -1329,9 +1329,9 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 (3 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000
@@ -1342,19 +1342,19 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
 (5 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 tgname           |tgtype|tgfoid                              |substring                                                                                                                              
 -----------------+------+------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|     7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM _timescaledb_catalog.hypertable
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|replication_factor
 --+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+------------------
  1|public       |disttable      |_timescaledb_internal |_hyper_1               |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                -1
@@ -1363,9 +1363,9 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 (3 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000
@@ -1376,10 +1376,10 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
 (5 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 tgname           |tgtype|tgfoid                              |substring                                                                                                                              
 -----------------+------+------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
 ts_insert_blocker|     7|_timescaledb_internal.insert_blocker| ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
@@ -1393,7 +1393,7 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker| ts_insert_blocker
 
 -- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
-SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, servers => '{ "server_1" }');
+SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
@@ -1427,10 +1427,10 @@ SELECT * FROM _timescaledb_catalog.dimension;
  10 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                
 (9 rows)
 
-SELECT * FROM attach_server('dimented_table', 'server_2');
- hypertable_id | server_hypertable_id | server_name 
----------------+----------------------+-------------
-             5 |                    4 | server_2
+SELECT * FROM attach_data_node('dimented_table', 'data_node_2');
+ hypertable_id | node_hypertable_id |  node_name  
+---------------+--------------------+-------------
+             5 |                  4 | data_node_2
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -1448,12 +1448,12 @@ SELECT * FROM _timescaledb_catalog.dimension;
 (9 rows)
 
 -- Note that this didn't get the add_dimension
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM _timescaledb_catalog.dimension;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000
@@ -1466,9 +1466,9 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
 (7 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func    |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+---------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000
@@ -1483,9 +1483,9 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
 (9 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM _timescaledb_catalog.dimension
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 id|hypertable_id|column_name     |column_type             |aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length
 --+-------------+----------------+------------------------+-------+----------+------------------------+------------------+---------------
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000
@@ -1501,7 +1501,7 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
  
 (1 row)
 
---test per-server queries
+--test per-data node queries
 -- Create some chunks through insertion
 CREATE TABLE disttable_replicated(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float, "Color" int);
 SELECT * FROM create_hypertable('disttable_replicated', 'time', replication_factor => 2);
@@ -1539,23 +1539,23 @@ SELECT * FROM disttable_replicated;
  Append (actual rows=8 loops=1)
    ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=4 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
-         Server: server_1
+         Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
-         Server: server_2
+         Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
-         Server: server_3
+         Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
 (16 rows)
 
 --guc disables the optimization
-SET timescaledb.enable_per_server_queries = FALSE;
+SET timescaledb.enable_per_data_node_queries = FALSE;
 EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
 SELECT * FROM disttable_replicated;
                                                                 QUERY PLAN                                                                 
@@ -1563,31 +1563,31 @@ SELECT * FROM disttable_replicated;
  Append (actual rows=8 loops=1)
    ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=2 loops=1)
          Output: _hyper_6_11_dist_chunk."time", _hyper_6_11_dist_chunk.device, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color"
-         Server: server_1
+         Data node: data_node_1
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_11_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_12_dist_chunk."time", _hyper_6_12_dist_chunk.device, _hyper_6_12_dist_chunk.temp, _hyper_6_12_dist_chunk."Color"
-         Server: server_2
+         Data node: data_node_2
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_12_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_13_dist_chunk."time", _hyper_6_13_dist_chunk.device, _hyper_6_13_dist_chunk.temp, _hyper_6_13_dist_chunk."Color"
-         Server: server_3
+         Data node: data_node_3
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_13_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk (actual rows=2 loops=1)
          Output: _hyper_6_14_dist_chunk."time", _hyper_6_14_dist_chunk.device, _hyper_6_14_dist_chunk.temp, _hyper_6_14_dist_chunk."Color"
-         Server: server_1
+         Data node: data_node_1
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_14_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_15_dist_chunk."time", _hyper_6_15_dist_chunk.device, _hyper_6_15_dist_chunk.temp, _hyper_6_15_dist_chunk."Color"
-         Server: server_2
+         Data node: data_node_2
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_15_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_16_dist_chunk."time", _hyper_6_16_dist_chunk.device, _hyper_6_16_dist_chunk.temp, _hyper_6_16_dist_chunk."Color"
-         Server: server_3
+         Data node: data_node_3
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_16_dist_chunk
 (25 rows)
 
-SET timescaledb.enable_per_server_queries = TRUE;
+SET timescaledb.enable_per_data_node_queries = TRUE;
 --test WHERE clause
 EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
 SELECT * FROM disttable_replicated WHERE temp > 2.0;
@@ -1596,17 +1596,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0;
  Append (actual rows=2 loops=1)
    ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=0 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
-         Server: server_1
+         Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND ((temp > 2::double precision))
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
-         Server: server_2
+         Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND ((temp > 2::double precision))
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
-         Server: server_3
+         Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND ((temp > 2::double precision))
 (16 rows)
@@ -1619,17 +1619,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
  Append (actual rows=3 loops=1)
    ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=1 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
-         Server: server_1
+         Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND (((temp > 2::double precision) OR ("Color" = 11)))
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
-         Server: server_2
+         Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
-         Server: server_3
+         Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
 (16 rows)
@@ -1642,12 +1642,12 @@ SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
  Append (actual rows=2 loops=1)
    ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=2 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
-         Server: server_1
+         Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
    ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
-         Server: server_2
+         Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
 (11 rows)
@@ -1676,17 +1676,17 @@ SELECT * FROM cte;
      ->  Append (actual rows=8 loops=1)
            ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=4 loops=1)
                  Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
-                 Server: server_1
+                 Data node: data_node_1
                  Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
                  Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
            ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
                  Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
-                 Server: server_2
+                 Data node: data_node_2
                  Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
                  Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
            ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
                  Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
-                 Server: server_3
+                 Data node: data_node_3
                  Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
                  Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
 (19 rows)
@@ -1726,27 +1726,27 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
                              Output: disttable_replicated_1.device
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk _hyper_6_11_dist_chunk_1 (actual rows=2 loops=1)
                              Output: _hyper_6_11_dist_chunk_1.device
-                             Server: server_1
+                             Data node: data_node_1
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_11_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk _hyper_6_12_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_12_dist_chunk_1.device
-                             Server: server_2
+                             Data node: data_node_2
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_12_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk _hyper_6_13_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_13_dist_chunk_1.device
-                             Server: server_3
+                             Data node: data_node_3
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_13_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk _hyper_6_14_dist_chunk_1 (actual rows=2 loops=1)
                              Output: _hyper_6_14_dist_chunk_1.device
-                             Server: server_1
+                             Data node: data_node_1
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_14_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk _hyper_6_15_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_15_dist_chunk_1.device
-                             Server: server_2
+                             Data node: data_node_2
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_15_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk _hyper_6_16_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_16_dist_chunk_1.device
-                             Server: server_3
+                             Data node: data_node_3
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_16_dist_chunk
    InitPlan 2 (returns $1)
      ->  Limit (actual rows=1 loops=1)
@@ -1758,27 +1758,27 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
          Filter: (disttable_replicated.device = $1)
    ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=2 loops=1)
          Output: _hyper_6_11_dist_chunk."time", 2, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color", _hyper_6_11_dist_chunk.ctid
-         Server: server_1
+         Data node: data_node_1
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_11_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_12_dist_chunk."time", 2, _hyper_6_12_dist_chunk.temp, _hyper_6_12_dist_chunk."Color", _hyper_6_12_dist_chunk.ctid
-         Server: server_2
+         Data node: data_node_2
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_12_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_13_dist_chunk."time", 2, _hyper_6_13_dist_chunk.temp, _hyper_6_13_dist_chunk."Color", _hyper_6_13_dist_chunk.ctid
-         Server: server_3
+         Data node: data_node_3
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_13_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_14_dist_chunk."time", 2, _hyper_6_14_dist_chunk.temp, _hyper_6_14_dist_chunk."Color", _hyper_6_14_dist_chunk.ctid
-         Server: server_1
+         Data node: data_node_1
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_14_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_15_dist_chunk."time", 2, _hyper_6_15_dist_chunk.temp, _hyper_6_15_dist_chunk."Color", _hyper_6_15_dist_chunk.ctid
-         Server: server_2
+         Data node: data_node_2
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_15_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_16_dist_chunk."time", 2, _hyper_6_16_dist_chunk.temp, _hyper_6_16_dist_chunk."Color", _hyper_6_16_dist_chunk.ctid
-         Server: server_3
+         Data node: data_node_3
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_16_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
 (81 rows)
 
@@ -1788,7 +1788,7 @@ SET timescaledb.max_insert_batch_size=4;
 CREATE TABLE twodim (time timestamptz DEFAULT '2019-02-10 10:11', "Color" int DEFAULT 11 CHECK ("Color" > 0), temp float DEFAULT 22.1);
 -- Create a replicated table to ensure we handle that case correctly
 -- with batching
-SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, servers => '{ "server_1", "server_2", "server_3" }');
+SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, data_nodes => '{ "data_node_1", "data_node_2", "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -1802,8 +1802,8 @@ ORDER BY time;
 (0 rows)
 
 -- INSERT enough data to stretch across multiple batches per
--- server. Also return a system column. Although we write tuples to
--- multiple servers, the returned tuple should only be the ones in the
+-- data node. Also return a system column. Although we write tuples to
+-- multiple data nodes, the returned tuple should only be the ones in the
 -- original insert statement (without the replica tuples).
 WITH result AS (
      INSERT INTO twodim VALUES
@@ -1861,9 +1861,9 @@ INSERT INTO twodim DEFAULT VALUES;
 --------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.twodim
-   Servers: server_1, server_2, server_3
+   Data nodes: data_node_1, data_node_2, data_node_3
    ->  Insert on public.twodim
-         ->  Custom Scan (ServerDispatch)
+         ->  Custom Scan (DataNodeDispatch)
                Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
                Batch size: 1
                Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
@@ -1880,8 +1880,8 @@ SET timescaledb.max_insert_batch_size=4;
 --
 -- Execute and filter mentioned server name in the error message.
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_server_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
-ERROR:  [server_x]: new row for relation "_hyper_7_22_dist_chunk" violates check constraint "twodim_Color_check"
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
+ERROR:  [data_node_x]: new row for relation "_hyper_7_22_dist_chunk" violates check constraint "twodim_Color_check"
 \set ON_ERROR_STOP 1
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
 -- First EXPLAIN with batching turned on.
@@ -1893,9 +1893,9 @@ INSERT INTO twodim VALUES
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.twodim
-   Servers: server_1, server_2, server_3
+   Data nodes: data_node_1, data_node_2, data_node_3
    ->  Insert on public.twodim
-         ->  Custom Scan (ServerDispatch)
+         ->  Custom Scan (DataNodeDispatch)
                Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
                Batch size: 4
                Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3), ..., ($10, $11, $12)
@@ -1915,7 +1915,7 @@ INSERT INTO twodim VALUES
 ----------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.twodim
-   Servers: server_1, server_2, server_3
+   Data nodes: data_node_1, data_node_2, data_node_3
    Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
    ->  Insert on public.twodim
          ->  Custom Scan (ChunkDispatch)
@@ -1964,16 +1964,16 @@ SELECT count(*) FROM twodim;
     23
 (1 row)
 
--- Show distribution across servers
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+-- Show distribution across data nodes
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT * FROM twodim
 ORDER BY time
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |Color|temp
 ----------------------------+-----+----
 Wed Feb 01 06:01:00 2017 PST|    1| 1.1
@@ -1991,19 +1991,19 @@ Sun Feb 10 10:11:00 2019 PST|   11|22.1
 (12 rows)
 
 
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT count(*) FROM twodim
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 count
 -----
    12
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT * FROM twodim
 ORDER BY time
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |Color|temp
 ----------------------------+-----+----
 Wed Feb 01 06:01:00 2017 PST|    1| 1.1
@@ -2028,19 +2028,19 @@ Sun Feb 10 17:11:00 2019 PST|    7| 3.2
 (19 rows)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT count(*) FROM twodim
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 count
 -----
    19
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT * FROM twodim
 ORDER BY time
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time                        |Color|temp
 ----------------------------+-----+----
 Fri Feb 02 08:01:00 2018 PST|    2| 1.3
@@ -2061,9 +2061,9 @@ Sun Feb 10 17:11:00 2019 PST|    7| 3.2
 (15 rows)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT count(*) FROM twodim
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 count
 -----
    15
@@ -2114,30 +2114,30 @@ SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 (1 row)
 
 -- Connect to data nodes to see if data is gone
-SELECT * FROM test.remote_exec('{ server_1, server_2, server_3 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 $$);
-NOTICE:  [server_1]: 
+NOTICE:  [data_node_1]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
-NOTICE:  [server_1]:
+NOTICE:  [data_node_1]:
 time                        |txn_id    |val|substring           
 ----------------------------+----------+---+--------------------
 Tue Jan 01 01:02:00 2019 PST|ts-1-11-20|  2|abcabcabcabcabcabcab
 (1 row)
 
 
-NOTICE:  [server_2]: 
+NOTICE:  [data_node_2]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
-NOTICE:  [server_2]:
+NOTICE:  [data_node_2]:
 time                        |txn_id    |val|substring           
 ----------------------------+----------+---+--------------------
 Tue Jan 01 01:02:00 2019 PST|ts-1-11-20|  2|abcabcabcabcabcabcab
 (1 row)
 
 
-NOTICE:  [server_3]: 
+NOTICE:  [data_node_3]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
-NOTICE:  [server_3]:
+NOTICE:  [data_node_3]:
 time|txn_id|val|substring
 ----+------+---+---------
 (0 rows)

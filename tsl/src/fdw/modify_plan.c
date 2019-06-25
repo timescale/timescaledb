@@ -54,7 +54,7 @@ get_update_attrs(RangeTblEntry *rte)
 }
 
 static List *
-get_chunk_servers(Oid relid)
+get_chunk_data_nodes(Oid relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(relid, 0, false);
 	List *serveroids = NIL;
@@ -63,9 +63,9 @@ get_chunk_servers(Oid relid)
 	if (NULL == chunk)
 		return NIL;
 
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		ChunkServer *cs = lfirst(lc);
+		ChunkDataNode *cs = lfirst(lc);
 
 		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
 	}
@@ -77,7 +77,7 @@ get_chunk_servers(Oid relid)
  * Plan INSERT, UPDATE, and DELETE.
  *
  * The main task of this function is to generate (deparse) the SQL statement
- * for the corresponding tables on remote servers.
+ * for the corresponding tables on data nodes.
  *
  * If the planning involves a hypertable, the function is called differently
  * depending on the command:
@@ -86,10 +86,10 @@ get_chunk_servers(Oid relid)
  * result relation is the hypertable root relation. This is due to
  * TimescaleDBs unique INSERT path. We'd like to plan the INSERT as if it
  * would happen on the root of the hypertable. This is useful because INSERTs
- * should occur via the top-level hypertables on the remote servers
+ * should occur via the top-level hypertables on the data nodes
  * (preferrably batched), and not once per individual remote chunk
- * (inefficient and won't go through the standard INSERT path on the remote
- * server).
+ * (inefficient and won't go through the standard INSERT path on the data
+ * node).
  *
  * 2. UPDATE and DELETE - called once per chunk and the given result relation
  * is the chunk relation.
@@ -117,7 +117,7 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 	List *returning_list = NIL;
 	List *retrieved_attrs = NIL;
 	List *target_attrs = NIL;
-	List *servers = NIL;
+	List *data_nodes = NIL;
 	bool do_nothing = false;
 
 	initStringInfo(&sql);
@@ -177,11 +177,11 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 							 target_attrs,
 							 returning_list,
 							 &retrieved_attrs);
-			servers = get_chunk_servers(rel->rd_id);
+			data_nodes = get_chunk_data_nodes(rel->rd_id);
 			break;
 		case CMD_DELETE:
 			deparseDeleteSql(&sql, rte, result_relation, rel, returning_list, &retrieved_attrs);
-			servers = get_chunk_servers(rel->rd_id);
+			data_nodes = get_chunk_data_nodes(rel->rd_id);
 			break;
 		default:
 			elog(ERROR, "unexpected operation: %d", (int) operation);
@@ -198,5 +198,5 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 					  target_attrs,
 					  makeInteger((retrieved_attrs != NIL)),
 					  retrieved_attrs,
-					  servers);
+					  data_nodes);
 }

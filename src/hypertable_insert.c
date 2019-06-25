@@ -56,7 +56,7 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 		 * Find all ChunkDispatchState subnodes and give them access to the
 		 * ModifyTableState node. Note that ChunkDispatchState could either be
 		 * a direct subnode or, in case of remote insert, a child of a
-		 * ServerDispatchState subnode.
+		 * DataNodeDispatchState subnode.
 		 */
 		for (i = 0; i < mtstate->mt_nplans; i++)
 		{
@@ -117,7 +117,7 @@ hypertable_insert_explain(CustomScanState *node, List *ancestors, ExplainState *
 
 		if (es->verbose)
 		{
-			List *server_names = NIL;
+			List *node_names = NIL;
 			ListCell *lc;
 
 			appendStringInfo(es->str,
@@ -129,10 +129,10 @@ hypertable_insert_explain(CustomScanState *node, List *ancestors, ExplainState *
 			{
 				ForeignServer *server = GetForeignServer(lfirst_oid(lc));
 
-				server_names = lappend(server_names, server->servername);
+				node_names = lappend(node_names, server->servername);
 			}
 
-			ExplainPropertyList("Servers", server_names, es);
+			ExplainPropertyList("Data nodes", node_names, es);
 		}
 		else
 			appendStringInfo(es->str, " %s\n", quote_identifier(relname));
@@ -175,12 +175,12 @@ hypertable_insert_state_create(CustomScan *cscan)
 	state->mt->arbiterIndexes = linitial(cscan->custom_private);
 
 	/*
-	 * Get the list of servers to insert on.
+	 * Get the list of data nodes to insert on.
 	 */
 	state->serveroids = lsecond(cscan->custom_private);
 
 	/*
-	 * Get the FDW routine for the first server. It should be the same for
+	 * Get the FDW routine for the first data node. It should be the same for
 	 * all of them
 	 */
 	if (NIL != state->serveroids)
@@ -218,7 +218,7 @@ plan_remote_modify(PlannerInfo *root, HypertableInsertPath *hipath, ModifyTable 
 
 	/* Iterate all subplans / result relations to check which ones are inserts
 	 * into hypertables. In case we find a remote hypertable insert, we either
-	 * have to plan it using the FDW or, in case of server dispatching, we
+	 * have to plan it using the FDW or, in case of data node dispatching, we
 	 * just need to mark the plan as "direct" to let ModifyTable know it
 	 * should not invoke the regular FDW modify API. */
 	foreach (lc, mt->resultRelations)
@@ -226,19 +226,19 @@ plan_remote_modify(PlannerInfo *root, HypertableInsertPath *hipath, ModifyTable 
 		Index rti = lfirst_int(lc);
 		RangeTblEntry *rte = planner_rt_fetch(rti, root);
 		List *fdwprivate = NIL;
-		bool is_server_dispatch = bms_is_member(i, hipath->server_dispatch_plans);
+		bool is_data_node_dispatch = bms_is_member(i, hipath->data_node_dispatch_plans);
 
-		/* If server batching is supported, we won't actually use the FDW
-		 * direct modify API (everything is done in ServerDispatch), but we
+		/* If data node batching is supported, we won't actually use the FDW
+		 * direct modify API (everything is done in DataNodeDispatch), but we
 		 * need to trick ModifyTable to believe we're doing direct modify so
 		 * that it doesn't invoke the non-direct FDW API for inserts. Instead,
 		 * it should handle only returning projections as if it was a direct
 		 * modify. We do this by adding the result relation's plan to
 		 * fdwDirectModifyPlans. See ExecModifyTable for more details. */
-		if (is_server_dispatch)
+		if (is_data_node_dispatch)
 			direct_modify_plans = bms_add_member(direct_modify_plans, i);
 
-		if (!is_server_dispatch && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
+		if (!is_data_node_dispatch && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
 			ts_is_hypertable(rte->relid))
 			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i);
 		else
@@ -302,8 +302,8 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 
 	if (NIL != hipath->serveroids)
 	{
-		/* Get the foreign data wrapper routines for the first server. Should be
-		 * the same for all servers. */
+		/* Get the foreign data wrapper routines for the first data node. Should be
+		 * the same for all data nodes. */
 		Oid serverid = linitial_oid(hipath->serveroids);
 
 		fdwroutine = GetFdwRoutineByServerId(serverid);
@@ -341,7 +341,7 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * we still need the original list in case that plan
 	 * gets reused.
 	 *
-	 * We also pass on the servers to insert on.
+	 * We also pass on the data nodes to insert on.
 	 */
 	cscan->custom_private = list_make2(mt->arbiterIndexes, hipath->serveroids);
 
@@ -360,7 +360,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc_path, *lc_rel;
 	List *subpaths = NIL;
-	Bitmapset *server_dispatch_plans = NULL;
+	Bitmapset *data_node_dispatch_plans = NULL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
 	int i = 0;
@@ -387,11 +387,11 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 
 			if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
 			{
-				/* Remember that this will become a server dispatch plan. We
+				/* Remember that this will become a data node dispatch plan. We
 				 * need to know later whether or not to plan this using the
 				 * FDW API. */
-				server_dispatch_plans = bms_add_member(server_dispatch_plans, i);
-				subpath = ts_cm_functions->server_dispatch_path_create(root, mtpath, rti, i);
+				data_node_dispatch_plans = bms_add_member(data_node_dispatch_plans, i);
+				subpath = ts_cm_functions->data_node_dispatch_path_create(root, mtpath, rti, i);
 			}
 			else
 				subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
@@ -413,8 +413,8 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->cpath.path.pathtype = T_CustomScan;
 	hipath->cpath.custom_paths = list_make1(mtpath);
 	hipath->cpath.methods = &hypertable_insert_path_methods;
-	hipath->server_dispatch_plans = server_dispatch_plans;
-	hipath->serveroids = ts_hypertable_get_available_server_oids(ht);
+	hipath->data_node_dispatch_plans = data_node_dispatch_plans;
+	hipath->serveroids = ts_hypertable_get_available_data_node_server_oids(ht);
 	path = &hipath->cpath.path;
 	mtpath->subpaths = subpaths;
 

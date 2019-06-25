@@ -18,17 +18,17 @@
 #include "chunk.h"
 
 static void
-chunk_server_insert_relation(Relation rel, int32 chunk_id, int32 server_chunk_id, Name server_name)
+chunk_data_node_insert_relation(Relation rel, int32 chunk_id, int32 node_chunk_id, Name node_name)
 {
 	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_chunk_server];
-	bool nulls[Natts_chunk_server] = { false };
+	Datum values[Natts_chunk_data_node];
+	bool nulls[Natts_chunk_data_node] = { false };
 	CatalogSecurityContext sec_ctx;
 
-	values[AttrNumberGetAttrOffset(Anum_chunk_server_chunk_id)] = Int32GetDatum(chunk_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_server_server_chunk_id)] =
-		Int32GetDatum(server_chunk_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_server_server_name)] = NameGetDatum(server_name);
+	values[AttrNumberGetAttrOffset(Anum_chunk_data_node_chunk_id)] = Int32GetDatum(chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_data_node_node_chunk_id)] =
+		Int32GetDatum(node_chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_data_node_node_name)] = NameGetDatum(node_name);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -36,57 +36,55 @@ chunk_server_insert_relation(Relation rel, int32 chunk_id, int32 server_chunk_id
 }
 
 static void
-chunk_server_insert_internal(int32 chunk_id, int32 server_chunk_id, Name server_name)
+chunk_data_node_insert_internal(int32 chunk_id, int32 node_chunk_id, Name node_name)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
-	rel = heap_open(catalog->tables[CHUNK_SERVER].id, RowExclusiveLock);
+	rel = heap_open(catalog->tables[CHUNK_DATA_NODE].id, RowExclusiveLock);
 
-	chunk_server_insert_relation(rel, chunk_id, server_chunk_id, server_name);
+	chunk_data_node_insert_relation(rel, chunk_id, node_chunk_id, node_name);
 
 	heap_close(rel, RowExclusiveLock);
 }
 
 void
-ts_chunk_server_insert(ChunkServer *server)
+ts_chunk_data_node_insert(ChunkDataNode *node)
 {
-	chunk_server_insert_internal(server->fd.chunk_id,
-								 server->fd.server_chunk_id,
-								 &server->fd.server_name);
+	chunk_data_node_insert_internal(node->fd.chunk_id, node->fd.node_chunk_id, &node->fd.node_name);
 }
 
 void
-ts_chunk_server_insert_multi(List *chunk_servers)
+ts_chunk_data_node_insert_multi(List *chunk_data_nodes)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	ListCell *lc;
 
-	rel = heap_open(catalog->tables[CHUNK_SERVER].id, RowExclusiveLock);
+	rel = heap_open(catalog->tables[CHUNK_DATA_NODE].id, RowExclusiveLock);
 
-	foreach (lc, chunk_servers)
+	foreach (lc, chunk_data_nodes)
 	{
-		ChunkServer *server = lfirst(lc);
+		ChunkDataNode *node = lfirst(lc);
 
-		chunk_server_insert_relation(rel,
-									 server->fd.chunk_id,
-									 server->fd.server_chunk_id,
-									 &server->fd.server_name);
+		chunk_data_node_insert_relation(rel,
+										node->fd.chunk_id,
+										node->fd.node_chunk_id,
+										&node->fd.node_name);
 	}
 
 	heap_close(rel, RowExclusiveLock);
 }
 
 static int
-chunk_server_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
-								 tuple_found_func on_tuple_found, void *scandata, int limit,
-								 LOCKMODE lock, MemoryContext mctx)
+chunk_data_node_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
+									tuple_found_func on_tuple_found, void *scandata, int limit,
+									LOCKMODE lock, MemoryContext mctx)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
-		.table = catalog->tables[CHUNK_SERVER].id,
-		.index = catalog_get_index(catalog, CHUNK_SERVER, indexid),
+		.table = catalog->tables[CHUNK_DATA_NODE].id,
+		.index = catalog_get_index(catalog, CHUNK_DATA_NODE, indexid),
 		.nkeys = num_scankeys,
 		.scankey = scankey,
 		.data = scandata,
@@ -101,113 +99,113 @@ chunk_server_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int ind
 }
 
 static ScanTupleResult
-chunk_server_tuple_found(TupleInfo *ti, void *data)
+chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 {
-	List **servers = data;
-	Form_chunk_server form = (Form_chunk_server) GETSTRUCT(ti->tuple);
-	ChunkServer *chunk_server;
-	ForeignServer *foreign_server = GetForeignServerByName(NameStr(form->server_name), false);
+	List **nodes = data;
+	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(ti->tuple);
+	ChunkDataNode *chunk_data_node;
+	ForeignServer *foreign_server = GetForeignServerByName(NameStr(form->node_name), false);
 	MemoryContext old;
 
 	old = MemoryContextSwitchTo(ti->mctx);
-	chunk_server = palloc(sizeof(ChunkServer));
-	memcpy(&chunk_server->fd, form, sizeof(FormData_chunk_server));
-	chunk_server->foreign_server_oid = foreign_server->serverid;
-	*servers = lappend(*servers, chunk_server);
+	chunk_data_node = palloc(sizeof(ChunkDataNode));
+	memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
+	chunk_data_node->foreign_server_oid = foreign_server->serverid;
+	*nodes = lappend(*nodes, chunk_data_node);
 	MemoryContextSwitchTo(old);
 
 	return SCAN_CONTINUE;
 }
 
 static int
-ts_chunk_server_scan_by_chunk_id_and_server_internal(int32 chunk_id, const char *servername,
-													 tuple_found_func tuple_found, void *data,
-													 LOCKMODE lockmode, MemoryContext mctx)
+ts_chunk_data_node_scan_by_chunk_id_and_node_internal(int32 chunk_id, const char *node_name,
+													  tuple_found_func tuple_found, void *data,
+													  LOCKMODE lockmode, MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
 	int nkeys = 0;
 
 	ScanKeyInit(&scankey[nkeys++],
-				Anum_chunk_server_chunk_id_server_name_idx_chunk_id,
+				Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk_id));
 
-	if (NULL != servername)
+	if (NULL != node_name)
 		ScanKeyInit(&scankey[nkeys++],
-					Anum_chunk_server_chunk_id_server_name_idx_server_name,
+					Anum_chunk_data_node_chunk_id_node_name_idx_node_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
-					DirectFunctionCall1(namein, CStringGetDatum(servername)));
+					DirectFunctionCall1(namein, CStringGetDatum(node_name)));
 
-	return chunk_server_scan_limit_internal(scankey,
-											nkeys,
-											CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
-											tuple_found,
-											data,
-											0,
-											lockmode,
-											mctx);
+	return chunk_data_node_scan_limit_internal(scankey,
+											   nkeys,
+											   CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX,
+											   tuple_found,
+											   data,
+											   0,
+											   lockmode,
+											   mctx);
 }
 
 static int
-ts_chunk_server_scan_by_server_internal(const char *servername, tuple_found_func tuple_found,
-										void *data, LOCKMODE lockmode, MemoryContext mctx)
+ts_chunk_data_node_scan_by_node_internal(const char *node_name, tuple_found_func tuple_found,
+										 void *data, LOCKMODE lockmode, MemoryContext mctx)
 {
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
-				Anum_chunk_server_server_name,
+				Anum_chunk_data_node_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(servername)));
+				DirectFunctionCall1(namein, CStringGetDatum(node_name)));
 
-	return chunk_server_scan_limit_internal(scankey,
-											1,
-											INVALID_INDEXID,
-											tuple_found,
-											data,
-											0,
-											lockmode,
-											mctx);
+	return chunk_data_node_scan_limit_internal(scankey,
+											   1,
+											   INVALID_INDEXID,
+											   tuple_found,
+											   data,
+											   0,
+											   lockmode,
+											   mctx);
 }
 
 List *
-ts_chunk_server_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
+ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 {
-	List *chunk_servers = NIL;
+	List *chunk_data_nodes = NIL;
 
-	ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
-														 NULL,
-														 chunk_server_tuple_found,
-														 &chunk_servers,
-														 AccessShareLock,
-														 mctx);
-	return chunk_servers;
+	ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
+														  NULL,
+														  chunk_data_node_tuple_found,
+														  &chunk_data_nodes,
+														  AccessShareLock,
+														  mctx);
+	return chunk_data_nodes;
 }
 
-ChunkServer *
-ts_chunk_server_scan_by_chunk_id_and_servername(int32 chunk_id, const char *servername,
-												MemoryContext mctx)
+ChunkDataNode *
+ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
+												  MemoryContext mctx)
 
 {
-	List *chunk_servers = NIL;
+	List *chunk_data_nodes = NIL;
 
-	ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
-														 servername,
-														 chunk_server_tuple_found,
-														 &chunk_servers,
-														 AccessShareLock,
-														 mctx);
-	Assert(list_length(chunk_servers) <= 1);
+	ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
+														  node_name,
+														  chunk_data_node_tuple_found,
+														  &chunk_data_nodes,
+														  AccessShareLock,
+														  mctx);
+	Assert(list_length(chunk_data_nodes) <= 1);
 
-	if (chunk_servers == NIL)
+	if (chunk_data_nodes == NIL)
 		return NULL;
-	return linitial(chunk_servers);
+	return linitial(chunk_data_nodes);
 }
 
 static ScanTupleResult
-chunk_server_tuple_delete(TupleInfo *ti, void *data)
+chunk_data_node_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
 
@@ -219,40 +217,40 @@ chunk_server_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_chunk_server_delete_by_chunk_id(int32 chunk_id)
+ts_chunk_data_node_delete_by_chunk_id(int32 chunk_id)
 {
-	return ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
-																NULL,
-																chunk_server_tuple_delete,
-																NULL,
-																RowExclusiveLock,
-																CurrentMemoryContext);
+	return ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
+																 NULL,
+																 chunk_data_node_tuple_delete,
+																 NULL,
+																 RowExclusiveLock,
+																 CurrentMemoryContext);
 }
 
 TSDLLEXPORT int
-ts_chunk_server_delete_by_chunk_id_and_server_name(int32 chunk_id, const char *server_name)
+ts_chunk_data_node_delete_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name)
 {
-	return ts_chunk_server_scan_by_chunk_id_and_server_internal(chunk_id,
-																server_name,
-																chunk_server_tuple_delete,
-																NULL,
-																RowExclusiveLock,
-																CurrentMemoryContext);
+	return ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
+																 node_name,
+																 chunk_data_node_tuple_delete,
+																 NULL,
+																 RowExclusiveLock,
+																 CurrentMemoryContext);
 }
 
 int
-ts_chunk_server_delete_by_servername(const char *servername)
+ts_chunk_data_node_delete_by_node_name(const char *node_name)
 {
-	return ts_chunk_server_scan_by_server_internal(servername,
-												   chunk_server_tuple_delete,
-												   NULL,
-												   RowExclusiveLock,
-												   CurrentMemoryContext);
+	return ts_chunk_data_node_scan_by_node_internal(node_name,
+													chunk_data_node_tuple_delete,
+													NULL,
+													RowExclusiveLock,
+													CurrentMemoryContext);
 }
 
 TSDLLEXPORT List *
-ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, int32 hypertable_id,
-													 MemoryContext mctx)
+ts_chunk_data_node_scan_by_node_name_and_hypertable_id(const char *node_name, int32 hypertable_id,
+													   MemoryContext mctx)
 {
 	List *results = NIL;
 	ListCell *lc;
@@ -265,10 +263,10 @@ ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, in
 	foreach (lc, chunk_ids)
 	{
 		int32 chunk_id = lfirst_int(lc);
-		ChunkServer *cs =
-			ts_chunk_server_scan_by_chunk_id_and_servername(chunk_id, server_name, mctx);
-		if (cs != NULL)
-			results = lappend(results, cs);
+		ChunkDataNode *cdn =
+			ts_chunk_data_node_scan_by_chunk_id_and_node_name(chunk_id, node_name, mctx);
+		if (cdn != NULL)
+			results = lappend(results, cdn);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -276,14 +274,15 @@ ts_chunk_server_scan_by_servername_and_hypertable_id(const char *server_name, in
 }
 
 TSDLLEXPORT bool
-ts_chunk_server_contains_non_replicated_chunks(List *chunk_servers)
+ts_chunk_data_node_contains_non_replicated_chunks(List *chunk_data_nodes)
 {
 	ListCell *lc;
 
-	foreach (lc, chunk_servers)
+	foreach (lc, chunk_data_nodes)
 	{
-		ChunkServer *cs = lfirst(lc);
-		List *replicas = ts_chunk_server_scan_by_chunk_id(cs->fd.chunk_id, CurrentMemoryContext);
+		ChunkDataNode *cdn = lfirst(lc);
+		List *replicas =
+			ts_chunk_data_node_scan_by_chunk_id(cdn->fd.chunk_id, CurrentMemoryContext);
 		if (list_length(replicas) < 2)
 			return true;
 	}
@@ -292,7 +291,7 @@ ts_chunk_server_contains_non_replicated_chunks(List *chunk_servers)
 }
 
 TSDLLEXPORT void
-ts_chunk_server_update_foreign_table_server(Oid relid, Oid new_server_id)
+ts_chunk_data_node_update_foreign_table_server(Oid relid, Oid new_server_id)
 {
 	Relation ftrel;
 	HeapTuple tuple;
@@ -347,10 +346,10 @@ ts_chunk_server_update_foreign_table_server(Oid relid, Oid new_server_id)
 }
 
 TSDLLEXPORT void
-ts_chunk_server_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id)
+ts_chunk_data_node_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id)
 {
 	ListCell *lc;
-	ChunkServer *new_server = NULL;
+	ChunkDataNode *new_node = NULL;
 	Chunk *chunk = ts_chunk_get_by_id(chunk_id, 0, true);
 	ForeignTable *foreign_table = NULL;
 
@@ -361,14 +360,14 @@ ts_chunk_server_update_foreign_table_server_if_needed(int32 chunk_id, Oid existi
 	if (existing_server_id != foreign_table->serverid)
 		return;
 
-	Assert(list_length(chunk->servers) > 1);
+	Assert(list_length(chunk->data_nodes) > 1);
 
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		new_server = lfirst(lc);
-		if (new_server->foreign_server_oid != existing_server_id)
+		new_node = lfirst(lc);
+		if (new_node->foreign_server_oid != existing_server_id)
 			break;
 	}
-	Assert(new_server != NULL);
-	ts_chunk_server_update_foreign_table_server(chunk->table_id, new_server->foreign_server_oid);
+	Assert(new_node != NULL);
+	ts_chunk_data_node_update_foreign_table_server(chunk->table_id, new_node->foreign_server_oid);
 }

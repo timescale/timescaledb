@@ -1,11 +1,11 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
--- Need to be super user to create extension and add servers
+-- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 -- Need explicit password for non-super users to connect
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
@@ -13,44 +13,44 @@ GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USE
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS server_1;
-DROP DATABASE IF EXISTS server_2;
-DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
-CREATE DATABASE server_1;
-CREATE DATABASE server_2;
-CREATE DATABASE server_3;
-\c server_1
+CREATE DATABASE data_node_1;
+CREATE DATABASE data_node_2;
+CREATE DATABASE data_node_3;
+\c data_node_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_2
+\c data_node_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-\c server_3
+\c data_node_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
--- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_1" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+-- Add data nodes using the TimescaleDB data node management API
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_1" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_1 | localhost | 15432 | data_node_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_2" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_2" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_2 | localhost | 15432 | data_node_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_3', database => 'server_3', password => 'pass', if_not_exists => true);
-NOTICE:  remote server database "server_3" already exists, skipping
- server_name |   host    | port  | database |       username       |   server_username    | created 
--------------+-----------+-------+----------+----------------------+----------------------+---------
- server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', password => 'pass', if_not_exists => true);
+NOTICE:  remote node database "data_node_3" already exists, skipping
+  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
+-------------+-----------+-------+-------------+----------------------+----------------------+---------
+ data_node_3 | localhost | 15432 | data_node_3 | default_cluster_user | default_cluster_user | t
 (1 row)
 
 -- Start out testing text copy code
@@ -153,49 +153,49 @@ SELECT * FROM _timescaledb_catalog.chunk;
  19 |             1 | _timescaledb_internal | _hyper_1_19_dist_chunk
 (16 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_3
-        1 |               1 | server_1
-        2 |               2 | server_3
-        2 |               2 | server_1
-        3 |               3 | server_1
-        3 |               1 | server_2
-        4 |               4 | server_1
-        4 |               2 | server_2
-        5 |               5 | server_1
-        5 |               3 | server_2
-        6 |               6 | server_1
-        6 |               4 | server_2
-        7 |               7 | server_1
-        7 |               5 | server_2
-        8 |               8 | server_1
-        8 |               6 | server_2
-       12 |              11 | server_1
-       12 |               8 | server_2
-       13 |              12 | server_1
-       13 |               9 | server_2
-       14 |              13 | server_1
-       14 |              10 | server_2
-       15 |              14 | server_1
-       15 |              11 | server_2
-       16 |              15 | server_1
-       16 |              12 | server_2
-       17 |              16 | server_1
-       17 |              13 | server_2
-       18 |              17 | server_1
-       18 |              14 | server_2
-       19 |               6 | server_3
-       19 |              18 | server_1
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_3
+        1 |             1 | data_node_1
+        2 |             2 | data_node_3
+        2 |             2 | data_node_1
+        3 |             3 | data_node_1
+        3 |             1 | data_node_2
+        4 |             4 | data_node_1
+        4 |             2 | data_node_2
+        5 |             5 | data_node_1
+        5 |             3 | data_node_2
+        6 |             6 | data_node_1
+        6 |             4 | data_node_2
+        7 |             7 | data_node_1
+        7 |             5 | data_node_2
+        8 |             8 | data_node_1
+        8 |             6 | data_node_2
+       12 |            11 | data_node_1
+       12 |             8 | data_node_2
+       13 |            12 | data_node_1
+       13 |             9 | data_node_2
+       14 |            13 | data_node_1
+       14 |            10 | data_node_2
+       15 |            14 | data_node_1
+       15 |            11 | data_node_2
+       16 |            15 | data_node_1
+       16 |            12 | data_node_2
+       17 |            16 | data_node_1
+       17 |            13 | data_node_2
+       18 |            17 | data_node_1
+       18 |            14 | data_node_2
+       19 |             6 | data_node_3
+       19 |            18 | data_node_1
 (32 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable_server;
- hypertable_id | server_hypertable_id | server_name | block_chunks 
----------------+----------------------+-------------+--------------
-             1 |                    1 | server_1    | f
-             1 |                    1 | server_2    | f
-             1 |                    1 | server_3    | f
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             1 |                  1 | data_node_1 | f
+             1 |                  1 | data_node_2 | f
+             1 |                  1 | data_node_3 | f
 (3 rows)
 
 select * from show_chunks('"+ri(k33_'')"');
@@ -219,7 +219,7 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_19_dist_chunk
 (16 rows)
 
-\c server_1
+\c data_node_1
 SELECT * FROM "+ri(k33_')";
   thyme  |         ))_          |         flavor         |  pH   | optional 
 ---------+----------------------+------------------------+-------+----------
@@ -264,7 +264,7 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_19_dist_chunk
 (16 rows)
 
-\c server_2
+\c data_node_2
 SELECT * FROM "+ri(k33_')";
   thyme  |         ))_          |         flavor         |  pH   | optional 
 ---------+----------------------+------------------------+-------+----------
@@ -303,7 +303,7 @@ select * from show_chunks('"+ri(k33_'')"');
  _timescaledb_internal._hyper_1_18_dist_chunk
 (13 rows)
 
-\c server_3
+\c data_node_3
 SELECT * FROM "+ri(k33_')";
  thyme | ))_  |   flavor   |  pH  | optional 
 -------+------+------------+------+----------
@@ -323,27 +323,27 @@ select * from show_chunks('"+ri(k33_'')"');
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 DROP TABLE "+ri(k33_')" CASCADE;
-SELECT * FROM delete_server('server_1', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server server_1
- delete_server 
----------------
+SELECT * FROM delete_data_node('data_node_1', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
+ delete_data_node 
+------------------
  t
 (1 row)
 
-SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server server_2
- delete_server 
----------------
+SELECT * FROM delete_data_node('data_node_2', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
+ delete_data_node 
+------------------
  t
 (1 row)
 
-SELECT * FROM delete_server('server_3', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server server_3
- delete_server 
----------------
+SELECT * FROM delete_data_node('data_node_3', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
+ delete_data_node 
+------------------
  t
 (1 row)
 
-DROP DATABASE server_1;
-DROP DATABASE server_2;
-DROP DATABASE server_3;
+DROP DATABASE data_node_1;
+DROP DATABASE data_node_2;
+DROP DATABASE data_node_3;

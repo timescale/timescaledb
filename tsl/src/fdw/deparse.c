@@ -17,7 +17,7 @@
  *		  Query deparser for postgres_fdw
  *
  * This file includes functions that examine query WHERE clauses to see
- * whether they're safe to send to the remote server for execution, as
+ * whether they're safe to send to the data node for execution, as
  * well as functions to construct the query text to be sent.  The latter
  * functionality is annoyingly duplicative of ruleutils.c, but there are
  * enough special considerations that it seems best to keep this separate.
@@ -28,11 +28,11 @@
  * and thus we need schema-qualify all and only names outside pg_catalog.
  *
  * We do not consider that it is ever safe to send COLLATE expressions to
- * the remote server: it might not have the same collation names we do.
+ * the data node: it might not have the same collation names we do.
  * (Later we might consider it safe to send COLLATE "C", but even that would
- * fail on old remote servers.)  An expression is considered safe to send
+ * fail on old data nodes.)  An expression is considered safe to send
  * only if all operator/function input collations used in it are traceable to
- * Var(s) of the foreign table.  That implies that if the remote server gets
+ * Var(s) of the foreign table.  That implies that if the data node gets
  * a different answer than we do, the foreign table's columns are not marked
  * with collations that match the remote table's columns, which we can
  * consider to be user error.
@@ -127,7 +127,7 @@ typedef struct deparse_expr_cxt
 							 * a base relation. */
 	StringInfo buf;			/* output buffer to append to */
 	List **params_list;		/* exprs that will become remote Params */
-	ServerChunkAssignment *sca;
+	DataNodeChunkAssignment *sca;
 } deparse_expr_cxt;
 
 #define REL_ALIAS_PREFIX "r"
@@ -138,7 +138,7 @@ typedef struct deparse_expr_cxt
 
 /*
  * Functions to determine whether an expression can be evaluated safely on
- * remote server.
+ * data node.
  */
 static bool foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *outer_cxt);
 static char *deparse_type_name(Oid type_oid, int32 typemod);
@@ -327,7 +327,7 @@ foreign_expr_contains_mutable_functions(Node *clause)
 }
 
 /*
- * Returns true if given expr is safe to evaluate on the foreign server.
+ * Returns true if given expr is safe to evaluate on the data node.
  */
 bool
 is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
@@ -374,7 +374,7 @@ is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 	if (foreign_expr_contains_mutable_functions((Node *) expr))
 		return false;
 
-	/* OK to evaluate on the remote server */
+	/* OK to evaluate on the data node */
 	return true;
 }
 
@@ -920,8 +920,8 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 }
 
 /*
- * Convert type OID + typmod info into a type name we can ship to the remote
- * server.  Someplace else had better have verified that this type name is
+ * Convert type OID + typmod info into a type name we can ship to the data
+ * node.  Someplace else had better have verified that this type name is
  * expected to be known on the remote end.
  *
  * This is almost just format_type_with_typemod(), except that if left to its
@@ -945,9 +945,9 @@ deparse_type_name(Oid type_oid, int32 typemod)
  * Build the targetlist for given relation to be deparsed as SELECT clause.
  *
  * The output targetlist contains the columns that need to be fetched from the
- * foreign server for the given relation.  If foreignrel is an upper relation,
+ * data node for the given relation.  If foreignrel is an upper relation,
  * then the output targetlist can also contain expressions to be evaluated on
- * foreign server.
+ * data node.
  */
 List *
 build_tlist_to_deparse(RelOptInfo *foreignrel)
@@ -985,7 +985,7 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
 /*
  * Deparse SELECT statement for given relation into buf.
  *
- * tlist contains the list of desired columns to be fetched from foreign server.
+ * tlist contains the list of desired columns to be fetched from data node.
  * For a base relation fpinfo->attrs_used is used to construct SELECT clause,
  * hence the tlist is ignored for a base relation.
  *
@@ -993,8 +993,8 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
  * (or, in the case of upper relations, into the HAVING clause).
  *
  * If params_list is not NULL, it receives a list of Params and other-relation
- * Vars used in the clauses; these values must be transmitted to the remote
- * server as parameter values.
+ * Vars used in the clauses; these values must be transmitted to the data
+ * node as parameter values.
  *
  * If params_list is NULL, we're generating the query for EXPLAIN purposes,
  * so Params and other-relation Vars should be replaced by dummy values.
@@ -1009,7 +1009,7 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
 void
 deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List *tlist,
 						List *remote_conds, List *pathkeys, bool is_subquery,
-						List **retrieved_attrs, List **params_list, ServerChunkAssignment *sca)
+						List **retrieved_attrs, List **params_list, DataNodeChunkAssignment *sca)
 {
 	deparse_expr_cxt context;
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
@@ -1109,8 +1109,8 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 	else if (tlist != NIL)
 	{
 		/*
-		 * For a join, hypertable-server or upper relation the input tlist gives the list of
-		 * columns required to be fetched from the foreign server.
+		 * For a join, hypertable-data node or upper relation the input tlist gives the list of
+		 * columns required to be fetched from the data node.
 		 */
 		deparseExplicitTargetList(tlist, false, retrieved_attrs, context);
 	}
@@ -1118,7 +1118,7 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 	{
 		/*
 		 * For a base relation fpinfo->attrs_used gives the list of columns
-		 * required to be fetched from the foreign server.
+		 * required to be fetched from the data node.
 		 */
 		RangeTblEntry *rte = planner_rt_fetch(foreignrel->relid, root);
 
@@ -1152,7 +1152,7 @@ deparseFromExpr(List *quals, deparse_expr_cxt *context)
 {
 	StringInfo buf = context->buf;
 	RelOptInfo *scanrel = context->scanrel;
-	/* Use alias if scan is on multiple rels, unless a per-server scan */
+	/* Use alias if scan is on multiple rels, unless a per-data node scan */
 	bool use_alias = bms_num_members(scanrel->relids) > 1 && context->sca == NULL;
 
 	/* For upper relations, scanrel must be either a joinrel or a baserel */
@@ -1323,7 +1323,7 @@ deparseLockingClause(deparse_expr_cxt *context)
 				 * For now, just ignore any [NO] KEY specification, since (a)
 				 * it's not clear what that means for a remote table that we
 				 * don't have complete information about, and (b) it wouldn't
-				 * work anyway on older remote servers.  Likewise, we don't
+				 * work anyway on older data nodes.  Likewise, we don't
 				 * worry about NOWAIT.
 				 */
 				switch (rc->strength)
@@ -1353,7 +1353,7 @@ static void
 append_chunk_exclusion_condition(deparse_expr_cxt *context, bool use_alias)
 {
 	StringInfo buf = context->buf;
-	ServerChunkAssignment *sca = context->sca;
+	DataNodeChunkAssignment *sca = context->sca;
 	RelOptInfo *scanrel = context->scanrel;
 	ListCell *lc;
 	bool first = true;
@@ -1841,11 +1841,11 @@ deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation
 	Bitmapset *attrs_used = NULL;
 
 	/* We currently do not handle triggers (trig_after_row == TRUE) given that
-	 * we know these triggers should exist also on remote servers and
+	 * we know these triggers should exist also on data nodes and
 	 * can/should be executed there. The only reason to handle triggers on the
 	 * frontend is to (1) more efficiently handle BEFORE triggers (executing
 	 * them on the frontend before sending tuples), or (2) have triggers that
-	 * do not exist on remote servers.
+	 * do not exist on data nodes.
 	 *
 	 * Note that, for a hypertable, trig_after_row is always true because of
 	 * the insert blocker trigger.
@@ -2010,7 +2010,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 
 		/*
 		 * The local name of the foreign table can not be recognized by the
-		 * foreign server and the table it references on foreign server might
+		 * data node and the table it references on data node might
 		 * have different column ordering or different columns than those
 		 * declared locally. Hence we have to deparse whole-row reference as
 		 * ROW(columns referenced locally). Construct this by deparsing a
@@ -2113,9 +2113,9 @@ deparseStringLiteral(StringInfo buf, const char *val)
 	const char *valptr;
 
 	/*
-	 * Rather than making assumptions about the remote server's value of
+	 * Rather than making assumptions about the data node's value of
 	 * standard_conforming_strings, always use E'foo' syntax if there are any
-	 * backslashes.  This will fail on remote servers before 8.1, but those
+	 * backslashes.  This will fail on data nodes before 8.1, but those
 	 * are long out of support.
 	 */
 	if (strchr(val, '\\') != NULL)
@@ -2211,7 +2211,7 @@ deparseVar(Var *node, deparse_expr_cxt *context)
 	int colno;
 
 	/* Qualify columns when multiple relations are involved, unless it is a
-	 * per-server scan. */
+	 * per-data node scan. */
 	bool qualify_col = (bms_num_members(relids) > 1 && context->sca == NULL);
 
 	/*

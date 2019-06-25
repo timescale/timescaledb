@@ -72,7 +72,7 @@ dist_util_set_id(Datum dist_id)
 			return false;
 		else
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_SERVERS_ASSIGNMENT_ALREADY_EXISTS),
+					(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
 					 (errmsg("database is already a member of a distributed database"))));
 	}
 
@@ -146,12 +146,12 @@ dist_util_is_frontend_session(void)
 Datum
 dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 {
-	char *server_name;
+	char *node_name;
 	FuncCallContext *funcctx;
 	PGresult *result;
 
 	Assert(!PG_ARGISNULL(0)); /* Strict function */
-	server_name = PG_GETARG_NAME(0)->data;
+	node_name = PG_GETARG_NAME(0)->data;
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -168,16 +168,16 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 							"that cannot accept type record")));
 
 		funcctx->user_fctx =
-			ts_dist_cmd_invoke_on_servers("SELECT * FROM "
-										  "timescaledb_information.hypertable_size_info;",
-										  list_make1((void *) server_name));
+			ts_dist_cmd_invoke_on_data_nodes("SELECT * FROM "
+											 "timescaledb_information.hypertable_size_info;",
+											 list_make1((void *) node_name));
 		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
-	result = ts_dist_cmd_get_server_result(funcctx->user_fctx, server_name);
+	result = ts_dist_cmd_get_data_node_result(funcctx->user_fctx, node_name);
 
 	if (funcctx->call_cntr < PQntuples((PGresult *) funcctx->user_fctx))
 	{

@@ -23,19 +23,19 @@ TS_FUNCTION_INFO_V1(ts_partialize_agg);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
 TS_FUNCTION_INFO_V1(continuous_agg_invalidation_trigger);
-TS_FUNCTION_INFO_V1(ts_server_add);
-TS_FUNCTION_INFO_V1(ts_server_delete);
-TS_FUNCTION_INFO_V1(ts_server_attach);
-TS_FUNCTION_INFO_V1(ts_server_ping);
-TS_FUNCTION_INFO_V1(ts_server_detach);
-TS_FUNCTION_INFO_V1(ts_server_block_new_chunks);
-TS_FUNCTION_INFO_V1(ts_server_allow_new_chunks);
-TS_FUNCTION_INFO_V1(ts_set_chunk_default_server);
+TS_FUNCTION_INFO_V1(ts_data_node_add);
+TS_FUNCTION_INFO_V1(ts_data_node_delete);
+TS_FUNCTION_INFO_V1(ts_data_node_attach);
+TS_FUNCTION_INFO_V1(ts_data_node_ping);
+TS_FUNCTION_INFO_V1(ts_data_node_detach);
+TS_FUNCTION_INFO_V1(ts_data_node_block_new_chunks);
+TS_FUNCTION_INFO_V1(ts_data_node_allow_new_chunks);
+TS_FUNCTION_INFO_V1(ts_set_chunk_default_data_node);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
-TS_FUNCTION_INFO_V1(ts_remote_txn_heal_server);
+TS_FUNCTION_INFO_V1(ts_remote_txn_heal_data_node);
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 TS_FUNCTION_INFO_V1(ts_dist_remove_id);
 TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
@@ -84,51 +84,51 @@ continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_server_add(PG_FUNCTION_ARGS)
+ts_data_node_add(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->add_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->add_data_node(fcinfo));
 }
 
 Datum
-ts_server_delete(PG_FUNCTION_ARGS)
+ts_data_node_delete(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->delete_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->delete_data_node(fcinfo));
 }
 
 Datum
-ts_server_attach(PG_FUNCTION_ARGS)
+ts_data_node_attach(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->attach_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->attach_data_node(fcinfo));
 }
 
 Datum
-ts_server_ping(PG_FUNCTION_ARGS)
+ts_data_node_ping(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->server_ping(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->data_node_ping(fcinfo));
 }
 
 Datum
-ts_server_detach(PG_FUNCTION_ARGS)
+ts_data_node_detach(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->detach_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->detach_data_node(fcinfo));
 }
 
 Datum
-ts_server_block_new_chunks(PG_FUNCTION_ARGS)
+ts_data_node_block_new_chunks(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->server_set_block_new_chunks(fcinfo, true));
+	PG_RETURN_DATUM(ts_cm_functions->data_node_set_block_new_chunks(fcinfo, true));
 }
 
 Datum
-ts_server_allow_new_chunks(PG_FUNCTION_ARGS)
+ts_data_node_allow_new_chunks(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->server_set_block_new_chunks(fcinfo, false));
+	PG_RETURN_DATUM(ts_cm_functions->data_node_set_block_new_chunks(fcinfo, false));
 }
 
 Datum
-ts_set_chunk_default_server(PG_FUNCTION_ARGS)
+ts_set_chunk_default_data_node(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_data_node(fcinfo));
 }
 
 Datum
@@ -156,9 +156,9 @@ ts_remote_txn_id_out(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_remote_txn_heal_server(PG_FUNCTION_ARGS)
+ts_remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_server(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_data_node(fcinfo));
 }
 
 Datum
@@ -295,14 +295,14 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 }
 
 static List *
-get_servername_list_default_fn(void)
+get_node_name_list_default_fn(void)
 {
 	error_no_default_fn_community();
 	return NIL;
 }
 
 static void
-hypertable_make_distributed_default_fn(Hypertable *ht, ArrayType *servers)
+hypertable_make_distributed_default_fn(Hypertable *ht, ArrayType *data_nodes)
 {
 	error_no_default_fn_community();
 }
@@ -354,14 +354,14 @@ empty_fn(PG_FUNCTION_ARGS)
 }
 
 static void
-create_chunk_on_servers_default(Chunk *chunk, Hypertable *ht)
+create_chunk_on_data_nodes_default(Chunk *chunk, Hypertable *ht)
 {
 	error_no_default_fn_community();
 }
 
 static Path *
-server_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
-									Index hypertable_rti, int subpath_index)
+data_node_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
+									   Index hypertable_rti, int subpath_index)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -389,7 +389,7 @@ set_distributed_peer_id_default(Datum d)
 }
 
 static Datum
-server_set_block_new_chunks_default(PG_FUNCTION_ARGS, bool block)
+data_node_set_block_new_chunks_default(PG_FUNCTION_ARGS, bool block)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -435,25 +435,25 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_drop_chunks_by_chunk_id = continuous_agg_drop_chunks_by_chunk_id_default,
 	.continuous_agg_trigfn = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
-	.add_server = error_no_default_fn_pg_community,
-	.delete_server = error_no_default_fn_pg_community,
-	.attach_server = error_no_default_fn_pg_community,
-	.server_ping = error_no_default_fn_pg_community,
-	.detach_server = error_no_default_fn_pg_community,
-	.server_set_block_new_chunks = server_set_block_new_chunks_default,
-	.set_chunk_default_server = error_no_default_fn_pg_community,
+	.add_data_node = error_no_default_fn_pg_community,
+	.delete_data_node = error_no_default_fn_pg_community,
+	.attach_data_node = error_no_default_fn_pg_community,
+	.data_node_ping = error_no_default_fn_pg_community,
+	.detach_data_node = error_no_default_fn_pg_community,
+	.data_node_set_block_new_chunks = data_node_set_block_new_chunks_default,
+	.set_chunk_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
-	.create_chunk_on_servers = create_chunk_on_servers_default,
-	.get_servername_list = get_servername_list_default_fn,
+	.create_chunk_on_data_nodes = create_chunk_on_data_nodes_default,
+	.get_node_name_list = get_node_name_list_default_fn,
 	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
 	.timescaledb_fdw_validator = empty_fn,
 	.cache_syscache_invalidate = cache_syscache_invalidate_default,
 	.remote_txn_id_in = error_no_default_fn_pg_community,
 	.remote_txn_id_out = error_no_default_fn_pg_community,
-	.remote_txn_heal_server = error_no_default_fn_pg_community,
-	.server_dispatch_path_create = server_dispatch_path_create_default,
+	.remote_txn_heal_data_node = error_no_default_fn_pg_community,
+	.data_node_dispatch_path_create = data_node_dispatch_path_create_default,
 	.distributed_copy = distributed_copy_default,
 	.set_distributed_id = set_distributed_id_default,
 	.set_distributed_peer_id = set_distributed_peer_id_default,

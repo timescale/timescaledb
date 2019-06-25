@@ -79,26 +79,26 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_trigfn;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
-	Datum (*add_server)(PG_FUNCTION_ARGS);
-	Datum (*delete_server)(PG_FUNCTION_ARGS);
-	Datum (*attach_server)(PG_FUNCTION_ARGS);
-	Datum (*server_ping)(PG_FUNCTION_ARGS);
-	Datum (*detach_server)(PG_FUNCTION_ARGS);
-	Datum (*server_set_block_new_chunks)(PG_FUNCTION_ARGS, bool block);
-	Datum (*set_chunk_default_server)(PG_FUNCTION_ARGS);
+	Datum (*add_data_node)(PG_FUNCTION_ARGS);
+	Datum (*delete_data_node)(PG_FUNCTION_ARGS);
+	Datum (*attach_data_node)(PG_FUNCTION_ARGS);
+	Datum (*data_node_ping)(PG_FUNCTION_ARGS);
+	Datum (*detach_data_node)(PG_FUNCTION_ARGS);
+	Datum (*data_node_set_block_new_chunks)(PG_FUNCTION_ARGS, bool block);
+	Datum (*set_chunk_default_data_node)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
-	List *(*get_servername_list)(void);
-	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *servers);
+	List *(*get_node_name_list)(void);
+	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *data_nodes);
 	Datum (*timescaledb_fdw_handler)(PG_FUNCTION_ARGS);
 	Datum (*timescaledb_fdw_validator)(PG_FUNCTION_ARGS);
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 	Datum (*remote_txn_id_in)(PG_FUNCTION_ARGS);
 	Datum (*remote_txn_id_out)(PG_FUNCTION_ARGS);
-	Datum (*remote_txn_heal_server)(PG_FUNCTION_ARGS);
-	void (*create_chunk_on_servers)(Chunk *chunk, Hypertable *ht);
-	Path *(*server_dispatch_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
-										 Index hypertable_rti, int subpath_index);
+	Datum (*remote_txn_heal_data_node)(PG_FUNCTION_ARGS);
+	void (*create_chunk_on_data_nodes)(Chunk *chunk, Hypertable *ht);
+	Path *(*data_node_dispatch_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
+											Index hypertable_rti, int subpath_index);
 	void (*distributed_copy)(const CopyStmt *stmt, uint64 *processed, Hypertable *ht,
 							 CopyState cstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);

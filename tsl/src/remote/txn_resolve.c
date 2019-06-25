@@ -31,10 +31,10 @@ remote_txn_resolution(Oid foreign_server, const RemoteTxnId *transaction_id)
 	return REMOTE_TXN_RESOLUTION_ABORT;
 }
 
-/* Resolve any unresolved 2-pc transaction on a remote server.
+/* Resolve any unresolved 2-pc transaction on a data node.
    Since the remote_txn log can be long, and most txn there
    will have been resolved, do not iterate that list.
-   Instead query the remote server for the list of unresolved txns
+   Instead query the data node for the list of unresolved txns
    via the pg_prepared_xacts view. Using that list, then check
    remote_txn. Use this as an opportunity to clean up remote_txn
    as well.
@@ -42,7 +42,7 @@ remote_txn_resolution(Oid foreign_server, const RemoteTxnId *transaction_id)
 #define GET_PREPARED_XACT_SQL "SELECT gid FROM pg_prepared_xacts"
 
 Datum
-remote_txn_heal_server(PG_FUNCTION_ARGS)
+remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 {
 	Oid foreign_server_oid = PG_GETARG_OID(0);
 	UserMapping *user = GetUserMapping(GetUserId(), foreign_server_oid);
@@ -64,7 +64,7 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 	 * This function cannot be called inside a transaction block since effects
 	 * cannot be rolled back
 	 */
-	PreventInTransactionBlock(true, "remote_txn_heal_server");
+	PreventInTransactionBlock(true, "remote_txn_heal_data_node");
 
 	res = remote_connection_query_ok_result(conn, GET_PREPARED_XACT_SQL);
 
@@ -110,7 +110,7 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 	 * Perform cleanup of all records if there are no unknown txns.
 	 */
 	if (list_length(unknown_txn_gid) == 0)
-		remote_txn_persistent_record_delete_for_server(foreign_server_oid);
+		remote_txn_persistent_record_delete_for_data_node(foreign_server_oid);
 
 	remote_connection_close(conn);
 	PG_RETURN_INT32(resolved);

@@ -85,12 +85,12 @@ get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
 	Path *path;
 
-	Assert(fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_SERVER);
+	Assert(fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE);
 
 	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE)
 	{
-		if (ts_guc_enable_per_server_queries)
-			server_scan_add_server_paths(root, baserel);
+		if (ts_guc_enable_per_data_node_queries)
+			data_node_scan_add_node_paths(root, baserel);
 		return;
 	}
 
@@ -376,8 +376,8 @@ get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *
 	 * reason, the regular create_upper_paths_hook is never called for
 	 * partially grouped rels, so we cannot use if for server rels. See end of
 	 * PostgreSQL planner.c:create_partial_grouping_paths(). */
-	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_SERVER)
-		return server_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
+	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+		return data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 
 	return fdw_create_upper_paths(fpinfo,
 								  root,

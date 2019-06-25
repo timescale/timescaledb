@@ -39,16 +39,16 @@
 #define TUPSTORE_MEMSIZE_KB work_mem
 #define TUPSTORE_FLUSH_THRESHOLD ts_guc_max_insert_batch_size
 
-typedef struct ServerDispatchPath
+typedef struct DataNodeDispatchPath
 {
 	CustomPath cpath;
 	ModifyTablePath *mtpath;
 	Index hypertable_rti; /* range table index of Hypertable */
 	int subplan_index;
-} ServerDispatchPath;
+} DataNodeDispatchPath;
 
 /*
- * ServerDispatch dispatches tuples to servers using batching. It inserts
+ * DataNodeDispatch dispatches tuples to data nodes using batching. It inserts
  * itself below a ModifyTable node in the plan and subsequent execution tree,
  * like so:
  *
@@ -61,9 +61,9 @@ typedef struct ServerDispatchPath
  *            ----------------
  *                   ^
  *                   | RETURNING tuple or nothing
- *           ------------------
- *           | ServerDispatch |    Batch and send tuples to servers.
- *           ------------------
+ *          --------------------
+ *          | DataNodeDispatch |    Batch and send tuples to data nodes.
+ *          --------------------
  *                   ^
  *                   | Chunk-routed tuple
  *           -----------------
@@ -76,25 +76,25 @@ typedef struct ServerDispatchPath
  *             --------------            ('2019-02-23 13:46', 2, 1.5);
  *
  *
- * Server dispatching uses the state machine outlined below:
+ * Data node dispatching uses the state machine outlined below:
  *
- * READ: read tuples from the subnode and save in per-server stores until one
+ * READ: read tuples from the subnode and save in per-node stores until one
  * of them reaches FLUSH_THRESHOLD and then move to FLUSH. If a NULL-tuple is
  * read before the threshold is reached, move to LAST_FLUSH. In case of
  * replication, tuples are split across a primary and a replica tuple store.
  *
- * FLUSH: flush the tuples for the server that reached
+ * FLUSH: flush the tuples for the data nodes that reached
  * FLUSH_THRESHOLD.
  *
- * LAST_FLUSH: flush tuples for all servers.
+ * LAST_FLUSH: flush tuples for all data nodes.
  *
  * RETURNING: if there is a RETURNING clause, return the inserted tuples
- * one-by-one from all flushed servers. When no more tuples remain, move to
+ * one-by-one from all flushed nodes. When no more tuples remain, move to
  * READ again or DONE if the previous state was LAST_FLUSH. Note, that in case
  * of replication, the tuples are split across a primary and a replica tuple
- * store for each server. only tuples in the primary tuple store are
+ * store for each data node. only tuples in the primary tuple store are
  * returned. It is implicitly assumed that the primary tuples are sent on a
- * connection before the replica tuples and thus the server will also return
+ * connection before the replica tuples and thus the data node will also return
  * the primary tuples first (in order of insertion).
  *
  *   read
@@ -122,12 +122,12 @@ typedef struct ServerDispatchPath
  *
  * - Better asynchronous behavior. When reading tuples, a flush happens as
  *   soon as a tuple store is filled instead of continuing to fill until more
- *   stores can be flushed. Further, after flushing tuples for a server, the
+ *   stores can be flushed. Further, after flushing tuples for a data node, the
  *   code immediately waits for a response instead of doing other work while
  *   waiting.
  *
  * - Currently, there is one "global" state machine for the
- *   ServerDispatchState executor node. Turning this into per-server state
+ *   DataNodeDispatchState executor node. Turning this into per-node state
  *   machines might make the code more asynchronous and/or amenable to
  *   parallel mode support.
  *
@@ -146,7 +146,7 @@ typedef enum DispatchState
 	SD_DONE,
 } DispatchState;
 
-typedef struct ServerDispatchState
+typedef struct DataNodeDispatchState
 {
 	CustomScanState cstate;
 	DispatchState prevstate; /* Previous state in state machine */
@@ -157,16 +157,16 @@ typedef struct ServerDispatchState
 	DeparsedInsertStmt stmt; /* Partially deparsed insert statement */
 	const char *sql_stmt;	/* Fully deparsed insert statement */
 	TupleFactory *tupfactory;
-	List *target_attrs;		 /* The attributes to send to remote servers */
+	List *target_attrs;		 /* The attributes to send to remote data nodes */
 	List *responses;		 /* List of responses to process in RETURNING state */
-	HTAB *serverstates;		 /* Hashtable of per-server state (tuple stores) */
-	MemoryContext mcxt;		 /* Memory context for per-server state */
+	HTAB *nodestates;		 /* Hashtable of per-nodestate (tuple stores) */
+	MemoryContext mcxt;		 /* Memory context for per-node state */
 	int64 num_tuples;		 /* Total number of tuples flushed each round */
 	int64 next_tuple;		 /* Next tuple to return to the parent node when in
 							  * RETURNING state */
-	int replication_factor;  /* > 1 if we replicate tuples across servers */
+	int replication_factor;  /* > 1 if we replicate tuples across data nodes */
 	StmtParams *stmt_params; /* Parameters to send with statement. Format can be binary or text */
-} ServerDispatchState;
+} DataNodeDispatchState;
 
 /*
  * Plan metadata list indexes.
@@ -183,9 +183,9 @@ enum CustomScanPrivateIndex
 #define HAS_RETURNING(sds) ((sds)->stmt.returning != NULL)
 
 /*
- * ServerState for each server.
+ * DataNodeState for each data node.
  *
- * Tuples destined for a server are batched in a tuple store until dispatched
+ * Tuples destined for a data node are batched in a tuple store until dispatched
  * using a "flush". A flush happens using the prepared (insert) statement,
  * which can only be used to send a "full" batch of tuples as the number of
  * rows in the statement is predefined. Thus, a flush only happens when the
@@ -195,17 +195,17 @@ enum CustomScanPrivateIndex
  * statement, since the number of rows do not match, and therefore a one-time
  * statement is created for the last insert.
  *
- * Note that, since we use one ServerState per connection/user-mapping, we
- * could technically have multiple ServerStates per foreign server.
+ * Note that, since we use one DataNodeState per connection/user-mapping, we
+ * could technically have multiple DataNodeStates per data node.
  */
-typedef struct ServerState
+typedef struct DataNodeState
 {
 	Oid umid; /* Must be first */
 	TSConnection *conn;
-	Tuplestorestate *primary_tupstore; /* Tuples this server is primary
+	Tuplestorestate *primary_tupstore; /* Tuples this data node is primary
 										* for. These tuples are returned when
 										* RETURNING is specified. */
-	Tuplestorestate *replica_tupstore; /* Tuples this server is a replica
+	Tuplestorestate *replica_tupstore; /* Tuples this data node is a replica
 										* for. This tuples are NOT returned
 										* when RETURNING is specified. */
 	PreparedStmt *pstmt;			   /* Prepared statement to use in the FLUSH state */
@@ -213,14 +213,14 @@ typedef struct ServerState
 	int num_tuples_inserted;		   /* Number of tuples inserted (returned in result)
 										* during the FLUSH or LAST_FLUSH states */
 	int next_tuple;					   /* The next tuple to return in the RETURNING state */
-} ServerState;
+} DataNodeState;
 
 #define NUM_STORED_TUPLES(ss)                                                                      \
 	(tuplestore_tuple_count((ss)->primary_tupstore) +                                              \
 	 ((ss)->replica_tupstore != NULL ? tuplestore_tuple_count((ss)->replica_tupstore) : 0))
 
 static void
-server_state_init(ServerState *ss, ServerDispatchState *sds, UserMapping *um)
+data_node_state_init(DataNodeState *ss, DataNodeDispatchState *sds, UserMapping *um)
 {
 	MemoryContext old = MemoryContextSwitchTo(sds->mcxt);
 
@@ -238,22 +238,22 @@ server_state_init(ServerState *ss, ServerDispatchState *sds, UserMapping *um)
 	MemoryContextSwitchTo(old);
 }
 
-static ServerState *
-server_state_get_or_create(ServerDispatchState *sds, UserMapping *um)
+static DataNodeState *
+data_node_state_get_or_create(DataNodeDispatchState *sds, UserMapping *um)
 {
-	ServerState *ss;
+	DataNodeState *ss;
 	bool found;
 
-	ss = hash_search(sds->serverstates, &um->umid, HASH_ENTER, &found);
+	ss = hash_search(sds->nodestates, &um->umid, HASH_ENTER, &found);
 
 	if (!found)
-		server_state_init(ss, sds, um);
+		data_node_state_init(ss, sds, um);
 
 	return ss;
 }
 
 static void
-server_state_clear_primary_store(ServerState *ss)
+data_node_state_clear_primary_store(DataNodeState *ss)
 {
 	tuplestore_clear(ss->primary_tupstore);
 	Assert(tuplestore_tuple_count(ss->primary_tupstore) == 0);
@@ -261,7 +261,7 @@ server_state_clear_primary_store(ServerState *ss)
 }
 
 static void
-server_state_clear_replica_store(ServerState *ss)
+data_node_state_clear_replica_store(DataNodeState *ss)
 {
 	if (NULL == ss->replica_tupstore)
 		return;
@@ -271,7 +271,7 @@ server_state_clear_replica_store(ServerState *ss)
 }
 
 static void
-server_state_close(ServerState *ss)
+data_node_state_close(DataNodeState *ss)
 {
 	if (NULL != ss->pstmt)
 		prepared_stmt_close(ss->pstmt);
@@ -283,9 +283,9 @@ server_state_close(ServerState *ss)
 }
 
 static void
-server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
+data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	ServerDispatchState *sds = (ServerDispatchState *) node;
+	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	ResultRelInfo *rri = estate->es_result_relation_info;
 	Relation rel = rri->ri_RelationDesc;
@@ -295,16 +295,16 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rel->rd_id);
 	PlanState *ps;
 	MemoryContext mcxt =
-		AllocSetContextCreate(estate->es_query_cxt, "ServerState", ALLOCSET_SMALL_SIZES);
+		AllocSetContextCreate(estate->es_query_cxt, "DataNodeState", ALLOCSET_SMALL_SIZES);
 	HASHCTL hctl = {
 		.keysize = sizeof(Oid),
-		.entrysize = sizeof(ServerState),
+		.entrysize = sizeof(DataNodeState),
 		.hcxt = mcxt,
 	};
-	List *available_servers = ts_hypertable_get_available_servers(ht, true);
+	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, true);
 
 	Assert(NULL != ht);
-	Assert(NIL != available_servers);
+	Assert(NIL != available_nodes);
 	Assert(ht->fd.replication_factor >= 1);
 
 	ps = ExecInitNode(subplan, estate, eflags);
@@ -318,10 +318,10 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	sds->userid = intVal(list_nth(cscan->custom_private, CustomScanPrivateUserId));
 	sds->set_processed = intVal(list_nth(cscan->custom_private, CustomScanPrivateSetProcessed));
 	sds->mcxt = mcxt;
-	sds->serverstates = hash_create("ServerDispatch tuple stores",
-									list_length(available_servers),
-									&hctl,
-									HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
+	sds->nodestates = hash_create("DataNodeDispatch tuple stores",
+								  list_length(available_nodes),
+								  &hctl,
+								  HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 
 	deparsed_insert_stmt_from_list(&sds->stmt,
 								   list_nth(cscan->custom_private,
@@ -339,7 +339,7 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
  * Store the result of a RETURNING clause.
  */
 static void
-store_returning_result(ServerDispatchState *sds, int row, TupleTableSlot *slot, PGresult *res)
+store_returning_result(DataNodeDispatchState *sds, int row, TupleTableSlot *slot, PGresult *res)
 {
 	PG_TRY();
 	{
@@ -366,11 +366,14 @@ static const char *state_names[] = {
  * Move the state machine to a new state.
  */
 static void
-server_dispatch_set_state(ServerDispatchState *sds, DispatchState new_state)
+data_node_dispatch_set_state(DataNodeDispatchState *sds, DispatchState new_state)
 {
 	Assert(sds->state != new_state);
 
-	elog(DEBUG2, "ServerDispatchState: %s -> %s", state_names[sds->state], state_names[new_state]);
+	elog(DEBUG2,
+		 "DataNodeDispatchState: %s -> %s",
+		 state_names[sds->state],
+		 state_names[new_state]);
 
 #ifdef USE_ASSERT_CHECKING
 
@@ -397,7 +400,7 @@ server_dispatch_set_state(ServerDispatchState *sds, DispatchState new_state)
 }
 
 static PreparedStmt *
-prepare_server_insert_stmt(ServerDispatchState *sds, TSConnection *conn, int total_params)
+prepare_data_node_insert_stmt(DataNodeDispatchState *sds, TSConnection *conn, int total_params)
 {
 	AsyncRequest *req;
 
@@ -408,20 +411,20 @@ prepare_server_insert_stmt(ServerDispatchState *sds, TSConnection *conn, int tot
 }
 
 /*
- * Send a batch of tuples to a server.
+ * Send a batch of tuples to a data node.
  *
- * All stored tuples for the given server are sent on the server's
+ * All stored tuples for the given data node are sent on the node's
  * connection. If in FLUSH state (i.e., sending a predefined amount of
  * tuples), use a prepared statement, or construct a custom statement if in
  * LAST_FLUSH state.
  *
  * If there's a RETURNING clause, we reset the read pointer for the store,
  * since the original tuples need to be returned along with the
- * server-returned ones. If there is no RETURNING clause, simply clear the
+ * node-returned ones. If there is no RETURNING clause, simply clear the
  * store.
  */
 static AsyncRequest *
-send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
+send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 {
 	TupleTableSlot *slot;
 	AsyncRequest *req;
@@ -471,9 +474,10 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 		case SD_FLUSH:
 			/* Lazy initialize the prepared statement */
 			if (NULL == ss->pstmt)
-				ss->pstmt = prepare_server_insert_stmt(sds,
-													   ss->conn,
-													   stmt_params_total_values(sds->stmt_params));
+				ss->pstmt =
+					prepare_data_node_insert_stmt(sds,
+												  ss->conn,
+												  stmt_params_total_values(sds->stmt_params));
 			Assert(ss->num_tuples_sent == TUPSTORE_FLUSH_THRESHOLD);
 			req = async_request_send_prepared_stmt_with_params(ss->pstmt,
 															   sds->stmt_params,
@@ -488,7 +492,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 				async_request_send_with_params(ss->conn, sql_stmt, sds->stmt_params, response_type);
 			break;
 		default:
-			elog(ERROR, "unexpected server dispatch state %s", state_names[sds->state]);
+			elog(ERROR, "unexpected data node dispatch state %s", state_names[sds->state]);
 			Assert(false);
 			break;
 	}
@@ -504,20 +508,20 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	if (HAS_RETURNING(sds))
 		tuplestore_rescan(ss->primary_tupstore);
 	else
-		server_state_clear_primary_store(ss);
+		data_node_state_clear_primary_store(ss);
 
 	/* No tuples are returned from the replica store so safe to clear */
-	server_state_clear_replica_store(ss);
+	data_node_state_clear_replica_store(ss);
 
 	/* Since we're done with current batch, reset params so they are safe to use in the next
-	 * batch/server */
+	 * batch/node */
 	stmt_params_reset(sds->stmt_params);
 
 	return req;
 }
 
 /*
- * Check if we should flush tuples stored for a server.
+ * Check if we should flush tuples stored for a data node.
  *
  * There are two cases when this happens:
  *
@@ -525,7 +529,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
  * 2. State is SD_LAST_FLUSH and there are tuples to send.
  */
 static bool
-should_flush_server(ServerDispatchState *sds, ServerState *ss)
+should_flush_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 {
 	int64 num_tuples = NUM_STORED_TUPLES(ss);
 
@@ -542,24 +546,24 @@ should_flush_server(ServerDispatchState *sds, ServerState *ss)
 }
 
 /*
- * Flush the tuples of servers that have a full batch.
+ * Flush the tuples of data nodes that have a full batch.
  */
 static AsyncRequestSet *
-flush_servers(ServerDispatchState *sds)
+flush_data_nodes(DataNodeDispatchState *sds)
 {
 	AsyncRequestSet *reqset = NULL;
-	ServerState *ss;
+	DataNodeState *ss;
 	HASH_SEQ_STATUS hseq;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
 
-	hash_seq_init(&hseq, sds->serverstates);
+	hash_seq_init(&hseq, sds->nodestates);
 
 	for (ss = hash_seq_search(&hseq); ss != NULL; ss = hash_seq_search(&hseq))
 	{
-		if (should_flush_server(sds, ss))
+		if (should_flush_data_node(sds, ss))
 		{
-			AsyncRequest *req = send_batch_to_server(sds, ss);
+			AsyncRequest *req = send_batch_to_data_node(sds, ss);
 
 			if (NULL != req)
 			{
@@ -575,12 +579,12 @@ flush_servers(ServerDispatchState *sds)
 }
 
 /*
- * Wait for responses from servers after INSERT.
+ * Wait for responses from data nodes after INSERT.
  *
  * In case of RETURNING, return a list of responses, otherwise NIL.
  */
 static List *
-await_all_responses(ServerDispatchState *sds, AsyncRequestSet *reqset)
+await_all_responses(DataNodeDispatchState *sds, AsyncRequestSet *reqset)
 {
 	AsyncResponseResult *rsp;
 	List *results = NIL;
@@ -589,7 +593,7 @@ await_all_responses(ServerDispatchState *sds, AsyncRequestSet *reqset)
 
 	while ((rsp = async_request_set_wait_any_result(reqset)))
 	{
-		ServerState *ss = async_response_result_get_user_data(rsp);
+		DataNodeState *ss = async_response_result_get_user_data(rsp);
 		PGresult *res = async_response_result_get_pg_result(rsp);
 		ExecStatusType status = PQresultStatus(res);
 		bool report_error = true;
@@ -634,18 +638,18 @@ await_all_responses(ServerDispatchState *sds, AsyncRequestSet *reqset)
 /*
  * Read tuples from the child scan node.
  *
- * Read until there's a NULL tuple or we've filled a server's batch. Ideally,
- * we'd continue to read more tuples to fill other servers' batches, but since
- * the next tuple might be for the same server that has the full batch, we
+ * Read until there's a NULL tuple or we've filled a data node's batch. Ideally,
+ * we'd continue to read more tuples to fill other data nodes' batches, but since
+ * the next tuple might be for the same node that has the full batch, we
  * risk overfilling. This could be mitigated by using two tuple stores per
- * server (current and next batch) and alternate between them. But that also
+ * data node (current and next batch) and alternate between them. But that also
  * increases memory requirements and complicates the code, so that's left as a
  * future optimization.
  *
  * Return the number of tuples read.
  */
 static int64
-handle_read(ServerDispatchState *sds)
+handle_read(DataNodeDispatchState *sds)
 {
 	PlanState *substate = linitial(sds->cstate.custom_ps);
 	EState *estate = sds->cstate.ss.ps.state;
@@ -660,7 +664,7 @@ handle_read(ServerDispatchState *sds)
 		TupleTableSlot *slot = ExecProcNode(substate);
 
 		if (TupIsNull(slot))
-			server_dispatch_set_state(sds, SD_LAST_FLUSH);
+			data_node_dispatch_set_state(sds, SD_LAST_FLUSH);
 		else
 		{
 			/* The previous node should have routed the tuple to the right
@@ -670,7 +674,7 @@ handle_read(ServerDispatchState *sds)
 			ChunkInsertState *cis = rri->ri_FdwState;
 			TriggerDesc *trigdesc = rri->ri_TrigDesc;
 			ListCell *lc;
-			bool primary_server = true;
+			bool primary_data_node = true;
 
 			Assert(NULL != cis);
 
@@ -687,24 +691,24 @@ handle_read(ServerDispatchState *sds)
 			foreach (lc, cis->usermappings)
 			{
 				UserMapping *um = lfirst(lc);
-				ServerState *ss = server_state_get_or_create(sds, um);
+				DataNodeState *ss = data_node_state_get_or_create(sds, um);
 
-				/* This will store one copy of the tuple per server, which is
+				/* This will store one copy of the tuple per data node, which is
 				 * a bit inefficient. Note that we put the tuple in the
-				 * primary store for the first server, but the replica store
-				 * for all other servers. This is to be able to know which
+				 * primary store for the first data node, but the replica store
+				 * for all other data nodes. This is to be able to know which
 				 * tuples to return in a RETURNING statement. */
-				if (primary_server)
+				if (primary_data_node)
 					tuplestore_puttupleslot(ss->primary_tupstore, slot);
 				else
 					tuplestore_puttupleslot(ss->replica_tupstore, slot);
 
-				/* Once one server has reached the batch size, we stop
+				/* Once one data node has reached the batch size, we stop
 				 * reading. */
 				if (sds->state != SD_FLUSH && NUM_STORED_TUPLES(ss) >= TUPSTORE_FLUSH_THRESHOLD)
-					server_dispatch_set_state(sds, SD_FLUSH);
+					data_node_dispatch_set_state(sds, SD_FLUSH);
 
-				primary_server = false;
+				primary_data_node = false;
 			}
 		}
 	}
@@ -715,7 +719,7 @@ handle_read(ServerDispatchState *sds)
 }
 
 /*
- * Flush all servers and move to the RETURNING state.
+ * Flush all data nodes and move to the RETURNING state.
  *
  * Note that future optimizations could do this more asynchronously by doing
  * other work until responses are available (e.g., one could start to fill the
@@ -724,13 +728,13 @@ handle_read(ServerDispatchState *sds)
  * interleaving different tasks would also complicate the state machine.
  */
 static void
-handle_flush(ServerDispatchState *sds)
+handle_flush(DataNodeDispatchState *sds)
 {
 	AsyncRequestSet *reqset;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
 
-	reqset = flush_servers(sds);
+	reqset = flush_data_nodes(sds);
 
 	if (NULL != reqset)
 	{
@@ -738,14 +742,14 @@ handle_flush(ServerDispatchState *sds)
 		pfree(reqset);
 	}
 
-	server_dispatch_set_state(sds, SD_RETURNING);
+	data_node_dispatch_set_state(sds, SD_RETURNING);
 }
 
 /*
  * Get a tuple when there's a RETURNING clause.
  */
 static TupleTableSlot *
-get_returning_tuple(ServerDispatchState *sds)
+get_returning_tuple(DataNodeDispatchState *sds)
 {
 	EState *estate = sds->cstate.ss.ps.state;
 	ResultRelInfo *rri = estate->es_result_relation_info;
@@ -778,7 +782,7 @@ get_returning_tuple(ServerDispatchState *sds)
 		while (NIL != sds->responses)
 		{
 			AsyncResponseResult *rsp = linitial(sds->responses);
-			ServerState *ss = async_response_result_get_user_data(rsp);
+			DataNodeState *ss = async_response_result_get_user_data(rsp);
 			PGresult *res = async_response_result_get_pg_result(rsp);
 			int64 num_tuples_to_return = tuplestore_tuple_count(ss->primary_tupstore);
 			bool last_tuple;
@@ -812,7 +816,7 @@ get_returning_tuple(ServerDispatchState *sds)
 			{
 				sds->responses = list_delete_first(sds->responses);
 				async_response_result_close(rsp);
-				server_state_clear_primary_store(ss);
+				data_node_state_clear_primary_store(ss);
 			}
 
 			if (got_tuple)
@@ -830,7 +834,7 @@ get_returning_tuple(ServerDispatchState *sds)
  * clause. Otherwise, return an empty slot.
  */
 static TupleTableSlot *
-handle_returning(ServerDispatchState *sds)
+handle_returning(DataNodeDispatchState *sds)
 {
 	EState *estate = sds->cstate.ss.ps.state;
 	ResultRelInfo *rri = estate->es_result_relation_info;
@@ -862,9 +866,9 @@ handle_returning(ServerDispatchState *sds)
 		slot = ExecClearTuple(slot);
 
 		if (sds->prevstate == SD_LAST_FLUSH)
-			server_dispatch_set_state(sds, SD_DONE);
+			data_node_dispatch_set_state(sds, SD_DONE);
 		else
-			server_dispatch_set_state(sds, SD_READ);
+			data_node_dispatch_set_state(sds, SD_READ);
 	}
 	else
 	{
@@ -884,14 +888,14 @@ handle_returning(ServerDispatchState *sds)
  *
  * This is called every time the parent asks for a new tuple. Read the child
  * scan node and buffer until there's a full batch, then flush by sending to
- * server(s). If there's a returning statement, we return the flushed tuples
+ * data node(s). If there's a returning statement, we return the flushed tuples
  * one-by-one, or continue reading more tuples from the child until there's a
  * NULL tuple.
  */
 static TupleTableSlot *
-server_dispatch_exec(CustomScanState *node)
+data_node_dispatch_exec(CustomScanState *node)
 {
-	ServerDispatchState *sds = (ServerDispatchState *) node;
+	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	MemoryContext oldcontext;
 	TupleTableSlot *slot = NULL;
@@ -938,7 +942,7 @@ server_dispatch_exec(CustomScanState *node)
 }
 
 static void
-server_dispatch_rescan(CustomScanState *node)
+data_node_dispatch_rescan(CustomScanState *node)
 {
 	/* Cannot rescan and start from the beginning since we might already have
 	 * sent data to remote nodes */
@@ -946,25 +950,25 @@ server_dispatch_rescan(CustomScanState *node)
 }
 
 static void
-server_dispatch_end(CustomScanState *node)
+data_node_dispatch_end(CustomScanState *node)
 {
-	ServerDispatchState *sds = (ServerDispatchState *) node;
-	ServerState *ss;
+	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
+	DataNodeState *ss;
 	HASH_SEQ_STATUS hseq;
 
-	hash_seq_init(&hseq, sds->serverstates);
+	hash_seq_init(&hseq, sds->nodestates);
 
 	for (ss = hash_seq_search(&hseq); ss != NULL; ss = hash_seq_search(&hseq))
-		server_state_close(ss);
+		data_node_state_close(ss);
 
-	hash_destroy(sds->serverstates);
+	hash_destroy(sds->nodestates);
 	ExecEndNode(linitial(node->custom_ps));
 }
 
 static void
-server_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+data_node_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	ServerDispatchState *sds = (ServerDispatchState *) node;
+	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 
 	ExplainPropertyIntegerCompat("Batch size", NULL, TUPSTORE_FLUSH_THRESHOLD, es);
 
@@ -980,30 +984,30 @@ server_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState *es
 	}
 }
 
-static CustomExecMethods server_dispatch_state_methods = {
-	.CustomName = "ServerDispatchState",
-	.BeginCustomScan = server_dispatch_begin,
-	.EndCustomScan = server_dispatch_end,
-	.ExecCustomScan = server_dispatch_exec,
-	.ReScanCustomScan = server_dispatch_rescan,
-	.ExplainCustomScan = server_dispatch_explain,
+static CustomExecMethods data_node_dispatch_state_methods = {
+	.CustomName = "DataNodeDispatchState",
+	.BeginCustomScan = data_node_dispatch_begin,
+	.EndCustomScan = data_node_dispatch_end,
+	.ExecCustomScan = data_node_dispatch_exec,
+	.ReScanCustomScan = data_node_dispatch_rescan,
+	.ExplainCustomScan = data_node_dispatch_explain,
 };
 
 /* Only allocate the custom scan state. Initialize in the begin handler. */
 static Node *
-server_dispatch_state_create(CustomScan *cscan)
+data_node_dispatch_state_create(CustomScan *cscan)
 {
-	ServerDispatchState *sds;
+	DataNodeDispatchState *sds;
 
-	sds = (ServerDispatchState *) newNode(sizeof(ServerDispatchState), T_CustomScanState);
-	sds->cstate.methods = &server_dispatch_state_methods;
+	sds = (DataNodeDispatchState *) newNode(sizeof(DataNodeDispatchState), T_CustomScanState);
+	sds->cstate.methods = &data_node_dispatch_state_methods;
 
 	return (Node *) sds;
 }
 
-static CustomScanMethods server_dispatch_plan_methods = {
-	.CustomName = "ServerDispatch",
-	.CreateCustomScanState = server_dispatch_state_create,
+static CustomScanMethods data_node_dispatch_plan_methods = {
+	.CustomName = "DataNodeDispatch",
+	.CreateCustomScanState = data_node_dispatch_state_create,
 };
 
 static List *
@@ -1034,7 +1038,7 @@ get_insert_attrs(Relation rel)
  * statement.
  */
 static List *
-plan_remote_insert(PlannerInfo *root, ServerDispatchPath *sdpath)
+plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 {
 	ModifyTablePath *mtpath = sdpath->mtpath;
 	OnConflictAction onconflict =
@@ -1102,15 +1106,15 @@ plan_remote_insert(PlannerInfo *root, ServerDispatchPath *sdpath)
 }
 
 static Plan *
-server_dispatch_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
-							List *tlist, List *clauses, List *custom_plans)
+data_node_dispatch_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+							   List *tlist, List *clauses, List *custom_plans)
 {
-	ServerDispatchPath *sdpath = (ServerDispatchPath *) best_path;
+	DataNodeDispatchPath *sdpath = (DataNodeDispatchPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 
 	Assert(list_length(custom_plans) == 1);
 
-	cscan->methods = &server_dispatch_plan_methods;
+	cscan->methods = &data_node_dispatch_plan_methods;
 	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0;
 	cscan->scan.plan.targetlist = tlist;
@@ -1120,16 +1124,16 @@ server_dispatch_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPat
 	return &cscan->scan.plan;
 }
 
-static CustomPathMethods server_dispatch_path_methods = {
-	.CustomName = "ServerDispatchPath",
-	.PlanCustomPath = server_dispatch_plan_create,
+static CustomPathMethods data_node_dispatch_path_methods = {
+	.CustomName = "DataNodeDispatchPath",
+	.PlanCustomPath = data_node_dispatch_plan_create,
 };
 
 Path *
-server_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
-							int subplan_index)
+data_node_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
+							   int subplan_index)
 {
-	ServerDispatchPath *sdpath = palloc0(sizeof(ServerDispatchPath));
+	DataNodeDispatchPath *sdpath = palloc0(sizeof(DataNodeDispatchPath));
 	Path *subpath = ts_chunk_dispatch_path_create(root, mtpath, hypertable_rti, subplan_index);
 
 	/* Copy costs, etc. from the subpath */
@@ -1138,7 +1142,7 @@ server_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hy
 	sdpath->cpath.path.type = T_CustomPath;
 	sdpath->cpath.path.pathtype = T_CustomScan;
 	sdpath->cpath.custom_paths = list_make1(subpath);
-	sdpath->cpath.methods = &server_dispatch_path_methods;
+	sdpath->cpath.methods = &data_node_dispatch_path_methods;
 	sdpath->mtpath = mtpath;
 	sdpath->hypertable_rti = hypertable_rti;
 	sdpath->subplan_index = subplan_index;

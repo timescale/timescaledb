@@ -37,9 +37,9 @@ typedef struct
 	char *query_string;
 	/* Saved oid for delayed resolving */
 	Oid relid;
-	/* List of servers to send query to */
-	List *server_list;
-	/* Memory context used for server_list */
+	/* List of data nodes to send query to */
+	List *data_node_list;
+	/* Memory context used for data_node_list */
 	MemoryContext mctx;
 } DistDDLState;
 
@@ -53,7 +53,7 @@ dist_ddl_init(void)
 	dist_ddl_state.exec_type = DIST_DDL_EXEC_NONE;
 	dist_ddl_state.query_string = NULL;
 	dist_ddl_state.relid = InvalidOid;
-	dist_ddl_state.server_list = NIL;
+	dist_ddl_state.data_node_list = NIL;
 	dist_ddl_state.mctx = NULL;
 }
 
@@ -77,8 +77,8 @@ dist_ddl_error_raise_blocked(void)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("operation is blocked on a distributed hypertable member"),
-			 errdetail("This operation should be executed on the frontend server."),
-			 errhint("Set timescaledb.enable_client_ddl_on_data_servers to TRUE, if you know what "
+			 errdetail("This operation should be executed on the access node."),
+			 errhint("Set timescaledb.enable_client_ddl_on_data_nodes to TRUE, if you know what "
 					 "you are doing.")));
 }
 
@@ -129,7 +129,7 @@ dist_ddl_check_session(void)
 		return;
 
 	/* Check if this operation is allowed by user */
-	if (ts_guc_enable_client_ddl_on_data_servers)
+	if (ts_guc_enable_client_ddl_on_data_nodes)
 		return;
 
 	dist_ddl_error_raise_blocked();
@@ -172,7 +172,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	 * PostgreSQL tables been involved in the query.
 	 *
 	 * We are particulary interested in distributed hypertables and distributed
-	 * hypertable members (regular hypertables created on a data servers).
+	 * hypertable members (regular hypertables created on a data nodes).
 	 *
 	 * In most cases expect and allow only one distributed hypertable per
 	 * operation to avoid query deparsing, but do not restrict the number of
@@ -313,7 +313,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 
 		case T_CreateTrigStmt:
 			/* Allow CREATE TRIGGER on hypertable locally, but do not send it
-			 * to other servers. */
+			 * to other data nodes. */
 			break;
 
 		case T_VacuumStmt:
@@ -335,11 +335,11 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	}
 
 	/*
-	 * Get a list of associated servers. This is done here and also
+	 * Get a list of associated data nodes. This is done here and also
 	 * during sql_drop and command_end triggers execution.
 	 */
 	if (dist_ddl_scheduled_for_execution())
-		dist_ddl_state.server_list = ts_hypertable_get_servername_list(ht);
+		dist_ddl_state.data_node_list = ts_hypertable_get_data_node_name_list(ht);
 
 	ts_cache_release(hcache);
 }
@@ -349,12 +349,12 @@ dist_ddl_execute(void)
 {
 	DistCmdResult *result;
 
-	/* Execute command on remote servers using local search_path. */
-	if (list_length(dist_ddl_state.server_list) > 0)
+	/* Execute command on data nodes using local search_path. */
+	if (list_length(dist_ddl_state.data_node_list) > 0)
 	{
-		result = ts_dist_cmd_invoke_on_servers_using_search_path(dist_ddl_state.query_string,
-																 namespace_search_path,
-																 dist_ddl_state.server_list);
+		result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(dist_ddl_state.query_string,
+																	namespace_search_path,
+																	dist_ddl_state.data_node_list);
 		if (result)
 			ts_dist_cmd_close_response(result);
 	}
@@ -381,7 +381,7 @@ dist_ddl_start(ProcessUtilityArgs *args)
 	if (dist_ddl_scheduled_for_execution())
 	{
 		/* Prepare execution state. Save origin query and memory context
-		 * used to save information in server_list since it will differ during
+		 * used to save information in data_node_list since it will differ during
 		 * event hooks execution. */
 		dist_ddl_state.query_string = pstrdup(args->query_string);
 		dist_ddl_state.mctx = CurrentMemoryContext;
@@ -402,7 +402,7 @@ dist_ddl_end(EventTriggerData *command)
 
 	/* Do delayed block of SET SCHEMA and RENAME commands.
 	 *
-	 * In the future those commands might be unblocked and server_list could
+	 * In the future those commands might be unblocked and data_node_list could
 	 * be updated here as well.
 	 */
 	if (OidIsValid(dist_ddl_state.relid))
@@ -417,20 +417,20 @@ dist_ddl_end(EventTriggerData *command)
 			dist_ddl_check_session();
 	}
 
-	/* Execute command on remote servers. */
+	/* Execute command on remote data nodes. */
 	dist_ddl_execute();
 }
 
 static bool
-dist_ddl_has_server(const char *name)
+dist_ddl_has_data_node(const char *name)
 {
 	ListCell *lc;
 
-	foreach (lc, dist_ddl_state.server_list)
+	foreach (lc, dist_ddl_state.data_node_list)
 	{
-		const char *server_name = lfirst(lc);
+		const char *data_node_name = lfirst(lc);
 
-		if (!strcmp(server_name, name))
+		if (!strcmp(data_node_name, name))
 			return true;
 	}
 
@@ -438,28 +438,28 @@ dist_ddl_has_server(const char *name)
 }
 
 static void
-dist_ddl_add_server_list(List *server_list)
+dist_ddl_add_data_node_list(List *data_node_list)
 {
 	ListCell *lc;
 
-	foreach (lc, server_list)
+	foreach (lc, data_node_list)
 	{
-		HypertableServer *hypertable_server = lfirst(lc);
-		const char *server_name = NameStr(hypertable_server->fd.server_name);
+		HypertableDataNode *hypertable_data_node = lfirst(lc);
+		const char *node_name = NameStr(hypertable_data_node->fd.node_name);
 
-		if (dist_ddl_has_server(server_name))
+		if (dist_ddl_has_data_node(node_name))
 			continue;
 
-		dist_ddl_state.server_list = lappend(dist_ddl_state.server_list, pstrdup(server_name));
+		dist_ddl_state.data_node_list = lappend(dist_ddl_state.data_node_list, pstrdup(node_name));
 	}
 }
 
 static void
-dist_ddl_add_server_list_from_table(const char *schema, const char *name)
+dist_ddl_add_data_node_list_from_table(const char *schema, const char *name)
 {
 	FormData_hypertable form;
 	bool nulls[Natts_hypertable];
-	List *server_list;
+	List *data_node_list;
 	MemoryContext mctx;
 
 	if (!ts_hypertable_get_attributes_by_name(schema, name, &form, nulls))
@@ -473,15 +473,15 @@ dist_ddl_add_server_list_from_table(const char *schema, const char *name)
 		dist_ddl_check_session();
 	}
 
-	server_list = ts_hypertable_server_scan(form.id, CurrentMemoryContext);
-	if (server_list == NIL)
+	data_node_list = ts_hypertable_data_node_scan(form.id, CurrentMemoryContext);
+	if (data_node_list == NIL)
 		return;
 
 	mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
-	dist_ddl_add_server_list(server_list);
+	dist_ddl_add_data_node_list(data_node_list);
 	MemoryContextSwitchTo(mctx);
 
-	list_free(server_list);
+	list_free(data_node_list);
 }
 
 void
@@ -503,7 +503,7 @@ dist_ddl_drop(List *dropped_objects)
 			{
 				EventTriggerDropRelation *event = (EventTriggerDropRelation *) obj;
 
-				dist_ddl_add_server_list_from_table(event->schema, event->name);
+				dist_ddl_add_data_node_list_from_table(event->schema, event->name);
 				break;
 			}
 
@@ -520,7 +520,7 @@ dist_ddl_drop(List *dropped_objects)
 			{
 				EventTriggerDropTableConstraint *event = (EventTriggerDropTableConstraint *) obj;
 
-				dist_ddl_add_server_list_from_table(event->schema, event->table);
+				dist_ddl_add_data_node_list_from_table(event->schema, event->table);
 				break;
 			}
 

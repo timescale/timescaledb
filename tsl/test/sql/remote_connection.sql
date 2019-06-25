@@ -4,7 +4,7 @@
 
 
 -- ===================================================================
--- create fake fdw to create server and user mapping
+-- create fake fdw to create data node and user mapping
 -- ===================================================================
 
 \c :TEST_DBNAME :ROLE_SUPERUSER

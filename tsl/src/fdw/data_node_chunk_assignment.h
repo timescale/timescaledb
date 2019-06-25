@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_SERVER_CHUNK_ASSIGNMENT
-#define TIMESCALEDB_TSL_SERVER_CHUNK_ASSIGNMENT
+#ifndef TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT
+#define TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -12,16 +12,16 @@
 #include <utils/hsearch.h>
 
 /*
- * server-chunk assignments map chunks to the servers that will be responsible
+ * data node-chunk assignments map chunks to the data nodes that will be responsible
  * for handling those chunks. For replicated chunks several such strategies
- * are possible. For example, the system can aim to use as many servers as
+ * are possible. For example, the system can aim to use as many data nodes as
  * possible to increase parallelism or as few as possible to decrease coordination
  * overhead.
  */
 
-typedef struct ServerChunkAssignment
+typedef struct DataNodeChunkAssignment
 {
-	Oid server_oid;
+	Oid node_server_oid;
 	double rows;
 	double tuples;
 	Cost startup_cost;
@@ -29,42 +29,42 @@ typedef struct ServerChunkAssignment
 	Relids chunk_relids;
 	List *chunk_oids;
 	List *remote_chunk_ids;
-} ServerChunkAssignment;
+} DataNodeChunkAssignment;
 
 /*
- * Only "attached server" strategy is supported at this time. This strategy
- * picks the server that is associated with a chunk's foreign table
+ * Only "attached data node" strategy is supported at this time. This strategy
+ * picks the data node that is associated with a chunk's foreign table
  */
-typedef enum ServerChunkAssignmentStrategy
+typedef enum DataNodeChunkAssignmentStrategy
 {
-	SCA_STRATEGY_ATTACHED_SERVER,
-} ServerChunkAssignmentStrategy;
+	SCA_STRATEGY_ATTACHED_DATA_NODE,
+} DataNodeChunkAssignmentStrategy;
 
-typedef struct ServerChunkAssignments
+typedef struct DataNodeChunkAssignments
 {
-	ServerChunkAssignmentStrategy strategy;
+	DataNodeChunkAssignmentStrategy strategy;
 	PlannerInfo *root;
 	HTAB *assignments;
 	unsigned long total_num_chunks;
-	unsigned long num_servers_with_chunks;
+	unsigned long num_nodes_with_chunks;
 	MemoryContext mctx;
-} ServerChunkAssignments;
+} DataNodeChunkAssignments;
 
-extern ServerChunkAssignment *server_chunk_assignment_assign_chunk(ServerChunkAssignments *scas,
-																   RelOptInfo *chunkrel);
+extern DataNodeChunkAssignment *
+data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptInfo *chunkrel);
 
-extern ServerChunkAssignments *server_chunk_assignment_assign_chunks(ServerChunkAssignments *scas,
-																	 RelOptInfo **chunkrels,
-																	 unsigned int nrels);
+extern DataNodeChunkAssignments *
+data_node_chunk_assignment_assign_chunks(DataNodeChunkAssignments *scas, RelOptInfo **chunkrels,
+										 unsigned int nrels);
 
-extern ServerChunkAssignment *server_chunk_assignment_get_or_create(ServerChunkAssignments *scas,
-																	RelOptInfo *rel);
+extern DataNodeChunkAssignment *
+data_node_chunk_assignment_get_or_create(DataNodeChunkAssignments *scas, RelOptInfo *rel);
 
-extern void server_chunk_assignments_init(ServerChunkAssignments *scas,
-										  ServerChunkAssignmentStrategy strategy, PlannerInfo *root,
-										  unsigned int nrels_hint);
+extern void data_node_chunk_assignments_init(DataNodeChunkAssignments *scas,
+											 DataNodeChunkAssignmentStrategy strategy,
+											 PlannerInfo *root, unsigned int nrels_hint);
 
-extern bool server_chunk_assignments_are_overlapping(ServerChunkAssignments *scas,
-													 int32 partitioning_dimension_id);
+extern bool data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
+														int32 partitioning_dimension_id);
 
-#endif /* TIMESCALEDB_TSL_SERVER_CHUNK_ASSIGNMENT */
+#endif /* TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT */

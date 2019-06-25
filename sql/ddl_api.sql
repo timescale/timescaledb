@@ -21,7 +21,7 @@
 -- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
 -- time_partitioning_func - (Optional) The partitioning function to use for "time" partitioning
 -- replication_factor - (Optional) A value of 1 or greater makes this hypertable distributed
--- servers - (Optional) The specific servers to distribute this hypertable across
+-- data_nodes - (Optional) The specific data nodes to distribute this hypertable across
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -38,7 +38,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
-    servers                 NAME[] = NULL
+    data_nodes              NAME[] = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- Same functionality as create_hypertable, only must have a replication factor > 0 (defaults to 1)
@@ -58,7 +58,7 @@ CREATE OR REPLACE FUNCTION  create_distributed_hypertable(
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = 1,
-    servers                 NAME[] = NULL
+    data_nodes              NAME[] = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
@@ -157,10 +157,10 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VO
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
 AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
 
--- Add a server to a TimescaleDB cluster. This also add a
+-- Add a data node to a TimescaleDB distributed database. This also add a
 -- corresponding user mapping, if one does not already exist.
-CREATE OR REPLACE FUNCTION add_server(
-    server_name            NAME,
+CREATE OR REPLACE FUNCTION add_data_node(
+    node_name              NAME,
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
@@ -171,33 +171,35 @@ CREATE OR REPLACE FUNCTION add_server(
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
-) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
-AS '@MODULE_PATHNAME@', 'ts_server_add' LANGUAGE C VOLATILE;
+) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, username NAME, node_username NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
 
--- Delete a server from a TimescaleDB cluster
-CREATE OR REPLACE FUNCTION delete_server(
-    server_name            NAME,
+-- Delete a data node from the distributed database
+CREATE OR REPLACE FUNCTION delete_data_node(
+    node_name            NAME,
     if_exists              BOOLEAN = FALSE,
     cascade                BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE
-) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_server_delete' LANGUAGE C VOLATILE;
+) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
 
--- Attach a server to a hypertable
-CREATE OR REPLACE FUNCTION attach_server(
+-- Attach a data node to a distributed hypertable
+CREATE OR REPLACE FUNCTION attach_data_node(
     hypertable             REGCLASS,
-    server_name            NAME,
+    node_name            NAME,
     if_not_attached        BOOLEAN = FALSE
-) RETURNS TABLE(hypertable_id INTEGER, server_hypertable_id INTEGER, server_name NAME)
-AS '@MODULE_PATHNAME@', 'ts_server_attach' LANGUAGE C VOLATILE;
+) RETURNS TABLE(hypertable_id INTEGER, node_hypertable_id INTEGER, node_name NAME)
+AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
 
--- Detach a server from a hypertable. NULL hypertable means it will do detach for all
-CREATE OR REPLACE FUNCTION detach_server(server_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_server_detach' LANGUAGE C VOLATILE;
+-- Detach a data node from a distributed hypertable. NULL hypertable means it will detach from all distributed hypertables
+CREATE OR REPLACE FUNCTION detach_data_node(node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
--- Block new chunks on a server. NULL hypertable means it will block chunks for all hypertables 
-CREATE OR REPLACE FUNCTION block_new_chunks_on_server(server_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_server_block_new_chunks' LANGUAGE C VOLATILE;
+-- Block new chunk creation on a data node for a distributed hypertable. NULL hypertable means it will block
+-- chunks for all distributed hypertables 
+CREATE OR REPLACE FUNCTION block_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
 
--- Allow new chunks on a server. NULL hypertable means it will allow chunks for all hypertables 
-CREATE OR REPLACE FUNCTION allow_new_chunks_on_server(server_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_server_allow_new_chunks' LANGUAGE C VOLATILE;
+-- Reallow chunk creations on a blocked data node for a distributed hypertable. NULL hypertable means it will
+-- allow chunks for all distributed hypertables 
+CREATE OR REPLACE FUNCTION allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;

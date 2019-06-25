@@ -64,13 +64,13 @@ BEGIN
                sum(entry.toast_bytes)::bigint AS toast_bytes,
                sum(entry.total_bytes)::bigint AS total_bytes
         FROM (
-        SELECT s.server_name, _timescaledb_internal.server_ping(server_name) AS server_up
-            FROM _timescaledb_catalog.hypertable AS ht, _timescaledb_catalog.hypertable_server AS s
+        SELECT s.node_name, _timescaledb_internal.ping_data_node(node_name) AS node_up
+            FROM _timescaledb_catalog.hypertable AS ht, _timescaledb_catalog.hypertable_data_node AS s
             WHERE ht.schema_name = schema_name_in
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id
             ) AS srv
-        LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(CASE WHEN srv.server_up THEN srv.server_name ELSE NULL END) entry ON TRUE
+        LEFT OUTER JOIN LATERAL @extschema@.data_node_hypertable_info(CASE WHEN srv.node_up THEN srv.node_name ELSE NULL END) entry ON TRUE
         WHERE entry.table_schema = schema_name_in
         AND entry.table_name =  table_name_in;
 END;
@@ -200,24 +200,24 @@ END;
 $BODY$;
 
 
--- Get the per-server relation size of a distributed hypertable across all servers in a distributed database
+-- Get the per-node relation size of a distributed hypertable across all nodes in a distributed database
 -- like pg_relation_size(hypertable)
 -- (https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-DBSIZE)
 --
 -- main_table - hypertable to get size of
 --
 -- Returns:
--- server_name        - Server hosting part of the table
--- num_chunks         - Number of chunks hosted on the server
--- table_size         - Pretty output of table_bytes for the server
--- index_bytes        - Pretty output of index_bytes for the server
--- toast_bytes        - Pretty output of toast_bytes for the server
--- total_size         - Pretty output of total_bytes for the server
+-- node_name          - Data node hosting part of the table
+-- num_chunks         - Number of chunks hosted on the data node
+-- table_size         - Pretty output of table_bytes for the data node
+-- index_bytes        - Pretty output of index_bytes for the data node
+-- toast_bytes        - Pretty output of toast_bytes for the data node
+-- total_size         - Pretty output of total_bytes for the data node
 
-CREATE OR REPLACE FUNCTION hypertable_server_relation_size(
+CREATE OR REPLACE FUNCTION hypertable_data_node_relation_size(
     main_table              REGCLASS
 )
-RETURNS TABLE (server_name   NAME,
+RETURNS TABLE (node_name   NAME,
                num_chunks  BIGINT,
                table_size  TEXT,
                index_size  TEXT,
@@ -236,19 +236,19 @@ BEGIN
         WHERE c.OID = main_table;
 
         IF NOT (SELECT distributed FROM timescaledb_information.hypertable ht WHERE ht.table_name = local_table_name AND ht.table_schema = local_schema_name)
-            THEN RAISE NOTICE 'Calling hypertable_server_relation_size on a non-distributed hypertable';
+            THEN RAISE NOTICE 'Calling hypertable_data_node_relation_size on a non-distributed hypertable';
         END IF;
 
         RETURN QUERY EXECUTE format(
         $$
-        SELECT s.server_name as server,
+        SELECT s.node_name as node,
                size.num_chunks as chunks,
                pg_size_pretty(table_bytes) as table,
                pg_size_pretty(index_bytes) as index,
                pg_size_pretty(toast_bytes) as toast,
                pg_size_pretty(total_bytes) as total
-            FROM timescaledb_information.server s
-                LEFT OUTER JOIN LATERAL @extschema@.server_hypertable_info(s.server_name) size ON TRUE
+            FROM timescaledb_information.data_node s
+                LEFT OUTER JOIN LATERAL @extschema@.data_node_hypertable_info(s.node_name) size ON TRUE
             WHERE size.table_schema = %L 
             AND size.table_name = %L;
         $$,

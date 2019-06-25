@@ -467,7 +467,7 @@ tuple_conversion_needed(Relation inrel, Relation outrel)
 	TupleDesc indesc = RelationGetDescr(inrel);
 	TupleDesc outdesc = RelationGetDescr(outrel);
 
-	/* We do not need to convert tuples for when we're doing server batching
+	/* We do not need to convert tuples for when we're doing data node batching
 	 * that execution plan works at the hypertable level rather than chunk
 	 * level. */
 	if (outrel->rd_rel->relkind == RELKIND_FOREIGN_TABLE && ts_guc_max_insert_batch_size > 0)
@@ -511,11 +511,11 @@ get_chunk_usermappings(Chunk *chunk, Oid userid)
 	List *usermappings = NIL;
 	ListCell *lc;
 
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		ChunkServer *cs = lfirst(lc);
+		ChunkDataNode *cdn = lfirst(lc);
 		UserMapping *um =
-			GetUserMapping(OidIsValid(userid) ? userid : GetUserId(), cs->foreign_server_oid);
+			GetUserMapping(OidIsValid(userid) ? userid : GetUserId(), cdn->foreign_server_oid);
 
 		usermappings = lappend(usermappings, um);
 	}
@@ -616,7 +616,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	{
 		/* If the hypertable is setup for direct modify, we do not really use
 		 * the FDW. Instead exploit the FdwPrivate pointer to pass on the
-		 * chunk insert state to ServerDispatch so that it knows which servers
+		 * chunk insert state to DataNodeDispatch so that it knows which data nodes
 		 * to insert into. */
 		resrelinfo->ri_FdwState = state;
 	}
@@ -624,7 +624,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 			 NULL != resrelinfo->ri_FdwRoutine->BeginForeignModify)
 	{
 		/*
-		 * If this is a chunk located one or more remote servers, setup the
+		 * If this is a chunk located one or more data nodes, setup the
 		 * foreign data wrapper state for the chunk. The private fdw data was
 		 * created at the planning stage and contains, among other things, a
 		 * deparsed insert statement for the hypertable.

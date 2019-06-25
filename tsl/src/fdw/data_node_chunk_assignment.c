@@ -19,26 +19,26 @@
 #include "chunk_data_node.h"
 #include "utils/fmgrprotos.h"
 
-#define DEFAULT_NUM_SERVERS 10
+#define DEFAULT_NUM_DATA_NODES 10
 
 static int
 get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, 0, false);
 	ForeignServer *fs = GetForeignServer(server_oid);
-	ChunkServer *cs = ts_chunk_server_scan_by_chunk_id_and_servername(chunk->fd.id,
-																	  fs->servername,
-																	  CurrentMemoryContext);
-	return cs->fd.server_chunk_id;
+	ChunkDataNode *cdn = ts_chunk_data_node_scan_by_chunk_id_and_node_name(chunk->fd.id,
+																		   fs->servername,
+																		   CurrentMemoryContext);
+	return cdn->fd.node_chunk_id;
 }
 
 /*
- * Find an existing server chunk assignment or initialize a new one.
+ * Find an existing data node chunk assignment or initialize a new one.
  */
-static ServerChunkAssignment *
-get_or_create_sca(ServerChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
+static DataNodeChunkAssignment *
+get_or_create_sca(DataNodeChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 {
-	ServerChunkAssignment *sca;
+	DataNodeChunkAssignment *sca;
 	bool found;
 
 	Assert(rel == NULL || rel->serverid == serverid);
@@ -49,7 +49,7 @@ get_or_create_sca(ServerChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 	{
 		/* New entry */
 		memset(sca, 0, sizeof(*sca));
-		sca->server_oid = serverid;
+		sca->node_server_oid = serverid;
 	}
 
 	return sca;
@@ -66,15 +66,15 @@ get_slice_for_dimension(Oid chunk_relid, int32 dimension_id)
 }
 
 /*
- * Assign the given chunk relation to a server.
+ * Assign the given chunk relation to a data node.
  *
  * The chunk is assigned according to the strategy set in the
- * ServerChunkAssignments state.
+ * DataNodeChunkAssignments state.
  */
-ServerChunkAssignment *
-server_chunk_assignment_assign_chunk(ServerChunkAssignments *scas, RelOptInfo *chunkrel)
+DataNodeChunkAssignment *
+data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptInfo *chunkrel)
 {
-	ServerChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
+	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
 	RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
 	MemoryContext old;
 
@@ -83,10 +83,10 @@ server_chunk_assignment_assign_chunk(ServerChunkAssignments *scas, RelOptInfo *c
 
 	old = MemoryContextSwitchTo(scas->mctx);
 
-	/* If this is the first chunk we assign to this server, increment the
-	 * number of servers with one or more chunks on them */
+	/* If this is the first chunk we assign to this data node, increment the
+	 * number of data nodes with one or more chunks on them */
 	if (list_length(sca->chunk_oids) == 0)
-		scas->num_servers_with_chunks++;
+		scas->num_nodes_with_chunks++;
 
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
 	sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
@@ -107,12 +107,13 @@ server_chunk_assignment_assign_chunk(ServerChunkAssignments *scas, RelOptInfo *c
  * Initialize a new chunk assignment state with a specific assignment strategy.
  */
 void
-server_chunk_assignments_init(ServerChunkAssignments *scas, ServerChunkAssignmentStrategy strategy,
-							  PlannerInfo *root, unsigned int nrels_hint)
+data_node_chunk_assignments_init(DataNodeChunkAssignments *scas,
+								 DataNodeChunkAssignmentStrategy strategy, PlannerInfo *root,
+								 unsigned int nrels_hint)
 {
 	HASHCTL hctl = {
 		.keysize = sizeof(Oid),
-		.entrysize = sizeof(ServerChunkAssignment),
+		.entrysize = sizeof(DataNodeChunkAssignment),
 		.hcxt = CurrentMemoryContext,
 	};
 
@@ -120,22 +121,22 @@ server_chunk_assignments_init(ServerChunkAssignments *scas, ServerChunkAssignmen
 	scas->root = root;
 	scas->mctx = hctl.hcxt;
 	scas->total_num_chunks = 0;
-	scas->num_servers_with_chunks = 0;
-	scas->assignments = hash_create("server chunk assignments",
+	scas->num_nodes_with_chunks = 0;
+	scas->assignments = hash_create("data node chunk assignments",
 									nrels_hint,
 									&hctl,
 									HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 }
 
 /*
- * Assign chunks to servers.
+ * Assign chunks to data nodes.
  *
- * Each chunk in the chunkrels array is a assigned a server using the strategy
- * set in the ServerChunkAssignments state.
+ * Each chunk in the chunkrels array is a assigned a data node using the strategy
+ * set in the DataNodeChunkAssignments state.
  */
-ServerChunkAssignments *
-server_chunk_assignment_assign_chunks(ServerChunkAssignments *scas, RelOptInfo **chunkrels,
-									  unsigned int nrels)
+DataNodeChunkAssignments *
+data_node_chunk_assignment_assign_chunks(DataNodeChunkAssignments *scas, RelOptInfo **chunkrels,
+										 unsigned int nrels)
 {
 	unsigned int i;
 
@@ -146,17 +147,17 @@ server_chunk_assignment_assign_chunks(ServerChunkAssignments *scas, RelOptInfo *
 		RelOptInfo *chunkrel = chunkrels[i];
 
 		Assert(IS_SIMPLE_REL(chunkrel) && chunkrel->fdw_private != NULL);
-		server_chunk_assignment_assign_chunk(scas, chunkrel);
+		data_node_chunk_assignment_assign_chunk(scas, chunkrel);
 	}
 
 	return scas;
 }
 
 /*
- * Get the server assignment for the given relation (chunk).
+ * Get the data node assignment for the given relation (chunk).
  */
-ServerChunkAssignment *
-server_chunk_assignment_get_or_create(ServerChunkAssignments *scas, RelOptInfo *rel)
+DataNodeChunkAssignment *
+data_node_chunk_assignment_get_or_create(DataNodeChunkAssignments *scas, RelOptInfo *rel)
 {
 	return get_or_create_sca(scas, rel->serverid, rel);
 }
@@ -184,75 +185,77 @@ dimension_slice_overlaps_with_others(DimensionSlice *slice, List *other_slices)
 }
 
 /*
- * ServerSlice: a hash table entry to track the server a chunk slice is placed
+ * DataNodeSlice: a hash table entry to track the data node a chunk slice is placed
  * on.
  */
-typedef struct ServerSlice
+typedef struct DataNodeSlice
 {
 	int32 sliceid;
-	Oid serverid;
-} ServerSlice;
+	Oid node_serverid;
+} DataNodeSlice;
 
 /*
  * Check whether chunks are assigned in an overlapping way.
  *
- * Assignments are overlapping if any server has a chunk that overlaps (in the
- * given paritioning dimension) with a chunk on another server. There are two
+ * Assignments are overlapping if any data node has a chunk that overlaps (in the
+ * given paritioning dimension) with a chunk on another data node. There are two
  * cases when this can happen:
  *
- * 1. The same slice exists on multiple servers (we optimize for detecting
+ * 1. The same slice exists on multiple data nodes (we optimize for detecting
  * this).
  *
- * 2. Two different slices overlap while existing on different servers (this
+ * 2. Two different slices overlap while existing on different data nodes (this
  * case is more costly to detect).
  */
 bool
-server_chunk_assignments_are_overlapping(ServerChunkAssignments *scas,
-										 int32 partitioning_dimension_id)
+data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
+											int32 partitioning_dimension_id)
 {
 	HASH_SEQ_STATUS status;
 	HASHCTL hashctl = {
 		.keysize = sizeof(int32),
-		.entrysize = sizeof(ServerSlice),
+		.entrysize = sizeof(DataNodeSlice),
 		.hcxt = CurrentMemoryContext,
 	};
-	HTAB *all_server_slice_htab;
-	ServerChunkAssignment *sca;
-	List *all_server_slices = NIL;
+	HTAB *all_data_node_slice_htab;
+	DataNodeChunkAssignment *sca;
+	List *all_data_node_slices = NIL;
 
-	/* No overlapping can occur if there are chunks on only one server (this
+	/* No overlapping can occur if there are chunks on only one data node (this
 	 * covers also the case of a single chunk) */
-	if (scas->num_servers_with_chunks <= 1)
+	if (scas->num_nodes_with_chunks <= 1)
 		return false;
 
-	/* If there are multiple servers with chunks and they are not placed along
+	/* If there are multiple data nodes with chunks and they are not placed along
 	 * a closed "space" dimension, we assume overlapping */
 	if (partitioning_dimension_id <= 0)
 		return true;
 
-	/* Use a hash table to track slice server mappings by slice ID. The same
-	 * slice can exist on multiple servers, causing an overlap across servers
+	/* Use a hash table to track slice data node mappings by slice ID. The same
+	 * slice can exist on multiple data nodes, causing an overlap across data nodes
 	 * in the slice dimension. This hash table is used to quickly detect such
 	 * "same-slice overlaps" and avoids having to do a more expensive range
 	 * overlap check.
 	 */
-	all_server_slice_htab =
-		hash_create("all_server_slices", scas->total_num_chunks, &hashctl, HASH_ELEM | HASH_BLOBS);
+	all_data_node_slice_htab = hash_create("all_data_node_slices",
+										   scas->total_num_chunks,
+										   &hashctl,
+										   HASH_ELEM | HASH_BLOBS);
 
 	hash_seq_init(&status, scas->assignments);
 
 	while ((sca = hash_seq_search(&status)))
 	{
-		List *server_slices = NIL;
+		List *data_node_slices = NIL;
 		ListCell *lc;
 
-		/* Check each slice on the server against the slices on other
-		 * servers */
+		/* Check each slice on the data node against the slices on other
+		 * data nodes */
 		foreach (lc, sca->chunk_oids)
 		{
 			Oid chunk_oid = lfirst_oid(lc);
 			DimensionSlice *slice;
-			ServerSlice *ss;
+			DataNodeSlice *ss;
 			bool found;
 
 			slice = get_slice_for_dimension(chunk_oid, partitioning_dimension_id);
@@ -260,37 +263,37 @@ server_chunk_assignments_are_overlapping(ServerChunkAssignments *scas,
 			Assert(NULL != slice);
 
 			/* Get or create a new entry in the global slice set */
-			ss = hash_search(all_server_slice_htab, &slice->fd.id, HASH_ENTER, &found);
+			ss = hash_search(all_data_node_slice_htab, &slice->fd.id, HASH_ENTER, &found);
 
 			if (!found)
 			{
 				ss->sliceid = slice->fd.id;
-				ss->serverid = sca->server_oid;
-				server_slices = lappend(server_slices, slice);
+				ss->node_serverid = sca->node_server_oid;
+				data_node_slices = lappend(data_node_slices, slice);
 			}
 
 			/* First detect "same-slice overlap", and then do a more expensive
 			 * range overlap check */
-			if (ss->serverid != sca->server_oid ||
+			if (ss->node_serverid != sca->node_server_oid ||
 				/* Check if the slice overlaps with the accumulated slices of
-				 * other servers. This can be made more efficient by using an
+				 * other data nodes. This can be made more efficient by using an
 				 * interval tree. */
-				dimension_slice_overlaps_with_others(slice, all_server_slices))
+				dimension_slice_overlaps_with_others(slice, all_data_node_slices))
 			{
-				/* The same slice exists on (at least) two servers, or it
-				 * overlaps with a different slice on another server */
+				/* The same slice exists on (at least) two data nodes, or it
+				 * overlaps with a different slice on another data node */
 				hash_seq_term(&status);
-				hash_destroy(all_server_slice_htab);
+				hash_destroy(all_data_node_slice_htab);
 				return true;
 			}
 		}
 
-		/* Add the server's slice set to the set of all servers checked so
+		/* Add the data node's slice set to the set of all data nodes checked so
 		 * far */
-		all_server_slices = list_concat(all_server_slices, server_slices);
+		all_data_node_slices = list_concat(all_data_node_slices, data_node_slices);
 	}
 
-	hash_destroy(all_server_slice_htab);
+	hash_destroy(all_data_node_slice_htab);
 
 	return false;
 }

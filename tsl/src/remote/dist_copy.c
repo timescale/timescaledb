@@ -239,7 +239,7 @@ send_binary_copy_header(PGconn *connection)
 	if (result != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_CONNECTION_FAILURE),
-				 errmsg("failed to send data to data server %s", PQhost(connection))));
+				 errmsg("failed to send data to data data node %s", PQhost(connection))));
 }
 
 static void
@@ -258,8 +258,7 @@ start_remote_copy_on_new_connection(CopyConnectionState *state, TSConnection *co
 		if (PQresultStatus(res) != PGRES_COPY_IN)
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
-					 errmsg("unable to start remote COPY on backend data server (%d)",
-							PQresultStatus(res))));
+					 errmsg("unable to start remote COPY on data node (%d)", PQresultStatus(res))));
 
 		if (state->using_binary)
 			send_binary_copy_header(pg_conn);
@@ -278,10 +277,10 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 	chunk_connections = palloc(sizeof(ChunkConnectionList));
 	chunk_connections->chunk = chunk;
 	chunk_connections->connections = NIL;
-	foreach (lc, chunk->servers)
+	foreach (lc, chunk->data_nodes)
 	{
-		ChunkServer *cs = lfirst(lc);
-		ForeignServer *fs = GetForeignServerByName(NameStr(cs->fd.server_name), false);
+		ChunkDataNode *cdn = lfirst(lc);
+		ForeignServer *fs = GetForeignServerByName(NameStr(cdn->fd.node_name), false);
 		UserMapping *um = GetUserMapping(GetUserId(), fs->serverid);
 		TSConnection *connection = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
 

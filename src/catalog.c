@@ -30,9 +30,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = HYPERTABLE_TABLE_NAME,
 	},
-	[HYPERTABLE_SERVER] = {
+	[HYPERTABLE_DATA_NODE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = HYPERTABLE_SERVER_TABLE_NAME,
+		.table_name = HYPERTABLE_DATA_NODE_TABLE_NAME,
 	},
 	[DIMENSION] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -54,9 +54,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_INDEX_TABLE_NAME,
 	},
-	[CHUNK_SERVER] = {
+	[CHUNK_DATA_NODE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = CHUNK_SERVER_TABLE_NAME,
+		.table_name = CHUNK_DATA_NODE_TABLE_NAME,
 	},
 	[TABLESPACE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -124,11 +124,11 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
 		},
 	},
-	[HYPERTABLE_SERVER] = {
-		.length = _MAX_HYPERTABLE_SERVER_INDEX,
+	[HYPERTABLE_DATA_NODE] = {
+		.length = _MAX_HYPERTABLE_DATA_NODE_INDEX,
 		.names = (char *[]) {
-			[HYPERTABLE_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX] = "hypertable_server_hypertable_id_server_name_key",
-			[HYPERTABLE_SERVER_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX] = "hypertable_server_server_hypertable_id_server_name_key",
+			[HYPERTABLE_DATA_NODE_HYPERTABLE_ID_NODE_NAME_IDX] = "hypertable_data_node_hypertable_id_node_name_key",
+			[HYPERTABLE_DATA_NODE_NODE_HYPERTABLE_ID_NODE_NAME_IDX] = "hypertable_data_node_node_hypertable_id_node_name_key",
 		}
 	},
 	[DIMENSION] = {
@@ -167,11 +167,11 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX] = "chunk_index_hypertable_id_hypertable_index_name_idx",
 		},
 	},
-	[CHUNK_SERVER] = {
-		.length = _MAX_CHUNK_SERVER_INDEX,
+	[CHUNK_DATA_NODE] = {
+		.length = _MAX_CHUNK_DATA_NODE_INDEX,
 		.names = (char *[]) {
-			[CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX] = "chunk_server_chunk_id_server_name_key",
-			[CHUNK_SERVER_SERVER_CHUNK_ID_SERVER_NAME_IDX] = "chunk_server_server_chunk_id_server_name_key",
+			[CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX] = "chunk_data_node_chunk_id_node_name_key",
+			[CHUNK_DATA_NODE_NODE_CHUNK_ID_NODE_NAME_IDX] = "chunk_data_node_node_chunk_id_node_name_key",
 		}
 	},
 	[TABLESPACE] = {
@@ -256,20 +256,20 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_REMOTE_TXN_INDEX,
 		.names = (char *[]) {
 			[REMOTE_TXN_PKEY_IDX] = "remote_txn_pkey",
-			[REMOTE_TXN_SERVER_NAME_IDX] = "remote_txn_server_name_idx"
+			[REMOTE_TXN_DATA_NODE_NAME_IDX] = "remote_txn_data_node_name_idx"
 		}
 	}
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = CATALOG_SCHEMA_NAME ".hypertable_id_seq",
-	[HYPERTABLE_SERVER] = NULL,
+	[HYPERTABLE_DATA_NODE] = NULL,
 	[DIMENSION] = CATALOG_SCHEMA_NAME ".dimension_id_seq",
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_INDEX] = NULL,
-	[CHUNK_SERVER] = NULL,
+	[CHUNK_DATA_NODE] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
@@ -692,7 +692,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 	{
 		case CHUNK:
 		case CHUNK_CONSTRAINT:
-		case CHUNK_SERVER:
+		case CHUNK_DATA_NODE:
 		case DIMENSION_SLICE:
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{
@@ -701,7 +701,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			}
 			break;
 		case HYPERTABLE:
-		case HYPERTABLE_SERVER:
+		case HYPERTABLE_DATA_NODE:
 		case DIMENSION:
 			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);

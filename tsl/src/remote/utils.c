@@ -23,7 +23,7 @@
 
 /*
  * Force assorted GUC parameters to settings that ensure that we'll output
- * data values in a form that is unambiguous to the remote server.
+ * data values in a form that is unambiguous to the data node.
  *
  * This is rather expensive and annoying to do once per row, but there's
  * little choice if we want to be sure values are transmitted accurately;
