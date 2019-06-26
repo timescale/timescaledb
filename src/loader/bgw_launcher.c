@@ -706,6 +706,10 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, launcher_sigterm);
 	pqsignal(SIGHUP, launcher_sighup);
+
+	/* Some SIGHUPS may already have been dropped, so we must load the file here */
+	got_SIGHUP = false;
+	ProcessConfigFile(PGC_SIGHUP);
 	BackgroundWorkerUnblockSignals();
 	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 

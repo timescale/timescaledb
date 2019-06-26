@@ -725,6 +725,10 @@ ts_bgw_scheduler_register_signal_handlers(void)
 	 */
 	pqsignal(SIGTERM, handle_sigterm);
 	pqsignal(SIGHUP, handle_sighup);
+
+	/* Some SIGHUPS may already have been dropped, so we must load the file here */
+	got_SIGHUP = false;
+	ProcessConfigFile(PGC_SIGHUP);
 }
 
 Datum

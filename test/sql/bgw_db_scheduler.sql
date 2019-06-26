@@ -37,6 +37,7 @@ LANGUAGE C VOLATILE STRICT;
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
+\set WAIT_FOR_STANDARD_WAITLATCH 3
 
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
@@ -73,7 +74,6 @@ $BODY$;
 SELECT _timescaledb_internal.stop_background_workers();
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
-SELECT _timescaledb_internal.start_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -263,6 +263,7 @@ DELETE FROM _timescaledb_config.bgw_job;
 --escalated priv needed for access to pg_stat_activity
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_STANDARD_WAITLATCH);
 SELECT ts_bgw_db_scheduler_test_run(-1);
 
 SHOW timescaledb.shutdown_bgw_scheduler;
@@ -280,6 +281,8 @@ ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
 SELECT pg_sleep(0.001);
 SHOW timescaledb.shutdown_bgw_scheduler;
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
 
 --Test that sending SIGTERM to scheduler terminates the jobs as well
 \c :TEST_DBNAME :ROLE_SUPERUSER

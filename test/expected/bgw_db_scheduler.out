@@ -28,6 +28,7 @@ LANGUAGE C VOLATILE STRICT;
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
+\set WAIT_FOR_STANDARD_WAITLATCH 3
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 --allow us to inject test jobs
@@ -64,12 +65,6 @@ SELECT _timescaledb_internal.stop_background_workers();
 
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
-SELECT _timescaledb_internal.start_background_workers();
- start_background_workers 
---------------------------
- t
-(1 row)
-
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -587,6 +582,12 @@ DELETE FROM _timescaledb_config.bgw_job;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --escalated priv needed for access to pg_stat_activity
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_STANDARD_WAITLATCH);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+(1 row)
+
 SELECT ts_bgw_db_scheduler_test_run(-1);
  ts_bgw_db_scheduler_test_run 
 ------------------------------
@@ -625,11 +626,10 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no |      mock_time      | application_name |                          msg                           
---------+---------------------+------------------+--------------------------------------------------------
-      0 |                   0 | DB Scheduler     | [TESTING] Wait until 9223372036854775807, started at 0
-      1 | 9223372036854775807 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
-(2 rows)
+ msg_no | mock_time | application_name |                      msg                      
+--------+-----------+------------------+-----------------------------------------------
+      0 |         0 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
+(1 row)
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -648,6 +648,12 @@ SHOW timescaledb.shutdown_bgw_scheduler;
  timescaledb.shutdown_bgw_scheduler 
 ------------------------------------
  off
+(1 row)
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
 (1 row)
 
 --Test that sending SIGTERM to scheduler terminates the jobs as well

@@ -24,6 +24,7 @@ extern TSDLLEXPORT TimestampTz ts_timer_get_current_timestamp(void);
 
 #ifdef TS_DEBUG
 extern void ts_timer_set(const Timer *timer);
+extern const Timer *ts_get_standard_timer(void);
 #endif
 
 #endif /* BGW_TIMER_H */

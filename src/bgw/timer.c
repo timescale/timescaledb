@@ -115,4 +115,10 @@ ts_timer_set(const Timer *timer)
 {
 	current_timer_implementation = timer;
 }
+
+const Timer *
+ts_get_standard_timer()
+{
+	return &standard_timer;
+}
 #endif

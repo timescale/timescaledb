@@ -69,6 +69,9 @@ mock_wait(TimestampTz until)
 
 			return true;
 		}
+		case WAIT_FOR_STANDARD_WAITLATCH:
+			ts_get_standard_timer()->wait(until);
+			return true;
 		default:
 			return false;
 	}
