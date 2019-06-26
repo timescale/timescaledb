@@ -1,4 +1,4 @@
-Parsed test spec with 8 sessions
+Parsed test spec with 12 sessions
 
 starting permutation: LockCompleted Refresh2 Refresh UnlockCompleted
 step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold;
@@ -131,39 +131,35 @@ step Refresh: REFRESH MATERIALIZED VIEW continuous_view; <waiting ...>
 step UnlockInval: ROLLBACK;
 step Refresh: <... completed>
 
-starting permutation: I1 Refresh LockInval Refresh Ib I1 Ic UnlockInval
-step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
+starting permutation: Refresh SV1 LockMatInval Refresh1 Ib I1 LockInvalThrEx Ic UnlockMatInval UnlockInvalThrEx SV1
 INFO:  new materialization range for public.ts_continuous_test (time column time) (15)
 INFO:  materializing continuous aggregate public.continuous_view: new range up to 15
 step Refresh: REFRESH MATERIALIZED VIEW continuous_view;
-step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-INFO:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold (15)
-INFO:  materializing continuous aggregate public.continuous_view: no new range to materialize
-step Refresh: REFRESH MATERIALIZED VIEW continuous_view; <waiting ...>
-step Ib: BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';
-step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
-step Ic: COMMIT; <waiting ...>
-step UnlockInval: ROLLBACK;
-INFO:  materializing continuous aggregate public.continuous_view: no new range to materialize or invalidations found, exiting early
-step Refresh: <... completed>
-step Ic: <... completed>
+step SV1: SELECT * FROM continuous_view order by 1;
+time_bucket    count          
 
-starting permutation: I1 Refresh LockInval Ib I1 Refresh Ic UnlockInval
-step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
-INFO:  new materialization range for public.ts_continuous_test (time column time) (15)
-INFO:  materializing continuous aggregate public.continuous_view: new range up to 15
-step Refresh: REFRESH MATERIALIZED VIEW continuous_view;
-step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-step Ib: BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';
-step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
+0              5              
+5              5              
+10             5              
+step LockMatInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 INFO:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold (15)
 INFO:  materializing continuous aggregate public.continuous_view: no new range to materialize
-step Refresh: REFRESH MATERIALIZED VIEW continuous_view; <waiting ...>
+step Refresh1: REFRESH MATERIALIZED VIEW continuous_view; <waiting ...>
+step Ib: BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';
+step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
+step LockInvalThrEx: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ;
 step Ic: COMMIT; <waiting ...>
-step UnlockInval: ROLLBACK;
+step UnlockMatInval: ROLLBACK;
 INFO:  materializing continuous aggregate public.continuous_view: no new range to materialize or invalidations found, exiting early
-step Refresh: <... completed>
+step Refresh1: <... completed>
+step UnlockInvalThrEx: ROLLBACK;
 step Ic: <... completed>
+step SV1: SELECT * FROM continuous_view order by 1;
+time_bucket    count          
+
+0              5              
+5              5              
+10             5              
 
 starting permutation: I1 Refresh LockInval Refresh Sb S1 Sc UnlockInval
 step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
