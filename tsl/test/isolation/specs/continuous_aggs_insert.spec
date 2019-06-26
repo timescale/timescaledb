@@ -32,8 +32,14 @@ step "Sb"	{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout =
 step "S1"	{ SELECT count(*) FROM ts_continuous_test; }
 step "Sc"	{ COMMIT; }
 
+session "SV"
+step "SV1"	{ SELECT * FROM continuous_view order by 1; }
+
 session "R"
 step "Refresh"	{ REFRESH MATERIALIZED VIEW continuous_view; }
+
+session "R1"
+step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 
 session "R2"
 setup { SET lock_timeout = '50ms'; SET deadlock_timeout = '10ms';  }
@@ -46,9 +52,14 @@ step "LockInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypert
 step "UnlockInval" { ROLLBACK; }
 
 # the invalidation threshold lock will block both INSERT and REFRESH
-session "L"
+session "LI"
 step "LockInvalThr" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold IN SHARE MODE; }
 step "UnlockInvalThr" { ROLLBACK; }
+
+# the invalidation threshold lock will block both INSERT and REFRESH
+session "LIE"
+step "LockInvalThrEx" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ; }
+step "UnlockInvalThrEx" { ROLLBACK; }
 
 #the completed threshold will block the REFRESH in the second materialization
 # txn , but not the INSERT
@@ -56,6 +67,10 @@ session "LC"
 step "LockCompleted" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold; }
 step "UnlockCompleted" { ROLLBACK; }
 
+# the materialization invalidation log
+session "LM"
+step "LockMatInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log; }
+step "UnlockMatInval" { ROLLBACK; }
 #only one refresh
 permutation "LockCompleted" "Refresh2" "Refresh"  "UnlockCompleted"
 
@@ -81,7 +96,7 @@ permutation "Ipb" "LockInval" "Ip1" "Ipc" "Refresh" "UnlockInval"
 
 
 #refresh and insert/select do not block each other
-permutation "I1" "Refresh" "LockInval" "Refresh" "Ib" "I1" "Ic" "UnlockInval"
-permutation "I1" "Refresh" "LockInval" "Ib" "I1" "Refresh" "Ic" "UnlockInval"
+#refresh1 is blocked on LockMatInval , insert is blocked on invalidation threshold. so refresh1 does not see the insert from I1
+permutation "Refresh" "SV1" "LockMatInval" "Refresh1" "Ib" "I1" "LockInvalThrEx" "Ic" "UnlockMatInval" "UnlockInvalThrEx" "SV1"
 permutation "I1" "Refresh" "LockInval" "Refresh" "Sb" "S1" "Sc" "UnlockInval"
 permutation "I1" "Refresh" "LockInval" "Sb" "S1" "Refresh" "Sc" "UnlockInval"
