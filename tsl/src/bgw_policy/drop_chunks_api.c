@@ -7,20 +7,22 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
-#include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <miscadmin.h>
 
 #include <hypertable_cache.h>
+#include <access/xact.h>
 
 #include "bgw/job.h"
 #include "bgw_policy/drop_chunks.h"
 #include "drop_chunks_api.h"
 #include "errors.h"
 #include "hypertable.h"
+#include "dimension.h"
 #include "license.h"
 #include "utils.h"
+#include "interval.h"
 
 /* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
@@ -62,36 +64,29 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	NameData drop_chunks_name;
 	int32 job_id;
 	BgwPolicyDropChunks *existing;
-	Hypertable *hypertable;
-	Cache *hcache;
 	Oid ht_oid = PG_GETARG_OID(0);
-	Interval *older_than = PG_GETARG_INTERVAL_P(1);
+	Datum older_than_datum = PG_GETARG_DATUM(1);
 	bool cascade = PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_GETARG_BOOL(3);
 	bool cascade_to_materializations = PG_GETARG_BOOL(4);
-	Oid partitioning_type;
-
-	BgwPolicyDropChunks policy = { .fd = {
-									   .hypertable_id = ts_hypertable_relid_to_id(ht_oid),
-									   .older_than = *older_than,
-									   .cascade = cascade,
-									   .cascade_to_materializations = cascade_to_materializations,
-								   } };
-
+	Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	BgwPolicyDropChunks policy;
+	Hypertable *hypertable;
+	Cache *hcache;
+	FormData_ts_interval *older_than;
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
-	/* First verify that the hypertable corresponds to a valid table */
-	if (hypertable == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not add drop_chunks policy because \"%s\" is not a hypertable",
-						get_rel_name(ht_oid))));
+	older_than = ts_interval_from_sql_input(ht_oid,
+											older_than_datum,
+											older_than_type,
+											"older_than",
+											"add_drop_chunks_policy");
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
+	hcache = ts_hypertable_cache_pin();
+	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
 	existing = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable->fd.id);
 
 	if (existing != NULL)
@@ -105,31 +100,26 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 							get_rel_name(ht_oid))));
 		}
 
-		if (!DatumGetBool(DirectFunctionCall2(interval_eq,
-											  IntervalPGetDatum(&existing->fd.older_than),
-											  IntervalPGetDatum(older_than))) ||
-			(existing->fd.cascade != cascade) ||
-			(existing->fd.cascade_to_materializations != cascade_to_materializations))
+		if (ts_interval_equal(&existing->fd.older_than, older_than) &&
+			existing->fd.cascade == cascade &&
+			existing->fd.cascade_to_materializations == cascade_to_materializations)
 		{
+			/* If all arguments are the same, do nothing */
+			ts_cache_release(hcache);
+			ereport(NOTICE,
+					(errmsg("drop chunks policy already exists on hypertable \"%s\", skipping",
+							get_rel_name(ht_oid))));
+			return -1;
+		}
+		else
+		{
+			ts_cache_release(hcache);
 			elog(WARNING,
 				 "could not add drop_chunks policy due to existing policy on hypertable with "
 				 "different arguments");
-			ts_cache_release(hcache);
 			return -1;
 		}
-
-		/* If all arguments are the same, do nothing */
-		ereport(NOTICE,
-				(errmsg("drop chunks policy already exists on hypertable \"%s\", skipping",
-						get_rel_name(ht_oid))));
-		ts_cache_release(hcache);
-		return -1;
 	}
-
-	/* validate that the open dimension uses a time type */
-	partitioning_type =
-		ts_dimension_get_partition_type(hyperspace_get_open_dimension(hypertable->space, 0));
-	ts_dimension_open_typecheck(INTERVALOID, partitioning_type, "add_drop_chunks_policy");
 
 	ts_cache_release(hcache);
 
@@ -143,8 +133,15 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 										DEFAULT_MAX_RETRIES,
 										DEFAULT_RETRY_PERIOD);
 
+	policy = (BgwPolicyDropChunks){ .fd = {
+										.job_id = job_id,
+										.hypertable_id = ts_hypertable_relid_to_id(ht_oid),
+										.older_than = *older_than,
+										.cascade = cascade,
+										.cascade_to_materializations = cascade_to_materializations,
+									} };
+
 	/* Now, insert a new row in the drop_chunks args table */
-	policy.fd.job_id = job_id;
 	ts_bgw_policy_drop_chunks_insert(&policy);
 
 	PG_RETURN_INT32(job_id);

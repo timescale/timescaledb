@@ -33,6 +33,7 @@ set(SOURCES
   hypertable_restrict_info.c
   indexing.c
   init.c
+  interval.c
   metadata.c
   jsonb_utils.c
   license_guc.c

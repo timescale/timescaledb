@@ -41,6 +41,7 @@ ORDER BY proname;
  reorder_chunk
  set_adaptive_chunking
  set_chunk_time_interval
+ set_integer_now_func
  set_number_partitions
  show_chunks
  show_tablespaces
@@ -48,5 +49,5 @@ ORDER BY proname;
  time_bucket_gapfill
  timescaledb_post_restore
  timescaledb_pre_restore
-(34 rows)
+(35 rows)
 

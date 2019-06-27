@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension (
     partitioning_func           NAME     NULL,
     -- open dimensions (e.g., time)
     interval_length             BIGINT   NULL CHECK(interval_length IS NULL OR interval_length > 0),
+    integer_now_func_schema     NAME     NULL,
+    integer_now_func            NAME     NULL,
     CHECK (
         (partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR
         (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
@@ -85,6 +87,10 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension (
     CHECK (
         (num_slices IS NULL AND interval_length IS NOT NULL) OR
         (num_slices IS NOT NULL AND interval_length IS NULL)
+    ),
+    CHECK (
+        (integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR
+        (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)
     ),
     UNIQUE (hypertable_id, column_name)
 );
@@ -195,11 +201,12 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_reorder (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_reorder', '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
-    job_id          		INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id   		INTEGER     UNIQUE NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-	older_than				INTERVAL    NOT NULL,
-	cascade					BOOLEAN,
-    cascade_to_materializations BOOLEAN
+    job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
+	cascade					    BOOLEAN                 NOT NULL,
+    cascade_to_materializations BOOLEAN                 NOT NULL,
+    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
 

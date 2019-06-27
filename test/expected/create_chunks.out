@@ -82,10 +82,10 @@ SELECT set_chunk_time_interval('chunk_test', 5::bigint);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------
-  2 |             1 | tag         | integer     | f       |          3 | _timescaledb_internal    | get_partition_hash |                
-  1 |             1 | time        | integer     | t       |            |                          |                    |               5
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
+  2 |             1 | tag         | integer     | f       |          3 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+  1 |             1 | time        | integer     | t       |            |                          |                    |               5 |                         | 
 (2 rows)
 
 INSERT INTO chunk_test VALUES (7, 24.3, 79669, 1);

@@ -420,7 +420,8 @@ select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 -- Should be noop again
 select * from test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
-CREATE TABLE test_table_int(time int);
+CREATE TABLE test_table_int(time bigint, junk int);
+CREATE TABLE test_overflow_smallint(time smallint, junk int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
 NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
@@ -428,19 +429,310 @@ NOTICE:  adding not-null constraint to column "time"
  (2,public,test_table_int,t)
 (1 row)
 
+SELECT create_hypertable('test_overflow_smallint', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable          
+-------------------------------------
+ (3,public,test_overflow_smallint,t)
+(1 row)
+
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+create or replace function dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 2::BIGINT';
+create or replace function overflow_now() returns SMALLINT LANGUAGE SQL IMMUTABLE as  'SELECT 32767::SMALLINT';
 CREATE TABLE test_table_perm(time timestamp PRIMARY KEY);
 SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
 WARNING:  unexpected interval: smaller than one second
       create_hypertable       
 ------------------------------
- (3,public,test_table_perm,t)
+ (4,public,test_table_perm,t)
 (1 row)
 
 \set ON_ERROR_STOP 0
--- we cannot add a drop_chunks policy on a table whose open dimension is not time
+-- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
 select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
-ERROR:  can only use "add_drop_chunks_policy" with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
+ERROR:  invalid parameter value for older_than
 \set ON_ERROR_STOP 1
+INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+CREATE USER unprivileged;
+\c :TEST_DBNAME unprivileged
+-- should fail as the user has no permissions on the table
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table_int', 'dummy_now');
+WARNING:  Timescale License expired
+ERROR:  must be owner of hypertable "test_table_int"
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+DROP USER unprivileged;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select set_integer_now_func('test_table_int', 'dummy_now');
+WARNING:  Timescale License expired
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select * from test_table_int;
+ time | junk 
+------+------
+   -2 |   -2
+   -1 |   -1
+    0 |    0
+    1 |    1
+    2 |    2
+    3 |    3
+(6 rows)
+
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int';
+ count 
+-------
+     6
+(1 row)
+
+select add_drop_chunks_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
+-- Now simulate drop_chunks running automatically by calling it explicitly
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+select * from test_table_int;
+ time | junk 
+------+------
+    0 |    0
+    1 |    1
+    2 |    2
+    3 |    3
+(4 rows)
+
+-- Should have 4 chunks left
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset before_
+select :before_count=4;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- Make sure this second call does nothing
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset after_
+-- Should be true
+select :before_count=:after_count;
+ ?column? 
+----------
+ t
+(1 row)
+
+INSERT INTO test_table_int VALUES (42, 42);
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset before_
+-- This call should also do nothing
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset after_
+-- Should be true
+select :before_count=:after_count;
+ ?column? 
+----------
+ t
+(1 row)
+
+INSERT INTO test_table_int VALUES (-1, -1);
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset add_one_
+select :before_count+1=:add_one_count;
+ ?column? 
+----------
+ t
+(1 row)
+
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset after_
+-- (-1,-1) was in droping range so it should be dropped by background job
+select :before_count=:after_count;
+ ?column? 
+----------
+ t
+(1 row)
+
+select set_integer_now_func('test_table_int', 'dummy_now2', replace_if_exists=>true);
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select * from test_table_int;
+ time | junk 
+------+------
+    0 |    0
+    1 |    1
+    2 |    2
+    3 |    3
+   42 |   42
+(5 rows)
+
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+-- added one to now() so time entry with value 0 should be dropped now
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset after_
+select :before_count=:after_count+1;
+ ?column? 
+----------
+ t
+(1 row)
+
+select * from test_table_int;
+ time | junk 
+------+------
+    1 |    1
+    2 |    2
+    3 |    3
+   42 |   42
+(4 rows)
+
+-- make the now() function invalid -- returns INT and not BIGINT
+drop function dummy_now2();
+create or replace function dummy_now2() returns INT LANGUAGE SQL IMMUTABLE as  'SELECT 2::INT';
+\set ON_ERROR_STOP 0
+select test_drop_chunks(:drop_chunks_job_id);
+ERROR:  invalid integer_now function
+\set ON_ERROR_STOP 1
+-- test the expected use case of set_integer_now_func
+ create function nowstamp() returns bigint language sql STABLE as 'SELECT extract(epoch from now())::BIGINT';
+select set_integer_now_func('test_table_int', 'nowstamp', replace_if_exists=>true);
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int' \gset after_
+select :after_count=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- test the case when now()-interval overflows
+select set_integer_now_func('test_overflow_smallint', 'overflow_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select add_drop_chunks_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
+\set ON_ERROR_STOP 0
+select test_drop_chunks(:drop_chunks_job_id);
+ERROR:  ts_interval overflow
+\set ON_ERROR_STOP 1
+-- test the case when partitioning function and now function are set.
+create table part_time_now_func(time float8, temp float8);
+create or replace function time_partfunc(unixtime float8)
+    returns bigint language plpgsql immutable as
+$body$
+declare
+    retval bigint;
+begin
+
+    retval := unixtime::bigint;
+    raise notice 'time value for % is %', unixtime, retval;
+    return retval;
+end
+$body$;
+create or replace function dummy_now() returns bigint language sql immutable as  'select 2::bigint';
+select create_hypertable('part_time_now_func', 'time', time_partitioning_func => 'time_partfunc', chunk_time_interval=>1);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (5,public,part_time_now_func,t)
+(1 row)
+
+insert into part_time_now_func values
+(1.1, 23.4), (2.2, 22.3), (3.3, 42.3);
+NOTICE:  time value for 1.1 is 1
+NOTICE:  time value for 1.1 is 1
+NOTICE:  time value for 1.1 is 1
+NOTICE:  time value for 1.1 is 1
+NOTICE:  time value for 2.2 is 2
+NOTICE:  time value for 2.2 is 2
+NOTICE:  time value for 2.2 is 2
+NOTICE:  time value for 2.2 is 2
+NOTICE:  time value for 3.3 is 3
+NOTICE:  time value for 3.3 is 3
+NOTICE:  time value for 3.3 is 3
+NOTICE:  time value for 3.3 is 3
+select * from part_time_now_func;
+ time | temp 
+------+------
+  1.1 | 23.4
+  2.2 | 22.3
+  3.3 | 42.3
+(3 rows)
+
+select set_integer_now_func('part_time_now_func', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select add_drop_chunks_policy('part_time_now_func', 0) as drop_chunks_job_id \gset
+select test_drop_chunks(:drop_chunks_job_id);
+ test_drop_chunks 
+------------------
+ 
+(1 row)
+
+select * from part_time_now_func;
+ time | temp 
+------+------
+  2.2 | 22.3
+  3.3 | 42.3
+(2 rows)
+
+select remove_drop_chunks_policy('part_time_now_func');
+ remove_drop_chunks_policy 
+---------------------------
+ 
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- todo:: this currently fails:
+-- alter function dummy_now rename to dummy_now_renamed;
+alter schema public rename to new_public;
+select * from  _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                    |    604800000000 |                         | 
+  2 |             1 | chunk_id    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
+  5 |             4 | time        | timestamp without time zone | t       |            |                          |                    |               1 |                         | 
+  6 |             5 | time        | double precision            | t       |            | new_public               | time_partfunc      |               1 | new_public              | dummy_now
+  3 |             2 | time        | bigint                      | t       |            |                          |                    |               1 | new_public              | nowstamp
+  4 |             3 | time        | smallint                    | t       |            |                          |                    |               1 | new_public              | overflow_now
+(6 rows)
+
+alter schema new_public rename to public;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
@@ -453,3 +745,4 @@ ERROR:  must be owner of hypertable "test_table_perm"
 select remove_drop_chunks_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"
 \set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

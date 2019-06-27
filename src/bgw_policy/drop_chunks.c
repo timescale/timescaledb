@@ -9,6 +9,7 @@
 #include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <funcapi.h>
 
 #include "catalog.h"
 #include "policy.h"
@@ -18,16 +19,42 @@
 #include "hypertable.h"
 #include "bgw/job.h"
 #include "scan_iterator.h"
+#include "interval.h"
 
 static ScanTupleResult
 bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwPolicyDropChunks **policy = data;
+	bool nulls[Natts_bgw_policy_drop_chunks];
+	Datum values[Natts_bgw_policy_drop_chunks];
 
-	*policy = STRUCT_FROM_TUPLE(ti->tuple,
-								ti->mctx,
-								BgwPolicyDropChunks,
-								FormData_bgw_policy_drop_chunks);
+	/* cannot use STRUCT_FROM_TUPLE because bgw_policy_drop_chunks
+	 * includes a column(older_than) that has a composite data type
+	 */
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+	*policy = MemoryContextAllocZero(ti->mctx, sizeof(BgwPolicyDropChunks));
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)]);
+	(*policy)->fd.job_id =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)]);
+
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)]);
+	(*policy)->fd.hypertable_id =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)]);
+
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
+
+	(*policy)->fd.older_than = *ts_interval_from_tuple(
+		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
+
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
+	(*policy)->fd.cascade =
+		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
+
+	Assert(
+		!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)]);
+	(*policy)->fd.cascade_to_materializations = DatumGetBool(
+		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)]);
 
 	return SCAN_CONTINUE;
 }
@@ -113,6 +140,7 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 	CatalogSecurityContext sec_ctx;
 	Datum values[Natts_bgw_policy_drop_chunks];
 	bool nulls[Natts_bgw_policy_drop_chunks] = { false };
+	HeapTuple ht_older_than;
 
 	tupdesc = RelationGetDescr(rel);
 
@@ -120,8 +148,12 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 		Int32GetDatum(policy->fd.job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)] =
 		Int32GetDatum(policy->fd.hypertable_id);
+
+	ht_older_than = ts_interval_form_heaptuple(&policy->fd.older_than);
+
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)] =
-		IntervalPGetDatum(&policy->fd.older_than);
+		HeapTupleGetDatum(ht_older_than);
+
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)] =
 		BoolGetDatum(policy->fd.cascade);
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
@@ -130,6 +162,7 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(ht_older_than);
 }
 
 void

@@ -50,6 +50,7 @@
 #include "trigger.h"
 #include "compat.h"
 #include "utils.h"
+#include "interval.h"
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
@@ -1055,6 +1056,8 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 											 uint64 *num_found)
 {
 	ChunkScanCtx *chunk_ctx = NULL;
+	FormData_ts_interval *invl;
+
 	int64 older_than = -1;
 	int64 newer_than = -1;
 
@@ -1071,10 +1074,22 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 	{
 		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
 		ts_dimension_open_typecheck(older_than_type, partitioning_type, caller_name);
+
 		if (older_than_type == INTERVALOID)
-			older_than = ts_interval_from_now_to_internal(older_than_datum, partitioning_type);
+		{
+			invl = ts_interval_from_sql_input(hs->main_table_relid,
+											  older_than_datum,
+											  older_than_type,
+											  "older_than",
+											  caller_name);
+			older_than = ts_time_value_to_internal(ts_interval_subtract_from_now(invl, time_dim),
+												   partitioning_type);
+		}
 		else
+		{
 			older_than = ts_time_value_to_internal(older_than_datum, older_than_type);
+		}
+
 		end_strategy = BTLessStrategyNumber;
 	}
 
@@ -1082,10 +1097,22 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 	{
 		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
 		ts_dimension_open_typecheck(newer_than_type, partitioning_type, caller_name);
+
 		if (newer_than_type == INTERVALOID)
-			newer_than = ts_interval_from_now_to_internal(newer_than_datum, partitioning_type);
+		{
+			invl = ts_interval_from_sql_input(hs->main_table_relid,
+											  newer_than_datum,
+											  newer_than_type,
+											  "newer_than",
+											  caller_name);
+			newer_than = ts_time_value_to_internal(ts_interval_subtract_from_now(invl, time_dim),
+												   partitioning_type);
+		}
 		else
+		{
 			newer_than = ts_time_value_to_internal(newer_than_datum, newer_than_type);
+		}
+
 		start_strategy = BTGreaterEqualStrategyNumber;
 	}
 

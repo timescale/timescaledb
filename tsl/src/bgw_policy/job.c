@@ -11,6 +11,8 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <utils/lsyscache.h>
+#include <hypertable_cache.h>
+#include <utils/snapmgr.h>
 
 #include "bgw/timer.h"
 #include "bgw/job_stat.h"
@@ -22,16 +24,17 @@
 
 #include "errors.h"
 #include "job.h"
-#include "hypertable.h"
+#include "../hypertable.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "errors.h"
-#include "hypertable.h"
 #include "job.h"
 #include "license.h"
 #include "reorder.h"
+#include "utils.h"
+#include "drop_chunks_api.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS 5
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
@@ -150,11 +153,16 @@ execute_drop_chunks_policy(int32 job_id)
 {
 	bool started = false;
 	BgwPolicyDropChunks *args;
+	Oid table_relid;
+	Hypertable *hypertable;
+	Cache *hcache;
+	Dimension *open_dim;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
 		started = true;
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
 	/* Get the arguments from the drop_chunks_policy table */
@@ -166,18 +174,35 @@ execute_drop_chunks_policy(int32 job_id)
 				 errmsg("could not run drop_chunks policy #%d because no args in policy table",
 						job_id)));
 
-	ts_chunk_do_drop_chunks(ts_hypertable_id_to_relid(args->fd.hypertable_id),
-							IntervalPGetDatum(&args->fd.older_than),
-							0,
-							INTERVALOID,
+	table_relid = ts_hypertable_id_to_relid(args->fd.hypertable_id);
+	hcache = ts_hypertable_cache_pin();
+	hypertable = ts_hypertable_cache_get_entry(hcache, table_relid);
+	/* First verify that the hypertable corresponds to a valid table */
+	if (hypertable == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("could not run drop_chunks policy #%d because \"%s\" is not a hypertable",
+						job_id,
+						get_rel_name(table_relid))));
+
+	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
+	ts_chunk_do_drop_chunks(table_relid,
+							ts_interval_subtract_from_now(&args->fd.older_than, open_dim),
+							(Datum) 0,
+							ts_dimension_get_partition_type(open_dim),
 							InvalidOid,
 							args->fd.cascade,
 							args->fd.cascade_to_materializations,
 							LOG);
+
+	ts_cache_release(hcache);
 	elog(LOG, "completed dropping chunks");
 
 	if (started)
+	{
+		PopActiveSnapshot();
 		CommitTransactionCommand();
+	}
 	return true;
 }
 

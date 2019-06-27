@@ -39,10 +39,10 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%chunk');
 -- show the column name and type of the partitioning dimension in the
 -- metadata table
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000
-  2 |             1 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000 |                         | 
+  2 |             1 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
 (2 rows)
 
 EXPLAIN (costs off)
@@ -93,10 +93,10 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%chunk');
 
 -- show that the metadata has been updated
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------
-  1 |             1 | time_us     | timestamp without time zone | t       |            |                          |                    |   2628000000000
-  2 |             1 | colorname   | character varying           | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+--------------------+-----------------+-------------------------+------------------
+  1 |             1 | time_us     | timestamp without time zone | t       |            |                          |                    |   2628000000000 |                         | 
+  2 |             1 | colorname   | character varying           | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                         | 
 (2 rows)
 
 -- constraint exclusion should still work with updated column

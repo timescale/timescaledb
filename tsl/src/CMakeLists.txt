@@ -1,4 +1,5 @@
 set(SOURCES
+  hypertable.c
   init.c
   license.c
   reorder.c

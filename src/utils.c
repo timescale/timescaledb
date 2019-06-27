@@ -24,6 +24,8 @@
 #include <fmgr.h>
 #include <access/xact.h>
 #include <funcapi.h>
+#include <utils/syscache.h>
+#include <utils/catcache.h>
 
 #include "chunk.h"
 #include "utils.h"
@@ -352,57 +354,6 @@ ts_integer_to_internal_value(int64 value, Oid type)
 	}
 }
 
-/*
- * Convert the difference of interval and current timestamp to internal representation
- * This function interprets the interval as distance in time dimension to the past.
- * Depending on the type of hypertable type column, the function applied the
- * necessary granularity to now() - interval and converts the resulting
- * time to internal int64 representation
- */
-int64
-ts_interval_from_now_to_internal(Datum interval, Oid type_oid)
-{
-	Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
-
-	switch (type_oid)
-	{
-		case TIMESTAMPOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
-
-			return ts_time_value_to_internal(res, type_oid);
-		case TIMESTAMPTZOID:
-			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
-
-			return ts_time_value_to_internal(res, type_oid);
-		case DATEOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
-			res = DirectFunctionCall1(timestamp_date, res);
-
-			return ts_time_value_to_internal(res, type_oid);
-		case INT8OID:
-		case INT4OID:
-		case INT2OID:
-
-			/*
-			 * should never get here as the case is handled by
-			 * time_dim_typecheck
-			 */
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("can only use this with an INTERVAL for "
-							"TIMESTAMP, TIMESTAMPTZ, and DATE types")));
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unknown time type OID %d", type_oid)));
-	}
-	/* suppress compiler warnings on MSVC */
-	Assert(false);
-	return 0;
-}
-
 /* Returns approximate period in microseconds */
 int64
 ts_get_interval_period_approx(Interval *interval)
@@ -513,6 +464,7 @@ ts_type_is_int8_binary_compatible(Oid sourcetype)
  * Create a fresh struct pointer that will contain copied contents of the tuple.
  * Note that this function uses GETSTRUCT, which will not work correctly for tuple types
  * that might have variable lengths.
+ * Also note that the function assumes no NULLs in the tuple.
  */
 void *
 ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
@@ -520,6 +472,8 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
 {
 	void *struct_ptr = MemoryContextAllocZero(mctx, alloc_size);
 
+	/* Make sure the function is not used when the tuple contains NULLs */
+	Assert(copy_size == tuple->t_len - tuple->t_data->t_hoff);
 	memcpy(struct_ptr, GETSTRUCT(tuple), copy_size);
 
 	return struct_ptr;
@@ -557,6 +511,49 @@ get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
 		func_candidates = func_candidates->next;
 	}
 	elog(ERROR, "failed to find function %s in schema %s with %d args", name, schema_name, nargs);
+}
+
+/*
+ * Find a partitioning function with a given schema and name.
+ *
+ * The caller can optionally pass a filter function and a type of the argument
+ * that the partitioning function should take.
+ */
+regproc
+lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, proc_filter filter,
+					 void *filter_arg)
+{
+	Oid namespace_oid = LookupExplicitNamespace(schema, false);
+	regproc func = InvalidOid;
+	CatCList *catlist;
+	int i;
+
+	/*
+	 * We could use SearchSysCache3 to get by (name, args, namespace), but
+	 * that would not allow us to check for functions that take either
+	 * ANYELEMENTOID or a dimension-specific in the same search.
+	 */
+	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
+
+	for (i = 0; i < catlist->n_members; i++)
+	{
+		HeapTuple proctup = &catlist->members[i]->tuple;
+		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
+
+		if (procform->pronamespace == namespace_oid &&
+			(filter == NULL || filter(procform, filter_arg)))
+		{
+			if (rettype)
+				*rettype = procform->prorettype;
+
+			func = HeapTupleGetOid(proctup);
+			break;
+		}
+	}
+
+	ReleaseSysCacheList(catlist);
+
+	return func;
 }
 
 /*

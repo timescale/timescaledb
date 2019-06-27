@@ -3,6 +3,7 @@ set(INSTALL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 # Source files that define the schemas and tables for our metadata
 set(PRE_INSTALL_SOURCE_FILES
   pre_install/schemas.sql # Must be first
+  pre_install/types.sql # Must be before tables.sql
   pre_install/tables.sql
   pre_install/bgw_scheduler_startup.sql
 )
@@ -30,6 +31,7 @@ set(SOURCE_FILES
   ddl_triggers.sql
   bookend.sql
   time_bucket.sql
+  ts_interval.sql
   version.sql
   size_utils.sql
   histogram.sql

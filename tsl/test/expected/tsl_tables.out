@@ -27,11 +27,19 @@ select * from _timescaledb_config.bgw_policy_reorder;
 (0 rows)
 
 CREATE TABLE test_table(time timestamptz, junk int);
+CREATE TABLE test_table_int(time bigint, junk int);
 SELECT create_hypertable('test_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,test_table,t)
+(1 row)
+
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (2,public,test_table_int,t)
 (1 row)
 
 CREATE INDEX second_index on test_table (time);
@@ -86,7 +94,7 @@ SELECT create_hypertable('test_table2', 'time', chunk_time_interval=>INTERVAL '1
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
- (2,public,test_table2,t)
+ (3,public,test_table2,t)
 (1 row)
 
 select add_reorder_policy('test_table2', 'test_table2_time_idx');
@@ -118,12 +126,22 @@ select add_drop_chunks_policy('test_table');
 ERROR:  function add_drop_chunks_policy(unknown) does not exist at character 8
 select add_drop_chunks_policy(INTERVAL '3 hours');
 ERROR:  function add_drop_chunks_policy(interval) does not exist at character 8
+select add_drop_chunks_policy('test_table', INTERVAL 'haha');
+ERROR:  invalid input syntax for type interval: "haha" at character 54
+select add_drop_chunks_policy('test_table', 'haha');
+ERROR:  invalid type for parameter older_than in add_drop_chunks_policy
+select add_drop_chunks_policy('test_table', 42);
+ERROR:  invalid parameter value for older_than
 select add_drop_chunks_policy('fake_table', INTERVAL '3 month', true);
 ERROR:  relation "fake_table" does not exist at character 31
 select add_drop_chunks_policy('fake_table', INTERVAL '3 month');
 ERROR:  relation "fake_table" does not exist at character 31
 select add_drop_chunks_policy('test_table', cascade=>true);
 ERROR:  function add_drop_chunks_policy(unknown, cascade => boolean) does not exist at character 8
+select add_drop_chunks_policy('test_table_int', INTERVAL '3 month', true);
+ERROR:  invalid parameter value for older_than
+select add_drop_chunks_policy('test_table_int', 42, true);
+ERROR:  integer_now_func not set on hypertable test_table_int
 \set ON_ERROR_STOP 1
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
  add_drop_chunks_policy 
@@ -176,9 +194,9 @@ WARNING:  could not add drop_chunks policy due to existing policy on hypertable 
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
---------+---------------+------------+---------+-----------------------------
-   1002 |             1 | @ 3 mons   | t       | f
+ job_id | hypertable_id |   older_than    | cascade | cascade_to_materializations 
+--------+---------------+-----------------+---------+-----------------------------
+   1002 |             1 | (t,"@ 3 mons",) | t       | f
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -194,15 +212,15 @@ select add_drop_chunks_policy('test_table', INTERVAL '3 days', cascade_to_materi
 ERROR:  drop chunks policy already exists for hypertable "test_table"
 \set ON_ERROR_STOP 1
 select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
---------+---------------+------------+---------+-----------------------------
-   1002 |             1 | @ 3 mons   | t       | f
+ job_id | hypertable_id |   older_than    | cascade | cascade_to_materializations 
+--------+---------------+-----------------+---------+-----------------------------
+   1002 |             1 | (t,"@ 3 mons",) | t       | f
 (1 row)
 
 select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
- job_id | hypertable_id | older_than | cascade 
---------+---------------+------------+---------
-   1002 |             1 | @ 3 mons   | t
+ job_id | hypertable_id |   older_than    | cascade 
+--------+---------------+-----------------+---------
+   1002 |             1 | (t,"@ 3 mons",) | t
 (1 row)
 
 select remove_drop_chunks_policy('test_table');
@@ -210,6 +228,71 @@ select remove_drop_chunks_policy('test_table');
 ---------------------------
  
 (1 row)
+
+-- Test set_integer_now_func and add_drop_chunks_policy with
+-- hypertables that have integer time dimension
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table', 42);
+ERROR:  integer_now_func can only be set for hypertables that have integer time dimensions
+select set_integer_now_func('test_table', 'set_integer_now_func');
+ERROR:  integer_now_func can only be set for hypertables that have integer time dimensions
+select set_integer_now_func('test_table_int', 'set_integer_now_func');
+ERROR:  integer_now_func must take no arguments and it must be STABLE
+\set ON_ERROR_STOP 1
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                         | 
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_schema;
+create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+-- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+select set_integer_now_func('test_table_int', 'dummy_now');
+WARNING:  Timescale License expired
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table_int', 'dummy_now');
+ERROR:  integer_now_func is already set for hypertable "test_table_int"
+\set ON_ERROR_STOP 1
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | public                  | dummy_now
+(2 rows)
+
+select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | my_schema               | dummy_now2
+(2 rows)
+
+-- \c :TEST_DBNAME :ROLE_SUPERUSER q:: should all of the following be execed in super user mode?
+-- partitioning.sql test does something similar bu tnot sure why superuser is necessary.
+ALTER SCHEMA my_schema RENAME TO my_new_schema;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
+  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | my_new_schema           | dummy_now2
+(2 rows)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
  job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
@@ -222,6 +305,7 @@ select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.
 (0 rows)
 
 select remove_reorder_policy('test_table');
+WARNING:  Timescale License expired
  remove_reorder_policy 
 -----------------------
  
@@ -244,12 +328,57 @@ select add_drop_chunks_policy('test_table', INTERVAL '3 month');
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
---------+---------------+------------+---------+-----------------------------
-   1003 |             1 | @ 3 mons   | f       | f
+ job_id | hypertable_id |   older_than    | cascade | cascade_to_materializations 
+--------+---------------+-----------------+---------+-----------------------------
+   1003 |             1 | (t,"@ 3 mons",) | f       | f
 (1 row)
 
 select remove_drop_chunks_policy('test_table');
+ remove_drop_chunks_policy 
+---------------------------
+ 
+(1 row)
+
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+ job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
+--------+---------------+------------+---------+-----------------------------
+(0 rows)
+
+select add_drop_chunks_policy('test_table_int', 1);
+ add_drop_chunks_policy 
+------------------------
+                   1004
+(1 row)
+
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+ job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
+--------+---------------+------------+---------+-----------------------------
+   1004 |             2 | (f,,1)     | f       | f
+(1 row)
+
+-- Should not add new policy with different parameters
+select add_drop_chunks_policy('test_table_int', 2, false, true);
+WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+ add_drop_chunks_policy 
+------------------------
+                     -1
+(1 row)
+
+select add_drop_chunks_policy('test_table_int', 1, false, true, true);
+WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+ add_drop_chunks_policy 
+------------------------
+                     -1
+(1 row)
+
+select add_drop_chunks_policy('test_table_int', 1, true, true, false);
+WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+ add_drop_chunks_policy 
+------------------------
+                     -1
+(1 row)
+
+select remove_drop_chunks_policy('test_table_int');
  remove_drop_chunks_policy 
 ---------------------------
  
@@ -406,8 +535,8 @@ select * from _timescaledb_config.bgw_job;
   id  |      application_name      |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period 
 ------+----------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------
     1 | Telemetry Reporter         | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour
- 1006 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 12 hours
- 1007 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 1 day
+ 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 12 hours
+ 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 1 day
 (3 rows)
 
 DROP TABLE test_table;
@@ -450,7 +579,7 @@ SELECT create_hypertable('test_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
- (3,public,test_table,t)
+ (4,public,test_table,t)
 (1 row)
 
 CREATE INDEX second_index on test_table (time);
@@ -459,47 +588,48 @@ SELECT create_hypertable('test_table2', 'time');
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
- (4,public,test_table2,t)
+ (5,public,test_table2,t)
 (1 row)
 
 CREATE INDEX junk_index on test_table2 (junk);
 select add_drop_chunks_policy('test_table', INTERVAL '2 days');
  add_drop_chunks_policy 
 ------------------------
-                   1008
+                   1009
 (1 row)
 
 select add_drop_chunks_policy('test_table2', INTERVAL '1 days');
  add_drop_chunks_policy 
 ------------------------
-                   1009
+                   1010
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1008 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
  1009 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
 (2 rows)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
---------+---------------+------------+---------+-----------------------------
-   1008 |             3 | @ 2 days   | f       | f
-   1009 |             4 | @ 1 day    | f       | f
+ job_id | hypertable_id |   older_than    | cascade | cascade_to_materializations 
+--------+---------------+-----------------+---------+-----------------------------
+   1009 |             4 | (t,"@ 2 days",) | f       | f
+   1010 |             5 | (t,"@ 1 day",)  | f       | f
 (2 rows)
 
 DROP TABLE test_table;
+DROP TABLE test_table_int;
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1009 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than | cascade | cascade_to_materializations 
---------+---------------+------------+---------+-----------------------------
-   1009 |             4 | @ 1 day    | f       | f
+ job_id | hypertable_id |   older_than   | cascade | cascade_to_materializations 
+--------+---------------+----------------+---------+-----------------------------
+   1010 |             5 | (t,"@ 1 day",) | f       | f
 (1 row)
 
 DROP TABLE test_table2;
@@ -540,7 +670,7 @@ SELECT create_hypertable('test_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
- (5,public,test_table,t)
+ (6,public,test_table,t)
 (1 row)
 
 CREATE INDEX second_index on test_table (time);
@@ -566,13 +696,13 @@ select ts_test_chunk_stats_insert(:job_id, :chunk_id, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1010 |        1 |                 1
+   1011 |        1 |                 1
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type='reorder';
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1010 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
@@ -582,13 +712,13 @@ DROP TABLE :other_chunk;
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1010 |        1 |                 1
+   1011 |        1 |                 1
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type='reorder';
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1010 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 -- Dropping the hypertable should drop the chunk, which should drop the reorder policy
@@ -609,14 +739,14 @@ SELECT create_hypertable('test_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
- (6,public,test_table,t)
+ (7,public,test_table,t)
 (1 row)
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
 select add_drop_chunks_policy('test_table', INTERVAL '2 days', true);
  add_drop_chunks_policy 
 ------------------------
-                   1012
+                   1013
 (1 row)
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
@@ -628,14 +758,14 @@ select ts_test_chunk_stats_insert(:job_id, 123, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1011 |      123 |                 1
+   1012 |      123 |                 1
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1011 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 1 day
- 1012 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
@@ -648,13 +778,13 @@ select remove_drop_chunks_policy('test_table');
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1011 |      123 |                 1
+   1012 |      123 |                 1
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1012 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 select remove_reorder_policy('test_table');
@@ -679,70 +809,70 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1013 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1014 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 -- No change
 select * from alter_job_schedule(:job_id);
  job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------+-------------------+-------------+-------------+--------------
-   1013 | @ 84 hours        | @ 0         |          -1 | @ 1 day
+   1014 | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 -- Changes expected
 select * from alter_job_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   
 --------+-------------------+-------------+-------------+-----------------
-   1013 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs
+   1014 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs
 (1 row)
 
 select * from alter_job_schedule(:job_id, INTERVAL '123 years');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   
 --------+-------------------+-------------+-------------+-----------------
-   1013 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs
+   1014 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs
 (1 row)
 
 select * from alter_job_schedule(:job_id, retry_period => INTERVAL '33 hours');
  job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------+-------------------+-------------+-------------+--------------
-   1013 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours
+   1014 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours
 (1 row)
 
 select * from alter_job_schedule(:job_id, max_runtime => INTERVAL '456 sec');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours
 (1 row)
 
 select * from alter_job_schedule(:job_id, max_retries => 0);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours
 (1 row)
 
 select * from alter_job_schedule(:job_id, max_retries => -1);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours
 (1 row)
 
 select * from alter_job_schedule(:job_id, max_retries => 20);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
 -- No change
 select * from alter_job_schedule(:job_id, max_runtime => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
 select * from alter_job_schedule(:job_id, max_retries => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
-   1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
 -- Check if_exists boolean works correctly
@@ -786,7 +916,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_c
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
 WARNING:  Timescale License expired
-ERROR:  insufficient permssions to alter job 1014
-select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
 ERROR:  insufficient permssions to alter job 1015
+select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
+ERROR:  insufficient permssions to alter job 1016
 \set ON_ERROR_STOP 1
