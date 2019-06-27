@@ -280,6 +280,7 @@ endif ()
 
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry" ON)
+option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
 
 # Check if PostgreSQL has OpenSSL enabled by inspecting pg_config --configure.
 # Right now, a Postgres header will redefine an OpenSSL function if Postgres is not installed --with-openssl,
