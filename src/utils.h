@@ -30,6 +30,8 @@ typedef enum TimevalInfinity
 	TimevalPosInfinity = 1,
 } TimevalInfinity;
 
+typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
+
 /*
  * Convert a column value into the internal time representation.
  * cannot store a timestamp earlier than MIN_TIMESTAMP, or greater than
@@ -47,10 +49,6 @@ extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_
  */
 extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
 extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);
-/*
- * Convert the difference of interval and current timestamp to internal representation
- */
-extern int64 ts_interval_from_now_to_internal(Datum time_val, Oid type);
 
 /*
  * Return the period in microseconds of the first argument to date_trunc.
@@ -69,6 +67,8 @@ extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
 
 extern Oid get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[]);
 
+extern TSDLLEXPORT regproc lookup_proc_filtered(const char *schema, const char *funcname,
+												Oid *rettype, proc_filter filter, void *filter_arg);
 extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
 
 extern Oid get_cast_func(Oid source, Oid target);

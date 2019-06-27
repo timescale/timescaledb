@@ -172,6 +172,8 @@ enum Anum_dimension
 	Anum_dimension_partitioning_func_schema,
 	Anum_dimension_partitioning_func,
 	Anum_dimension_interval_length,
+	Anum_dimension_integer_now_func_schema,
+	Anum_dimension_integer_now_func,
 	_Anum_dimension_max,
 };
 
@@ -190,6 +192,8 @@ typedef struct FormData_dimension
 	NameData partitioning_func;
 	/* open (time) columns */
 	int64 interval_length;
+	NameData integer_now_func_schema;
+	NameData integer_now_func;
 } FormData_dimension;
 
 typedef FormData_dimension *Form_dimension;
@@ -691,6 +695,23 @@ typedef struct FormData_bgw_policy_reorder_hypertable_id_idx
  *
  ******************************************/
 #define BGW_POLICY_DROP_CHUNKS_TABLE_NAME "bgw_policy_drop_chunks"
+
+typedef enum Anum_ts_interval
+{
+	Anum_is_time_interval = 1,
+	Anum_time_interval,
+	Anum_integer_interval,
+	_Anum_ts_interval_max
+} Anum_ts_interval;
+
+#define Natts_ts_interval (_Anum_ts_interval_max - 1)
+typedef struct FormData_ts_interval
+{
+	bool is_time_interval;
+	Interval time_interval;
+	int64 integer_interval;
+} FormData_ts_interval;
+
 typedef enum Anum_bgw_policy_drop_chunks
 {
 	Anum_bgw_policy_drop_chunks_job_id = 1,
@@ -707,7 +728,7 @@ typedef struct FormData_bgw_policy_drop_chunks
 {
 	int32 job_id;
 	int32 hypertable_id;
-	Interval older_than;
+	FormData_ts_interval older_than;
 	bool cascade;
 	bool cascade_to_materializations;
 } FormData_bgw_policy_drop_chunks;

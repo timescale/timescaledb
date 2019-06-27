@@ -47,51 +47,6 @@
 	((dimtype == DIMENSION_TYPE_OPEN) ? IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :        \
 										IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
 
-typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
-
-/*
- * Find a partitioning function with a given schema and name.
- *
- * The caller can optionally pass a filter function and a type of the argument
- * that the partitioning function should take.
- */
-static regproc
-lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, proc_filter filter,
-					 void *filter_arg)
-{
-	Oid namespace_oid = LookupExplicitNamespace(schema, false);
-	regproc func = InvalidOid;
-	CatCList *catlist;
-	int i;
-
-	/*
-	 * We could use SearchSysCache3 to get by (name, args, namespace), but
-	 * that would not allow us to check for functions that take either
-	 * ANYELEMENTOID or a dimension-specific in the same search.
-	 */
-	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
-
-	for (i = 0; i < catlist->n_members; i++)
-	{
-		HeapTuple proctup = &catlist->members[i]->tuple;
-		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
-
-		if (procform->pronamespace == namespace_oid &&
-			(filter == NULL || filter(procform, filter_arg)))
-		{
-			if (rettype)
-				*rettype = procform->prorettype;
-
-			func = HeapTupleGetOid(proctup);
-			break;
-		}
-	}
-
-	ReleaseSysCacheList(catlist);
-
-	return func;
-}
-
 static bool
 closed_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
 {

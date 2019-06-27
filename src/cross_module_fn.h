@@ -42,6 +42,9 @@ typedef struct CrossModuleFunctions
 	void (*add_tsl_license_info_telemetry)(JsonbParseState *parseState);
 	bool (*bgw_policy_job_execute)(BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, bool verbose);
+	Datum (*set_integer_now_func)(PG_FUNCTION_ARGS);
+	Datum (*valid_ts_interval)(PG_FUNCTION_ARGS);
+
 	Datum (*add_drop_chunks_policy)(PG_FUNCTION_ARGS);
 	Datum (*add_reorder_policy)(PG_FUNCTION_ARGS);
 	Datum (*remove_drop_chunks_policy)(PG_FUNCTION_ARGS);

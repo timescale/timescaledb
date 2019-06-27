@@ -165,6 +165,16 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		MemoryContextSwitchTo(old);
 	}
 
+	if (!isnull[Anum_dimension_integer_now_func_schema - 1] &&
+		!isnull[Anum_dimension_integer_now_func - 1])
+	{
+		namecpy(&d->fd.integer_now_func_schema,
+				DatumGetName(
+					values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]));
+		namecpy(&d->fd.integer_now_func,
+				DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)]));
+	}
+
 	if (d->type == DIMENSION_TYPE_CLOSED)
 		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 	else
@@ -527,6 +537,17 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 			NameGetDatum(&dim->fd.partitioning_func_schema);
 	}
 
+	if (*NameStr(dim->fd.integer_now_func) != '\0' &&
+		*NameStr(dim->fd.integer_now_func_schema) != '\0')
+	{
+		values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] =
+			NameGetDatum(&dim->fd.integer_now_func);
+		values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] =
+			NameGetDatum(&dim->fd.integer_now_func_schema);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] = false;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = false;
+	}
+
 	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)])
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
 			Int64GetDatum(dim->fd.interval_length);
@@ -586,6 +607,10 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
 	}
+
+	/* no integer_now function by default */
+	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = true;
+	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	dimension_id = Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION));
@@ -901,10 +926,9 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 
 	AlterTableInternal(table_relid, list_make1(&cmd), false);
 }
-
-static void
-dimension_update(FunctionCallInfo fcinfo, Oid table_relid, Name dimname, DimensionType dimtype,
-				 Datum *interval, int16 *num_slices)
+void
+dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum *interval,
+				 Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
@@ -946,19 +970,33 @@ dimension_update(FunctionCallInfo fcinfo, Oid table_relid, Name dimname, Dimensi
 
 	if (NULL != interval)
 	{
-		Oid intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
 		Oid dimtype = ts_dimension_get_partition_type(dim);
+		Assert(NULL != intervaltype);
 
 		dim->fd.interval_length =
 			dimension_interval_to_internal(NameStr(dim->fd.column_name),
 										   dimtype,
-										   intervaltype,
+										   *intervaltype,
 										   *interval,
 										   hypertable_adaptive_chunking_enabled(ht));
 	}
 
 	if (NULL != num_slices)
 		dim->fd.num_slices = *num_slices;
+
+	if (NULL != integer_now_func)
+	{
+		Oid pronamespace = get_func_namespace(*integer_now_func);
+		namecpy(&dim->fd.integer_now_func_schema,
+				DatumGetName(
+					DirectFunctionCall1(namein,
+										CStringGetDatum(get_namespace_name(pronamespace)))));
+
+		namecpy(&dim->fd.integer_now_func,
+				DatumGetName(
+					DirectFunctionCall1(namein,
+										CStringGetDatum(get_func_name(*integer_now_func)))));
+	}
 
 	dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 
@@ -995,7 +1033,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 */
 	num_slices = num_slices_arg & 0xffff;
 
-	dimension_update(fcinfo, table_relid, colname, DIMENSION_TYPE_CLOSED, NULL, &num_slices);
+	dimension_update(table_relid, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
 
 	PG_RETURN_VOID();
 }
@@ -1018,6 +1056,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_GETARG_OID(0);
 	Datum interval = PG_GETARG_DATUM(1);
+	Oid intervaltype = InvalidOid;
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 
 	if (PG_ARGISNULL(0))
@@ -1031,8 +1070,14 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid interval: an explicit interval must be specified")));
-
-	dimension_update(fcinfo, table_relid, colname, DIMENSION_TYPE_OPEN, &interval, NULL);
+	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	dimension_update(table_relid,
+					 colname,
+					 DIMENSION_TYPE_OPEN,
+					 &interval,
+					 &intervaltype,
+					 NULL,
+					 NULL);
 
 	PG_RETURN_VOID();
 }
@@ -1355,11 +1400,50 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 static ScanTupleResult
 dimension_rename_schema_name(TupleInfo *ti, void *data)
 {
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_dimension *dimension = (FormData_dimension *) GETSTRUCT(tuple);
+	/* Dimension table may contain null valued columns that is why we do not use
+	 * FormData_dimension *dimension = (FormData_dimension *) GETSTRUCT(tuple);
+	 * pattern here
+	 */
+	Datum values[Natts_dimension];
+	bool nulls[Natts_dimension];
+	bool doReplace[Natts_dimension] = { false };
+	HeapTuple tuple = ti->tuple;
+	/* contains [old_name,new_name] in that order */
+	char **names = (char **) data;
+	Name schemaname;
+	heap_deform_tuple(tuple, ti->desc, values, nulls);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] ||
+		   !nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]);
 
-	/* Rename schema name */
-	namestrcpy(&dimension->partitioning_func_schema, (const char *) data);
+	/* Rename schema names */
+	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)])
+	{
+		schemaname =
+			DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]);
+
+		if (namestrcmp(schemaname, names[0]) == 0)
+		{
+			namestrcpy(schemaname, (const char *) names[1]);
+			values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] =
+				NameGetDatum(schemaname);
+			doReplace[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = true;
+		}
+	}
+
+	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)])
+	{
+		schemaname =
+			DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]);
+		if (namestrcmp(schemaname, names[0]) == 0)
+		{
+			namestrcpy(schemaname, (const char *) names[1]);
+			values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] =
+				NameGetDatum(schemaname);
+			doReplace[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = true;
+		}
+	}
+
+	tuple = heap_modify_tuple(tuple, ti->desc, values, nulls, doReplace);
 	ts_catalog_update(ti->scanrel, tuple);
 	heap_freetuple(tuple);
 
@@ -1373,6 +1457,7 @@ ts_dimensions_rename_schema_name(char *old_name, char *new_name)
 	NameData old_schema_name;
 	ScanKeyData scankey[1];
 	Catalog *catalog = ts_catalog_get();
+	char *names[2] = { old_name, new_name };
 
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, DIMENSION),
@@ -1380,7 +1465,7 @@ ts_dimensions_rename_schema_name(char *old_name, char *new_name)
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = dimension_rename_schema_name,
-		.data = new_name,
+		.data = names,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 	};
@@ -1389,6 +1474,14 @@ ts_dimensions_rename_schema_name(char *old_name, char *new_name)
 
 	ScanKeyInit(&scankey[0],
 				Anum_dimension_partitioning_func_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				NameGetDatum(&old_schema_name));
+
+	ts_scanner_scan(&scanctx);
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_integer_now_func_schema,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				NameGetDatum(&old_schema_name));

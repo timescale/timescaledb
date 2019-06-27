@@ -20,7 +20,11 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 select * from _timescaledb_config.bgw_policy_reorder;
 
 CREATE TABLE test_table(time timestamptz, junk int);
+CREATE TABLE test_table_int(time bigint, junk int);
+
 SELECT create_hypertable('test_table', 'time');
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+
 CREATE INDEX second_index on test_table (time);
 CREATE INDEX third_index on test_table (time);
 
@@ -59,9 +63,14 @@ select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reo
 select add_drop_chunks_policy();
 select add_drop_chunks_policy('test_table');
 select add_drop_chunks_policy(INTERVAL '3 hours');
+select add_drop_chunks_policy('test_table', INTERVAL 'haha');
+select add_drop_chunks_policy('test_table', 'haha');
+select add_drop_chunks_policy('test_table', 42);
 select add_drop_chunks_policy('fake_table', INTERVAL '3 month', true);
 select add_drop_chunks_policy('fake_table', INTERVAL '3 month');
 select add_drop_chunks_policy('test_table', cascade=>true);
+select add_drop_chunks_policy('test_table_int', INTERVAL '3 month', true);
+select add_drop_chunks_policy('test_table_int', 42, true);
 \set ON_ERROR_STOP 1
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
@@ -89,6 +98,39 @@ select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.
 
 select remove_drop_chunks_policy('test_table');
 
+-- Test set_integer_now_func and add_drop_chunks_policy with
+-- hypertables that have integer time dimension
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table', 42);
+select set_integer_now_func('test_table', 'set_integer_now_func');
+select set_integer_now_func('test_table_int', 'set_integer_now_func');
+\set ON_ERROR_STOP 1
+
+select * from _timescaledb_catalog.dimension;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_schema;
+create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+-- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+
+select set_integer_now_func('test_table_int', 'dummy_now');
+
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table_int', 'dummy_now');
+\set ON_ERROR_STOP 1
+
+select * from _timescaledb_catalog.dimension;
+select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
+select * from _timescaledb_catalog.dimension;
+-- \c :TEST_DBNAME :ROLE_SUPERUSER q:: should all of the following be execed in super user mode?
+-- partitioning.sql test does something similar bu tnot sure why superuser is necessary.
+ALTER SCHEMA my_schema RENAME TO my_new_schema;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select * from _timescaledb_catalog.dimension;
+
+
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
 select remove_reorder_policy('test_table');
@@ -99,6 +141,16 @@ select r.job_id,r.hypertable_id,r.hypertable_index_name from _timescaledb_config
 select add_drop_chunks_policy('test_table', INTERVAL '3 month');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 select remove_drop_chunks_policy('test_table');
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+
+select add_drop_chunks_policy('test_table_int', 1);
+select * from _timescaledb_config.bgw_policy_drop_chunks;
+-- Should not add new policy with different parameters
+select add_drop_chunks_policy('test_table_int', 2, false, true);
+select add_drop_chunks_policy('test_table_int', 1, false, true, true);
+select add_drop_chunks_policy('test_table_int', 1, true, true, false);
+
+select remove_drop_chunks_policy('test_table_int');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 -- Make sure remove works when there's nothing to remove
@@ -185,6 +237,7 @@ select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 DROP TABLE test_table;
+DROP TABLE test_table_int;
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
