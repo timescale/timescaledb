@@ -36,12 +36,12 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 -- Now make sure that only the exported_uuid is exported on pg_dump
 \c postgres :ROLE_SUPERUSER
 
-\! pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
-\! dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
-\! createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
+\! ${PG_BINDIR}/pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
+\! ${PG_BINDIR}/dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
+\! ${PG_BINDIR}/createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
 -- Redirect to /dev/null to suppress NOTICE
-\! pg_restore -h ${TEST_PGHOST} -U super_user -d "${TEST_DBNAME}" dump/instmeta.sql > /dev/null 2>&1
+\! ${PG_BINDIR}/pg_restore -h ${TEST_PGHOST} -U super_user -d "${TEST_DBNAME}" dump/instmeta.sql > /dev/null 2>&1
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
