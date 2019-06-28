@@ -44,7 +44,7 @@
 #if PG_VERSION_SUPPORTS_MULTINODE
 #include "server.h"
 #include "process_utility.h"
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/fdw.h"
 #include "chunk_api.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"

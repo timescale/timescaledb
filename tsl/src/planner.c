@@ -18,7 +18,7 @@
 #include "hypertable_cache.h"
 #include "compat.h"
 #if PG_VERSION_SUPPORTS_MULTINODE
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/fdw.h"
 #include "fdw/server_scan_plan.h"
 #endif
 #include "guc.h"

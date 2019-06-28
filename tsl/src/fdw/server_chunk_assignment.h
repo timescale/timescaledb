@@ -16,6 +16,7 @@
 #else
 #include <nodes/relation.h>
 #endif
+#include <utils/hsearch.h>
 
 /*
  * server-chunk assignments map chunks to the servers that will be responsible
