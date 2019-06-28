@@ -76,7 +76,7 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     newer_than "any" = NULL,
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL
-) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 
 -- show chunks older than or newer than a specific time.

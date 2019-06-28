@@ -703,19 +703,19 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	Catalog *catalog = ts_catalog_get();
 	int num_found;
 	ScannerCtx	ctx = {
-		.table = catalog_get_table_id(catalog, CHUNK),
-		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = chunk_stub,
-		.tuple_found = chunk_tuple_found,
-		.lockmode = AccessShareLock,
-		.tuplock = {
-			.lockmode = LockTupleShare,
-			.enabled = tuplock,
-		},
-		.scandirection = ForwardScanDirection,
-	};
+        .table = catalog_get_table_id(catalog, CHUNK),
+        .index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
+        .nkeys = 1,
+        .scankey = scankey,
+        .data = chunk_stub,
+        .tuple_found = chunk_tuple_found,
+        .lockmode = AccessShareLock,
+        .tuplock = {
+            .lockmode = LockTupleShare,
+            .enabled = tuplock,
+        },
+        .scandirection = ForwardScanDirection,
+    };
 
 	/*
 	 * Perform an index scan on chunk ID.
@@ -1894,7 +1894,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_DONE(funcctx);
 }
 
-void
+List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,
 						bool cascades_to_materializations, int32 log_level)
@@ -1902,6 +1902,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	int i = 0;
 	uint64 num_chunks = 0;
 	Chunk **chunks;
+	List *dropped_chunk_names = NIL;
+	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
 
 	ts_hypertable_permissions_check(table_relid, GetUserId());
@@ -1911,7 +1913,6 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		case HypertableIsMaterialization:
 		case HypertableIsMaterializationAndRaw:
 			elog(ERROR, "cannot drop_chunks on a continuous aggregate materialization table");
-			return;
 		case HypertableIsRawTable:
 			if (!cascades_to_materializations)
 				ereport(ERROR,
@@ -1935,6 +1936,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 
 	for (; i < num_chunks; i++)
 	{
+		size_t len;
+		char *chunk_name;
+
 		ObjectAddress objaddr = {
 			.classId = RelationRelationId,
 			.objectId = chunks[i]->table_id,
@@ -1945,6 +1949,16 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			 chunks[i]->fd.schema_name.data,
 			 chunks[i]->fd.table_name.data);
 
+		/* Store chunk name for output */
+		schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
+		table_name = quote_identifier(chunks[i]->fd.table_name.data);
+
+		len = strlen(schema_name) + strlen(table_name) + 2;
+		chunk_name = palloc(len);
+
+		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
+		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
+
 		/* Remove the chunk from the hypertable table */
 		ts_chunk_delete_by_relid(chunks[i]->table_id);
 
@@ -1954,25 +1968,89 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 
 	if (cascades_to_materializations)
 		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, chunks, num_chunks);
+
+	return dropped_chunk_names;
+}
+
+/*
+ * This is a helper set returning function (SRF) that takes a set returning function context and as
+ * argument and returns cstrings extracted from funcctx->user_fctx (which is a List).
+ * Note that the caller needs to be registered as a
+ * set returning function for this to work.
+ */
+static Datum
+list_return_srf(FunctionCallInfo fcinfo)
+{
+	FuncCallContext *funcctx;
+	uint64 call_cntr;
+	TupleDesc tupdesc;
+	List *result_set;
+	Datum retval;
+
+	/* stuff done only on the first call of the function */
+	if (SRF_IS_FIRSTCALL())
+	{
+		/* Build a tuple descriptor for our result type */
+		/* not quite necessary */
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_SCALAR)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+	}
+
+	/* stuff done on every call of the function */
+	funcctx = SRF_PERCALL_SETUP();
+
+	call_cntr = funcctx->call_cntr;
+	result_set = (List *) funcctx->user_fctx;
+
+	/* do when there is more left to send */
+	if (call_cntr < funcctx->max_calls)
+	{
+		/* store return value and increment linked list */
+		retval = CStringGetTextDatum(linitial(result_set));
+		funcctx->user_fctx = list_delete_first(result_set);
+		SRF_RETURN_NEXT(funcctx, retval);
+	}
+	else /* do when there is no more left */
+		SRF_RETURN_DONE(funcctx);
 }
 
 Datum
 ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
+	MemoryContext oldcontext;
+	FuncCallContext *funcctx;
 	ListCell *lc;
-	List *ht_oids;
-	Name table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	Name schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	Datum older_than_datum = PG_GETARG_DATUM(0);
-	Datum newer_than_datum = PG_GETARG_DATUM(4);
+	List *ht_oids, *dc_names = NIL;
+
+	Name table_name, schema_name;
+	Datum older_than_datum, newer_than_datum;
+
+	Oid older_than_type, newer_than_type;
+	bool cascade, verbose, cascades_to_materializations;
+	int elevel;
+
+	/*
+	 * When past the first call of the SRF, dropping has already been completed,
+	 * so we just return the next chunk in the list of dropped chunks.
+	 */
+	if (!SRF_IS_FIRSTCALL())
+		return list_return_srf(fcinfo);
+
+	table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
+	schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	older_than_datum = PG_GETARG_DATUM(0);
+	newer_than_datum = PG_GETARG_DATUM(4);
 
 	/* Making types InvalidOid makes the logic simpler later */
-	Oid older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
-	Oid newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
-	bool cascade = PG_GETARG_BOOL(3);
-	bool verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
-	bool cascades_to_materializations = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
-	int elevel = verbose ? INFO : DEBUG2;
+	older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
+	newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
+	cascade = PG_GETARG_BOOL(3);
+	verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
+	cascades_to_materializations = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
+	elevel = verbose ? INFO : DEBUG2;
 
 	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))
 		ereport(ERROR,
@@ -1990,10 +2068,15 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 					 errmsg("hypertable \"%s\" does not exist", NameStr(*table_name))));
 	}
 
+	/* Initial multi function call setup */
+	funcctx = SRF_FIRSTCALL_INIT();
+
+	/* Drop chunks and build list of dropped chunks */
 	foreach (lc, ht_oids)
 	{
 		Oid table_relid = lfirst_oid(lc);
 		List *fk_relids = NIL;
+		List *dc_temp = NIL;
 		ListCell *lf;
 
 		ts_hypertable_permissions_check(table_relid, GetUserId());
@@ -2041,17 +2124,28 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		{
 			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
 		}
-		ts_chunk_do_drop_chunks(table_relid,
-								older_than_datum,
-								newer_than_datum,
-								older_than_type,
-								newer_than_type,
-								cascade,
-								cascades_to_materializations,
-								elevel);
+
+		/* Drop chunks and store their names for return */
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		dc_temp = ts_chunk_do_drop_chunks(table_relid,
+										  older_than_datum,
+										  newer_than_datum,
+										  older_than_type,
+										  newer_than_type,
+										  cascade,
+										  cascades_to_materializations,
+										  elevel);
+		dc_names = list_concat(dc_names, dc_temp);
+
+		MemoryContextSwitchTo(oldcontext);
 	}
 
-	PG_RETURN_NULL();
+	/* store data for multi function call */
+	funcctx->max_calls = list_length(dc_names);
+	funcctx->user_fctx = dc_names;
+
+	return list_return_srf(fcinfo);
 }
 
 /**

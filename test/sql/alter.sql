@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- Set this variable to avoid using a hard-coded path each time query
+-- results are compared
+\set QUERY_RESULT_TEST_EQUAL_RELPATH 'include/query_result_test_equal.sql'
+
 -- DROP a table's column before making it a hypertable
 CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 ALTER TABLE alter_before DROP COLUMN id;
@@ -155,7 +159,12 @@ ALTER TABLE hyper_in_space SET TABLESPACE tablespace1;
 DROP TABLESPACE tablespace1;
 \set ON_ERROR_STOP 1
 
-SELECT drop_chunks(20, 'hyper_in_space');
+-- show_chunks and drop_chunks output should be the same
+\set QUERY1 'SELECT show_chunks(\'hyper_in_space\', 22)::REGCLASS::TEXT'
+\set QUERY2 'SELECT drop_chunks(22, \'hyper_in_space\')::TEXT'
+\set ECHO errors
+\ir :QUERY_RESULT_TEST_EQUAL_RELPATH
+\set ECHO all
 SELECT tablename, tablespace FROM pg_tables WHERE tablespace = 'tablespace1' ORDER BY tablename;
 
 \set ON_ERROR_STOP 0

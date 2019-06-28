@@ -1,6 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Set this variable to avoid using a hard-coded path each time query
+-- results are compared
+\set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../test/sql/include/query_result_test_equal.sql'
 \set ON_ERROR_STOP 0
 --DDL commands on continuous aggregates
 CREATE TABLE conditions (
@@ -320,10 +323,13 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           10 |     5
 (3 rows)
 
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 13, cascade_to_materializations => true);
- drop_chunks 
--------------
- 
+-- show_chunks and drop_chunks output should be the same
+\set QUERY1 'SELECT show_chunks(hypertable => \'drop_chunks_table\', older_than => 13)::REGCLASS::TEXT'
+\set QUERY2 'SELECT drop_chunks(table_name => \'drop_chunks_table\', older_than => 13, cascade_to_materializations => true)::TEXT'
+\set ECHO errors
+ Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
+----------------+-------------------------+-------------------------
+              0 |                       1 |                       1
 (1 row)
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -389,10 +395,13 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           12 |     3
 (5 rows)
 
-SELECT drop_chunks(table_name => 'drop_chunks_table_u', older_than => 13, cascade_to_materializations => true);
- drop_chunks 
--------------
- 
+-- show_chunks and drop_chunks output should be the same
+\set QUERY1 'SELECT show_chunks(hypertable => \'drop_chunks_table_u\', older_than => 13)::REGCLASS::TEXT'
+\set QUERY2 'SELECT drop_chunks(table_name => \'drop_chunks_table_u\', older_than => 13, cascade_to_materializations => true)::TEXT'
+\set ECHO errors
+ Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
+----------------+-------------------------+-------------------------
+              0 |                       1 |                       1
 (1 row)
 
 -- everything in the first chunk (values within [0, 6]) should be dropped
