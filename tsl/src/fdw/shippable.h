@@ -8,9 +8,9 @@
 
 #include <postgres.h>
 
-typedef struct TsFdwRelationInfo TsFdwRelationInfo;
+typedef struct TsFdwRelInfo TsFdwRelInfo;
 
 extern bool is_builtin(Oid objectId);
-extern bool is_shippable(Oid objectId, Oid classId, TsFdwRelationInfo *fpinfo);
+extern bool is_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo);
 
 #endif /* TIMESCALEDB_TSL_FDW_SHIPPABLE_H */

@@ -17,7 +17,9 @@
 #else
 #include <nodes/relation.h>
 #endif
-#include "timescaledb_fdw.h"
+
+#include "scan_plan.h"
+#include "scan_exec.h"
 #include "server_scan_exec.h"
 
 /*

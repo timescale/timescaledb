@@ -22,12 +22,12 @@
 #include <errors.h>
 
 #include "errors.h"
+#include "fdw/fdw.h"
 #include "hypertable.h"
 #include "dimension.h"
 #include "license.h"
 #include "utils.h"
 #include "hypertable_cache.h"
-#include "fdw/timescaledb_fdw.h"
 #include "server.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"

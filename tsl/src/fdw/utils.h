@@ -9,8 +9,17 @@
 #include <postgres.h>
 #include <funcapi.h>
 #include <libpq-fe.h>
+#include <nodes/execnodes.h>
+#include <utils/palloc.h>
 
-#include "remote/data_format.h"
+#include <compat.h>
+#if PG12_GE
+#include <nodes/pathnodes.h>
+#else
+#include <nodes/relation.h>
+#endif
+
+#include <remote/data_format.h>
 
 extern int set_transmission_modes(void);
 extern void reset_transmission_modes(int nestlevel);
