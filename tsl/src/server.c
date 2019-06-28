@@ -28,7 +28,7 @@
 #include <compat.h>
 #include <catalog.h>
 
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"

@@ -1,5 +1,11 @@
 set(SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/timescaledb_fdw.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/relinfo.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/estimate.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/fdw.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modify_plan.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modify_exec.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/scan_plan.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/scan_exec.c
   ${CMAKE_CURRENT_SOURCE_DIR}/deparse.c
   ${CMAKE_CURRENT_SOURCE_DIR}/shippable.c
   ${CMAKE_CURRENT_SOURCE_DIR}/utils.c

@@ -11,7 +11,8 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 
-#include "timescaledb_fdw.h"
+#include "scan_plan.h"
+#include "scan_exec.h"
 #include "server_scan_exec.h"
 
 /*

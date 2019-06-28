@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 #include <nodes/relation.h>
+#include <utils/hsearch.h>
 
 /*
  * server-chunk assignments map chunks to the servers that will be responsible

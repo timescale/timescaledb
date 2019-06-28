@@ -17,7 +17,7 @@
 #include <hypertable_server.h>
 #include <errors.h>
 
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/fdw.h"
 #include "hypertable.h"
 #include "server.h"
 #include "deparse.h"

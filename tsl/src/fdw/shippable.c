@@ -41,9 +41,10 @@
 #include <utils/inval.h>
 #include <utils/syscache.h>
 
-#include "timescaledb_fdw.h"
+#include "scan_plan.h"
 #include "shippable.h"
 #include "utils.h"
+#include "relinfo.h"
 
 /* Hash table for caching the results of shippability lookups */
 static HTAB *ShippableCacheHash = NULL;
@@ -122,7 +123,7 @@ InitializeShippableCache(void)
  * additionally have a whitelist of functions/operators declared one at a time.
  */
 static bool
-lookup_shippable(Oid objectId, Oid classId, TsFdwRelationInfo *fpinfo)
+lookup_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
 {
 	Oid extensionOid;
 
@@ -167,7 +168,7 @@ is_builtin(Oid objectId)
  *	   Is this object (function/operator/type) shippable to foreign server?
  */
 bool
-is_shippable(Oid objectId, Oid classId, TsFdwRelationInfo *fpinfo)
+is_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
 {
 	ShippableCacheKey key;
 	ShippableCacheEntry *entry;

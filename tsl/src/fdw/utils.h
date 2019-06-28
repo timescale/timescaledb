@@ -9,6 +9,9 @@
 #include <postgres.h>
 #include <funcapi.h>
 #include <libpq-fe.h>
+#include <nodes/relation.h>
+#include <nodes/execnodes.h>
+#include <utils/palloc.h>
 
 #include "remote/data_format.h"
 

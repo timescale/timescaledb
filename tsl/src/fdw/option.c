@@ -21,7 +21,7 @@
  */
 #include <postgres.h>
 
-#include "timescaledb_fdw.h"
+#include "scan_plan.h"
 
 #include <access/reloptions.h>
 #include <catalog/pg_foreign_server.h>

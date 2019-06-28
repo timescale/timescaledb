@@ -27,7 +27,7 @@
 #include <compat.h>
 #include <guc.h>
 
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/scan_exec.h"
 #include "fdw/deparse.h"
 #include "fdw/utils.h"
 #include "remote/dist_txn.h"

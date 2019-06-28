@@ -1124,7 +1124,8 @@ CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
 ERROR:  invalid replication_factor
 \set ON_ERROR_STOP 1
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable
+ORDER BY table_schema, table_name;
  table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
 --------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
  public       | disttable       | default_cluster_user |              2 |          9 | 72 kB      | 720 kB     |            | 792 kB     | t

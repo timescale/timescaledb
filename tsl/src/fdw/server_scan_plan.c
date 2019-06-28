@@ -29,8 +29,9 @@
 #include <dimension.h>
 #include <compat.h>
 
-#include "timescaledb_fdw.h"
+#include "relinfo.h"
 #include "server_chunk_assignment.h"
+#include "scan_plan.h"
 #include "server_scan_plan.h"
 #include "server_scan_exec.h"
 
@@ -240,7 +241,7 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 static void
 add_server_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 {
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(baserel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
 	Path *path;
 
 	if (baserel->reloptkind == RELOPT_JOINREL)
@@ -531,18 +532,18 @@ server_scan_add_server_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	{
 		RelOptInfo *server_rel = server_rels[i];
 		ServerChunkAssignment *sca = server_chunk_assignment_get_or_create(&scas, server_rel);
-		TsFdwRelationInfo *fpinfo;
+		TsFdwRelInfo *fpinfo;
 
 		/* Update the number of tuples and rows based on the chunk
 		 * assignments */
 		server_rel->tuples = sca->tuples;
 		server_rel->rows = sca->rows;
 
-		fpinfo = fdw_relation_info_create(root,
-										  server_rel,
-										  server_rel->serverid,
-										  hyper_rte->relid,
-										  TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
+		fpinfo = fdw_relinfo_create(root,
+									server_rel,
+									server_rel->serverid,
+									hyper_rte->relid,
+									TS_FDW_RELINFO_HYPERTABLE_SERVER);
 		fpinfo->sca = sca;
 
 		if (!bms_is_empty(sca->chunk_relids))
@@ -574,16 +575,16 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 							   RelOptInfo *output_rel, void *extra)
 {
 	TimescaleDBPrivate *rel_private = input_rel->fdw_private;
-	TsFdwRelationInfo *fpinfo;
+	TsFdwRelInfo *fpinfo;
 
 	if (rel_private == NULL || rel_private->fdw_relation_info == NULL)
 		/* Not a rel we're interested in */
 		return;
 
-	fpinfo = fdw_relation_info_get(input_rel);
+	fpinfo = fdw_relinfo_get(input_rel);
 
 	/* Verify that this is a server rel */
-	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELATION_INFO_HYPERTABLE_SERVER)
+	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_SERVER)
 		return;
 
 	fdw_create_upper_paths(fpinfo,

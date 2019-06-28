@@ -30,7 +30,7 @@
 #if PG11_GE
 #include "process_utility.h"
 #include "server.h"
-#include "fdw/timescaledb_fdw.h"
+#include "fdw/fdw.h"
 #include "chunk_api.h"
 #include "hypertable.h"
 #include "remote/connection_cache.h"

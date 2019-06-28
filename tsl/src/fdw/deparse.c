@@ -73,10 +73,11 @@
 
 #include <compat.h>
 #include <func_cache.h>
+#include "relinfo.h"
 #include "deparse.h"
 #include "shippable.h"
 #include "utils.h"
-#include "timescaledb_fdw.h"
+#include "scan_plan.h"
 #include "extension_constants.h"
 #include "plan_expand_hypertable.h"
 #include "partialize_finalize.h"
@@ -203,8 +204,8 @@ static void get_relation_column_alias_ids(Var *node, RelOptInfo *foreignrel, int
  *	- local_conds contains expressions that can't be evaluated remotely
  */
 void
-classifyConditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds, List **remote_conds,
-				   List **local_conds)
+classify_conditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds, List **remote_conds,
+					List **local_conds)
 {
 	ListCell *lc;
 
@@ -303,7 +304,7 @@ is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 {
 	foreign_glob_cxt glob_cxt;
 	foreign_loc_cxt loc_cxt;
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(baserel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
 
 	/*
 	 * Check that the expression consists of nodes that are safe to execute
@@ -364,7 +365,7 @@ static bool
 foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *outer_cxt)
 {
 	bool check_type = true;
-	TsFdwRelationInfo *fpinfo;
+	TsFdwRelInfo *fpinfo;
 	foreign_loc_cxt inner_cxt;
 	Oid collation;
 	FDWCollateState state;
@@ -373,7 +374,7 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt, foreign_loc_cxt *out
 	if (node == NULL)
 		return true;
 
-	fpinfo = fdw_relation_info_get(glob_cxt->foreignrel);
+	fpinfo = fdw_relinfo_get(glob_cxt->foreignrel);
 
 	/* Set up inner_cxt for possible recursion to child nodes */
 	inner_cxt.collation = InvalidOid;
@@ -922,7 +923,7 @@ List *
 build_tlist_to_deparse(RelOptInfo *foreignrel)
 {
 	List *tlist = NIL;
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(foreignrel);
 	ListCell *lc;
 
 	/*
@@ -981,7 +982,7 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 						List **retrieved_attrs, List **params_list, ServerChunkAssignment *sca)
 {
 	deparse_expr_cxt context;
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(rel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
 	List *quals;
 
 	/*
@@ -1008,9 +1009,9 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 	 */
 	if (IS_UPPER_REL(rel))
 	{
-		TsFdwRelationInfo *ofpinfo;
+		TsFdwRelInfo *ofpinfo;
 
-		ofpinfo = fdw_relation_info_get(fpinfo->outerrel);
+		ofpinfo = fdw_relinfo_get(fpinfo->outerrel);
 		quals = ofpinfo->remote_conds;
 	}
 	else
@@ -1059,7 +1060,7 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 	StringInfo buf = context->buf;
 	RelOptInfo *foreignrel = context->foreignrel;
 	PlannerInfo *root = context->root;
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(foreignrel);
 
 	/*
 	 * Construct SELECT list
@@ -1245,7 +1246,7 @@ deparseLockingClause(deparse_expr_cxt *context)
 	StringInfo buf = context->buf;
 	PlannerInfo *root = context->root;
 	RelOptInfo *rel = context->scanrel;
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(rel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
 	int relid = -1;
 
 	while ((relid = bms_next_member(rel->relids, relid)) >= 0)
@@ -3084,7 +3085,7 @@ deparseSortGroupClause(Index ref, List *tlist, bool force_colno, deparse_expr_cx
 static bool
 is_subquery_var(Var *node, RelOptInfo *foreignrel, int *relno, int *colno)
 {
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(foreignrel);
 	RelOptInfo *outerrel = fpinfo->outerrel;
 	RelOptInfo *innerrel = fpinfo->innerrel;
 
@@ -3146,7 +3147,7 @@ is_subquery_var(Var *node, RelOptInfo *foreignrel, int *relno, int *colno)
 static void
 get_relation_column_alias_ids(Var *node, RelOptInfo *foreignrel, int *relno, int *colno)
 {
-	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(foreignrel);
 	int i;
 	ListCell *lc;
 

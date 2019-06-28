@@ -351,7 +351,8 @@ CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
 \set ON_ERROR_STOP 1
 
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable
+ORDER BY table_schema, table_name;
 
 -- Test distributed hypertable creation with many parameters
 \c server_1
