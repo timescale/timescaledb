@@ -301,8 +301,8 @@ INFO:  Telemetry is disabled. Call get_telemetry_report(always_display_report :=
 
 SELECT * FROM json_object_keys(get_telemetry_report(always_display_report := true)::json) AS key
 WHERE key != 'os_name_pretty';
-           key            
---------------------------
+             key             
+-----------------------------
  db_uuid
  license
  os_name
@@ -318,6 +318,7 @@ WHERE key != 'os_name_pretty';
  build_os_version
  exported_db_uuid
  instance_metadata
+ build_architecture
  last_tuned_version
  postgresql_version
  related_extensions
@@ -325,14 +326,15 @@ WHERE key != 'os_name_pretty';
  timescaledb_version
  num_reorder_policies
  num_drop_chunks_policies
-(22 rows)
+ build_architecture_bit_size
+(24 rows)
 
 -- Test telemetry report contents
 SET timescaledb.telemetry_level=basic;
 SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
 WHERE key != 'os_name_pretty';
-           key            
---------------------------
+             key             
+-----------------------------
  db_uuid
  license
  os_name
@@ -348,6 +350,7 @@ WHERE key != 'os_name_pretty';
  build_os_version
  exported_db_uuid
  instance_metadata
+ build_architecture
  last_tuned_version
  postgresql_version
  related_extensions
@@ -355,7 +358,8 @@ WHERE key != 'os_name_pretty';
  timescaledb_version
  num_reorder_policies
  num_drop_chunks_policies
-(22 rows)
+ build_architecture_bit_size
+(24 rows)
 
 -- check telemetry picks up flagged content from metadata
 SELECT json_object_field(get_telemetry_report()::json,'db_metadata');

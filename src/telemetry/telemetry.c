@@ -47,6 +47,8 @@
 #define REQ_TS_VERSION "timescaledb_version"
 #define REQ_BUILD_OS "build_os_name"
 #define REQ_BUILD_OS_VERSION "build_os_version"
+#define REQ_BUILD_ARCHITECTURE_BIT_SIZE "build_architecture_bit_size"
+#define REQ_BUILD_ARCHITECTURE "build_architecture"
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
 #define REQ_NUM_CONTINUOUS_AGGS "num_continuous_aggs"
@@ -170,6 +172,15 @@ get_num_hypertables()
 }
 
 static char *
+get_architecture_bit_size()
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%d", BUILD_POINTER_BYTES * 8);
+	return buf->data;
+}
+
+static char *
 get_num_continuous_aggs()
 {
 	StringInfo buf = makeStringInfo();
@@ -285,6 +296,8 @@ build_version_body(void)
 	ts_jsonb_add_str(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
 	ts_jsonb_add_str(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
 	ts_jsonb_add_str(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
+	ts_jsonb_add_str(parseState, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
+	ts_jsonb_add_str(parseState, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
 	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
 	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
 	ts_jsonb_add_str(parseState, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
