@@ -104,10 +104,11 @@ extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
-extern TSDLLEXPORT void ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
-												Datum newer_than_datum, Oid older_than_type,
-												Oid newer_than_type, bool cascade,
-												bool cascades_to_materializations, int32 log_level);
+extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
+												 Datum newer_than_datum, Oid older_than_type,
+												 Oid newer_than_type, bool cascade,
+												 bool cascades_to_materializations,
+												 int32 log_level);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

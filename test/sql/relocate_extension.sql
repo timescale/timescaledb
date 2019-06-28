@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- Set this variable to avoid using a hard-coded path each time query
+-- results are compared
+\set QUERY_RESULT_TEST_EQUAL_RELPATH 'include/query_result_test_equal.sql'
+
 \c postgres :ROLE_SUPERUSER
 DROP DATABASE :TEST_DBNAME;
 CREATE DATABASE :TEST_DBNAME;
@@ -49,11 +53,24 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '
 -- testing time_bucket END
 
 -- testing drop_chunks START
-SELECT "testSchema0".drop_chunks('2017-03-01'::timestamp, 'test_ts');
+-- show_chunks and drop_chunks output should be the same
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => \'2017-03-01\'::timestamp, hypertable => \'test_ts\')::REGCLASS::TEXT'
+\set QUERY2 'SELECT "testSchema0".drop_chunks(\'2017-03-01\'::timestamp, \'test_ts\')::TEXT'
+\set ECHO errors
+\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
+\set ECHO all
 SELECT * FROM test_ts ORDER BY time;
-SELECT "testSchema0".drop_chunks(interval '1 minutes', 'test_tz');
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable => \'test_tz\')::REGCLASS::TEXT'
+\set QUERY2 'SELECT "testSchema0".drop_chunks(interval \'1 minutes\', \'test_tz\')::TEXT'
+\set ECHO errors
+\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
+\set ECHO all
 SELECT * FROM test_tz ORDER BY time;
-SELECT "testSchema0".drop_chunks(interval '1 minutes', 'test_dt');
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable => \'test_dt\')::REGCLASS::TEXT'
+\set QUERY2 'SELECT "testSchema0".drop_chunks(interval \'1 minutes\', \'test_dt\')::TEXT'
+\set ECHO errors
+\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
+\set ECHO all
 SELECT * FROM test_dt ORDER BY time;
 -- testing drop_chunks END
 
