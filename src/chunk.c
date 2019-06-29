@@ -763,6 +763,7 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p)
 	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 	ctx->space = hs;
 	ctx->point = p;
+	ctx->num_complete_chunks = 0;
 	ctx->early_abort = false;
 	ctx->lockmode = NoLock;
 }
@@ -902,22 +903,10 @@ chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 l
 	return num_processed;
 }
 
-/* Returns true if the chunk has a full set of constraints, otherwise
- * false. Used to find a chunk matching a point in an N-dimensional
- * hyperspace. */
-static bool
-chunk_is_complete(ChunkScanCtx *scanctx, Chunk *chunk)
-{
-	if (scanctx->space->num_dimensions != chunk->constraints->num_dimension_constraints)
-		return false;
-
-	return true;
-}
-
 static ChunkResult
 set_complete_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	if (chunk_is_complete(scanctx, chunk))
+	if (chunk_is_complete(chunk, scanctx->space))
 	{
 		scanctx->data = chunk;
 #ifdef USE_ASSERT_CHECKING
@@ -1124,7 +1113,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 static ChunkResult
 append_chunk_oid(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	if (!chunk_is_complete(scanctx, chunk))
+	if (!chunk_is_complete(chunk, scanctx->space))
 		return CHUNK_IGNORED;
 
 	/* Fill in the rest of the chunk's data from the chunk table */
@@ -1134,13 +1123,37 @@ append_chunk_oid(ChunkScanCtx *scanctx, Chunk *chunk)
 		LockRelationOid(chunk->table_id, scanctx->lockmode);
 
 	scanctx->data = lappend_oid(scanctx->data, chunk->table_id);
+
 	return CHUNK_PROCESSED;
 }
 
-List *
-ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode)
+static ChunkResult
+append_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	List *oid_list = NIL;
+	Chunk **chunks = scanctx->data;
+
+	if (!chunk_is_complete(chunk, scanctx->space))
+		return CHUNK_IGNORED;
+
+	/* Fill in the rest of the chunk's data from the chunk table */
+	chunk_fill_stub(chunk, false);
+
+	if (scanctx->lockmode != NoLock)
+		LockRelationOid(chunk->table_id, scanctx->lockmode);
+
+	if (NULL == chunks && scanctx->num_complete_chunks > 0)
+		scanctx->data = chunks = palloc(sizeof(Chunk *) * scanctx->num_complete_chunks);
+
+	if (scanctx->num_complete_chunks > 0)
+		chunks[--scanctx->num_complete_chunks] = chunk;
+
+	return CHUNK_PROCESSED;
+}
+
+static void *
+chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_func on_chunk, LOCKMODE lockmode,
+			   unsigned int *num_chunks)
+{
 	ChunkScanCtx ctx;
 	ListCell *lc;
 
@@ -1159,13 +1172,27 @@ ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode)
 		dimension_slice_and_chunk_constraint_join(&ctx, vec);
 	}
 
-	ctx.data = NIL;
-	chunk_scan_ctx_foreach_chunk(&ctx, append_chunk_oid, 0);
-	oid_list = ctx.data;
+	if (NULL != num_chunks)
+		*num_chunks = ctx.num_complete_chunks;
+
+	ctx.data = NULL;
+	chunk_scan_ctx_foreach_chunk(&ctx, on_chunk, 0);
 
 	chunk_scan_ctx_destroy(&ctx);
 
-	return oid_list;
+	return ctx.data;
+}
+
+Chunk **
+ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode, unsigned int *num_chunks)
+{
+	return chunk_find_all(hs, dimension_vecs, append_chunk, lockmode, num_chunks);
+}
+
+List *
+ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode)
+{
+	return chunk_find_all(hs, dimension_vecs, append_chunk_oid, lockmode, NULL);
 }
 
 /* show_chunks SQL function handler */

@@ -15,6 +15,7 @@
 #include "utils.h"
 #include "dimension_slice.h"
 #include "chunk.h"
+#include "hypercube.h"
 #include "dimension_vector.h"
 #include "partitioning.h"
 
@@ -507,9 +508,8 @@ ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri)
 	return hri->num_base_restrictions > 0;
 }
 
-List *
-ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht,
-										   LOCKMODE lockmode)
+static List *
+gather_restriction_dimension_vectors(HypertableRestrictInfo *hri)
 {
 	int i;
 	List *dimension_vecs = NIL;
@@ -535,9 +535,58 @@ ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertab
 		dimension_vecs = lappend(dimension_vecs, dv);
 	}
 
-	Assert(list_length(dimension_vecs) == ht->space->num_dimensions);
+	Assert(list_length(dimension_vecs) == hri->num_dimensions);
+
+	return dimension_vecs;
+}
+
+List *
+ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht,
+										   LOCKMODE lockmode)
+{
+	List *dimension_vecs = gather_restriction_dimension_vectors(hri);
+
+	Assert(hri->num_dimensions == ht->space->num_dimensions);
 
 	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
+}
+
+static Chunk **
+hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
+									unsigned int *num_chunks)
+{
+	List *dimension_vecs = gather_restriction_dimension_vectors(hri);
+
+	Assert(hri->num_dimensions == ht->space->num_dimensions);
+
+	return ts_chunk_find_all(ht->space, dimension_vecs, lockmode, num_chunks);
+}
+
+/*
+ * Compare two chunks along first dimension and chunk ID (in that priority and
+ * order).
+ */
+static int
+chunk_cmp_impl(const Chunk *c1, const Chunk *c2)
+{
+	int cmp = ts_dimension_slice_cmp(c1->cube->slices[0], c2->cube->slices[0]);
+
+	if (cmp == 0)
+		cmp = VALUE_CMP(c1->fd.id, c2->fd.id);
+
+	return cmp;
+}
+
+static int
+chunk_cmp(const void *c1, const void *c2)
+{
+	return chunk_cmp_impl(*((const Chunk **) c1), *((const Chunk **) c2));
+}
+
+static int
+chunk_cmp_reverse(const void *c1, const void *c2)
+{
+	return chunk_cmp_impl(*((const Chunk **) c2), *((const Chunk **) c1));
 }
 
 /*
@@ -553,55 +602,44 @@ ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, 
 												   LOCKMODE lockmode, List **nested_oids,
 												   bool reverse)
 {
-	DimensionRestrictInfo *dri;
-	DimensionVec *dv;
+	unsigned num_chunks;
+	Chunk **chunks = hypertable_restrict_info_get_chunks(hri, ht, lockmode, &num_chunks);
 	List *chunk_oids = NIL;
-	int i;
+	List *slot_chunk_oids = NIL;
+	DimensionSlice *slice = NULL;
+	unsigned int i;
 
-	dri = hri->dimension_restriction[0];
-
-	Assert(NULL != dri);
-
-	dv = dimension_restrict_info_slices(dri);
-
-	Assert(dv->num_slices >= 0);
-
-	/*
-	 * If there are no matching slices in any single dimension, the result
-	 * will be empty
-	 */
-	if (dv->num_slices == 0)
+	if (num_chunks == 0)
 		return NIL;
 
+	Assert(ht->space->num_dimensions > 0);
+	Assert(IS_OPEN_DIMENSION(&ht->space->dimensions[0]));
+
 	if (reverse)
-		ts_dimension_vec_sort_reverse(&dv);
+		qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
 	else
-		ts_dimension_vec_sort(&dv);
+		qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp);
 
-	for (i = 0; i < dv->num_slices; i++)
+	for (i = 0; i < num_chunks; i++)
 	{
-		ListCell *lc;
-		List *chunk_ids = NIL;
-		List *slice_oids = NIL;
-		DimensionSlice *slice = dv->slices[i];
+		Chunk *chunk = chunks[i];
 
-		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
-															&chunk_ids,
-															CurrentMemoryContext);
-
-		foreach (lc, chunk_ids)
+		if (NULL != slice && ts_dimension_slice_cmp(slice, chunk->cube->slices[0]) != 0 &&
+			slot_chunk_oids != NIL)
 		{
-			Chunk *chunk = ts_chunk_get_by_id(lfirst_int(lc), 0, true);
-
-			chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
-
-			if (nested_oids != NULL)
-				slice_oids = lappend_oid(slice_oids, chunk->table_id);
+			*nested_oids = lappend(*nested_oids, slot_chunk_oids);
+			slot_chunk_oids = NIL;
 		}
 
-		if (slice_oids != NIL)
-			*nested_oids = lappend(*nested_oids, slice_oids);
+		if (NULL != nested_oids)
+			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->table_id);
+
+		chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
+		slice = chunk->cube->slices[0];
 	}
+
+	if (slot_chunk_oids != NIL)
+		*nested_oids = lappend(*nested_oids, slot_chunk_oids);
 
 	return chunk_oids;
 }

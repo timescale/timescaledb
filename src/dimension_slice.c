@@ -68,21 +68,12 @@ ts_dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
 int
 ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
 {
-	if (left->fd.range_start == right->fd.range_start)
-	{
-		if (left->fd.range_end == right->fd.range_end)
-			return 0;
+	int res = DIMENSION_SLICE_RANGE_START_CMP(left, right);
 
-		if (left->fd.range_end > right->fd.range_end)
-			return 1;
+	if (res == 0)
+		res = DIMENSION_SLICE_RANGE_END_CMP(left, right);
 
-		return -1;
-	}
-
-	if (left->fd.range_start > right->fd.range_start)
-		return 1;
-
-	return -1;
+	return res;
 }
 
 int

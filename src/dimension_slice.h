@@ -19,6 +19,21 @@
 /* partition functions return int32 */
 #define DIMENSION_SLICE_CLOSED_MAX ((int64) PG_INT32_MAX)
 
+#define VALUE_GT(v1, v2) ((v1) > (v2))
+#define VALUE_LT(v1, v2) ((v1) < (v2))
+/*
+ * Compare two values, returning -1, 1, 0 if the left one is, less, greater,
+ * or equal to the right one, respectively.
+ */
+#define VALUE_CMP(v1, v2) VALUE_GT(v1, v2) - VALUE_LT(v1, v2)
+
+/* Compare the range start values of two slices */
+#define DIMENSION_SLICE_RANGE_START_CMP(s1, s2)                                                    \
+	VALUE_CMP((s1)->fd.range_start, (s2)->fd.range_start)
+
+/* Compare the range end values of two slices */
+#define DIMENSION_SLICE_RANGE_END_CMP(s1, s2) VALUE_CMP((s1)->fd.range_end, (s2)->fd.range_end)
+
 typedef struct DimensionSlice
 {
 	FormData_dimension_slice fd;
