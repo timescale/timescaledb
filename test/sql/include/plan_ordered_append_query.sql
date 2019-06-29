@@ -267,6 +267,22 @@ ORDER BY time DESC;
 FROM space
 ORDER BY time;
 
+-- test hypertable with space partitioning and exclusion in space
+-- should remove 3 of 4 space partitions (2 chunks scanned)
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+WHERE device_id = 1
+ORDER BY time;
+
+-- test hypertable with space partitioning and exclusion in space
+-- should remove 2 of 4 space partitions (2 + 2 chunks scanned)
+:PREFIX SELECT
+  time, device_id, value
+FROM space
+WHERE device_id IN (1, 4)
+ORDER BY time;
+
 -- test hypertable with space partitioning and reverse order
 :PREFIX SELECT
   time, device_id, value
@@ -467,4 +483,3 @@ LEFT OUTER JOIN LATERAL(
 
 -- test NULLS LAST
 :PREFIX SELECT * FROM sortopt_test ORDER BY time, device DESC NULLS LAST;
-

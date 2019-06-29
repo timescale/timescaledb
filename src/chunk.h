@@ -56,10 +56,20 @@ typedef struct ChunkScanCtx
 	HTAB *htab;
 	Hyperspace *space;
 	Point *point;
+	unsigned int num_complete_chunks;
 	bool early_abort;
 	LOCKMODE lockmode;
 	void *data;
 } ChunkScanCtx;
+
+/* Returns true if the chunk has a full set of constraints, otherwise
+ * false. Used to find a chunk matching a point in an N-dimensional
+ * hyperspace. */
+static inline bool
+chunk_is_complete(Chunk *chunk, Hyperspace *space)
+{
+	return space->num_dimensions == chunk->constraints->num_dimension_constraints;
+}
 
 /* The hash table entry for the ChunkScanCtx */
 typedef struct ChunkScanEntry
@@ -71,7 +81,10 @@ typedef struct ChunkScanEntry
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
 extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
+extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
+								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
+
 extern Chunk *ts_chunk_copy(Chunk *chunk);
 extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 													   const char *table_name,
