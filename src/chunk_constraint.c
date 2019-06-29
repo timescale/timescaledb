@@ -468,10 +468,17 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 
 		ts_hypercube_add_slice(chunk->cube, slice);
 
-		if (ctx->early_abort && chunk->constraints->num_dimension_constraints == hs->num_dimensions)
+		/* A chunk is complete when we've added slices for all its dimensions,
+		 * i.e., a complete hypercube */
+		if (chunk_is_complete(chunk, ctx->space))
 		{
-			ts_scan_iterator_close(&iterator);
-			break;
+			ctx->num_complete_chunks++;
+
+			if (ctx->early_abort)
+			{
+				ts_scan_iterator_close(&iterator);
+				break;
+			}
 		}
 	}
 	return count;

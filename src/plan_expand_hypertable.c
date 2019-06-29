@@ -737,8 +737,7 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 																	  nested_oids,
 																	  reverse);
 		}
-		else
-			return find_children_oids(hri, ht, AccessShareLock);
+		return find_children_oids(hri, ht, AccessShareLock);
 	}
 	else
 		return get_explicit_chunk_oids(ctx, ht);
