@@ -21,7 +21,7 @@
 #include <foreign/fdwapi.h>
 
 #include <export.h>
-#include <chunk_server.h>
+#include <chunk_data_node.h>
 #include <hypertable_cache.h>
 #include <planner.h>
 #include <planner_import.h>
@@ -30,10 +30,10 @@
 #include <compat.h>
 
 #include "relinfo.h"
-#include "server_chunk_assignment.h"
+#include "data_node_chunk_assignment.h"
 #include "scan_plan.h"
-#include "server_scan_plan.h"
-#include "server_scan_exec.h"
+#include "data_node_scan_plan.h"
+#include "data_node_scan_exec.h"
 
 /*
  * ServerScan is a custom scan implementation for scanning hypertables on

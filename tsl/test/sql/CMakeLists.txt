@@ -61,8 +61,8 @@ if (NOT ${PG_VERSION} VERSION_LESS "11")
     remote_connection_cache.sql
     remote_txn.sql
     remote_txn_id.sql
-    server.sql
-    server_bootstrap.sql
+    data_node.sql
+    data_node_bootstrap.sql
     dist_commands.sql
     deparse.sql
     deparse_fail.sql

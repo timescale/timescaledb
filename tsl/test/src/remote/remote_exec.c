@@ -21,7 +21,7 @@
 #include "remote/async.h"
 #include "remote/dist_txn.h"
 #include "remote/connection.h"
-#include "server.h"
+#include "data_node.h"
 
 TS_FUNCTION_INFO_V1(ts_remote_exec);
 

@@ -29,15 +29,15 @@
 
 #if PG11_GE
 #include "process_utility.h"
-#include "server.h"
 #include "fdw/fdw.h"
+#include "data_node.h"
 #include "chunk_api.h"
 #include "hypertable.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
-#include "server_dispatch.h"
+#include "data_node_dispatch.h"
 #include "remote/dist_copy.h"
 #include "process_utility.h"
 #include "dist_util.h"

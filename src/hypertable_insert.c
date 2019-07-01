@@ -22,7 +22,7 @@
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
 #include "hypertable_cache.h"
-#include "hypertable_server.h"
+#include "hypertable_data_node.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 

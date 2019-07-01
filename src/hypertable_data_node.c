@@ -9,7 +9,7 @@
 #include <utils/array.h>
 #include <foreign/foreign.h>
 
-#include "hypertable_server.h"
+#include "hypertable_data_node.h"
 #include "scanner.h"
 #include "catalog.h"
 

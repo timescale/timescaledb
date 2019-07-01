@@ -9,7 +9,7 @@
 #include <catalog/namespace.h>
 
 #include <guc.h>
-#include "hypertable_server.h"
+#include "hypertable_data_node.h"
 #include "chunk_index.h"
 #include "process_utility.h"
 #include "event_trigger.h"

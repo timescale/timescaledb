@@ -10,7 +10,7 @@
 #include "remote/dist_commands.h"
 #include "remote/dist_txn.h"
 #include "remote/connection_cache.h"
-#include "server.h"
+#include "data_node.h"
 #include "miscadmin.h"
 
 typedef struct DistPreparedStmt

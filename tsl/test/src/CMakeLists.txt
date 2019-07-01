@@ -7,7 +7,7 @@ set(SOURCES
 
 if (NOT ${PG_VERSION} VERSION_LESS "11")
   list(APPEND SOURCES
-       server.c
+       data_node.c
        deparse.c)
 endif ()
 

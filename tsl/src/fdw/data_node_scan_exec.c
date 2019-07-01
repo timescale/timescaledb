@@ -13,7 +13,7 @@
 
 #include "scan_plan.h"
 #include "scan_exec.h"
-#include "server_scan_exec.h"
+#include "data_node_scan_exec.h"
 
 /*
  * The execution stage of a ServerScan.

@@ -11,8 +11,8 @@ if (NOT ${PG_VERSION} VERSION_LESS "11")
   list(APPEND SOURCES
        deparse.c
        hypertable.c
-       server.c
-       server_dispatch.c
+       data_node.c
+       data_node_dispatch.c
        chunk_api.c
        process_utility.c
        dist_util.c)

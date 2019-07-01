@@ -13,7 +13,7 @@
 #include <utils/inval.h>
 #include <access/xact.h>
 
-#include "chunk_server.h"
+#include "chunk_data_node.h"
 #include "scanner.h"
 #include "chunk.h"
 

@@ -14,16 +14,15 @@
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
-#include <hypertable_server.h>
 #include <errors.h>
 
 #include "fdw/fdw.h"
 #include "hypertable.h"
-#include "server.h"
+#include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"
 #include "compat.h"
-#include "hypertable_server.h"
+#include "hypertable_data_node.h"
 #include <utils.h>
 #include <extension.h>
 

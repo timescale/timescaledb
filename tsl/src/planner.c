@@ -11,7 +11,7 @@
 #include "compat.h"
 #if !PG96
 #include "fdw/fdw.h"
-#include "fdw/server_scan_plan.h"
+#include "fdw/data_node_scan_plan.h"
 #endif
 #include "guc.h"
 #include <planner.h>

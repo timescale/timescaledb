@@ -32,7 +32,7 @@
 #include "remote/utils.h"
 #include "remote/dist_txn.h"
 #include "remote/async.h"
-#include "server_dispatch.h"
+#include "data_node_dispatch.h"
 #include "remote/data_format.h"
 #include "remote/tuplefactory.h"
 

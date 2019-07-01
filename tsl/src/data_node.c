@@ -23,7 +23,7 @@
 #include <miscadmin.h>
 #include <funcapi.h>
 
-#include <hypertable_server.h>
+#include <hypertable_data_node.h>
 #include <extension.h>
 #include <compat.h>
 #include <catalog.h>
@@ -32,14 +32,14 @@
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
-#include "server.h"
+#include "data_node.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "errors.h"
 #include "dist_util.h"
 #include "utils/uuid.h"
 #include "chunk.h"
-#include "chunk_server.h"
+#include "chunk_data_node.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"

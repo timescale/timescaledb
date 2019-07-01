@@ -10,7 +10,7 @@
 #include <utils/rel.h>
 
 #include <chunk.h>
-#include <chunk_server.h>
+#include <chunk_data_node.h>
 
 #include "deparse.h"
 #include "modify_plan.h"

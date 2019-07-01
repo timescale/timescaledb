@@ -11,7 +11,7 @@
 #include <utils/lsyscache.h>
 #include "partitioning.h"
 #include "chunk.h"
-#include "chunk_server.h"
+#include "chunk_data_node.h"
 #include <miscadmin.h>
 #include "remote/dist_txn.h"
 #include <utils/builtins.h>

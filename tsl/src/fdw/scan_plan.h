@@ -15,7 +15,7 @@
 #include <commands/explain.h>
 #include <funcapi.h>
 
-#include "server_chunk_assignment.h"
+#include "data_node_chunk_assignment.h"
 
 typedef struct TsFdwRelInfo TsFdwRelInfo;
 

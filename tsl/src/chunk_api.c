@@ -15,7 +15,7 @@
 #include <catalog.h>
 #include <compat.h>
 #include <chunk.h>
-#include <chunk_server.h>
+#include <chunk_data_node.h>
 #include <errors.h>
 #include <hypercube.h>
 #include <hypertable.h>

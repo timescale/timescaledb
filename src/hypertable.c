@@ -38,7 +38,7 @@
 #endif
 
 #include "hypertable.h"
-#include "hypertable_server.h"
+#include "hypertable_data_node.h"
 #include "hypercube.h"
 #include "dimension.h"
 #include "chunk.h"

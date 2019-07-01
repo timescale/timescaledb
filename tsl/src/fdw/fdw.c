@@ -28,7 +28,7 @@
 #include "scan_exec.h"
 #include "modify_plan.h"
 #include "modify_exec.h"
-#include "server_scan_plan.h"
+#include "data_node_scan_plan.h"
 #include "analyze.h"
 
 /*

@@ -7,7 +7,7 @@
 #define TIMESCALEDB_TSL_FDW_DEPARSE_H
 
 #include <postgres.h>
-#include "server_chunk_assignment.h"
+#include "data_node_chunk_assignment.h"
 
 typedef struct DeparsedInsertStmt
 {

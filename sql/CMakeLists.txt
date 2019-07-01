@@ -37,7 +37,7 @@ set(SOURCE_FILES
   cache.sql
   bgw_scheduler.sql
   metadata.sql
-  server.sql
+  data_node.sql
   dist_internal.sql
   views.sql
   gapfill.sql
