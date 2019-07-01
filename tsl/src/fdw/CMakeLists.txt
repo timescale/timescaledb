@@ -8,7 +8,6 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/scan_exec.c
   ${CMAKE_CURRENT_SOURCE_DIR}/deparse.c
   ${CMAKE_CURRENT_SOURCE_DIR}/shippable.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/option.c
   ${CMAKE_CURRENT_SOURCE_DIR}/server_chunk_assignment.c
   ${CMAKE_CURRENT_SOURCE_DIR}/server_scan_plan.c
