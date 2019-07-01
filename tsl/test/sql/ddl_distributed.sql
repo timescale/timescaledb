@@ -96,7 +96,6 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttab
 
 CLUSTER disttable USING disttable_description_idx;
 REINDEX TABLE disttable;
-VACUUM disttable;
 TRUNCATE disttable;
 -- test block several hypertables
 TRUNCATE disttable, disttable;
@@ -114,7 +113,7 @@ CREATE TABLE non_disttable2(id int);
 
 DROP TABLE non_disttable1, disttable;
 DROP TABLE disttable, non_disttable2;
-DROP TABLE disttable, disttable; 
+DROP TABLE disttable, disttable;
 
 \set ON_ERROR_STOP 1
 
@@ -378,8 +377,8 @@ $$;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
-	WHEN TAG IN ('drop table')
-	EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
+    WHEN TAG IN ('drop table')
+    EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
 
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 

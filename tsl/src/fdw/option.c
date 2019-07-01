@@ -249,3 +249,26 @@ option_extract_extension_list(const char *extensions_string, bool warn_on_missin
 
 	return extension_oids;
 }
+
+bool
+option_get_from_options_list_int(List *options, const char *optionname, int *value)
+{
+	ListCell *lc;
+	bool found = false;
+
+	Assert(NULL != value);
+
+	foreach (lc, options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+
+		if (strcmp(def->defname, optionname) == 0)
+		{
+			*value = strtol(defGetString(def), NULL, 10);
+			found = true;
+			break;
+		}
+	}
+
+	return found;
+}

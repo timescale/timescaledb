@@ -33,6 +33,7 @@ typedef struct Cursor
 	TupleDesc tupdesc;
 	TupleFactory *tf;
 	MemoryContext batch_mctx; /* Stores batches of fetched tuples */
+	MemoryContext tuple_mctx;
 	const char *stmt;
 	unsigned int fetch_size;
 	char fetch_stmt[64];
@@ -89,6 +90,7 @@ remote_cursor_init_with_params(Cursor *cursor, TSConnection *conn, Relation rel,
 								 tuplefactory_create_for_rel(rel, retrieved_attrs);
 	cursor->batch_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "cursor tuple data", ALLOCSET_DEFAULT_SIZES);
+	cursor->tuple_mctx = cursor->batch_mctx;
 
 	remote_cursor_set_fetch_size(cursor, DEFAULT_FETCH_SIZE);
 
@@ -164,8 +166,15 @@ remote_cursor_set_fetch_size(Cursor *cursor, unsigned int fetch_size)
 	return true;
 }
 
-static int
-cursor_fetch_data(Cursor *cursor)
+void
+remote_cursor_set_tuple_memcontext(Cursor *cursor, MemoryContext mctx)
+{
+	Assert(mctx != NULL);
+	cursor->tuple_mctx = mctx;
+}
+
+int
+remote_cursor_fetch_data(Cursor *cursor)
 {
 	AsyncRequest *volatile req = NULL;
 	AsyncResponseResult *volatile rsp = NULL;
@@ -211,8 +220,14 @@ cursor_fetch_data(Cursor *cursor)
 		cursor->num_tuples = numrows;
 		cursor->next_tuple = 0;
 
+		/* Allow creating tuples in alternative memory context if user has set
+		 * it explicitly, otherwise same as batch_mctx */
+		MemoryContextSwitchTo(cursor->tuple_mctx);
+
 		for (i = 0; i < numrows; i++)
 			cursor->tuples[i] = tuplefactory_make_tuple(cursor->tf, res, i);
+
+		MemoryContextSwitchTo(cursor->batch_mctx);
 
 		/* Update fetch_ct_2 */
 		if (cursor->fetch_ct_2 < 2)
@@ -244,17 +259,36 @@ cursor_fetch_data(Cursor *cursor)
 }
 
 HeapTuple
-remote_cursor_get_next_tuple(Cursor *cursor)
+remote_cursor_get_tuple(Cursor *cursor, int row)
 {
-	if (cursor->next_tuple >= cursor->num_tuples)
+	if (row >= cursor->num_tuples)
 	{
 		/* No point in another fetch if we already detected EOF, though. */
-
-		if (cursor->eof || cursor_fetch_data(cursor) == 0)
+		if (cursor->eof || remote_cursor_fetch_data(cursor) == 0)
 			return NULL;
+
+		/* More data was fetched so need to reset row index */
+		row = 0;
+		Assert(row == cursor->next_tuple);
 	}
 
-	return cursor->tuples[cursor->next_tuple++];
+	Assert(cursor->tuples != NULL);
+	Assert(row >= 0 && row < cursor->num_tuples);
+
+	return cursor->tuples[row];
+}
+
+HeapTuple
+remote_cursor_get_next_tuple(Cursor *cursor)
+{
+	HeapTuple tuple = remote_cursor_get_tuple(cursor, cursor->next_tuple);
+
+	if (NULL != tuple)
+		cursor->next_tuple++;
+
+	Assert(cursor->next_tuple <= cursor->num_tuples);
+
+	return tuple;
 }
 
 static void

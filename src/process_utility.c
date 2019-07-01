@@ -527,6 +527,7 @@ process_vacuum(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	bool affects_hypertable = false;
+	List *vacuum_rels = NIL;
 
 	if (stmt->rels == NIL)
 		/* Vacuum is for all tables */
@@ -541,27 +542,43 @@ process_vacuum(ProcessUtilityArgs *args)
 		if (!OidIsValid(table_relid) && vacuum_rel->relation != NULL)
 			table_relid = RangeVarGetRelid(vacuum_rel->relation, NoLock, true);
 
-		if (!OidIsValid(table_relid))
-			continue;
+		if (OidIsValid(table_relid))
+		{
+			ht = ts_hypertable_cache_get_entry(hcache, table_relid);
 
-		ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+			if (ht)
+			{
+				affects_hypertable = true;
+				process_add_hypertable(args, ht);
 
-		if (!ht)
-			continue;
+				/* Exclude distributed hypertables from the list of relations
+				 * to vacuum since they contain no local tuples. */
+				if (hypertable_is_distributed(ht) && stmt->options & VACOPT_VACUUM)
+					continue;
 
-		affects_hypertable = true;
-		process_add_hypertable(args, ht);
-		ctx.ht_vacuum_rel = vacuum_rel;
-		foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+				ctx.ht_vacuum_rel = vacuum_rel;
+				foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+			}
+		}
+		vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 	}
+
 	ts_cache_release(hcache);
+
 	if (!affects_hypertable)
 		return false;
 
-	stmt->rels = list_concat(ctx.chunk_rels, stmt->rels);
-	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
-	/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
-	ExecVacuum(stmt, is_toplevel);
+	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
+
+	/* The list of rels to vacuum could be empty if we are only vacuuming a
+	 * distributed hypertable. In that case, we don't want to vacuum
+	 * locally. */
+	if (list_length(stmt->rels) > 0)
+	{
+		PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
+		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
+		ExecVacuum(stmt, is_toplevel);
+	}
 	return true;
 }
 #endif

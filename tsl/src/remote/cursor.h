@@ -23,7 +23,10 @@ extern Cursor *remote_cursor_create_for_scan(TSConnection *conn, ScanState *ss,
 											 List *retrieved_attrs, const char *stmt,
 											 StmtParams *params);
 extern bool remote_cursor_set_fetch_size(Cursor *cursor, unsigned int fetch_size);
+extern void remote_cursor_set_tuple_memcontext(Cursor *cursor, MemoryContext mctx);
+extern int remote_cursor_fetch_data(Cursor *cursor);
 extern HeapTuple remote_cursor_get_next_tuple(Cursor *cursor);
+extern HeapTuple remote_cursor_get_tuple(Cursor *cursor, int row);
 extern void remote_cursor_close(Cursor *cursor);
 extern void remote_cursor_rewind(Cursor *cursor);
 

@@ -135,6 +135,27 @@ dist_ddl_check_session(void)
 	dist_ddl_error_raise_blocked();
 }
 
+/*
+ * Process distributed VACUUM.  We want to forward VACUUM to data nodes, but
+ * analyze is handled locally via FDW which reaches out to data nodes
+ * separately.
+ */
+static DistDDLExecType
+dist_ddl_process_vacuum(VacuumStmt *stmt)
+{
+	/* let analyze through */
+	if (stmt->options & VACOPT_ANALYZE)
+		return DIST_DDL_EXEC_NONE;
+
+	/* VACCUM currently unsupported. A VACCUM cannot run inside a transaction
+	 * block. Unfortunately, we currently execute all distributed DDL inside a
+	 * distributed transaction. We need to add a way to run some DDL commands
+	 * across "raw" connections. */
+	dist_ddl_error_raise_unsupported();
+
+	return DIST_DDL_EXEC_ON_START;
+}
+
 static void
 dist_ddl_preprocess(ProcessUtilityArgs *args)
 {
@@ -295,10 +316,12 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			 * to other servers. */
 			break;
 
+		case T_VacuumStmt:
+			dist_ddl_state.exec_type = dist_ddl_process_vacuum((VacuumStmt *) args->parsetree);
+			break;
 		/* Currently unsupported */
 		case T_TruncateStmt:
 		case T_RenameStmt:
-		case T_VacuumStmt:
 		case T_ReindexStmt:
 		case T_ClusterStmt:
 			/* Those commands are also targets for execute_on_start in since they
