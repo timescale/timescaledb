@@ -444,8 +444,6 @@ CLUSTER disttable USING disttable_description_idx;
 ERROR:  operation not supported on distributed hypertable
 REINDEX TABLE disttable;
 ERROR:  operation not supported on distributed hypertable
-VACUUM disttable;
-ERROR:  operation not supported on distributed hypertable
 TRUNCATE disttable;
 ERROR:  operation not supported on distributed hypertable
 -- test block several hypertables
@@ -471,7 +469,7 @@ DROP TABLE non_disttable1, disttable;
 ERROR:  cannot drop a hypertable along with other objects
 DROP TABLE disttable, non_disttable2;
 ERROR:  cannot drop a hypertable along with other objects
-DROP TABLE disttable, disttable; 
+DROP TABLE disttable, disttable;
 ERROR:  cannot drop a hypertable along with other objects
 \set ON_ERROR_STOP 1
 -- CREATE/DROP TRIGGER
@@ -1638,8 +1636,8 @@ END
 $$;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
-	WHEN TAG IN ('drop table')
-	EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
+    WHEN TAG IN ('drop table')
+    EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Test DROP inside event trigger on local table (should not crash)
 CREATE TABLE non_htable (id int PRIMARY KEY);
