@@ -15,6 +15,7 @@
 #include <access/sysattr.h>
 #include <commands/defrem.h>
 #include <foreign/fdwapi.h>
+#include <foreign/foreign.h>
 #include <utils/rel.h>
 #include <fmgr.h>
 
@@ -305,7 +306,7 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 }
 
 static bool
-analyze_foreign_table(Relation relation, AcquireSampleRowsFunc *func, BlockNumber *totalpages)
+analyze_foreign_table(Relation rel, AcquireSampleRowsFunc *func, BlockNumber *totalpages)
 {
 	return false;
 }

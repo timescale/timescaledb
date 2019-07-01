@@ -27,28 +27,13 @@ typedef struct TsFdwScanState
 	List *retrieved_attrs; /* list of retrieved attribute numbers */
 
 	/* for remote query execution */
-	struct TSConnection *conn;  /* connection for the scan */
-	unsigned int cursor_number; /* quasi-unique ID for my cursor */
-	bool cursor_exists;			/* have we created the cursor? */
-	int num_params;				/* number of parameters passed to query */
-	FmgrInfo *param_flinfo;		/* output conversion functions for them */
-	List *param_exprs;			/* executable expressions for param values */
-	const char **param_values;  /* textual values of query parameters */
-
-	/* for storing result tuples */
-	HeapTuple *tuples; /* array of currently-retrieved tuples */
-	int num_tuples;	/* # of tuples in array */
-	int next_tuple;	/* index of next one to return */
-
-	/* batch-level state, for optimizing rewinds and avoiding useless fetch */
-	int fetch_ct_2;   /* Min(# of fetches done, 2) */
-	bool eof_reached; /* true if last fetch reached EOF */
-
-	/* working memory contexts */
-	MemoryContext batch_cxt; /* context holding current batch of tuples */
-	MemoryContext temp_cxt;  /* context for per-tuple temporary data */
-
-	int fetch_size; /* number of tuples per fetch */
+	struct TSConnection *conn; /* connection for the scan */
+	struct Cursor *cursor;
+	int num_params;			   /* number of parameters passed to query */
+	FmgrInfo *param_flinfo;	/* output conversion functions for them */
+	List *param_exprs;		   /* executable expressions for param values */
+	const char **param_values; /* textual values of query parameters */
+	int fetch_size;			   /* number of tuples per fetch */
 	int row_counter;
 } TsFdwScanState;
 
