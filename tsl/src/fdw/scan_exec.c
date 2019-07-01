@@ -15,6 +15,8 @@
 #include <remote/dist_txn.h>
 #include <remote/async.h>
 #include <remote/stmt_params.h>
+#include <remote/utils.h>
+#include <remote/cursor.h>
 
 #include "scan_exec.h"
 #include "utils.h"
@@ -93,9 +95,11 @@ create_cursor(ScanState *ss, TsFdwScanState *fsstate)
 	ExprContext *econtext = ss->ps.ps_ExprContext;
 	int num_params = fsstate->num_params;
 	const char **values = fsstate->param_values;
-	TSConnection *conn = fsstate->conn;
-	StringInfoData buf;
-	AsyncRequest *req;
+	MemoryContext oldcontext;
+	StmtParams *params = NULL;
+
+	if (NULL != fsstate->cursor)
+		return;
 
 	/*
 	 * Construct array of query parameter values in text format.  We do the
@@ -104,46 +108,30 @@ create_cursor(ScanState *ss, TsFdwScanState *fsstate)
 	 */
 	if (num_params > 0)
 	{
-		MemoryContext oldcontext;
 		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 		fill_query_params_array(econtext, fsstate->param_flinfo, fsstate->param_exprs, values);
+
+		/*
+		 * Notice that we do not specify param types, thus forcing the remote
+		 * server to infer types for all parameters.  Since we explicitly cast
+		 * every parameter (see deparse.c), the "inference" is trivial and
+		 * will produce the desired result.  This allows us to avoid assuming
+		 * that the remote server has the same OIDs we do for the parameters'
+		 * types.
+		 */
+		params = stmt_params_create_from_values(values, num_params);
 		MemoryContextSwitchTo(oldcontext);
 	}
 
-	/* Assign a unique ID for my cursor */
-	fsstate->cursor_number = remote_connection_get_cursor_number();
+	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
+	fsstate->cursor = remote_cursor_create_for_scan(fsstate->conn,
+													ss,
+													fsstate->retrieved_attrs,
+													fsstate->query,
+													params);
+	MemoryContextSwitchTo(oldcontext);
 
-	/* Construct the DECLARE CURSOR command */
-	initStringInfo(&buf);
-	appendStringInfo(&buf, "DECLARE c%u CURSOR FOR\n%s", fsstate->cursor_number, fsstate->query);
-
-	/*
-	 * Notice that we pass NULL for paramTypes, thus forcing the remote server
-	 * to infer types for all parameters.  Since we explicitly cast every
-	 * parameter (see deparse.c), the "inference" is trivial and will produce
-	 * the desired result.  This allows us to avoid assuming that the remote
-	 * server has the same OIDs we do for the parameters' types.
-	 */
-	req = async_request_send_with_params(conn,
-										 buf.data,
-										 stmt_params_create_from_values(values, num_params),
-										 FORMAT_TEXT);
-
-	Assert(NULL != req);
-
-	async_request_wait_ok_command(req);
-	pfree(req);
-
-	/* Mark the cursor as created, and show no tuples have been retrieved */
-	fsstate->cursor_exists = true;
-	fsstate->tuples = NULL;
-	fsstate->num_tuples = 0;
-	fsstate->next_tuple = 0;
-	fsstate->fetch_ct_2 = 0;
-	fsstate->eof_reached = false;
-
-	/* Clean up */
-	pfree(buf.data);
+	remote_cursor_set_fetch_size(fsstate->cursor, fsstate->fetch_size);
 }
 
 /*
@@ -242,31 +230,6 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 	fsstate->retrieved_attrs = (List *) list_nth(fdw_private, FdwScanPrivateRetrievedAttrs);
 	fsstate->fetch_size = intVal(list_nth(fdw_private, FdwScanPrivateFetchSize));
 
-	/* Create contexts for batches of tuples and per-tuple temp workspace. */
-	fsstate->batch_cxt = AllocSetContextCreate(estate->es_query_cxt,
-											   "timescaledb_fdw tuple data",
-											   ALLOCSET_DEFAULT_SIZES);
-	fsstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
-											  "timescaledb_fdw temporary data",
-											  ALLOCSET_SMALL_SIZES);
-
-	/*
-	 * Get info we'll need for converting data fetched from the foreign server
-	 * into local representation and error reporting during that process.
-	 */
-	if (scan->scanrelid > 0)
-	{
-		fsstate->rel = ss->ss_currentRelation;
-		fsstate->tupdesc = RelationGetDescr(fsstate->rel);
-	}
-	else
-	{
-		fsstate->rel = NULL;
-		fsstate->tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
-	}
-
-	fsstate->att_conv_metadata = data_format_create_att_conv_in_metadata(fsstate->tupdesc);
-
 	/*
 	 * Prepare for processing of parameters used in remote query, if any.
 	 */
@@ -281,130 +244,24 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 							 &fsstate->param_exprs,
 							 &fsstate->param_values);
 
-	fsstate->cursor_exists = false;
-}
-
-/*
- * Fetch some more rows from the node's cursor.
- */
-static void
-fetch_more_data(ScanState *ss, TsFdwScanState *fsstate)
-{
-	AsyncRequest *volatile req = NULL;
-	AsyncResponseResult *volatile rsp = NULL;
-	MemoryContext oldcontext;
-
-	/*
-	 * We'll store the tuples in the batch_cxt.  First, flush the previous
-	 * batch.
-	 */
-	fsstate->tuples = NULL;
-	MemoryContextReset(fsstate->batch_cxt);
-	oldcontext = MemoryContextSwitchTo(fsstate->batch_cxt);
-
-	/* PGresult must be released before leaving this function. */
-	PG_TRY();
-	{
-		TSConnection *conn = fsstate->conn;
-		PGresult *res;
-		char sql[64];
-		int numrows;
-		int i;
-
-		snprintf(sql,
-				 sizeof(sql),
-				 "FETCH %d FROM c%u",
-				 fsstate->fetch_size,
-				 fsstate->cursor_number);
-
-		if (fsstate->att_conv_metadata->binary)
-			req = async_request_send_binary(conn, sql);
-		else
-			req = async_request_send(conn, sql);
-
-		Assert(NULL != req);
-
-		rsp = async_request_wait_any_result(req);
-
-		Assert(NULL != rsp);
-
-		res = async_response_result_get_pg_result(rsp);
-
-		/* On error, report the original query, not the FETCH. */
-		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-			remote_connection_report_error(ERROR, res, fsstate->conn, false, fsstate->query);
-
-		/* Convert the data into HeapTuples */
-		numrows = PQntuples(res);
-		fsstate->tuples = (HeapTuple *) palloc0(numrows * sizeof(HeapTuple));
-		fsstate->num_tuples = numrows;
-		fsstate->next_tuple = 0;
-
-		for (i = 0; i < numrows; i++)
-		{
-			Assert(IsA(ss->ps.plan, ForeignScan) || IsA(ss->ps.plan, CustomScan));
-
-			fsstate->tuples[i] = make_tuple_from_result_row(res,
-															i,
-															fsstate->rel,
-															fsstate->att_conv_metadata,
-															fsstate->retrieved_attrs,
-															ss,
-															fsstate->temp_cxt);
-		}
-
-		/* Update fetch_ct_2 */
-		if (fsstate->fetch_ct_2 < 2)
-			fsstate->fetch_ct_2++;
-
-		/* Must be EOF if we didn't get as many tuples as we asked for. */
-		fsstate->eof_reached = (numrows < fsstate->fetch_size);
-
-		pfree(req);
-		async_response_result_close(rsp);
-		req = NULL;
-		rsp = NULL;
-	}
-	PG_CATCH();
-	{
-		if (NULL != req)
-			pfree(req);
-
-		if (NULL != rsp)
-			async_response_result_close(rsp);
-
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
-	MemoryContextSwitchTo(oldcontext);
+	fsstate->cursor = NULL;
 }
 
 TupleTableSlot *
 fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 {
 	TupleTableSlot *slot = ss->ss_ScanTupleSlot;
+	HeapTuple tuple;
 
-	if (!fsstate->cursor_exists)
+	if (NULL == fsstate->cursor)
 		create_cursor(ss, fsstate);
 
-	/*
-	 * Get some more tuples, if we've run out.
-	 */
-	if (fsstate->next_tuple >= fsstate->num_tuples)
-	{
-		/* No point in another fetch if we already detected EOF, though. */
-		if (!fsstate->eof_reached)
-			fetch_more_data(ss, fsstate);
-		/* If we didn't get any tuples, must be end of data. */
-		if (fsstate->next_tuple >= fsstate->num_tuples)
-			return ExecClearTuple(slot);
-	}
+	tuple = remote_cursor_get_next_tuple(fsstate->cursor);
 
-	/*
-	 * Return the next tuple.
-	 */
-	ExecStoreTuple(fsstate->tuples[fsstate->next_tuple++], slot, InvalidBuffer, false);
+	if (NULL == tuple)
+		return ExecClearTuple(slot);
+
+	ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 
 	return slot;
 }
@@ -412,11 +269,8 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 void
 fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 {
-	char sql[64];
-	AsyncRequest *req;
-
 	/* If we haven't created the cursor yet, nothing to do. */
-	if (!fsstate->cursor_exists)
+	if (NULL == fsstate->cursor)
 		return;
 
 	/*
@@ -427,63 +281,11 @@ fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 	 */
 	if (ss->ps.chgParam != NULL)
 	{
-		fsstate->cursor_exists = false;
-		snprintf(sql, sizeof(sql), "CLOSE c%u", fsstate->cursor_number);
-	}
-	else if (fsstate->fetch_ct_2 > 1)
-	{
-		snprintf(sql, sizeof(sql), "MOVE BACKWARD ALL IN c%u", fsstate->cursor_number);
+		remote_cursor_close(fsstate->cursor);
+		fsstate->cursor = NULL;
 	}
 	else
-	{
-		/* Easy: just rescan what we already have in memory, if anything */
-		fsstate->next_tuple = 0;
-		return;
-	}
-
-	/*
-	 * We don't use a PG_TRY block here, so be careful not to throw error
-	 * without releasing the PGresult.
-	 */
-	req = async_request_send(fsstate->conn, sql);
-
-	Assert(NULL != req);
-
-	async_request_wait_ok_command(req);
-
-	pfree(req);
-
-	/* Now force a fresh FETCH. */
-	fsstate->tuples = NULL;
-	fsstate->num_tuples = 0;
-	fsstate->next_tuple = 0;
-	fsstate->fetch_ct_2 = 0;
-	fsstate->eof_reached = false;
-}
-
-/*
- * Utility routine to close a cursor.
- */
-static void
-close_cursor(TSConnection *conn, unsigned int cursor_number)
-{
-	char sql[64];
-	AsyncRequest *req;
-
-	snprintf(sql, sizeof(sql), "CLOSE c%u", cursor_number);
-
-	/*
-	 * We don't use a PG_TRY block here, so be careful not to throw error
-	 * without releasing the PGresult.
-	 */
-
-	req = async_request_send(conn, sql);
-
-	Assert(NULL != req);
-
-	async_request_wait_ok_command(req);
-
-	pfree(req);
+		remote_cursor_rewind(fsstate->cursor);
 }
 
 void
@@ -494,8 +296,11 @@ fdw_scan_end(TsFdwScanState *fsstate)
 		return;
 
 	/* Close the cursor if open, to prevent accumulation of cursors */
-	if (fsstate->cursor_exists)
-		close_cursor(fsstate->conn, fsstate->cursor_number);
+	if (NULL != fsstate->cursor)
+	{
+		remote_cursor_close(fsstate->cursor);
+		fsstate->cursor = NULL;
+	}
 
 	/* Release remote connection */
 	fsstate->conn = NULL;

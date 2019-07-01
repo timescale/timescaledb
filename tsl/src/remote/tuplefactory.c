@@ -26,7 +26,7 @@
 #include "utils.h"
 #include "compat.h"
 #include "remote/data_format.h"
-#include "guc.h"
+#include "tuplefactory.h"
 
 /*
  * Identify the attribute where data conversion fails.
@@ -44,6 +44,18 @@ typedef struct ConversionLocation
 	 */
 	ScanState *ss;
 } ConversionLocation;
+
+typedef struct TupleFactory
+{
+	MemoryContext temp_mctx;
+	TupleDesc tupdesc;
+	Datum *values;
+	bool *nulls;
+	List *retrieved_attrs;
+	AttConvInMetadata *attconv;
+	ConversionLocation errpos;
+	ErrorContextCallback errcallback;
+} TupleFactory;
 
 /*
  * Callback function which is called when error occurs during column value
@@ -125,27 +137,65 @@ conversion_error_callback(void *arg)
 	}
 }
 
-/*
- * Create a tuple from the specified row of the PGresult.
- *
- * rel is the local representation of the foreign table, attinmeta is
- * conversion data for the rel's tupdesc, and retrieved_attrs is an
- * integer list of the table column numbers present in the PGresult.
- * temp_context is a working context that can be reset after each tuple.
- */
+static TupleFactory *
+tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
+{
+	TupleFactory *tf = palloc0(sizeof(TupleFactory));
+
+	tf->temp_mctx = AllocSetContextCreate(CurrentMemoryContext,
+										  "tuple factory temporary data",
+										  ALLOCSET_SMALL_SIZES);
+
+	if (NULL != rel)
+		tf->tupdesc = RelationGetDescr(rel);
+	else
+	{
+		Assert(ss);
+		tf->tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
+	}
+
+	tf->retrieved_attrs = retrieved_attrs;
+	tf->attconv = data_format_create_att_conv_in_metadata(tf->tupdesc);
+	tf->values = (Datum *) palloc0(tf->tupdesc->natts * sizeof(Datum));
+	tf->nulls = (bool *) palloc(tf->tupdesc->natts * sizeof(bool));
+
+	/* Initialize to nulls for any columns not present in result */
+	memset(tf->nulls, true, tf->tupdesc->natts * sizeof(bool));
+
+	tf->errpos.rel = rel;
+	tf->errpos.cur_attno = 0;
+	tf->errpos.ss = ss;
+	tf->errcallback.callback = conversion_error_callback;
+	tf->errcallback.arg = (void *) &tf->errpos;
+	tf->errcallback.previous = error_context_stack;
+
+	return tf;
+}
+
+TupleFactory *
+tuplefactory_create_for_rel(Relation rel, List *retrieved_attrs)
+{
+	return tuplefactory_create(rel, NULL, retrieved_attrs);
+}
+
+TupleFactory *
+tuplefactory_create_for_scan(ScanState *ss, List *retrieved_attrs)
+{
+	return tuplefactory_create(NULL, ss, retrieved_attrs);
+}
+
+bool
+tuplefactory_is_binary(TupleFactory *tf)
+{
+	return tf->attconv->binary;
+}
+
 HeapTuple
-make_tuple_from_result_row(PGresult *res, int row, Relation rel,
-						   AttConvInMetadata *att_conv_metadata, List *retrieved_attrs,
-						   ScanState *ss, MemoryContext temp_context)
+tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row)
 {
 	HeapTuple tuple;
-	TupleDesc tupdesc;
-	Datum *values;
-	bool *nulls;
 	ItemPointer ctid = NULL;
 	Oid oid = InvalidOid;
-	ConversionLocation errpos;
-	ErrorContextCallback errcallback;
 	MemoryContext oldcontext;
 	ListCell *lc;
 	int j;
@@ -159,38 +209,19 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 	 * This cleans up not only the data we have direct access to, but any
 	 * cruft the I/O functions might leak.
 	 */
-	oldcontext = MemoryContextSwitchTo(temp_context);
-
-	if (rel)
-		tupdesc = RelationGetDescr(rel);
-	else
-	{
-		Assert(ss);
-		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
-	}
-
-	values = (Datum *) palloc0(tupdesc->natts * sizeof(Datum));
-	nulls = (bool *) palloc(tupdesc->natts * sizeof(bool));
-	/* Initialize to nulls for any columns not present in result */
-	memset(nulls, true, tupdesc->natts * sizeof(bool));
-
-	/*
-	 * Set up and install callback to report where conversion error occurs.
-	 */
-	errpos.rel = rel;
-	errpos.cur_attno = 0;
-	errpos.ss = ss;
-	errcallback.callback = conversion_error_callback;
-	errcallback.arg = (void *) &errpos;
-	errcallback.previous = error_context_stack;
-	error_context_stack = &errcallback;
+	oldcontext = MemoryContextSwitchTo(tf->temp_mctx);
 
 	buf = makeStringInfo();
+
+	/* Install error callback */
+	tf->errcallback.previous = error_context_stack;
+	error_context_stack = &tf->errcallback;
+
 	/*
 	 * i indexes columns in the relation, j indexes columns in the PGresult.
 	 */
 	j = 0;
-	foreach (lc, retrieved_attrs)
+	foreach (lc, tf->retrieved_attrs)
 	{
 		int i = lfirst_int(lc);
 		char *valstr;
@@ -213,31 +244,33 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 		 *
 		 * Note: we ignore system columns other than ctid and oid in result
 		 */
-		errpos.cur_attno = i;
+		tf->errpos.cur_attno = i;
+
 		if (i > 0)
 		{
 			/* ordinary column */
-			Assert(i <= tupdesc->natts);
-			nulls[i - 1] = (valstr == NULL);
+			Assert(i <= tf->tupdesc->natts);
+			tf->nulls[i - 1] = (valstr == NULL);
+
 			if (format == FORMAT_TEXT)
 			{
-				Assert(!att_conv_metadata->binary);
+				Assert(!tf->attconv->binary);
 				/* Apply the input function even to nulls, to support domains */
-				values[i - 1] = InputFunctionCall(&att_conv_metadata->conv_funcs[i - 1],
-												  valstr,
-												  att_conv_metadata->ioparams[i - 1],
-												  att_conv_metadata->typmods[i - 1]);
+				tf->values[i - 1] = InputFunctionCall(&tf->attconv->conv_funcs[i - 1],
+													  valstr,
+													  tf->attconv->ioparams[i - 1],
+													  tf->attconv->typmods[i - 1]);
 			}
 			else
 			{
-				Assert(att_conv_metadata->binary);
+				Assert(tf->attconv->binary);
 				if (valstr != NULL)
-					values[i - 1] = ReceiveFunctionCall(&att_conv_metadata->conv_funcs[i - 1],
-														buf,
-														att_conv_metadata->ioparams[i - 1],
-														att_conv_metadata->typmods[i - 1]);
+					tf->values[i - 1] = ReceiveFunctionCall(&tf->attconv->conv_funcs[i - 1],
+															buf,
+															tf->attconv->ioparams[i - 1],
+															tf->attconv->typmods[i - 1]);
 				else
-					values[i - 1] = PointerGetDatum(NULL);
+					tf->values[i - 1] = PointerGetDatum(NULL);
 			}
 		}
 		else if (i == SelfItemPointerAttributeNumber)
@@ -266,12 +299,12 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 				oid = DatumGetObjectId(datum);
 			}
 		}
-		errpos.cur_attno = 0;
+		tf->errpos.cur_attno = 0;
 		j++;
 	}
 
 	/* Uninstall error context callback. */
-	error_context_stack = errcallback.previous;
+	error_context_stack = tf->errcallback.previous;
 
 	/*
 	 * Check we got the expected number of columns.  Note: j == 0 and
@@ -285,7 +318,7 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 	 */
 	MemoryContextSwitchTo(oldcontext);
 
-	tuple = heap_form_tuple(tupdesc, values, nulls);
+	tuple = heap_form_tuple(tf->tupdesc, tf->values, tf->nulls);
 
 	/*
 	 * If we have a CTID to return, install it in both t_self and t_ctid.
@@ -315,100 +348,7 @@ make_tuple_from_result_row(PGresult *res, int row, Relation rel,
 		HeapTupleSetOid(tuple, oid);
 
 	/* Clean up */
-	MemoryContextReset(temp_context);
+	MemoryContextReset(tf->temp_mctx);
 
 	return tuple;
-}
-
-/*
- * Force assorted GUC parameters to settings that ensure that we'll output
- * data values in a form that is unambiguous to the remote server.
- *
- * This is rather expensive and annoying to do once per row, but there's
- * little choice if we want to be sure values are transmitted accurately;
- * we can't leave the settings in place between rows for fear of affecting
- * user-visible computations.
- *
- * We use the equivalent of a function SET option to allow the settings to
- * persist only until the caller calls reset_transmission_modes().  If an
- * error is thrown in between, guc.c will take care of undoing the settings.
- *
- * The return value is the nestlevel that must be passed to
- * reset_transmission_modes() to undo things.
- */
-int
-set_transmission_modes(void)
-{
-	int nestlevel = NewGUCNestLevel();
-
-	/*
-	 * The values set here should match what pg_dump does.  See also
-	 * configure_remote_session in connection.c.
-	 */
-	if (DateStyle != USE_ISO_DATES)
-		(void) set_config_option("datestyle",
-								 "ISO",
-								 PGC_USERSET,
-								 PGC_S_SESSION,
-								 GUC_ACTION_SAVE,
-								 true,
-								 0,
-								 false);
-	if (IntervalStyle != INTSTYLE_POSTGRES)
-		(void) set_config_option("intervalstyle",
-								 "postgres",
-								 PGC_USERSET,
-								 PGC_S_SESSION,
-								 GUC_ACTION_SAVE,
-								 true,
-								 0,
-								 false);
-	if (extra_float_digits < 3)
-		(void) set_config_option("extra_float_digits",
-								 "3",
-								 PGC_USERSET,
-								 PGC_S_SESSION,
-								 GUC_ACTION_SAVE,
-								 true,
-								 0,
-								 false);
-
-	return nestlevel;
-}
-
-/*
- * Undo the effects of set_transmission_modes().
- */
-void
-reset_transmission_modes(int nestlevel)
-{
-	AtEOXact_GUC(true, nestlevel);
-}
-
-/*
- * Find an equivalence class member expression, all of whose Vars, come from
- * the indicated relation.
- */
-extern Expr *
-find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
-{
-	ListCell *lc_em;
-
-	foreach (lc_em, ec->ec_members)
-	{
-		EquivalenceMember *em = lfirst(lc_em);
-
-		if (bms_is_subset(em->em_relids, rel->relids))
-		{
-			/*
-			 * If there is more than one equivalence member whose Vars are
-			 * taken entirely from this relation, we'll be content to choose
-			 * any one of those.
-			 */
-			return em->em_expr;
-		}
-	}
-
-	/* We didn't find any suitable equivalence class expression */
-	return NULL;
 }

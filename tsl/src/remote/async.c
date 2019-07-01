@@ -18,7 +18,6 @@
 
 #include "async.h"
 #include "connection.h"
-#include "fdw/utils.h"
 #include "utils.h"
 
 #define MAX_ASYNC_TIMEOUT_MS 60000

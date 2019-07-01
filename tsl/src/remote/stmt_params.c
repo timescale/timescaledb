@@ -13,8 +13,10 @@
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 
+#include <limits.h>
+
 #include "guc.h"
-#include "fdw/utils.h"
+#include "utils.h"
 #include "data_format.h"
 #include "stmt_params.h"
 

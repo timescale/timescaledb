@@ -19,11 +19,12 @@
 #include <remote/stmt_params.h>
 #include <remote/connection.h>
 #include <remote/dist_txn.h>
+#include <remote/utils.h>
+#include <remote/tuplefactory.h>
 #include <chunk_insert_state.h>
 
 #include "scan_plan.h"
 #include "modify_exec.h"
-#include "utils.h"
 
 /*
  * This enum describes what's kept in the fdw_private list for a ModifyTable
@@ -70,15 +71,12 @@ typedef struct TsFdwModifyState
 											 result to tuples */
 
 	/* extracted fdw_private data */
-	char *query;		   /* text of INSERT/UPDATE/DELETE command */
-	List *target_attrs;	/* list of target attribute numbers */
-	bool has_returning;	/* is there a RETURNING clause? */
-	List *retrieved_attrs; /* attr numbers retrieved by RETURNING */
+	char *query;		/* text of INSERT/UPDATE/DELETE command */
+	List *target_attrs; /* list of target attribute numbers */
+	bool has_returning; /* is there a RETURNING clause? */
+	TupleFactory *tupfactory;
 
 	AttrNumber ctid_attno; /* attnum of input resjunk ctid column */
-
-	/* working memory context */
-	MemoryContext temp_cxt; /* context for per-tuple temporary data */
 
 	bool prepared;
 	int num_servers;
@@ -158,14 +156,8 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	fmstate->query = query;
 	fmstate->target_attrs = target_attrs;
 	fmstate->has_returning = has_returning;
-	fmstate->retrieved_attrs = retrieved_attrs;
 	fmstate->prepared = false; /* PREPARE will happen later */
 	fmstate->num_servers = num_servers;
-
-	/* Create context for per-tuple temp workspace. */
-	fmstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
-											  "timescaledb_fdw temporary data",
-											  ALLOCSET_SMALL_SIZES);
 
 	/* Prepare for input conversion of RETURNING results. */
 	if (fmstate->has_returning)
@@ -185,6 +177,8 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 											  operation == CMD_UPDATE || operation == CMD_DELETE,
 											  tupdesc,
 											  1);
+
+	fmstate->tupfactory = tuplefactory_create_for_rel(rel, retrieved_attrs);
 
 	return fmstate;
 }
@@ -362,15 +356,8 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 {
 	PG_TRY();
 	{
-		HeapTuple newtup;
+		HeapTuple newtup = tuplefactory_make_tuple(fmstate->tupfactory, res, 0);
 
-		newtup = make_tuple_from_result_row(res,
-											0,
-											fmstate->rel,
-											fmstate->att_conv_metadata,
-											fmstate->retrieved_attrs,
-											NULL,
-											fmstate->temp_cxt);
 		/* tuple will be deleted when it is cleared from the slot */
 		ExecStoreTuple(newtup, slot, InvalidBuffer, true);
 	}
@@ -455,8 +442,6 @@ fdw_exec_foreign_insert(TsFdwModifyState *fmstate, EState *estate, TupleTableSlo
 	 * inserts
 	 */
 	pfree(reqset);
-
-	MemoryContextReset(fmstate->temp_cxt);
 
 	/* Return NULL if nothing was inserted on the remote end */
 	return (n_rows > 0) ? slot : NULL;
@@ -544,8 +529,6 @@ fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmstate, EState *estate, Tup
 	 */
 	pfree(reqset);
 	stmt_params_reset(params);
-
-	MemoryContextReset(fmstate->temp_cxt);
 
 	/* Return NULL if nothing was updated on the remote end */
 	return (n_rows > 0) ? slot : NULL;

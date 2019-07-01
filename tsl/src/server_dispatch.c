@@ -29,11 +29,12 @@
 
 #include "fdw/scan_exec.h"
 #include "fdw/deparse.h"
-#include "fdw/utils.h"
+#include "remote/utils.h"
 #include "remote/dist_txn.h"
 #include "remote/async.h"
 #include "server_dispatch.h"
 #include "remote/data_format.h"
+#include "remote/tuplefactory.h"
 
 #define TUPSTORE_MEMSIZE_KB work_mem
 #define TUPSTORE_FLUSH_THRESHOLD ts_guc_max_insert_batch_size
@@ -155,16 +156,15 @@ typedef struct ServerDispatchState
 	bool set_processed;		 /* Indicates whether to set the number or processed tuples */
 	DeparsedInsertStmt stmt; /* Partially deparsed insert statement */
 	const char *sql_stmt;	/* Fully deparsed insert statement */
-	AttConvInMetadata *att_conv_metadata; /* Metadata to convert incoming data to tuples */
-	List *target_attrs;					  /* The attributes to send to remote servers */
-	List *responses;					  /* List of responses to process in RETURNING state */
-	HTAB *serverstates;					  /* Hashtable of per-server state (tuple stores) */
-	MemoryContext mcxt;					  /* Memory context for per-server state */
-	MemoryContext temp_mcxt;			  /* context for per-tuple temporary data */
-	int64 num_tuples;					  /* Total number of tuples flushed each round */
-	int64 next_tuple;					  /* Next tuple to return to the parent node when in
-										   * RETURNING state */
-	int replication_factor;				  /* > 1 if we replicate tuples across servers */
+	TupleFactory *tupfactory;
+	List *target_attrs;		 /* The attributes to send to remote servers */
+	List *responses;		 /* List of responses to process in RETURNING state */
+	HTAB *serverstates;		 /* Hashtable of per-server state (tuple stores) */
+	MemoryContext mcxt;		 /* Memory context for per-server state */
+	int64 num_tuples;		 /* Total number of tuples flushed each round */
+	int64 next_tuple;		 /* Next tuple to return to the parent node when in
+							  * RETURNING state */
+	int replication_factor;  /* > 1 if we replicate tuples across servers */
 	StmtParams *stmt_params; /* Parameters to send with statement. Format can be binary or text */
 } ServerDispatchState;
 
@@ -323,10 +323,6 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 									&hctl,
 									HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 
-	sds->temp_mcxt = AllocSetContextCreate(estate->es_query_cxt,
-										   "ServerDispatch temporary data",
-										   ALLOCSET_SMALL_SIZES);
-
 	deparsed_insert_stmt_from_list(&sds->stmt,
 								   list_nth(cscan->custom_private,
 											CustomScanPrivateDeparsedInsertStmt));
@@ -334,7 +330,7 @@ server_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 		stmt_params_create(sds->target_attrs, false, tupdesc, TUPSTORE_FLUSH_THRESHOLD);
 
 	if (HAS_RETURNING(sds))
-		sds->att_conv_metadata = data_format_create_att_conv_in_metadata(tupdesc);
+		sds->tupfactory = tuplefactory_create_for_rel(rel, sds->stmt.retrieved_attrs);
 
 	ts_cache_release(hcache);
 }
@@ -347,15 +343,8 @@ store_returning_result(ServerDispatchState *sds, int row, TupleTableSlot *slot, 
 {
 	PG_TRY();
 	{
-		HeapTuple newtup;
+		HeapTuple newtup = tuplefactory_make_tuple(sds->tupfactory, res, row);
 
-		newtup = make_tuple_from_result_row(res,
-											row,
-											sds->rel,
-											sds->att_conv_metadata,
-											sds->stmt.retrieved_attrs,
-											NULL,
-											sds->temp_mcxt);
 		/* tuple will be deleted when it is cleared from the slot */
 		ExecStoreTuple(newtup, slot, InvalidBuffer, true);
 	}
@@ -471,7 +460,7 @@ send_batch_to_server(ServerDispatchState *sds, ServerState *ss)
 	Assert(ss->num_tuples_sent == NUM_STORED_TUPLES(ss));
 	Assert(ss->num_tuples_sent == stmt_params_converted_tuples(sds->stmt_params));
 
-	if (HAS_RETURNING(sds) && sds->att_conv_metadata->binary)
+	if (HAS_RETURNING(sds) && tuplefactory_is_binary(sds->tupfactory))
 		response_type = FORMAT_BINARY;
 	else if (ts_guc_enable_connection_binary_data)
 		response_type = FORMAT_BINARY;
