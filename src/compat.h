@@ -1052,4 +1052,38 @@ typedef struct ForeignKeyCacheInfoCompat
 #define create_append_path_compat create_append_path
 #endif
 
+#include <commands/vacuum.h>
+#include <commands/defrem.h>
+
+static inline int
+get_vacuum_options(const VacuumStmt *stmt)
+{
+#if PG12_GE
+	/* In PG12, the vacuum options is a list of DefElems and require
+	 * parsing. Here we only parse the options we might be interested in since
+	 * PostgreSQL itself will parse the options fully when it executes the
+	 * vacuum. */
+	ListCell *lc;
+	bool analyze = false;
+	bool verbose = false;
+
+	foreach (lc, stmt->options)
+	{
+		DefElem *opt = (DefElem *) lfirst(lc);
+
+		/* Parse common options for VACUUM and ANALYZE */
+		if (strcmp(opt->defname, "verbose") == 0)
+			verbose = defGetBoolean(opt);
+		/* Parse options available on VACUUM */
+		else if (strcmp(opt->defname, "analyze") == 0)
+			analyze = defGetBoolean(opt);
+	}
+
+	return (stmt->is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE) | (verbose ? VACOPT_VERBOSE : 0) |
+		   (analyze ? VACOPT_ANALYZE : 0);
+#else
+	return stmt->options;
+#endif
+}
+
 #endif /* TIMESCALEDB_COMPAT_H */

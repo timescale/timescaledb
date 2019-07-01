@@ -191,6 +191,61 @@ INSERT INTO disttable VALUES
        ('2018-07-01 06:01', 13, 1.4),
        ('2018-07-01 09:11', 90, 2.7),
        ('2018-07-01 08:01', 29, 1.5);
+\set ON_ERROR_STOP 0
+-- VACUUM currently not supported. A VACCUM cannot run in a
+-- transaction block so we need to distribute the command to data
+-- nodes using "raw" connections.
+VACUUM ANALYZE disttable;
+VACUUM FULL disttable;
+ERROR:  operation not supported on distributed hypertable
+VACUUM disttable;
+ERROR:  operation not supported on distributed hypertable
+\set ON_ERROR_STOP 1
+-- Test ANALYZE. First show no statistics
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class
+WHERE oid = 'disttable'::regclass;
+  relname  | relkind | reltuples | relpages 
+-----------+---------+-----------+----------
+ disttable | r       |         0 |        0
+(1 row)
+
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
+WHERE cl.oid = ch.chunk::regclass;
+        relname        | relkind | reltuples | relpages 
+-----------------------+---------+-----------+----------
+ _hyper_1_1_dist_chunk | f       |         0 |        0
+ _hyper_1_2_dist_chunk | f       |         0 |        0
+ _hyper_1_3_dist_chunk | f       |         0 |        0
+ _hyper_1_4_dist_chunk | f       |         0 |        0
+ _hyper_1_5_dist_chunk | f       |         0 |        0
+ _hyper_1_6_dist_chunk | f       |         0 |        0
+(6 rows)
+
+ANALYZE disttable;
+-- Show updated statistics
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class
+WHERE oid = 'disttable'::regclass;
+  relname  | relkind | reltuples | relpages 
+-----------+---------+-----------+----------
+ disttable | r       |         0 |        0
+(1 row)
+
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
+WHERE cl.oid = ch.chunk::regclass;
+        relname        | relkind | reltuples | relpages 
+-----------------------+---------+-----------+----------
+ _hyper_1_1_dist_chunk | f       |         2 |        1
+ _hyper_1_2_dist_chunk | f       |         1 |        1
+ _hyper_1_3_dist_chunk | f       |         1 |        1
+ _hyper_1_4_dist_chunk | f       |         1 |        1
+ _hyper_1_5_dist_chunk | f       |         1 |        1
+ _hyper_1_6_dist_chunk | f       |         2 |        1
+(6 rows)
+
 -- Test prepared statement
 PREPARE dist_insert (timestamptz, int, float) AS
 INSERT INTO disttable VALUES ($1, $2, $3);
@@ -362,31 +417,29 @@ EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
 FROM disttable GROUP BY 1, 2
 ORDER BY 1;
-                                                                   QUERY PLAN                                                                    
--------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device, (avg(disttable.temp))
-   Sort Key: (time_bucket('@ 3 hours'::interval, disttable."time"))
-   ->  HashAggregate
-         Output: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device, avg(disttable.temp)
-         Group Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
-         ->  Append
-               ->  Custom Scan (ServerScan) on public.disttable
-                     Output: time_bucket('@ 3 hours'::interval, disttable."time"), disttable.device, disttable.temp
-                     Server: server_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
-               ->  Custom Scan (ServerScan) on public.disttable disttable_1
-                     Output: time_bucket('@ 3 hours'::interval, disttable_1."time"), disttable_1.device, disttable_1.temp
-                     Server: server_2
-                     Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
-               ->  Custom Scan (ServerScan) on public.disttable disttable_2
-                     Output: time_bucket('@ 3 hours'::interval, disttable_2."time"), disttable_2.device, disttable_2.temp
-                     Server: server_3
-                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
-(22 rows)
+                                                                                                                QUERY PLAN                                                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device, avg(disttable.temp)
+   Group Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
+   ->  Merge Append
+         Sort Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
+         ->  Custom Scan (ServerScan) on public.disttable
+               Output: time_bucket('@ 3 hours'::interval, disttable."time"), disttable.device, disttable.temp
+               Server: server_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+               Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+         ->  Custom Scan (ServerScan) on public.disttable disttable_1
+               Output: time_bucket('@ 3 hours'::interval, disttable_1."time"), disttable_1.device, disttable_1.temp
+               Server: server_2
+               Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+               Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+         ->  Custom Scan (ServerScan) on public.disttable disttable_2
+               Output: time_bucket('@ 3 hours'::interval, disttable_2."time"), disttable_2.device, disttable_2.temp
+               Server: server_3
+               Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+               Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+(20 rows)
 
 -- Execute some queries on the frontend and return the results
 SELECT * FROM disttable;
@@ -410,12 +463,12 @@ ORDER BY 1;
              time             | device | avg_temp 
 ------------------------------+--------+----------
  Sun Jan 01 04:00:00 2017 PST |      1 |     1.25
- Sun Jan 01 07:00:00 2017 PST |      3 |      2.1
  Sun Jan 01 07:00:00 2017 PST |      1 |      1.2
+ Sun Jan 01 07:00:00 2017 PST |      3 |      2.1
  Mon Jan 02 07:00:00 2017 PST |      2 |      1.3
  Sun Jul 01 05:00:00 2018 PDT |     13 |      1.4
- Sun Jul 01 08:00:00 2018 PDT |     90 |      2.7
  Sun Jul 01 08:00:00 2018 PDT |     29 |      1.5
+ Sun Jul 01 08:00:00 2018 PDT |     90 |      2.7
  Mon Jul 02 08:00:00 2018 PDT |     87 |      1.6
 (8 rows)
 

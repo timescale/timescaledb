@@ -114,6 +114,35 @@ INSERT INTO disttable VALUES
        ('2018-07-01 09:11', 90, 2.7),
        ('2018-07-01 08:01', 29, 1.5);
 
+\set ON_ERROR_STOP 0
+-- VACUUM currently not supported. A VACCUM cannot run in a
+-- transaction block so we need to distribute the command to data
+-- nodes using "raw" connections.
+VACUUM ANALYZE disttable;
+VACUUM FULL disttable;
+VACUUM disttable;
+\set ON_ERROR_STOP 1
+
+-- Test ANALYZE. First show no statistics
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class
+WHERE oid = 'disttable'::regclass;
+
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
+WHERE cl.oid = ch.chunk::regclass;
+
+ANALYZE disttable;
+
+-- Show updated statistics
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class
+WHERE oid = 'disttable'::regclass;
+
+SELECT relname, relkind, reltuples, relpages
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
+WHERE cl.oid = ch.chunk::regclass;
+
 -- Test prepared statement
 PREPARE dist_insert (timestamptz, int, float) AS
 INSERT INTO disttable VALUES ($1, $2, $3);

@@ -152,4 +152,5 @@ SELECT * FROM test_ft;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 ANALYZE VERBOSE test_ft;
-WARNING:  skipping "test_ft" --- cannot analyze this foreign table
+INFO:  analyzing "public.test_ft"
+INFO:  "test_ft": table contains 2 rows, 2 rows in sample

@@ -77,7 +77,7 @@ option_validate(List *options_list, Oid catalog)
 	 */
 	foreach (cell, options_list)
 	{
-		DefElem *def = (DefElem *) lfirst(cell);
+		DefElem *def = lfirst_node(DefElem, cell);
 
 		if (!is_valid_option(def->defname, catalog))
 		{
@@ -248,4 +248,27 @@ option_extract_extension_list(const char *extensions_string, bool warn_on_missin
 	list_free(extlist);
 
 	return extension_oids;
+}
+
+bool
+option_get_from_options_list_int(List *options, const char *optionname, int *value)
+{
+	ListCell *lc;
+	bool found = false;
+
+	Assert(NULL != value);
+
+	foreach (lc, options)
+	{
+		DefElem *def = lfirst_node(DefElem, lc);
+
+		if (strcmp(def->defname, optionname) == 0)
+		{
+			*value = strtol(defGetString(def), NULL, 10);
+			found = true;
+			break;
+		}
+	}
+
+	return found;
 }
