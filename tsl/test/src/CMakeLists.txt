@@ -8,18 +8,11 @@ set(SOURCES
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND SOURCES
-       server.c
+       data_node.c
        deparse.c)
 endif ()
 
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
-
-if (PG_VERSION_SUPPORTS_MULTINODE)
-  list(APPEND SOURCES
-    deparse.c
-    server.c
-  )
-endif ()
 
 add_library(${TSL_TESTS_LIB_NAME} OBJECT ${SOURCES})
 

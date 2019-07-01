@@ -42,7 +42,8 @@
 #include "compat.h"
 
 #if PG_VERSION_SUPPORTS_MULTINODE
-#include "server.h"
+#include "data_node.h"
+#include "data_node_dispatch.h"
 #include "process_utility.h"
 #include "fdw/fdw.h"
 #include "chunk_api.h"
@@ -50,7 +51,6 @@
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
-#include "server_dispatch.h"
 #include "remote/dist_copy.h"
 #include "process_utility.h"
 #include "dist_util.h"

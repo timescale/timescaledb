@@ -11,8 +11,8 @@ set(SOURCES
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND SOURCES
        deparse.c
-       server.c
-       server_dispatch.c
+       data_node.c
+       data_node_dispatch.c
        chunk_api.c
        process_utility.c
        dist_util.c)

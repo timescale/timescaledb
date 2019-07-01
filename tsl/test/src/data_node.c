@@ -10,7 +10,7 @@
 #include <foreign/foreign.h>
 #include <utils/builtins.h>
 
-#include "server.h"
+#include "data_node.h"
 #include "export.h"
 
 TS_FUNCTION_INFO_V1(test_server_show);
