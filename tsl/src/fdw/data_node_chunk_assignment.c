@@ -10,13 +10,13 @@
 #include <parser/parsetree.h>
 #include <nodes/bitmapset.h>
 
-#include "server_chunk_assignment.h"
+#include "data_node_chunk_assignment.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "hypercube.h"
 #include "chunk.h"
-#include "chunk_server.h"
+#include "chunk_data_node.h"
 
 static int
 get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)

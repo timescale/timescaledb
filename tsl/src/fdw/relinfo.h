@@ -19,8 +19,7 @@
 #include <nodes/relation.h>
 #include <optimizer/var.h>
 #endif
-
-#include "server_chunk_assignment.h"
+#include "data_node_chunk_assignment.h"
 
 /*
  * FDW-specific planner information kept in RelOptInfo.fdw_private. For a

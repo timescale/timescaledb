@@ -86,6 +86,8 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_partial_agg.sql
   )
   list(APPEND TEST_FILES_DEBUG
+    data_node.sql
+    data_node_bootstrap.sql
     deparse.sql
     deparse_fail.sql
     dist_commands.sql
@@ -98,8 +100,6 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     remote_txn.sql
     remote_txn_id.sql
     remote_txn_resolve.sql
-    server.sql
-    server_bootstrap.sql
     )
   if (CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_TEMPLATES

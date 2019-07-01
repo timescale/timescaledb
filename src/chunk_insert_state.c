@@ -35,7 +35,7 @@
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
-#include "chunk_server.h"
+#include "chunk_data_node.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "compat/tupconvert.h"

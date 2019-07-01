@@ -14,7 +14,7 @@ set(SOURCES
   chunk_dispatch_state.c
   chunk_index.c
   chunk_insert_state.c
-  chunk_server.c
+  chunk_data_node.c
   constraint.c
   constraint_aware_append.c
   cross_module_fn.c
@@ -36,7 +36,7 @@ set(SOURCES
   hypertable_compression.c
   hypertable_insert.c
   hypertable_restrict_info.c
-  hypertable_server.c
+  hypertable_data_node.c
   indexing.c
   init.c
   interval.c

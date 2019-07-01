@@ -18,7 +18,6 @@
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
-#include <hypertable_server.h>
 #include <errors.h>
 
 #include "errors.h"
@@ -28,12 +27,11 @@
 #include "license.h"
 #include "utils.h"
 #include "hypertable_cache.h"
-#include "server.h"
+#include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"
 #include "compat.h"
-#include "hypertable_server.h"
-#include <utils.h>
+#include "hypertable_data_node.h"
 #include <extension.h>
 
 Datum
