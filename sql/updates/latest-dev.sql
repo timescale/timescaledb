@@ -16,3 +16,5 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log TO PUBLIC;
 DROP FUNCTION IF EXISTS get_telemetry_report();
+
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregate_stats;

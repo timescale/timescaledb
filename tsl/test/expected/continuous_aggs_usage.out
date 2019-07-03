@@ -99,9 +99,14 @@ completed_threshold    | Sun Dec 30 22:00:00 2018 PST
 invalidation_threshold | Sun Dec 30 22:00:00 2018 PST
 job_id                 | 1000
 last_run_started_at    | 
+last_run_status        | 
 job_status             | 
 last_run_duration      | 
 next_scheduled_run     | 
+total_runs             | 
+total_successes        | 
+total_failures         | 
+total_crashes          | 
 
 \x
 --
