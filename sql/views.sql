@@ -115,12 +115,19 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     END AS invalidation_threshold,
     cagg.job_id as job_id,
     bgw_job_stat.last_start as last_run_started_at,
+    CASE when bgw_job_stat.last_run_success = 't' then 'Success'
+         when bgw_job_stat.last_run_success = 'f' then 'Failed'
+    END AS last_run_status,
     case when bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' then 'running'
        when bgw_job_stat.next_start is not null then 'scheduled'
     end as job_status,
     case when bgw_job_stat.last_finish > bgw_job_stat.last_start then (bgw_job_stat.last_finish - bgw_job_stat.last_start)
     end as last_run_duration,
-    bgw_job_stat.next_start as next_scheduled_run
+    bgw_job_stat.next_start as next_scheduled_run,
+    bgw_job_stat.total_runs,
+    bgw_job_stat.total_successes,
+    bgw_job_stat.total_failures,
+    bgw_job_stat.total_crashes
   FROM
     _timescaledb_catalog.continuous_agg as cagg
     LEFT JOIN _timescaledb_internal.bgw_job_stat as bgw_job_stat

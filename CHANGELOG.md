@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Minor features**
 * #1273 Propagate quals to joined hypertables
+* #1332 Add job statistics columns to timescaledb_information.continuous_aggregate_stats view
 
 **Bugfixes**
 * #1300 Fix telemetry report return value
