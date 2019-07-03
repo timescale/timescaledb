@@ -12,6 +12,12 @@ SELECT * FROM create_hypertable(NULL, NULL);
 ERROR:  invalid main_table: cannot be NULL
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', NULL);
 ERROR:  invalid time_column_name: cannot be NULL
+-- integer time dimensions require an explicit interval
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time');
+ERROR:  integer dimensions require an explicit interval
+-- space dimensions require explicit number of partitions
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ERROR:  invalid number of partitions for dimension "Device_id"
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 ERROR:  relation "public.Hypertable_1_mispelled" does not exist at character 33
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));

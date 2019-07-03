@@ -106,8 +106,7 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di)                                                                  \
-	(di != NULL && OidIsValid((di)->table_relid) && (di)->colname != NULL &&                       \
-	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
+	(di != NULL && OidIsValid((di)->table_relid) && (di)->colname != NULL)
 
 /* add_dimension record attribute numbers */
 enum Anum_add_dimension

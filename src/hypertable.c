@@ -1433,6 +1433,8 @@ Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_GETARG_OID(0);
+	Name time_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
+	Name space_dim_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
 	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
 	bool create_default_indexes =
@@ -1442,7 +1444,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	DimensionInfo *time_dim_info =
 		ts_dimension_info_create_open(table_relid,
 									  /* column name */
-									  PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
+									  time_dim_name,
 									  /* interval */
 									  PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
 									  /* interval type */
@@ -1465,12 +1467,12 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	bool created;
 	uint32 flags = 0;
 
-	if (!PG_ARGISNULL(3))
+	if (NULL != space_dim_name)
 	{
 		space_dim_info =
 			ts_dimension_info_create_closed(table_relid,
 											/* column name */
-											PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2),
+											space_dim_name,
 											/* number partitions */
 											PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
 											/* partitioning func */
