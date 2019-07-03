@@ -1043,6 +1043,7 @@ ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval,
 {
 	DimensionInfo *info = palloc(sizeof(*info));
 	*info = (DimensionInfo){
+		.type = DIMENSION_TYPE_OPEN,
 		.table_relid = table_relid,
 		.colname = column_name,
 		.interval_datum = interval,
@@ -1058,6 +1059,7 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 {
 	DimensionInfo *info = palloc(sizeof(*info));
 	*info = (DimensionInfo){
+		.type = DIMENSION_TYPE_CLOSED,
 		.table_relid = table_relid,
 		.colname = column_name,
 		.num_slices = num_slices,
@@ -1067,6 +1069,60 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 	return info;
 }
 
+/* Validate the configuration of an open ("time") dimension */
+static void
+dimension_info_validate_open(DimensionInfo *info)
+{
+	Oid dimtype = info->coltype;
+
+	Assert(info->type == DIMENSION_TYPE_OPEN);
+
+	if (OidIsValid(info->partitioning_func))
+	{
+		if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+					 errmsg("invalid partitioning function"),
+					 errhint("A valid partitioning function for open (time) dimensions must be "
+							 "IMMUTABLE, "
+							 "take the column type as input, and return an integer or "
+							 "timestamp type.")));
+
+		dimtype = get_func_rettype(info->partitioning_func);
+	}
+
+	info->interval = dimension_interval_to_internal(NameStr(*info->colname),
+													dimtype,
+													info->interval_type,
+													info->interval_datum,
+													info->adaptive_chunking);
+}
+
+/* Validate the configuration of a closed ("space") dimension */
+static void
+dimension_info_validate_closed(DimensionInfo *info)
+{
+	Assert(info->type == DIMENSION_TYPE_CLOSED);
+
+	if (!OidIsValid(info->partitioning_func))
+		info->partitioning_func = ts_partitioning_func_get_closed_default();
+	else if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+				 errmsg("invalid partitioning function"),
+				 errhint("A valid partitioning function for closed (space) dimensions must be "
+						 "IMMUTABLE "
+						 "and have the signature (anyelement) -> integer.")));
+
+	if (!info->num_slices_is_set || !IS_VALID_NUM_SLICES(info->num_slices))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid number of partitions for dimension \"%s\"",
+						NameStr(*info->colname)),
+				 errhint("A closed (space) dimension must specify between 1 and %d partitions.",
+						 PG_INT16_MAX)));
+}
+
 void
 ts_dimension_info_validate(DimensionInfo *info)
 {
@@ -1074,7 +1130,6 @@ ts_dimension_info_validate(DimensionInfo *info)
 	HeapTuple tuple;
 	Datum datum;
 	bool isnull = false;
-	bool not_null_is_set;
 
 	if (!DIMENSION_INFO_IS_SET(info))
 		ereport(ERROR,
@@ -1101,7 +1156,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attnotnull, &isnull);
 	Assert(!isnull);
 
-	not_null_is_set = DatumGetBool(datum);
+	info->set_not_null = !DatumGetBool(datum);
 
 	ReleaseSysCache(tuple);
 
@@ -1129,61 +1184,24 @@ ts_dimension_info_validate(DimensionInfo *info)
 		}
 	}
 
-	if (info->num_slices_is_set)
+	switch (info->type)
 	{
-		/* Closed ("space") dimension */
-		info->type = DIMENSION_TYPE_CLOSED;
-
-		if (!OidIsValid(info->partitioning_func))
-			info->partitioning_func = ts_partitioning_func_get_closed_default();
-		else if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
-					 errmsg("invalid partitioning function"),
-					 errhint("A valid partitioning function for closed (space) dimensions must be "
-							 "IMMUTABLE "
-							 "and have the signature (anyelement) -> integer.")));
-
-		if (!IS_VALID_NUM_SLICES(info->num_slices))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid number of partitions: must be between 1 and %d",
-							PG_INT16_MAX)));
-	}
-	else
-	{
-		/* Open ("time") dimension */
-		Oid dimtype = info->coltype;
-
-		info->type = DIMENSION_TYPE_OPEN;
-		info->set_not_null = !not_null_is_set;
-
-		if (OidIsValid(info->partitioning_func))
-		{
-			if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
-						 errmsg("invalid partitioning function"),
-						 errhint("A valid partitioning function for open (time) dimensions must be "
-								 "IMMUTABLE, "
-								 "take the column type as input, and return an integer or "
-								 "timestamp type.")));
-
-			dimtype = get_func_rettype(info->partitioning_func);
-		}
-
-		info->interval = dimension_interval_to_internal(NameStr(*info->colname),
-														dimtype,
-														info->interval_type,
-														info->interval_datum,
-														info->adaptive_chunking);
+		case DIMENSION_TYPE_CLOSED:
+			dimension_info_validate_closed(info);
+			break;
+		case DIMENSION_TYPE_OPEN:
+			dimension_info_validate_open(info);
+			break;
+		case DIMENSION_TYPE_ANY:
+			elog(ERROR, "invalid dimension type in configuration");
+			break;
 	}
 }
 
 void
 ts_dimension_add_from_info(DimensionInfo *info)
 {
-	if (info->set_not_null)
+	if (info->set_not_null && info->type == DIMENSION_TYPE_OPEN)
 		dimension_add_not_null_on_column(info->table_relid, NameStr(*info->colname));
 
 	Assert(info->ht != NULL);
@@ -1244,6 +1262,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	DimensionInfo info = {
+		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
 		.num_slices = PG_ARGISNULL(2) ? DatumGetInt32(-1) : PG_GETARG_INT32(2),
