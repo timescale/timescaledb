@@ -1079,6 +1079,7 @@ REFRESH MATERIALIZED VIEW max_mat_view;
 INFO:  new materialization range for public.continuous_agg_max_mat larger than allowed in one run, truncating (time column time) (12)
 INFO:  new materialization range for public.continuous_agg_max_mat (time column time) (4)
 INFO:  materializing continuous aggregate public.max_mat_view: new range up to 4
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1091,6 +1092,7 @@ REFRESH MATERIALIZED VIEW max_mat_view;
 INFO:  new materialization range for public.continuous_agg_max_mat larger than allowed in one run, truncating (time column time) (12)
 INFO:  new materialization range for public.continuous_agg_max_mat (time column time) (8)
 INFO:  materializing continuous aggregate public.max_mat_view: new range up to 8
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1152,6 +1154,7 @@ REFRESH MATERIALIZED VIEW max_mat_view_t;
 INFO:  new materialization range for public.continuous_agg_max_mat_t larger than allowed in one run, truncating (time column time) (1568030400000000)
 INFO:  new materialization range for public.continuous_agg_max_mat_t (time column time) (1568001600000000)
 INFO:  materializing continuous aggregate public.max_mat_view_t: new range up to 1568001600000000
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
@@ -1164,6 +1167,7 @@ REFRESH MATERIALIZED VIEW max_mat_view_t;
 INFO:  new materialization range for public.continuous_agg_max_mat_t larger than allowed in one run, truncating (time column time) (1568030400000000)
 INFO:  new materialization range for public.continuous_agg_max_mat_t (time column time) (1568016000000000)
 INFO:  materializing continuous aggregate public.max_mat_view_t: new range up to 1568016000000000
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
