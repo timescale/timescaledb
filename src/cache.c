@@ -164,21 +164,25 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 	query->result = hash_search(cache->htab, cache->get_key(query), action, &found);
 
 	if (found)
-	{
 		cache->stats.hits++;
-
-		if (cache->update_entry != NULL)
-			query->result = cache->update_entry(cache, query);
-	}
 	else
-	{
 		cache->stats.misses++;
 
-		if (cache->create_entry != NULL)
-		{
-			cache->stats.numelements++;
-			query->result = cache->create_entry(cache, query);
-		}
+	/* Update the entry if it was found and the check did not say that the
+	 * entry was bad. */
+	if (found && (cache->check_entry == NULL || cache->check_entry(cache, query)))
+	{
+		if (cache->update_entry != NULL)
+			query->result = cache->update_entry(cache, query);
+		return query->result;
+	}
+
+	/* Here we know that either no entry was found, or the entry was bad, so
+	 * recreate the entry (if possible). */
+	if (cache->create_entry != NULL)
+	{
+		cache->stats.numelements++;
+		query->result = cache->create_entry(cache, query);
 	}
 
 	return query->result;

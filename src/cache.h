@@ -37,7 +37,7 @@ typedef struct Cache
 	void *(*get_key)(struct CacheQuery *);
 	void *(*create_entry)(struct Cache *, CacheQuery *);
 	void *(*update_entry)(struct Cache *, CacheQuery *);
-
+	bool (*check_entry)(struct Cache *, CacheQuery *);
 	void (*remove_entry)(void *entry);
 	void (*pre_destroy_hook)(struct Cache *);
 

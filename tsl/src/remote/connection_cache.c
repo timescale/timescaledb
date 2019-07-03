@@ -59,6 +59,35 @@ connection_cache_get_key(CacheQuery *query)
 	return &((ConnectionCacheQuery *) query)->user_mapping->umid;
 }
 
+/*
+ */
+static bool
+connection_cache_check_entry(Cache *cache, CacheQuery *query)
+{
+	ConnectionCacheEntry *entry = query->result;
+	/* If this is set, then an async call was aborted. */
+	if (remote_connection_is_processing(entry->conn))
+		return false;
+	return true;
+}
+
+/*
+ * This is called when the connection cache entry is found in the cache and
+ * before it is returned. Since the settings for the local session might have
+ * changed since it was last used, we need to configure the remote session
+ * again to ensure that it has the same configuration as the local session.
+ */
+static void *
+connection_cache_update_entry(Cache *cache, CacheQuery *query)
+{
+	ConnectionCacheEntry *entry = query->result;
+	char *set_timezone_cmd =
+		psprintf("SET timezone = '%s'", pg_get_timezone_name(session_timezone));
+	remote_connection_exec_ok_command(entry->conn, set_timezone_cmd);
+	pfree(set_timezone_cmd);
+	return entry;
+}
+
 static void *
 connection_cache_create_entry(Cache *cache, CacheQuery *query)
 {
@@ -92,19 +121,20 @@ connection_cache_create()
 
 	*cache = (Cache)
 	{
-		.hctl =
-		{
+		.hctl = {
 			.keysize = sizeof(Oid),
-				.entrysize = sizeof(ConnectionCacheEntry),
-				.hcxt = ctx,
+			.entrysize = sizeof(ConnectionCacheEntry),
+			.hcxt = ctx,
 		},
-			.name = "connection_cache",
-			.numelements = 16,
-			.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-			.get_key = connection_cache_get_key,
-			.create_entry = connection_cache_create_entry,
-			.remove_entry = connection_cache_entry_free,
-			.pre_destroy_hook = connection_cache_pre_destroy_hook,
+		.name = "connection_cache",
+		.numelements = 16,
+		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
+		.get_key = connection_cache_get_key,
+		.create_entry = connection_cache_create_entry,
+		.remove_entry = connection_cache_entry_free,
+		.update_entry = connection_cache_update_entry,
+		.check_entry = connection_cache_check_entry,
+		.pre_destroy_hook = connection_cache_pre_destroy_hook,
 	};
 
 	ts_cache_init(cache);
