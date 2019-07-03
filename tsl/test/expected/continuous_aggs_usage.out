@@ -264,6 +264,7 @@ REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546236000000000)
 INFO:  new materialization range for public.device_readings (time column observation_time) (1543723200000000)
 INFO:  materializing continuous aggregate public.device_summary: new range up to 1543723200000000
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT min(min_time)::timestamp FROM device_summary;
            min            
 --------------------------
