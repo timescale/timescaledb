@@ -67,6 +67,19 @@ connection_cache_get_key(CacheQuery *query)
 	return &((ConnectionCacheQuery *) query)->user_mapping->umid;
 }
 
+/*
+ * Verify that a connection is still valid.
+ */
+static bool
+connection_cache_check_entry(Cache *cache, CacheQuery *query)
+{
+	ConnectionCacheEntry *entry = query->result;
+	/* If this is set, then an async call was aborted. */
+	if (remote_connection_is_processing(entry->conn))
+		return false;
+	return true;
+}
+
 static void *
 connection_cache_create_entry(Cache *cache, CacheQuery *query)
 {
@@ -90,6 +103,33 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	return entry;
 }
 
+/*
+ * This is called when the connection cache entry is found in the cache and
+ * before it is returned. The connection can either be bad, in which case it
+ * needs to be recreated, or the settings for the local session might have
+ * changed since it was last used. In the latter case, we need to configure
+ * the remote session again to ensure that it has the same configuration as
+ * the local session.
+ */
+static void *
+connection_cache_update_entry(Cache *cache, CacheQuery *query)
+{
+	ConnectionCacheEntry *entry = query->result;
+	char *set_timezone_cmd;
+
+	if (!connection_cache_check_entry(cache, query))
+	{
+		remote_connection_close(entry->conn);
+		return connection_cache_create_entry(cache, query);
+	}
+
+	set_timezone_cmd = psprintf("SET timezone = '%s'", pg_get_timezone_name(session_timezone));
+	remote_connection_exec_ok_command(entry->conn, set_timezone_cmd);
+	pfree(set_timezone_cmd);
+
+	return entry;
+}
+
 static Cache *
 connection_cache_create()
 {
@@ -100,20 +140,20 @@ connection_cache_create()
 
 	*cache = (Cache)
 	{
-		.hctl =
-		{
+		.hctl = {
 			.keysize = sizeof(Oid),
-				.entrysize = sizeof(ConnectionCacheEntry),
-				.hcxt = ctx,
+			.entrysize = sizeof(ConnectionCacheEntry),
+			.hcxt = ctx,
 		},
-			.name = "connection_cache",
-			.numelements = 16,
-			.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-			.valid_result = connection_cache_valid_result,
-			.get_key = connection_cache_get_key,
-			.create_entry = connection_cache_create_entry,
-			.remove_entry = connection_cache_entry_free,
-			.pre_destroy_hook = connection_cache_pre_destroy_hook,
+		.name = "connection_cache",
+		.numelements = 16,
+		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
+		.valid_result = connection_cache_valid_result,
+		.get_key = connection_cache_get_key,
+		.create_entry = connection_cache_create_entry,
+		.remove_entry = connection_cache_entry_free,
+		.update_entry = connection_cache_update_entry,
+		.pre_destroy_hook = connection_cache_pre_destroy_hook,
 	};
 
 	ts_cache_init(cache);
