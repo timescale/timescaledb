@@ -2697,6 +2697,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	ScanIterator continuous_aggregate_iter;
 	NameData view_name;
 	NameData view_schema;
+	bool cagg_fullrange;
 
 	if (!OidIsValid(view_relid))
 		return false;
@@ -2734,7 +2735,13 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
-	ts_cm_functions->continuous_agg_materialize(materialization_id, true);
+	cagg_fullrange = ts_cm_functions->continuous_agg_materialize(materialization_id, true);
+	if (!cagg_fullrange)
+	{
+		elog(WARNING,
+			 "REFRESH did not materialize the entire range since it was limited by the "
+			 "max_interval_per_job setting");
+	}
 
 	StartTransactionCommand();
 	return true;
