@@ -286,16 +286,16 @@ fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *ep
 				(Path *) create_sort_path(root, rel, sorted_epq_path, useful_pathkeys, -1.0);
 
 		add_path(rel,
-				 (Path *) create_scan_path(root,
-										   rel,
-										   NULL,
-										   rows,
-										   startup_cost,
-										   total_cost,
-										   useful_pathkeys,
-										   NULL,
-										   sorted_epq_path,
-										   NIL));
+				 create_scan_path(root,
+								  rel,
+								  NULL,
+								  rows,
+								  startup_cost,
+								  total_cost,
+								  useful_pathkeys,
+								  NULL,
+								  sorted_epq_path,
+								  NIL));
 	}
 }
 
@@ -768,6 +768,10 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 
 	/* Add generated path into grouped_rel by add_path(). */
 	add_path(grouped_rel, grouppath);
+
+	/* Add paths with pathkeys if there's an order by clause */
+	if (root->sort_pathkeys != NIL)
+		fdw_add_paths_with_pathkeys_for_rel(root, grouped_rel, NULL, create_path);
 }
 
 void

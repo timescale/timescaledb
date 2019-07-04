@@ -1796,27 +1796,27 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk _hyper_6_11_dist_chunk_1 (actual rows=2 loops=1)
                              Output: _hyper_6_11_dist_chunk_1.device
                              Data node: data_node_1
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_11_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_11_dist_chunk ORDER BY device ASC NULLS LAST
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk _hyper_6_12_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_12_dist_chunk_1.device
                              Data node: data_node_2
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_12_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_12_dist_chunk ORDER BY device ASC NULLS LAST
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk _hyper_6_13_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_13_dist_chunk_1.device
                              Data node: data_node_3
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_13_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_13_dist_chunk ORDER BY device ASC NULLS LAST
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk _hyper_6_14_dist_chunk_1 (actual rows=2 loops=1)
                              Output: _hyper_6_14_dist_chunk_1.device
                              Data node: data_node_1
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_14_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_14_dist_chunk ORDER BY device ASC NULLS LAST
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk _hyper_6_15_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_15_dist_chunk_1.device
                              Data node: data_node_2
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_15_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_15_dist_chunk ORDER BY device ASC NULLS LAST
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk _hyper_6_16_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_16_dist_chunk_1.device
                              Data node: data_node_3
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_16_dist_chunk
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_16_dist_chunk ORDER BY device ASC NULLS LAST
    InitPlan 2 (returns $1)
      ->  Limit (actual rows=1 loops=1)
            Output: devices.device
