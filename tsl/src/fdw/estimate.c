@@ -20,8 +20,8 @@
 #include "estimate.h"
 #include "deparse.h"
 
-/* If no remote estimates, assume a sort costs 20% extra */
-#define DEFAULT_FDW_SORT_MULTIPLIER 1.2
+/* If no remote estimates, assume a sort costs 5% extra.  */
+#define DEFAULT_FDW_SORT_MULTIPLIER 1.05
 
 typedef struct CostEstimate
 {
