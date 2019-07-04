@@ -48,7 +48,10 @@ extern void fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo
 							   Path *best_path, List *scan_clauses);
 
 extern void fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
-												CreatePathFunc);
+												CreatePathFunc create_scan_path);
+extern void fdw_add_upper_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel,
+													  Path *epq_path,
+													  CreateUpperPathFunc create_upper_path);
 
 extern void fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root,
 								   UpperRelationKind stage, RelOptInfo *input_rel,

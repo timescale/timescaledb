@@ -245,12 +245,15 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 	return useful_pathkeys_list;
 }
 
-void
-fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
-									CreatePathFunc create_scan_path)
+static void
+add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
+								CreatePathFunc create_scan_path,
+								CreateUpperPathFunc create_upper_path)
 {
 	List *useful_pathkeys_list = NIL; /* List of all pathkeys */
 	ListCell *lc;
+
+	Assert((create_scan_path || create_upper_path) && !(create_scan_path && create_upper_path));
 
 	useful_pathkeys_list = get_useful_pathkeys_for_relation(root, rel);
 
@@ -283,18 +286,50 @@ fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *ep
 			sorted_epq_path =
 				(Path *) create_sort_path(root, rel, sorted_epq_path, useful_pathkeys, -1.0);
 
-		add_path(rel,
-				 (Path *) create_scan_path(root,
-										   rel,
-										   NULL,
-										   rows,
-										   startup_cost,
-										   total_cost,
-										   useful_pathkeys,
-										   NULL,
-										   sorted_epq_path,
-										   NIL));
+		if (create_scan_path)
+		{
+			Assert(IS_SIMPLE_REL(rel));
+			add_path(rel,
+					 create_scan_path(root,
+									  rel,
+									  NULL,
+									  rows,
+									  startup_cost,
+									  total_cost,
+									  useful_pathkeys,
+									  NULL,
+									  sorted_epq_path,
+									  NIL));
+		}
+		else
+		{
+			Assert(IS_UPPER_REL(rel));
+			add_path(rel,
+					 create_upper_path(root,
+									   rel,
+									   NULL,
+									   rows,
+									   startup_cost,
+									   total_cost,
+									   useful_pathkeys,
+									   sorted_epq_path,
+									   NIL));
+		}
 	}
+}
+
+void
+fdw_add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
+									CreatePathFunc create_scan_path)
+{
+	add_paths_with_pathkeys_for_rel(root, rel, epq_path, create_scan_path, NULL);
+}
+
+void
+fdw_add_upper_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_path,
+										  CreateUpperPathFunc create_upper_path)
+{
+	add_paths_with_pathkeys_for_rel(root, rel, epq_path, NULL, create_upper_path);
 }
 
 void
@@ -765,6 +800,10 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 
 	/* Add generated path into grouped_rel by add_path(). */
 	add_path(grouped_rel, grouppath);
+
+	/* Add paths with pathkeys if there's an order by clause */
+	if (root->sort_pathkeys != NIL)
+		fdw_add_upper_paths_with_pathkeys_for_rel(root, grouped_rel, NULL, create_path);
 }
 
 void
