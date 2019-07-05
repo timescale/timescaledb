@@ -63,12 +63,16 @@ typedef struct TsFdwRelInfo
 	int width;
 	Cost startup_cost;
 	Cost total_cost;
+
 	/* Costs excluding costs for transferring data from the foreign server */
 	Cost rel_startup_cost;
 	Cost rel_total_cost;
+	double rel_retrieved_rows;
 
 	/* Options extracted from catalogs. */
 	bool use_remote_estimate;
+
+	/* Costs for transferring data across the network */
 	Cost fdw_startup_cost;
 	Cost fdw_tuple_cost;
 	List *shippable_extensions; /* OIDs of whitelisted extensions */

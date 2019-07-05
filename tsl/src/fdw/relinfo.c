@@ -29,6 +29,8 @@
 /* Default CPU cost to process 1 row (above and beyond cpu_tuple_cost). */
 #define DEFAULT_FDW_TUPLE_COST 0.01
 
+#define DEFAULT_FDW_FETCH_SIZE 100
+
 /*
  * Parse options from foreign server and apply them to fpinfo.
  *
@@ -125,7 +127,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
 	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
 	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
-	fpinfo->fetch_size = 100;
+	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
 	apply_server_options(fpinfo);
 
@@ -188,6 +190,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 */
 	fpinfo->rel_startup_cost = -1;
 	fpinfo->rel_total_cost = -1;
+	fpinfo->rel_retrieved_rows = -1;
 
 	/*
 	 * If the table or the server is configured to use remote estimates,
@@ -232,7 +235,6 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			rel->pages = 10;
 			rel->tuples = (10 * BLCKSZ) / (rel->reltarget->width + MAXALIGN(SizeofHeapTupleHeader));
 		}
-
 		/* Estimate rel size as best we can with local statistics. */
 		set_baserel_size_estimates(root, rel);
 
