@@ -1641,6 +1641,36 @@ create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 	return HeapTupleGetDatum(tuple);
 }
 
+/*
+ * Check that the partitioning is reasonable and raise warnings if
+ * not. Typically called after applying updates to a partitioning dimension.
+ */
+void
+ts_hypertable_check_partitioning(Hypertable *ht, int32 id_of_updated_dimension)
+{
+	Dimension *dim = ts_hyperspace_get_dimension_by_id(ht->space, id_of_updated_dimension);
+
+	Assert(NULL != dim);
+
+	if (hypertable_is_distributed(ht))
+	{
+		Dimension *first_closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
+		int num_nodes = list_length(ht->data_nodes);
+
+		/* Warn the user that there aren't enough slices to make use of all
+		 * servers. Only do this if this is the first closed (space) dimension. */
+		if (first_closed_dim != NULL && dim->fd.id == first_closed_dim->fd.id &&
+			num_nodes > first_closed_dim->fd.num_slices)
+			ereport(WARNING,
+					(errmsg("the number of partitions in dimension \"%s\" is too low to "
+							"make use of all attached data nodes",
+							NameStr(dim->fd.column_name)),
+					 errhint("Increase the number of partitions in dimension \"%s\" to match or "
+							 "exceed the number of attached data nodes.",
+							 NameStr(dim->fd.column_name))));
+	}
+}
+
 static int16
 validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call)
 {
@@ -1752,14 +1782,38 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	bool created;
 	uint32 flags = 0;
 
+	if (NULL != data_nodes && ARR_NDIM(data_nodes) > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid data nodes format"),
+				 errhint("Specify a one-dimensional array of data nodes.")));
+
 	if (NULL != space_dim_name)
 	{
+		int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
+
+		/* If the number of partitions isn't specified, default to setting it
+		 * to the number of data nodes */
+		if (num_partitions < 1 && NULL != data_nodes)
+		{
+			int num_nodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+
+			if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("max number of data nodes exceeded"),
+						 errhint("The number of data nodes cannot exceed %d.",
+								 MAX_NUM_HYPERTABLE_DATA_NODES)));
+
+			num_partitions = num_nodes & 0xFFFF;
+		}
+
 		space_dim_info =
 			ts_dimension_info_create_closed(table_relid,
 											/* column name */
 											space_dim_name,
 											/* number partitions */
-											PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
+											num_partitions,
 											/* partitioning func */
 											PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9));
 	}
@@ -1800,6 +1854,10 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 											 data_nodes);
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+
+	if (NULL != space_dim_info)
+		ts_hypertable_check_partitioning(ht, space_dim_info->dimension_id);
+
 	retval = create_hypertable_datum(fcinfo, ht, created);
 	ts_cache_release(hcache);
 

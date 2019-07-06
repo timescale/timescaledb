@@ -195,18 +195,19 @@ SELECT * FROM attach_data_node('disttable', 'data_node_1');
 
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 32768);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 32768);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => -1);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => -1);
 
 -- Non-existing data node
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_3" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_3" }');
 \set ON_ERROR_STOP 1
 
 -- Use a subset of data nodes and a replication factor of two so that
--- each chunk is associated with more than one data_node
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
+-- each chunk is associated with more than one data node. Set
+-- number_partitions lower than number of servers to raise a warning
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
 
 -- Create some chunks
 INSERT INTO disttable VALUES
@@ -288,6 +289,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 SELECT * FROM _timescaledb_catalog.chunk;
 
 -- Attach data node should now succeed
+SET client_min_messages TO NOTICE;
 SELECT * FROM attach_data_node('disttable', 'data_node_1');
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -326,8 +328,31 @@ SELECT * FROM attach_data_node('disttable', 'data_node_1', false);
 -- Attach if not exists
 SELECT * FROM attach_data_node('disttable', 'data_node_1', true);
 
+-- Should repartition too. First show existing number of slices in
+-- 'device' dimension
+SELECT column_name, num_slices
+FROM _timescaledb_catalog.dimension
+WHERE num_slices IS NOT NULL
+AND column_name = 'device';
 
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
+                                     if_not_exists => true);
+SELECT * FROM attach_data_node('disttable', 'data_node_3');
+
+-- Show updated number of slices in 'device' dimension.
+SELECT column_name, num_slices
+FROM _timescaledb_catalog.dimension
+WHERE num_slices IS NOT NULL
+AND column_name = 'device';
+
+-- Clean up
 DROP TABLE disttable;
+SELECT * FROM delete_data_node('data_node_3', cascade => true);
+
+-- Creating a distributed hypertable without any servers should fail
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
 \set ON_ERROR_STOP 0

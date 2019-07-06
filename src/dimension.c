@@ -811,7 +811,19 @@ ts_dimension_set_name(Dimension *dim, const char *newname)
 int
 ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
 {
+	Assert(IS_OPEN_DIMENSION(dim));
+
 	dim->fd.interval_length = chunk_interval;
+
+	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
+}
+
+int
+ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices)
+{
+	Assert(IS_CLOSED_DIMENSION(dim));
+
+	dim->fd.num_slices = num_slices;
 
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }
@@ -1103,6 +1115,8 @@ ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum 
 		Oid dimtype = ts_dimension_get_partition_type(dim);
 		Assert(NULL != intervaltype);
 
+		Assert(IS_OPEN_DIMENSION(dim));
+
 		dim->fd.interval_length =
 			dimension_interval_to_internal(NameStr(dim->fd.column_name),
 										   dimtype,
@@ -1112,7 +1126,10 @@ ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum 
 	}
 
 	if (NULL != num_slices)
+	{
+		Assert(IS_CLOSED_DIMENSION(dim));
 		dim->fd.num_slices = *num_slices;
+	}
 
 	if (NULL != integer_now_func)
 	{
@@ -1129,6 +1146,7 @@ ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum 
 	}
 
 	dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
+	ts_hypertable_check_partitioning(ht, dim->fd.id);
 
 	ts_cache_release(hcache);
 }
@@ -1141,13 +1159,16 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	Oid table_relid = PG_GETARG_OID(0);
 	int32 num_slices_arg = PG_ARGISNULL(1) ? -1 : PG_GETARG_INT32(1);
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht;
 	int16 num_slices;
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid main_table: cannot be NULL")));
+				 errmsg("invalid hypertable name: cannot be NULL")));
 
+	ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
 	if (PG_ARGISNULL(1) || !IS_VALID_NUM_SLICES(num_slices_arg))
@@ -1164,6 +1185,8 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	num_slices = num_slices_arg & 0xffff;
 
 	ts_dimension_update(table_relid, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
+
+	ts_cache_release(hcache);
 
 	PG_RETURN_VOID();
 }
@@ -1390,7 +1413,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 	}
 }
 
-void
+int32
 ts_dimension_add_from_info(DimensionInfo *info)
 {
 	if (info->set_not_null && info->type == DIMENSION_TYPE_OPEN)
@@ -1404,6 +1427,8 @@ ts_dimension_add_from_info(DimensionInfo *info)
 										  info->num_slices,
 										  info->partitioning_func,
 										  info->interval);
+
+	return info->dimension_id;
 }
 
 /*
@@ -1507,6 +1532,8 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	if (!info.skip)
 	{
+		int32 dimension_id;
+
 		if (ts_hypertable_has_chunks(info.table_relid, AccessShareLock))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1521,7 +1548,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		 * table.
 		 */
 		ts_hypertable_set_num_dimensions(info.ht, info.ht->space->num_dimensions + 1);
-		ts_dimension_add_from_info(&info);
+		dimension_id = ts_dimension_add_from_info(&info);
 
 		/* Verify that existing indexes are compatible with a hypertable */
 
@@ -1532,6 +1559,9 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		 */
 		info.ht = ts_hypertable_get_by_id(info.ht->fd.id);
 		ts_indexing_verify_indexes(info.ht);
+
+		/* Check that partitioning is sane */
+		ts_hypertable_check_partitioning(info.ht, dimension_id);
 	}
 
 	retval = dimension_create_datum(fcinfo, &info);

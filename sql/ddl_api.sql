@@ -157,8 +157,7 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VO
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
 AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
 
--- Add a data node to a TimescaleDB distributed database. This also add a
--- corresponding user mapping, if one does not already exist.
+-- Add a data node to a TimescaleDB distributed database.
 CREATE OR REPLACE FUNCTION add_data_node(
     node_name              NAME,
     host                   TEXT = 'localhost',
@@ -173,9 +172,9 @@ CREATE OR REPLACE FUNCTION add_data_node(
                 node_created BOOL, database_created BOOL, extension_created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
 
--- Delete a data node from the distributed database
+-- Delete a data node from a distributed database
 CREATE OR REPLACE FUNCTION delete_data_node(
-    node_name            NAME,
+    node_name              NAME,
     if_exists              BOOLEAN = FALSE,
     cascade                BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE
@@ -184,8 +183,9 @@ CREATE OR REPLACE FUNCTION delete_data_node(
 -- Attach a data node to a distributed hypertable
 CREATE OR REPLACE FUNCTION attach_data_node(
     hypertable             REGCLASS,
-    node_name            NAME,
-    if_not_attached        BOOLEAN = FALSE
+    node_name              NAME,
+    if_not_attached        BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE
 ) RETURNS TABLE(hypertable_id INTEGER, node_hypertable_id INTEGER, node_name NAME)
 AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
 
