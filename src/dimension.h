@@ -138,6 +138,7 @@ extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern TSDLLEXPORT int ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices);
 extern Datum ts_dimension_transform_value(Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
@@ -164,7 +165,7 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_reli
 																  regproc partitioning_func);
 
 extern void ts_dimension_info_validate(DimensionInfo *info);
-extern void ts_dimension_add_from_info(DimensionInfo *info);
+extern int32 ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);
 extern TSDLLEXPORT void ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype,
 											Datum *interval, Oid *intervaltype, int16 *num_slices,

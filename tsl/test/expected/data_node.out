@@ -265,6 +265,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Test that data nodes are added to a hypertable
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
+WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | disttable  | t
@@ -350,23 +351,25 @@ SELECT * FROM attach_data_node('disttable', 'data_node_1');
 ERROR:  table "disttable" is not a hypertable
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
 ERROR:  invalid replication_factor
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 32768);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 32768);
 ERROR:  invalid replication_factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
 ERROR:  invalid replication_factor
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => -1);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => -1);
 ERROR:  invalid replication_factor
 -- Non-existing data node
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_3" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  server "data_node_3" does not exist
 \set ON_ERROR_STOP 1
 -- Use a subset of data nodes and a replication factor of two so that
--- each chunk is associated with more than one data_node
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
+-- each chunk is associated with more than one data node. Set
+-- number_partitions lower than number of servers to raise a warning
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
 NOTICE:  adding not-null constraint to column "time"
+WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              4 | public      | disttable  | t
@@ -405,8 +408,8 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 ----------+---------------+-------------
         2 |             1 | data_node_2
         2 |             1 | data_node_4
-        3 |             2 | data_node_4
         3 |             2 | data_node_2
+        3 |             2 | data_node_4
         4 |             3 | data_node_2
         4 |             3 | data_node_4
 (6 rows)
@@ -430,7 +433,7 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_4_3_dist_chunk | data_node_4
+ _hyper_4_3_dist_chunk | data_node_2
  _hyper_4_4_dist_chunk | data_node_2
 (2 rows)
 
@@ -440,8 +443,8 @@ _timescaledb_catalog.chunk_data_node cdn
 WHERE c.id = cdn.chunk_id;
       table_name       |  node_name  
 -----------------------+-------------
- _hyper_4_3_dist_chunk | data_node_4
  _hyper_4_3_dist_chunk | data_node_2
+ _hyper_4_3_dist_chunk | data_node_4
  _hyper_4_4_dist_chunk | data_node_2
  _hyper_4_4_dist_chunk | data_node_4
 (4 rows)
@@ -450,7 +453,7 @@ WHERE c.id = cdn.chunk_id;
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
  set_chunk_default_data_node 
 -----------------------------
- f
+ t
 (1 row)
 
 -- Should update the default data node and return true
@@ -573,6 +576,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (0 rows)
 
 -- Attach data node should now succeed
+SET client_min_messages TO NOTICE;
 SELECT * FROM attach_data_node('disttable', 'data_node_1');
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
@@ -634,7 +638,56 @@ NOTICE:  data node "data_node_1" is already attached to hypertable "disttable", 
              4 |                  2 | data_node_1
 (1 row)
 
+-- Should repartition too. First show existing number of slices in
+-- 'device' dimension
+SELECT column_name, num_slices
+FROM _timescaledb_catalog.dimension
+WHERE num_slices IS NOT NULL
+AND column_name = 'device';
+ column_name | num_slices 
+-------------+------------
+ device      |          1
+(1 row)
+
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
+                                     if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+NOTICE:  database "data_node_3" already exists on data node, skipping
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | f                | f
+(1 row)
+
+SELECT * FROM attach_data_node('disttable', 'data_node_3');
+NOTICE:  the number of partitions in dimension "device" was increased to 2
+ hypertable_id | node_hypertable_id |  node_name  
+---------------+--------------------+-------------
+             4 |                  1 | data_node_3
+(1 row)
+
+-- Show updated number of slices in 'device' dimension.
+SELECT column_name, num_slices
+FROM _timescaledb_catalog.dimension
+WHERE num_slices IS NOT NULL
+AND column_name = 'device';
+ column_name | num_slices 
+-------------+------------
+ device      |          2
+(1 row)
+
+-- Clean up
 DROP TABLE disttable;
+SELECT * FROM delete_data_node('data_node_3', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+-- Creating a distributed hypertable without any servers should fail
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Creating a distributed hypertable without any data nodes should fail
@@ -748,6 +801,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2,
                                             replication_factor => 2,
                                             data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
+WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              7 | public      | disttable  | t
@@ -797,6 +851,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', 'device', 2, replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
+WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              8 | public      | disttable_2 | t

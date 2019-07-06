@@ -142,5 +142,5 @@ ERROR:  invalid tablespace name
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 select set_number_partitions(NULL,NULL);
-ERROR:  invalid main_table: cannot be NULL
+ERROR:  invalid hypertable name: cannot be NULL
 \set ON_ERROR_STOP 1

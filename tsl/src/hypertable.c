@@ -18,6 +18,8 @@
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
+#include <hypertable_data_node.h>
+#include <dimension.h>
 #include <errors.h>
 
 #include "errors.h"
@@ -132,6 +134,7 @@ void
 hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes)
 {
 	List *nodelist;
+	int num_nodes;
 
 	/* Get the list of servers to attach to the distributed hypertable. We
 	 * require USAGE on the servers to be able to attach them to the
@@ -141,7 +144,9 @@ hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes)
 	else
 		nodelist = data_node_array_to_node_name_list_with_aclcheck(data_nodes, ACL_USAGE);
 
-	if (list_length(nodelist) == 0)
+	num_nodes = list_length(nodelist);
+
+	if (num_nodes == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_NO_DATA_NODES),
 				 errmsg("no data nodes can be assigned to \"%s\"",
