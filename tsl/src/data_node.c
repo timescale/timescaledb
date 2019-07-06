@@ -659,13 +659,15 @@ data_node_attach(PG_FUNCTION_ARGS)
 	Oid table_id = PG_GETARG_OID(0);
 	const char *node_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1)->data;
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	ForeignServer *fserver = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	ForeignServer *fserver;
+	HypertableDataNode *node;
 	Cache *hcache;
 	Hypertable *ht;
+	Dimension *dim;
 	List *result;
+	int num_nodes;
 	ListCell *lc;
-
-	Assert(NULL != fserver);
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -680,21 +682,25 @@ data_node_attach(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_id))));
 
-	/* Must have owner permissions on the hypertable to attach a new server.
-	   Must also have USAGE on the foreign server.  */
+	/* Must have owner permissions on the hypertable to attach a new data
+	   node. Must also have USAGE on the foreign server.  */
 	ts_hypertable_permissions_check(table_id, GetUserId());
+	fserver = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 
-	foreach (lc, ts_hypertable_data_node_scan(ht->fd.id, CurrentMemoryContext))
+	Assert(NULL != fserver);
+
+	foreach (lc, ht->data_nodes)
 	{
-		HypertableDataNode *node = lfirst(lc);
+		node = lfirst(lc);
 
 		if (node->foreign_server_oid == fserver->serverid)
 		{
 			ts_cache_release(hcache);
+
 			if (if_not_attached)
 			{
 				ereport(NOTICE,
-						(errcode(ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED),
+						(errcode(ERRCODE_TS_DATA_NODE_ALREADY_ATTACHED),
 						 errmsg("data node \"%s\" is already attached to hypertable \"%s\", "
 								"skipping",
 								node_name,
@@ -703,7 +709,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 			}
 			else
 				ereport(ERROR,
-						(errcode(ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED),
+						(errcode(ERRCODE_TS_DATA_NODE_ALREADY_ATTACHED),
 						 errmsg("data node \"%s\" is already attached to hypertable \"%s\"",
 								node_name,
 								get_rel_name(table_id))));
@@ -712,9 +718,55 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	result = hypertable_assign_data_nodes(ht->fd.id, list_make1((char *) node_name));
 	Assert(result->length == 1);
+
+	/* Get the first closed (space) dimension, which is the one along which we
+	 * partition across data nodes. */
+	dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	num_nodes = list_length(ht->data_nodes) + 1;
+
+	/* If there are less slices (partitions) in the space dimension than there
+	 * are data nodesx, we'd like to expand the number of slices to be able to
+	 * make use of the new data node. */
+	if (NULL != dim && num_nodes > dim->fd.num_slices)
+	{
+		if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("max number of data nodes already attached"),
+					 errdetail("The number of data nodes in a hypertable cannot exceed %d",
+							   MAX_NUM_HYPERTABLE_DATA_NODES)));
+
+		if (repartition)
+		{
+			ts_dimension_set_number_of_slices(dim, num_nodes & 0xFFFF);
+
+			ereport(NOTICE,
+					(errmsg("the number of partitions in dimension \"%s\" was increased to %u",
+							NameStr(dim->fd.column_name),
+							num_nodes),
+					 errdetail("To make use of all attached data nodes, a distributed "
+							   "hypertable needs at least as many partitions in the first "
+							   "closed (space) dimension as there are attached data nodes.")));
+		}
+		else
+		{
+			/* Raise a warning if the number of partitions are too few to make
+			 * use of all data nodes. Need to refresh cache first to get the
+			 * updated data node list. */
+			int dimension_id = dim->fd.id;
+
+			ts_cache_release(hcache);
+			hcache = ts_hypertable_cache_pin();
+			ht = ts_hypertable_cache_get_entry(hcache, table_id);
+			ts_hypertable_check_partitioning(ht, dimension_id);
+		}
+	}
+
+	node = linitial(result);
 	ts_cache_release(hcache);
-	PG_RETURN_DATUM(
-		create_hypertable_data_node_datum(fcinfo, (HypertableDataNode *) linitial(result)));
+
+	PG_RETURN_DATUM(create_hypertable_data_node_datum(fcinfo, node));
 }
 
 /* Only used for generating proper error message */
@@ -1188,7 +1240,7 @@ data_node_get_node_name_list(void)
 }
 
 /*
- * Turn an array of server names into a list of names.
+ * Turn an array of data nodes into a list of names.
  *
  * The function will verify that all the servers in the list belong to the
  * TimescaleDB foreign data wrapper. Optionally, perform ACL check on each
@@ -1196,12 +1248,19 @@ data_node_get_node_name_list(void)
  * ACL_NO_CHECK.
  */
 List *
-data_node_array_to_node_name_list_with_aclcheck(ArrayType *serverarr, AclMode mode)
+data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode)
 {
-	ArrayIterator it = array_create_iterator(serverarr, 0, NULL);
+	ArrayIterator it;
 	Datum node_datum;
 	bool isnull;
 	List *nodes = NIL;
+
+	if (NULL == nodearr)
+		return NIL;
+
+	Assert(ARR_NDIM(nodearr) <= 1);
+
+	it = array_create_iterator(nodearr, 0, NULL);
 
 	while (array_iterate(it, &node_datum, &isnull))
 	{

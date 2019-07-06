@@ -28,6 +28,10 @@
 
 #define INVALID_HYPERTABLE_ID 0
 
+/* We cannot make use of more data nodes than we have slices in closed (space)
+ * dimensions, and the value for number of slices is an int16. */
+#define MAX_NUM_HYPERTABLE_DATA_NODES INT16_MAX
+
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
@@ -113,6 +117,8 @@ extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, Cr
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name);
 extern void ts_hypertable_drop(Hypertable *hypertable);
 
+extern TSDLLEXPORT void ts_hypertable_check_partitioning(Hypertable *ht,
+														 int32 id_of_updated_dimension);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);

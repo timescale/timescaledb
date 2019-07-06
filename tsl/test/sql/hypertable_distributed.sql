@@ -43,7 +43,20 @@ SELECT * FROM add_data_node('data_node_3',
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+-- Test setting num_partitions lower than the number of servers
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 1);
+
+-- Increase the number of partitions. Expect warning since still too low
+SELECT * FROM set_number_partitions('disttable', 2);
+-- Set number of partitions equal to the number of servers should not
+-- raise a warning.
+SELECT * FROM set_number_partitions('disttable', 3, 'device');
+
+-- Show the number of slices
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'disttable';
 
 -- This table tests both 1-dimensional tables and under-replication
 -- (replication_factor > num_data_nodes).
@@ -401,15 +414,49 @@ GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
-SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
+SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
-data_nodes => '{ "data_node_2", "data_node_3" }');
+data_nodes => '{ "data_node_3" }');
 
--- Test attach_data_node
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+-- Test attach_data_node. First show dimensions and currently attached
+-- servers.  The number of slices in the space dimension should equal
+-- the number of servers since we didn't explicitly specify
+-- number_partitions
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+
+SELECT h.table_name, hdn.node_name
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.hypertable_data_node hdn
+WHERE h.id = hdn.hypertable_id
+AND h.table_name = 'Param_Table';
+
 SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_1');
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+
+-- Show updated metadata after attach
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+SELECT h.table_name, hdn.node_name
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.hypertable_data_node hdn
+WHERE h.id = hdn.hypertable_id
+AND h.table_name = 'Param_Table';
+
+-- Attach another data node but do not auto-repartition, i.e.,
+-- increase the number of slices.
+SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_2', repartition => false);
+
+-- Number of slices should not be increased
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+
+-- Manually increase the number of partitions
+SELECT * FROM set_number_partitions('"Table\\Schema"."Param_Table"', 4);
 
 -- Verify hypertables on all data nodes
 SELECT * FROM _timescaledb_catalog.hypertable;
@@ -426,7 +473,7 @@ $$);
 
 -- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
-SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
+SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
