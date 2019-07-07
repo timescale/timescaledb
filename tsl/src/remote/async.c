@@ -155,6 +155,10 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 		elog(ERROR, "can't send async request in state \"%d\"", req->state);
 	if (remote_connection_is_processing(req->conn))
 		return req;
+
+	/* Send configuration parameters if necessary */
+	remote_connection_configure_if_changed(req->conn);
+
 	if (req->stmt_name)
 	{
 		/*

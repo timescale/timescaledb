@@ -48,6 +48,7 @@ extern bool remote_connection_cancel_query(TSConnection *conn);
 extern PGconn *remote_connection_get_pg_conn(TSConnection *conn);
 extern bool remote_connection_is_processing(TSConnection *conn);
 extern void remote_connection_set_processing(TSConnection *conn, bool processing);
+extern void remote_connection_configure_if_changed(TSConnection *conn);
 
 /* wrappers around async stuff to emulate sync communication */
 
