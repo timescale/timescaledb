@@ -25,14 +25,13 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
-    local_user             REGROLE = NULL,
-    remote_user            NAME = NULL,
     password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
-) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
+) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
+                server_created BOOL, database_created BOOL, extension_created BOOL)
 AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 
@@ -44,27 +43,27 @@ SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port 
 -- ===================================================================
 CREATE SCHEMA "S 1";
 CREATE TABLE "S 1"."T 1" (
-	"C 1" int NOT NULL,
-	c2 int NOT NULL,
-	c3 text,
-	c4 timestamptz,
-	c5 timestamp,
-	c6 varchar(10),
-	c7 char(10),
-	CONSTRAINT t1_pkey PRIMARY KEY ("C 1")
+    "C 1" int NOT NULL,
+    c2 int NOT NULL,
+    c3 text,
+    c4 timestamptz,
+    c5 timestamp,
+    c6 varchar(10),
+    c7 char(10),
+    CONSTRAINT t1_pkey PRIMARY KEY ("C 1")
 );
 
 ANALYZE "S 1"."T 1";
 
 INSERT INTO "S 1"."T 1"
-	SELECT id,
-	       id % 10,
-	       to_char(id, 'FM00000'),
-	       '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
-	       '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
-	       id % 10,
-	       id % 10
-	FROM generate_series(1, 1000) id;
+    SELECT id,
+           id % 10,
+           to_char(id, 'FM00000'),
+           '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
+           '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
+           id % 10,
+           id % 10
+    FROM generate_series(1, 1000) id;
 
 \set ON_ERROR_STOP 0
 
@@ -95,7 +94,7 @@ COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-commit', 'loopback');
+    SELECT remote_node_killer_set_event('pre-commit', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 
@@ -103,7 +102,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20003;
 SELECT count(*) FROM pg_prepared_xacts;
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
+    SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 
@@ -115,7 +114,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --fail the connection before the abort
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT remote_node_killer_set_event('pre-abort', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ROLLBACK;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
@@ -156,7 +155,7 @@ COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 
@@ -164,7 +163,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10002;
 SELECT count(*) FROM pg_prepared_xacts;
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 
@@ -180,7 +179,7 @@ SELECT count(*) from _timescaledb_catalog.remote_txn;
 --the following only breaks stuff in post-commit so commit should succeed
 --but leave transaction in an unresolved state.
 BEGIN;
-	SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 --unresolved state shown here
@@ -189,7 +188,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --this fails because heal cannot run inside txn block
 BEGIN;
-	SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+    SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 COMMIT;
 
 select count(*) from _timescaledb_catalog.remote_txn;
@@ -202,7 +201,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 select count(*) from _timescaledb_catalog.remote_txn;
 
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
+    SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 --unresolved state shown here
@@ -215,7 +214,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 select count(*) from _timescaledb_catalog.remote_txn;
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
+    SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
 --at this point the commit prepared might or might not have been executed before
@@ -270,7 +269,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --below will fail the abort and thus ROLLBACK TRANSACTION will never be called leaving
 --a prepared_xact that should be rolled back by heal server
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT remote_node_killer_set_event('pre-abort', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
@@ -284,9 +283,9 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-	SAVEPOINT save_1;
-    	SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-	ROLLBACK TO SAVEPOINT save_1;
+    SAVEPOINT save_1;
+        SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    ROLLBACK TO SAVEPOINT save_1;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
@@ -296,12 +295,12 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --test comm error in subtrans abort
 BEGIN;
-	SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
+    SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-	SAVEPOINT save_1;
-    	SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
-	ROLLBACK TO SAVEPOINT save_1;
+    SAVEPOINT save_1;
+        SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    ROLLBACK TO SAVEPOINT save_1;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
@@ -314,5 +313,3 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 PREPARE TRANSACTION 'test-1';
-
-

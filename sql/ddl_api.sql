@@ -164,14 +164,13 @@ CREATE OR REPLACE FUNCTION add_data_node(
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
-    local_user             REGROLE = NULL,
-    remote_user            NAME = NULL,
     password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
-) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, username NAME, node_username NAME, created BOOL)
+) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME,
+                node_created BOOL, database_created BOOL, extension_created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
 
 -- Delete a data node from the distributed database
@@ -195,11 +194,11 @@ CREATE OR REPLACE FUNCTION detach_data_node(node_name NAME, hypertable REGCLASS 
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
 -- Block new chunk creation on a data node for a distributed hypertable. NULL hypertable means it will block
--- chunks for all distributed hypertables 
+-- chunks for all distributed hypertables
 CREATE OR REPLACE FUNCTION block_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
 
 -- Reallow chunk creations on a blocked data node for a distributed hypertable. NULL hypertable means it will
--- allow chunks for all distributed hypertables 
+-- allow chunks for all distributed hypertables
 CREATE OR REPLACE FUNCTION allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;

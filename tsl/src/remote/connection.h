@@ -19,7 +19,7 @@ typedef enum ConnOptionType
 {
 	CONN_OPTION_TYPE_NONE,
 	CONN_OPTION_TYPE_USER,
-	CONN_OPTION_TYPE_DATA_NODE,
+	CONN_OPTION_TYPE_NODE,
 } ConnOptionType;
 
 /* Open a connection with a remote endpoint.
@@ -27,9 +27,10 @@ typedef enum ConnOptionType
  * malloc. Most users should use `remote_dist_txn_get_connection` or
  * `remote_connection_cache_get_connection` instead. Must be closed with `remote_connection_close`
  */
-TSConnection *remote_connection_open_default(const char *data_node_name);
-TSConnection *remote_connection_open(const char *data_node_name, List *data_node_options,
-									 List *user_options, bool set_dist_id);
+TSConnection *remote_connection_open_default(const char *node_name);
+TSConnection *remote_connection_open(const char *node_name, List *node_options, List *user_options,
+									 bool set_dist_id);
+bool remote_connection_ping(const char *server_name);
 void remote_connection_close(TSConnection *conn);
 
 extern void remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn,
@@ -37,7 +38,7 @@ extern void remote_connection_report_error(int elevel, PGresult *res, TSConnecti
 
 extern ConnOptionType remote_connection_option_type(const char *keyword);
 extern bool remote_connection_valid_user_option(const char *keyword);
-extern bool remote_connection_valid_data_node_option(const char *keyword);
+extern bool remote_connection_valid_node_option(const char *keyword);
 extern unsigned int remote_connection_get_cursor_number(void);
 void remote_connection_reset_cursor_number(void);
 extern unsigned int remote_connection_get_prep_stmt_number(void);

@@ -2,33 +2,50 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('data_node1', 'localhost', 'data_node1', port=>current_setting('port')::integer);
- node_name  |   host    | port  |  database  |  username  | node_username | created 
-------------+-----------+-------+------------+------------+---------------+---------
- data_node1 | localhost | 15432 | data_node1 | super_user | super_user    | t
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_data_node('data_node1',
+                            database => 'data_node1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node1"
+ node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
+------------+-----------+-------+------------+--------------+------------------+-------------------
+ data_node1 | localhost | 15432 | data_node1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node2', 'localhost', 'data_node2', port=>current_setting('port')::integer);
- node_name  |   host    | port  |  database  |  username  | node_username | created 
-------------+-----------+-------+------------+------------+---------------+---------
- data_node2 | localhost | 15432 | data_node2 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node2',
+                            database => 'data_node2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node2"
+ node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
+------------+-----------+-------+------------+--------------+------------------+-------------------
+ data_node2 | localhost | 15432 | data_node2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node3', 'localhost', 'data_node3', port=>current_setting('port')::integer);
- node_name  |   host    | port  |  database  |  username  | node_username | created 
-------------+-----------+-------+------------+------------+---------------+---------
- data_node3 | localhost | 15432 | data_node3 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node3',
+                            database => 'data_node3',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node3"
+ node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
+------------+-----------+-------+------------+--------------+------------------+-------------------
+ data_node3 | localhost | 15432 | data_node3 | t            | t                | t
 (1 row)
 
 \des+
-                                                                  List of foreign servers
-    Name    |   Owner    | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                      | Description 
-------------+------------+----------------------+-------------------+------+---------+-------------------------------------------------------+-------------
- data_node1 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node1') | 
- data_node2 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node2') | 
- data_node3 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node3') | 
+                                                                       List of foreign servers
+    Name    |        Owner         | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                      | Description 
+------------+----------------------+----------------------+-------------------+------+---------+-------------------------------------------------------+-------------
+ data_node1 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node1') | 
+ data_node2 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node2') | 
+ data_node3 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node3') | 
 (3 rows)
 
+RESET ROLE;
 CREATE FUNCTION _timescaledb_internal.invoke_distributed_commands()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_invoke_distributed_commands'
@@ -37,14 +54,15 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT _timescaledb_internal.invoke_distributed_commands();
 INFO:  data_node1 result: PGRES_COMMAND_OK
 INFO:  data_node2 result: PGRES_COMMAND_OK
 INFO:  data_node3 result: PGRES_COMMAND_OK
 INFO:  data_node1 result: PGRES_COMMAND_OK
-INFO:  data_node3 result: PGRES_COMMAND_OK
+INFO:  data_node2 result: PGRES_COMMAND_OK
 INFO:  data_node1 result: PGRES_COMMAND_OK
-INFO:  data_node3 result: PGRES_COMMAND_OK
+INFO:  data_node2 result: PGRES_COMMAND_OK
  invoke_distributed_commands 
 -----------------------------
  
@@ -52,11 +70,11 @@ INFO:  data_node3 result: PGRES_COMMAND_OK
 
 \c data_node1
 \dt
-            List of relations
- Schema |    Name    | Type  |   Owner    
---------+------------+-------+------------
- public | disttable1 | table | super_user
- public | disttable2 | table | super_user
+                 List of relations
+ Schema |    Name    | Type  |        Owner         
+--------+------------+-------+----------------------
+ public | disttable1 | table | default_cluster_user
+ public | disttable2 | table | default_cluster_user
 (2 rows)
 
 SELECT * FROM disttable1;
@@ -67,24 +85,11 @@ SELECT * FROM disttable1;
 
 \c data_node2
 \dt
-            List of relations
- Schema |    Name    | Type  |   Owner    
---------+------------+-------+------------
- public | disttable1 | table | super_user
-(1 row)
-
-SELECT * FROM disttable1;
- time | device | temp 
-------+--------+------
-(0 rows)
-
-\c data_node3
-\dt
-            List of relations
- Schema |    Name    | Type  |   Owner    
---------+------------+-------+------------
- public | disttable1 | table | super_user
- public | disttable2 | table | super_user
+                 List of relations
+ Schema |    Name    | Type  |        Owner         
+--------+------------+-------+----------------------
+ public | disttable1 | table | default_cluster_user
+ public | disttable2 | table | default_cluster_user
 (2 rows)
 
 SELECT * FROM disttable1;
@@ -93,11 +98,25 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c single
+\c data_node3
+\dt
+                 List of relations
+ Schema |    Name    | Type  |        Owner         
+--------+------------+-------+----------------------
+ public | disttable1 | table | default_cluster_user
+(1 row)
+
+SELECT * FROM disttable1;
+ time | device | temp 
+------+--------+------
+(0 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Verify failed insert command gets fully rolled back
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
-ERROR:  schema "_timescaledb_internal" does not exist at character 8
+ERROR:  [data_node3]: relation "public.disttable2" does not exist
 \set ON_ERROR_STOP 1
 \c data_node1
 SELECT * from disttable2;
@@ -105,7 +124,7 @@ SELECT * from disttable2;
 ------+--------+------
 (0 rows)
 
-\c data_node3
+\c data_node2
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
@@ -152,6 +171,7 @@ SELECT is_frontend_session();
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT is_frontend_session();
  is_frontend_session 
 ---------------------
@@ -196,7 +216,7 @@ t
  
 (1 row)
 
-\c single
+\c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE data_node1;
 DROP DATABASE data_node2;
 DROP DATABASE data_node3;

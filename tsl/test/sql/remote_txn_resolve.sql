@@ -19,14 +19,13 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
-    local_user             REGROLE = NULL,
-    remote_user            NAME = NULL,
     password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
-) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
+) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
+                server_created BOOL, database_created BOOL, extension_created BOOL)
 AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 

@@ -5,10 +5,13 @@
 -- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+\o /dev/null
 \ir include/remote_exec.sql
-
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+\ir include/filter_exec.sql
+\o
+\set ECHO all
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -17,35 +20,44 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
--- Add test data nodes
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
--- Support for execute_sql_and_filter_data_node_name_on_error()
-\unset ECHO
-\o /dev/null
-\ir include/filter_exec.sql
-\o
-\set ECHO all
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_2',
+                            database => 'data_node_2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_3',
+                            database => 'data_node_3',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
 \c data_node_1
+SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \c data_node_2
+SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \c data_node_3
+SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \o
+SET client_min_messages TO NOTICE;
 \set ECHO all
 
 -- This SCHEMA will not be created on data nodes
 CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_check CHECK (color > 0), temp float);

@@ -3,17 +3,18 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created this database
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 SET client_min_messages TO NOTICE;
-
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-ALTER SERVER data_node_1 OWNER TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
 -- Set FDW and libpq options to make sure they are validated correctly
 ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
