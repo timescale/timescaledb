@@ -15,7 +15,7 @@ typedef struct ChunkDataNode
 	Oid foreign_server_oid;
 } ChunkDataNode;
 
-extern List *ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
+extern TSDLLEXPORT List *ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
 extern TSDLLEXPORT ChunkDataNode *
 ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
 												  MemoryContext mctx);
