@@ -170,7 +170,7 @@ ts_chunk_data_node_scan_by_node_internal(const char *node_name, tuple_found_func
 											   mctx);
 }
 
-List *
+TSDLLEXPORT List *
 ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 {
 	List *chunk_data_nodes = NIL;
@@ -271,103 +271,4 @@ ts_chunk_data_node_scan_by_node_name_and_hypertable_id(const char *node_name, in
 
 	MemoryContextSwitchTo(old);
 	return results;
-}
-
-TSDLLEXPORT bool
-ts_chunk_data_node_contains_non_replicated_chunks(List *chunk_data_nodes)
-{
-	ListCell *lc;
-
-	foreach (lc, chunk_data_nodes)
-	{
-		ChunkDataNode *cdn = lfirst(lc);
-		List *replicas =
-			ts_chunk_data_node_scan_by_chunk_id(cdn->fd.chunk_id, CurrentMemoryContext);
-		if (list_length(replicas) < 2)
-			return true;
-	}
-
-	return false;
-}
-
-TSDLLEXPORT void
-ts_chunk_data_node_update_foreign_table_server(Oid relid, Oid new_server_id)
-{
-	Relation ftrel;
-	HeapTuple tuple;
-	HeapTuple copy;
-	Datum values[Natts_pg_foreign_table];
-	bool nulls[Natts_pg_foreign_table];
-	CatalogSecurityContext sec_ctx;
-	Oid old_server_id;
-	long updated;
-
-	tuple = SearchSysCache1(FOREIGNTABLEREL, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("relation with OID %u does not exist", relid)));
-
-	ftrel = heap_open(ForeignTableRelationId, RowExclusiveLock);
-
-	heap_deform_tuple(tuple, RelationGetDescr(ftrel), values, nulls);
-
-	old_server_id =
-		DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_pg_foreign_table_ftserver)]);
-
-	values[AttrNumberGetAttrOffset(Anum_pg_foreign_table_ftserver)] =
-		ObjectIdGetDatum(new_server_id);
-
-	copy = heap_form_tuple(RelationGetDescr(ftrel), values, nulls);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ftrel, &tuple->t_self, copy);
-	ts_catalog_restore_user(&sec_ctx);
-
-	heap_close(ftrel, RowExclusiveLock);
-	heap_freetuple(copy);
-	ReleaseSysCache(tuple);
-	/* invalidate foreign table cache */
-	CacheInvalidateRelcacheByRelid(ForeignTableRelationId);
-	/* update dependencies between foreign table and foreign server */
-	updated = changeDependencyFor(RelationRelationId,
-								  relid,
-								  ForeignServerRelationId,
-								  old_server_id,
-								  new_server_id);
-	if (updated != 1)
-		elog(ERROR,
-			 "failed while trying to update server for foreign table %s",
-			 get_rel_name(relid));
-
-	/* make changes visible */
-	CommandCounterIncrement();
-}
-
-TSDLLEXPORT void
-ts_chunk_data_node_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id)
-{
-	ListCell *lc;
-	ChunkDataNode *new_node = NULL;
-	Chunk *chunk = ts_chunk_get_by_id(chunk_id, 0, true);
-	ForeignTable *foreign_table = NULL;
-
-	Assert(chunk->relkind == RELKIND_FOREIGN_TABLE);
-	foreign_table = GetForeignTable(chunk->table_id);
-
-	/* no need to update since foreign table doesn't reference server we try to remove */
-	if (existing_server_id != foreign_table->serverid)
-		return;
-
-	Assert(list_length(chunk->data_nodes) > 1);
-
-	foreach (lc, chunk->data_nodes)
-	{
-		new_node = lfirst(lc);
-		if (new_node->foreign_server_oid != existing_server_id)
-			break;
-	}
-	Assert(new_node != NULL);
-	ts_chunk_data_node_update_foreign_table_server(chunk->table_id, new_node->foreign_server_oid);
 }

@@ -10,16 +10,15 @@
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
 #include <catalog/pg_foreign_server.h>
-#include <catalog/pg_foreign_table.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <utils/builtins.h>
-#include <utils/inval.h>
 #include <utils/syscache.h>
 #include <utils/acl.h>
+#include <utils/inval.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <funcapi.h>
@@ -28,6 +27,7 @@
 #include <extension.h>
 #include <compat.h>
 #include <catalog.h>
+#include <chunk_data_node.h>
 
 #include "fdw/fdw.h"
 #include "remote/async.h"
@@ -41,7 +41,6 @@
 #include "dist_util.h"
 #include "utils/uuid.h"
 #include "chunk.h"
-#include "chunk_data_node.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
@@ -771,6 +770,24 @@ check_replication_for_new_data(const char *node_name, Hypertable *ht, bool force
 					node_name)));
 }
 
+static bool
+data_node_contains_non_replicated_chunks(List *chunk_data_nodes)
+{
+	ListCell *lc;
+
+	foreach (lc, chunk_data_nodes)
+	{
+		ChunkDataNode *cdn = lfirst(lc);
+		List *replicas =
+			ts_chunk_data_node_scan_by_chunk_id(cdn->fd.chunk_id, CurrentMemoryContext);
+
+		if (list_length(replicas) < 2)
+			return true;
+	}
+
+	return false;
+}
+
 static List *
 data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, OperationType op_type)
 {
@@ -778,8 +795,7 @@ data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, Ope
 		ts_chunk_data_node_scan_by_node_name_and_hypertable_id(node_name,
 															   ht->fd.id,
 															   CurrentMemoryContext);
-	bool has_non_replicated_chunks =
-		ts_chunk_data_node_contains_non_replicated_chunks(chunk_data_nodes);
+	bool has_non_replicated_chunks = data_node_contains_non_replicated_chunks(chunk_data_nodes);
 	char *operation = get_operation_type_message(op_type);
 
 	if (has_non_replicated_chunks)
@@ -866,8 +882,8 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			foreach (cs_lc, chunk_data_nodes)
 			{
 				ChunkDataNode *cdn = lfirst(cs_lc);
-				ts_chunk_data_node_update_foreign_table_server_if_needed(cdn->fd.chunk_id,
-																		 cdn->foreign_server_oid);
+
+				chunk_update_foreign_server_if_needed(cdn->fd.chunk_id, cdn->foreign_server_oid);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
 			}
@@ -927,12 +943,15 @@ data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_d
 }
 
 static HypertableDataNode *
-get_hypertable_data_node(Oid table_id, const char *node_name)
+get_hypertable_data_node(Oid table_id, const char *node_name, bool ownercheck)
 {
 	HypertableDataNode *hdn = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id);
 	ListCell *lc;
+
+	if (ownercheck)
+		ts_hypertable_permissions_check(table_id, GetUserId());
 
 	if (ht == NULL)
 		ereport(ERROR,
@@ -975,7 +994,8 @@ data_node_block_or_allow_new_chunks(PG_FUNCTION_ARGS, bool block_chunks)
 	{
 		/* Early abort on missing hypertable permissions */
 		ts_hypertable_permissions_check(table_id, GetUserId());
-		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, server->servername));
+		hypertable_data_nodes =
+			list_make1(get_hypertable_data_node(table_id, server->servername, true));
 	}
 	else
 	{
@@ -1015,7 +1035,8 @@ data_node_detach(PG_FUNCTION_ARGS)
 	{
 		/* Early abort on missing hypertable permissions */
 		ts_hypertable_permissions_check(table_id, GetUserId());
-		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, server->servername));
+		hypertable_data_nodes =
+			list_make1(get_hypertable_data_node(table_id, server->servername, true));
 	}
 	else
 	{
@@ -1216,19 +1237,4 @@ data_node_ping(PG_FUNCTION_ARGS)
 	success = remote_connection_ping(server->servername);
 
 	PG_RETURN_DATUM(BoolGetDatum(success));
-}
-
-Datum
-data_node_set_chunk_default_data_node(PG_FUNCTION_ARGS)
-{
-	char *schema_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	char *table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1);
-	char *node_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
-	Chunk *chunk = chunk_get_by_name(schema_name, table_name, 0, true);
-
-	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
-	ts_chunk_data_node_update_foreign_table_server(chunk->table_id, server->serverid);
-
-	PG_RETURN_BOOL(true);
 }

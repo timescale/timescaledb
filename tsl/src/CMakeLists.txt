@@ -9,6 +9,7 @@ set(SOURCES
 
 if (NOT ${PG_VERSION} VERSION_LESS "11")
   list(APPEND SOURCES
+       chunk.c
        deparse.c
        hypertable.c
        data_node.c
