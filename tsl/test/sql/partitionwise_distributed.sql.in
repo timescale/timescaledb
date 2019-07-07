@@ -8,8 +8,6 @@
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
 -- Need explicit password for non-super users to connect
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
@@ -18,19 +16,6 @@ SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 SET client_min_messages TO NOTICE;
-
-CREATE DATABASE data_node_1;
-CREATE DATABASE data_node_2;
-
--- Creating extension is only possible as super-user
-\c data_node_1 :ROLE_SUPERUSER
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c data_node_2 :ROLE_SUPERUSER
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 SELECT inet_server_port() AS "port" \gset
 
@@ -42,6 +27,18 @@ CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_p
 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+
+-- Add data nodes using the TimescaleDB node management API
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_2',
+                            database => 'data_node_2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
 -- Create a 2-dimensional partitioned table for comparision
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
@@ -55,7 +52,7 @@ CREATE FOREIGN TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-
 CREATE FOREIGN TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg2;
 
 -- Create these partitioned tables on the servers
-SELECT * FROM test.remote_exec('{ server_pg1, server_pg2 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2 }', $$
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
@@ -66,12 +63,6 @@ CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00
 CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
 CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
 $$);
-
-
--- Add data nodes using the TimescaleDB data node management AP
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
-
 
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 2, chunk_time_interval => '3 months'::interval);
@@ -129,7 +120,7 @@ FROM show_chunks('hyper');
 
 -- Show how slices are assigned to data nodes. In particular, verify that
 -- there are overlapping slices in the closed "space" dimension
-SELECT * FROM test.remote_exec('{ server_pg1, server_pg2 }', $$
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2 }', $$
        SELECT * FROM _timescaledb_catalog.dimension_slice WHERE dimension_id = 2;
 $$);
 

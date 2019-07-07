@@ -83,7 +83,6 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
-    dist_partial_agg.sql
   )
   list(APPEND TEST_FILES_DEBUG
     data_node.sql
@@ -92,6 +91,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     deparse_fail.sql
     dist_commands.sql
     dist_ddl.sql
+    dist_partial_agg.sql
     dist_util.sql
     remote_connection.sql
     remote_connection_cache.sql
