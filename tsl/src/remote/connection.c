@@ -44,6 +44,7 @@ typedef struct TSConnection
 	PGconn *pg_conn;		 /* PostgreSQL connection */
 	bool processing;		 /* TRUE if there is ongoin Async request processing */
 	NameData data_node_name; /* Associated data node name */
+	char *tz_name;			 /* Timezone name last sent over connection */
 } TSConnection;
 
 static PQconninfoOption *
@@ -169,6 +170,45 @@ check_conn_params(const char **keywords, const char **values)
 }
 
 /*
+ * Internal connection configure.
+ *
+ * This function will send internal configuration settings if they have
+ * changed. It is used to pass on configuration settings before executing a
+ * command requested by module users.
+ *
+ * ATTENTION! This function should *not* use
+ * `remote_connection_exec_ok_command` since this function is called
+ * indirectly whenever a remote command is executed, which would lead to
+ * infinite recursion. Stick to `PQ*` functions.
+ */
+void
+remote_connection_configure_if_changed(TSConnection *conn)
+{
+	const char *local_tz_name = pg_get_timezone_name(session_timezone);
+
+	/*
+	 * We need to enforce the same timezone setting across nodes. Otherwise,
+	 * we might get the wrong result when we push down things like
+	 * date_trunc(text, timestamptz). To safely do that, we also need the
+	 * timezone databases to be the same on all data nodes.
+	 *
+	 * We save away the timezone name so that we know what we last sent over
+	 * the connection. If the time zone changed since last time we sent a
+	 * command, we will send a SET TIMEZONE command with the new timezone
+	 * first.
+	 */
+	if (conn->tz_name == NULL ||
+		(local_tz_name && pg_strcasecmp(conn->tz_name, local_tz_name) != 0))
+	{
+		char *set_timezone_cmd = psprintf("SET TIMEZONE = '%s'", local_tz_name);
+		PQexec(remote_connection_get_pg_conn(conn), set_timezone_cmd);
+		pfree(set_timezone_cmd);
+		free(conn->tz_name);
+		conn->tz_name = strdup(local_tz_name);
+	}
+}
+
+/*
  * Issue SET commands to make sure remote session is configured properly.
  *
  * We do this just once at connection, assuming nothing will change the
@@ -182,19 +222,11 @@ check_conn_params(const char **keywords, const char **values)
 void
 remote_connection_configure(TSConnection *conn)
 {
-	const char *set_timezone_cmd =
-		psprintf("SET timezone = '%s'", pg_get_timezone_name(session_timezone));
+	/* Timezone is indirectly set with the first command executed. See
+	 * async.c */
 
 	/* Force the search path to contain only pg_catalog (see deparse.c) */
 	remote_connection_exec_ok_command(conn, "SET search_path = pg_catalog");
-
-	/*
-	 * We need to enforce the same timezone setting across nodes. Otherwise,
-	 * we might get the wrong result when we push down things like
-	 * date_trunc(text, timestamptz). To safely do that, we also need the
-	 * timezone databases to be the same on all data nodes.
-	 */
-	remote_connection_exec_ok_command(conn, set_timezone_cmd);
 
 	/*
 	 * Set values needed to ensure unambiguous data output from remote.  (This
@@ -213,6 +245,7 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *data_node
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
 	namestrcpy(&conn->data_node_name, data_node_name);
+	conn->tz_name = NULL;
 	return conn;
 }
 
@@ -393,6 +426,7 @@ remote_connection_close(TSConnection *conn)
 	Assert(conn != NULL);
 	PQfinish(conn->pg_conn);
 	conn->pg_conn = NULL;
+	free(conn->tz_name);
 	free(conn);
 }
 

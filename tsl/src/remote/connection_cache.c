@@ -115,7 +115,6 @@ static void *
 connection_cache_update_entry(Cache *cache, CacheQuery *query)
 {
 	ConnectionCacheEntry *entry = query->result;
-	char *set_timezone_cmd;
 
 	if (!connection_cache_check_entry(cache, query))
 	{
@@ -123,9 +122,7 @@ connection_cache_update_entry(Cache *cache, CacheQuery *query)
 		return connection_cache_create_entry(cache, query);
 	}
 
-	set_timezone_cmd = psprintf("SET timezone = '%s'", pg_get_timezone_name(session_timezone));
-	remote_connection_exec_ok_command(entry->conn, set_timezone_cmd);
-	pfree(set_timezone_cmd);
+	remote_connection_configure_if_changed(entry->conn);
 
 	return entry;
 }
