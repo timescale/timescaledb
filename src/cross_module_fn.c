@@ -52,7 +52,7 @@ TS_FUNCTION_INFO_V1(ts_data_node_ping);
 TS_FUNCTION_INFO_V1(ts_data_node_detach);
 TS_FUNCTION_INFO_V1(ts_data_node_block_new_chunks);
 TS_FUNCTION_INFO_V1(ts_data_node_allow_new_chunks);
-TS_FUNCTION_INFO_V1(ts_set_chunk_default_data_node);
+TS_FUNCTION_INFO_V1(ts_chunk_set_default_data_node);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
@@ -166,7 +166,7 @@ ts_data_node_allow_new_chunks(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_set_chunk_default_data_node(PG_FUNCTION_ARGS)
+ts_chunk_set_default_data_node(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_data_node(fcinfo));
 }

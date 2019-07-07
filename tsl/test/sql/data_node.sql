@@ -226,26 +226,36 @@ SELECT * FROM test.show_subtables('disttable');
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
-SELECT * FROM _timescaledb_catalog.chunk;
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_2');
+SELECT table_name, node_name
+FROM _timescaledb_catalog.chunk c,
+_timescaledb_catalog.chunk_data_node cdn
+WHERE c.id = cdn.chunk_id;
+
+-- Setting the same data node should do nothing and return false
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
+
+-- Should update the default data node and return true
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_2');
 
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_4');
+-- Reset the default data node
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
 SELECT * FROM delete_data_node('data_node_2', cascade => true);
 -- non-existing chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x', 'x_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_4');
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_0000');
+-- data node exists but does not store the chunk
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_1');
 -- NULL try
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, NULL, 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_4');
 \set ON_ERROR_STOP 1
 
 -- Deleting a data node removes the "foreign" chunk table(s) that
