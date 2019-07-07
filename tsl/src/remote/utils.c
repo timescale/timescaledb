@@ -13,6 +13,9 @@
 #include <postgres.h>
 #include <miscadmin.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_user_mapping.h>
+#include <access/reloptions.h>
+#include <access/htup_details.h>
 #include <utils/syscache.h>
 #include <utils/guc.h>
 #include <utils/builtins.h>
@@ -84,4 +87,55 @@ void
 reset_transmission_modes(int nestlevel)
 {
 	AtEOXact_GUC(true, nestlevel);
+}
+
+/*
+ * Version of GetUserMapping() that optionally does not throw error on missing
+ * user mapping.
+ */
+UserMapping *
+get_user_mapping(Oid userid, Oid serverid, bool missing_ok)
+{
+	HeapTuple tuple;
+	UserMapping *um;
+	Datum datum;
+	bool isnull;
+
+	tuple = SearchSysCache2(USERMAPPINGUSERSERVER,
+							ObjectIdGetDatum(userid),
+							ObjectIdGetDatum(serverid));
+
+	if (!HeapTupleIsValid(tuple))
+	{
+		/* Not found for the specific user -- try PUBLIC */
+		tuple = SearchSysCache2(USERMAPPINGUSERSERVER,
+								ObjectIdGetDatum(InvalidOid),
+								ObjectIdGetDatum(serverid));
+	}
+
+	if (!HeapTupleIsValid(tuple))
+	{
+		if (missing_ok)
+			return NULL;
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("user mapping not found for \"%s\"", MappingUserName(userid))));
+	}
+
+	um = (UserMapping *) palloc(sizeof(UserMapping));
+	um->umid = HeapTupleGetOid(tuple);
+	um->userid = userid;
+	um->serverid = serverid;
+
+	/* Extract the umoptions */
+	datum = SysCacheGetAttr(USERMAPPINGUSERSERVER, tuple, Anum_pg_user_mapping_umoptions, &isnull);
+	if (isnull)
+		um->options = NIL;
+	else
+		um->options = untransformRelOptions(datum);
+
+	ReleaseSysCache(tuple);
+
+	return um;
 }

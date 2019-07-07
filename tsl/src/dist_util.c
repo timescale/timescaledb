@@ -187,10 +187,17 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 
 		for (i = 0; i < PQnfields(result); ++i)
 		{
-			fields[i] = PQgetvalue(result, funcctx->call_cntr, i);
-			if (fields[i][0] == '\0')
+			if (PQgetisnull(result, funcctx->call_cntr, i) != 1)
+			{
+				fields[i] = PQgetvalue(result, funcctx->call_cntr, i);
+
+				if (fields[i][0] == '\0')
+					fields[i] = NULL;
+			}
+			else
 				fields[i] = NULL;
 		}
+
 		tuple = BuildTupleFromCStrings(funcctx->attinmeta, fields);
 
 		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));

@@ -33,10 +33,10 @@ test_options()
 	Assert(!remote_connection_valid_user_option("xxx"));
 	Assert(!remote_connection_valid_user_option("fallback_application_name"));
 
-	Assert(remote_connection_valid_data_node_option("port"));
-	Assert(!remote_connection_valid_data_node_option("user"));
-	Assert(!remote_connection_valid_data_node_option("xxx"));
-	Assert(!remote_connection_valid_data_node_option("fallback_application_name"));
+	Assert(remote_connection_valid_node_option("port"));
+	Assert(!remote_connection_valid_node_option("user"));
+	Assert(!remote_connection_valid_node_option("xxx"));
+	Assert(!remote_connection_valid_node_option("fallback_application_name"));
 }
 
 static void

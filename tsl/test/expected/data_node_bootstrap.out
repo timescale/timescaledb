@@ -4,7 +4,6 @@
 -- Test functionality of add_data_node() bootstrapping.
 -- Most of this already done in other tests, so we check some corner cases.
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 CREATE OR REPLACE FUNCTION show_data_nodes()
 RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
@@ -16,13 +15,12 @@ SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Super user is required to make remote connection without password
 --
--- local_user         = :ROLE_DEFAULT_PERM_USER
--- remote_user        = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-ERROR:  password is required
+NOTICE:  adding user mapping for "default_perm_user" to connect to "bootstrap_test"
+ERROR:  athentication required on target host
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
  data_node_name | host | port | dbname 
@@ -35,9 +33,10 @@ SELECT * FROM show_data_nodes();
 -- bootstrap_database = 'postgres'
 RESET ROLE;
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-   node_name    |   host    | port  |    database    |  username  | node_username | created 
-----------------+-----------+-------+----------------+------------+---------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | super_user | super_user    | t
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
 (1 row)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -81,12 +80,11 @@ SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 -- Try to recreate data node with the same name, database and extension exists
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
 ERROR:  database "bootstrap_test" already exists on the remote node
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
@@ -96,15 +94,14 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  remote node database "bootstrap_test" already exists, skipping
-   node_name    |   host    | port  |    database    |  username  | node_username | created 
-----------------+-----------+-------+----------------+------------+---------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | super_user | super_user    | t
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+NOTICE:  database "bootstrap_test" already exists on data node, skipping
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM show_data_nodes();
@@ -115,8 +112,6 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (has local server, has database database but no extension installed)
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
@@ -136,11 +131,11 @@ SELECT extname FROM pg_extension;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  server "bootstrap_test" already exists, skipping
-NOTICE:  remote node database "bootstrap_test" already exists, skipping
-   node_name    |   host    | port  |    database    |  username  | node_username | created 
-----------------+-----------+-------+----------------+------------+---------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | super_user | super_user    | f
+NOTICE:  data node "bootstrap_test" already exists, skipping
+NOTICE:  database "bootstrap_test" already exists on data node, skipping
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | f            | f                | t
 (1 row)
 
 \c bootstrap_test :ROLE_SUPERUSER;
@@ -160,8 +155,9 @@ NOTICE:  drop cascades to user mapping for super_user on server bootstrap_test
 (1 row)
 
 DROP DATABASE bootstrap_test;
--- Test automatic schema creation
-CREATE DATABASE bootstrap_schema_test;
+-- Test automatic schema creation in a new database. Use template0 to
+-- not get extension pre-installed.
+CREATE DATABASE bootstrap_schema_test TEMPLATE template0;
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 CREATE SCHEMA bootstrap_schema;
 SET client_min_messages TO ERROR;
@@ -175,9 +171,10 @@ SELECT extname FROM pg_extension;
 (2 rows)
 
 SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-   node_name    |   host    | port  |    database    |  username  | node_username | created 
-----------------+-----------+-------+----------------+------------+---------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | super_user | super_user    | t
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
 (1 row)
 
 \c bootstrap_test :ROLE_SUPERUSER;
@@ -190,26 +187,26 @@ SELECT extname FROM pg_extension;
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  server "bootstrap_test" already exists, skipping
-NOTICE:  remote node database "bootstrap_test" already exists, skipping
-   node_name    |   host    | port  |    database    |  username  | node_username | created 
-----------------+-----------+-------+----------------+------------+---------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | super_user | super_user    | f
+NOTICE:  data node "bootstrap_test" already exists, skipping
+NOTICE:  database "bootstrap_test" already exists on data node, skipping
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | f            | f                | f
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
--- Test users setting
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test with non-superuser
 --
--- local_user         = :ROLE_DEFAULT_PERM_USER
--- remote_user        = :ROLE_DEFAULT_PERM_USER
--- bootstrap_user     = :ROLE_SUPERUSER
+-- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
 -- bootstrap_database = 'template1'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', bootstrap_database => 'template1');
-   node_name    |   host    | port  |    database    |     username      |   node_username   | created 
-----------------+-----------+-------+----------------+-------------------+-------------------+---------
- bootstrap_test | localhost | 15432 | bootstrap_test | default_perm_user | default_perm_user | t
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS', bootstrap_database => 'template1');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "bootstrap_test"
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
 (1 row)
 
 \c bootstrap_test :ROLE_DEFAULT_PERM_USER;
@@ -222,7 +219,7 @@ SELECT extname FROM pg_extension;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server bootstrap_test
+NOTICE:  drop cascades to user mapping for default_cluster_user on server bootstrap_test
  delete_data_node 
 ------------------
  t
@@ -243,33 +240,33 @@ SELECT * FROM show_data_nodes();
 DROP DATABASE bootstrap_test;
 -- Test unusual database names
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass');
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test1"
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  server "bootstrap_test1" already exists, skipping
-NOTICE:  remote node database "Unusual Name" already exists, skipping
+NOTICE:  data node "bootstrap_test1" already exists, skipping
+NOTICE:  database "Unusual Name" already exists on data node, skipping
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass');
+NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test2"
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  server "bootstrap_test2" already exists, skipping
-NOTICE:  remote node database "слон" already exists, skipping
+NOTICE:  data node "bootstrap_test2" already exists, skipping
+NOTICE:  database "слон" already exists on data node, skipping
  bool 
 ------
  t

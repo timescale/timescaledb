@@ -6,8 +6,6 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
 -- Need explicit password for non-super users to connect
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
@@ -25,26 +23,22 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-CREATE DATABASE data_node_1;
-CREATE DATABASE data_node_2;
-CREATE DATABASE data_node_3;
-
-\c data_node_1
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c data_node_2
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c data_node_3
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-
--- Add data nodes using the TimescaleDB data node management API
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
+-- Add data nodes using the TimescaleDB node management API
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_2',
+                            database => 'data_node_2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_3',
+                            database => 'data_node_3',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
@@ -554,7 +548,7 @@ SET timescaledb.max_insert_batch_size=4;
 
 -- Constraint violation error check
 --
--- Execute and filter mentioned server name in the error message.
+-- Execute and filter mentioned data node name in the error message.
 \set ON_ERROR_STOP 0
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
 \set ON_ERROR_STOP 1

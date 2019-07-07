@@ -1,10 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 -- This test sets explicit UUIDs on the frontends to guarantee stable test output
 GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -38,8 +35,6 @@ SET client_min_messages TO NOTICE;
 \c frontend_b
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-SET client_min_messages TO NOTICE;
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -50,11 +45,10 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_3" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_1 | localhost | 15432 | backend_3 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | backend_3 | t            | f                | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
@@ -74,11 +68,12 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 77348176-09da-4a80-bc78-e31bdf5e63ec | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_1" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_1 | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+NOTICE:  database "backend_1" already exists on data node, skipping
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | backend_1 | t            | f                | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
@@ -92,17 +87,19 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "frontend_b" already exists, skipping
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "frontend_b"
+NOTICE:  database "frontend_b" already exists on data node, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 -- Adding backend from a different group as a backend
-SELECT * FROM add_data_node('server_b', database => 'backend_3', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_3" already exists, skipping
-ERROR:  [server_b]: database is already a member of a distributed database
+SELECT * FROM add_data_node('data_node_b', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_b"
+NOTICE:  database "backend_3" already exists on data node, skipping
+ERROR:  [data_node_b]: database is already a member of a distributed database
 -- Adding a valid backend target but to an existing backend
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 ERROR:  unable to assign data nodes from an existing distributed database
 \c backend_2
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
@@ -113,8 +110,9 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 (0 rows)
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "frontend_b" already exists, skipping
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "frontend_b"
+NOTICE:  database "frontend_b" already exists on data node, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
  key | value | include_in_telemetry 
@@ -125,11 +123,12 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_2" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_2 | localhost | 15432 | backend_2 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+NOTICE:  database "backend_2" already exists on data node, skipping
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | backend_2 | t            | f                | f
 (1 row)
 
 \c backend_2
@@ -176,11 +175,12 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  dist_uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (2 rows)
 
-SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_1" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_2 | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+NOTICE:  database "backend_1" already exists on data node, skipping
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | backend_1 | t            | f                | f
 (1 row)
 
 \c backend_1
@@ -216,25 +216,28 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_1" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_1 | localhost | 15432 | backend_1 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+NOTICE:  database "backend_1" already exists on data node, skipping
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | backend_1 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "backend_3" already exists, skipping
-  node_name  |   host    | port  | database  |       username       |    node_username     | created 
--------------+-----------+-------+-----------+----------------------+----------------------+---------
- data_node_3 | localhost | 15432 | backend_3 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+NOTICE:  database "backend_3" already exists on data node, skipping
+  node_name  |   host    | port  | database  | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | backend_3 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => 'pass', if_not_exists => true);
-NOTICE:  remote node database "frontend_b" already exists, skipping
-  node_name  |   host    | port  |  database  |       username       |    node_username     | created 
--------------+-----------+-------+------------+----------------------+----------------------+---------
- data_node_4 | localhost | 15432 | frontend_b | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_4"
+NOTICE:  database "frontend_b" already exists on data node, skipping
+  node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
+-------------+-----------+-------+------------+--------------+------------------+-------------------
+ data_node_4 | localhost | 15432 | frontend_b | t            | f                | f
 (1 row)
 
 \c frontend_b
@@ -278,10 +281,10 @@ INSERT INTO disttable VALUES
 SELECT * FROM timescaledb_information.data_node;
   node_name  | owner |                    options                    | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+-------+-----------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_2 | 16388 | {host=localhost,port=15432,dbname=backend_2}  | t       |               1 |               1 | 24 kB
- data_node_3 | 16388 | {host=localhost,port=15432,dbname=backend_3}  | t       |               1 |               1 | 24 kB
- data_node_1 | 16388 | {host=localhost,port=15432,dbname=backend_1}  | t       |               1 |               1 | 24 kB
- data_node_4 | 16388 | {host=localhost,port=15432,dbname=frontend_b} | t       |               1 |               0 | 
+ data_node_4 | 16389 | {host=localhost,port=15432,dbname=frontend_b} | t       |               1 |               0 | 
+ data_node_2 | 16389 | {host=localhost,port=15432,dbname=backend_2}  | t       |               1 |               1 | 24 kB
+ data_node_1 | 16389 | {host=localhost,port=15432,dbname=backend_1}  | t       |               1 |               1 | 24 kB
+ data_node_3 | 16389 | {host=localhost,port=15432,dbname=backend_3}  | t       |               1 |               1 | 24 kB
 (4 rows)
 
 SELECT * FROM timescaledb_information.hypertable;
@@ -306,10 +309,10 @@ SELECT * FROM hypertable_relation_size('nondisttable');
 SELECT * FROM hypertable_data_node_relation_size('disttable');
   node_name  | num_chunks | table_size | index_size | toast_size | total_size 
 -------------+------------+------------+------------+------------+------------
- data_node_2 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- data_node_3 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- data_node_1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
  data_node_4 |          0 |            |            |            | 
+ data_node_2 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ data_node_1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ data_node_3 |          1 | 8192 bytes | 16 kB      |            | 24 kB
 (4 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('nondisttable');

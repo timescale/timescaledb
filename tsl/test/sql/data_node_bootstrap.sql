@@ -5,7 +5,6 @@
 -- Test functionality of add_data_node() bootstrapping.
 -- Most of this already done in other tests, so we check some corner cases.
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 
 CREATE OR REPLACE FUNCTION show_data_nodes()
@@ -21,8 +20,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Super user is required to make remote connection without password
 --
--- local_user         = :ROLE_DEFAULT_PERM_USER
--- remote_user        = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
@@ -53,8 +50,6 @@ SELECT extname FROM pg_extension;
 
 -- Try to recreate data node with the same name, database and extension exists
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
@@ -64,8 +59,6 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
@@ -73,8 +66,6 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (has local server, has database database but no extension installed)
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
@@ -90,8 +81,9 @@ SELECT extname FROM pg_extension;
 SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
 DROP DATABASE bootstrap_test;
 
--- Test automatic schema creation
-CREATE DATABASE bootstrap_schema_test;
+-- Test automatic schema creation in a new database. Use template0 to
+-- not get extension pre-installed.
+CREATE DATABASE bootstrap_schema_test TEMPLATE template0;
 \c bootstrap_schema_test :ROLE_SUPERUSER;
 CREATE SCHEMA bootstrap_schema;
 SET client_min_messages TO ERROR;
@@ -107,13 +99,12 @@ SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'boot
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
 
--- Test users setting
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test with non-superuser
 --
--- local_user         = :ROLE_DEFAULT_PERM_USER
--- remote_user        = :ROLE_DEFAULT_PERM_USER
--- bootstrap_user     = :ROLE_SUPERUSER
+-- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
 -- bootstrap_database = 'template1'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', bootstrap_database => 'template1');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS', bootstrap_database => 'template1');
 \c bootstrap_test :ROLE_DEFAULT_PERM_USER;
 SELECT extname FROM pg_extension;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -131,8 +122,6 @@ DROP DATABASE bootstrap_test;
 
 -- Test unusual database names
 --
--- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass');

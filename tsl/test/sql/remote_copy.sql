@@ -2,16 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
-
--- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
--- Need explicit password for non-super users to connect
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
@@ -21,32 +12,28 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-CREATE DATABASE data_node_1;
-CREATE DATABASE data_node_2;
-CREATE DATABASE data_node_3;
-
-\c data_node_1
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c data_node_2
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c data_node_3
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-
--- Add data nodes using the TimescaleDB data node management API
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', password => 'pass', if_not_exists => true);
+-- Add data nodes using the TimescaleDB node management API
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_2',
+                            database => 'data_node_2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+SELECT * FROM add_data_node('data_node_3',
+                            database => 'data_node_3',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
 -- Start out testing text copy code
 SET timescaledb.enable_connection_binary_data=false;
 
 -- Use some horrible names to make sure the parsing code works
-CREATE TABLE "+ri(k33_')" (       
+CREATE TABLE "+ri(k33_')" (
     "thyme" bigint NOT NULL,
     "))_" double precision NOT NULL,
     "flavor" text DEFAULT 'mint',
@@ -61,12 +48,12 @@ COPY "+ri(k33_')" FROM STDIN;
 1	11	strawberry	2.3	stuff
 \.
 
-\copy public   	.		"+ri(k33_')" ("pH", 	"))_"   ,	thyme) fROm stdIN deLIMitER '-';
+\copy public    .		"+ri(k33_')" ("pH",     "))_"   ,	thyme) fROm stdIN deLIMitER '-';
 .01-40-208
 10.-37-315
 \.
 
-cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm 
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm
 StDiN wiTH dElImITeR ','
 ;
 15,1,403,\N
@@ -120,12 +107,12 @@ COPY "+ri(k33_')" FROM STDIN;
 10	11	strawberry	12.3	stuff
 \.
 
-\copy public   	.		"+ri(k33_')" ("pH", 	"))_"   ,	thyme) fROm stdIN deLIMitER '-';
+\copy public    .		"+ri(k33_')" ("pH",     "))_"   ,	thyme) fROm stdIN deLIMitER '-';
 .001-40-2080
 100.-37-3150
 \.
 
-cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm 
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm
 StDiN wiTH dElImITeR ','
 ;
 150,10,403,\N

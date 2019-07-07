@@ -290,6 +290,8 @@ chunk_create(PG_FUNCTION_ARGS)
 	if (NULL == ht)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid hypertable")));
 
+	ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+
 	if (NULL == slices)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
 

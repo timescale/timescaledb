@@ -33,6 +33,7 @@
 #include "connection.h"
 #include "guc.h"
 #include "async.h"
+#include "utils.h"
 #include "dist_util.h"
 
 /* for assigning cursor numbers and prepared statement numbers */
@@ -41,10 +42,10 @@ static unsigned int prep_stmt_number = 0;
 
 typedef struct TSConnection
 {
-	PGconn *pg_conn;		 /* PostgreSQL connection */
-	bool processing;		 /* TRUE if there is ongoin Async request processing */
-	NameData data_node_name; /* Associated data node name */
-	char *tz_name;			 /* Timezone name last sent over connection */
+	PGconn *pg_conn;	/* PostgreSQL connection */
+	bool processing;	/* TRUE if there is ongoin Async request processing */
+	NameData node_name; /* Associated data node name */
+	char *tz_name;		/* Timezone name last sent over connection */
 } TSConnection;
 
 static PQconninfoOption *
@@ -105,7 +106,7 @@ remote_connection_option_type(const char *keyword)
 	if (strchr(display_option, '*') || strcmp(keyword, "user") == 0)
 		return CONN_OPTION_TYPE_USER;
 
-	return CONN_OPTION_TYPE_DATA_NODE;
+	return CONN_OPTION_TYPE_NODE;
 }
 
 bool
@@ -115,9 +116,9 @@ remote_connection_valid_user_option(const char *keyword)
 }
 
 bool
-remote_connection_valid_data_node_option(const char *keyword)
+remote_connection_valid_node_option(const char *keyword)
 {
-	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_DATA_NODE;
+	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_NODE;
 }
 
 static int
@@ -239,13 +240,15 @@ remote_connection_configure(TSConnection *conn)
 }
 
 static TSConnection *
-remote_connection_create(PGconn *pg_conn, bool processing, const char *data_node_name)
+remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name)
 {
 	TSConnection *conn = malloc(sizeof(TSConnection));
+
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
-	namestrcpy(&conn->data_node_name, data_node_name);
+	namestrcpy(&conn->node_name, node_name);
 	conn->tz_name = NULL;
+
 	return conn;
 }
 
@@ -289,6 +292,60 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 	remote_connection_result_close(res);
 }
 
+static TSConnection *
+remote_connection_open_internal(const char *hostname, List *host_options, List *user_options)
+{
+	PGconn *pg_conn = NULL;
+	const char **keywords;
+	const char **values;
+	int n;
+
+	/*
+	 * Construct connection params from generic options of ForeignServer
+	 * and UserMapping.  (Some of them might not be libpq options, in
+	 * which case we'll just waste a few array slots.)  Add 3 extra slots
+	 * for fallback_application_name, client_encoding, end marker.
+	 */
+	n = list_length(host_options) + list_length(user_options) + 3;
+	keywords = (const char **) palloc(n * sizeof(char *));
+	values = (const char **) palloc(n * sizeof(char *));
+
+	n = 0;
+	n += extract_connection_options(host_options, keywords + n, values + n);
+	n += extract_connection_options(user_options, keywords + n, values + n);
+
+	/* Use "timescaledb_fdw" as fallback_application_name. */
+	keywords[n] = "fallback_application_name";
+	values[n] = "timescaledb";
+	n++;
+
+	/* Set client_encoding so that libpq can convert encoding properly. */
+	keywords[n] = "client_encoding";
+	values[n] = GetDatabaseEncodingName();
+	n++;
+
+	keywords[n] = values[n] = NULL;
+
+	/* verify connection parameters and make connection */
+	check_conn_params(keywords, values);
+
+	pg_conn = PQconnectdbParams(keywords, values, false);
+
+	pfree(keywords);
+	pfree(values);
+
+	if (NULL == pg_conn)
+		return NULL;
+
+	if (PQstatus(pg_conn) != CONNECTION_OK)
+	{
+		PQfinish(pg_conn);
+		return NULL;
+	}
+
+	return remote_connection_create(pg_conn, false, hostname);
+}
+
 /*
  * Opens a connection.
  *
@@ -300,87 +357,50 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
  * that if you can.
  */
 TSConnection *
-remote_connection_open(const char *data_node_name, List *data_node_options, List *user_options,
+remote_connection_open(const char *node_name, List *node_options, List *user_options,
 					   bool set_dist_id)
 {
-	TSConnection *conn = NULL;
-	PGconn *volatile pg_conn = NULL;
+	TSConnection *volatile conn = NULL;
 
 	/*
 	 * Use PG_TRY block to ensure closing connection on error.
 	 */
 	PG_TRY();
 	{
-		const char **keywords;
-		const char **values;
-		int n;
+		conn = remote_connection_open_internal(node_name, node_options, user_options);
 
-		/*
-		 * Construct connection params from generic options of ForeignServer
-		 * and UserMapping.  (Some of them might not be libpq options, in
-		 * which case we'll just waste a few array slots.)  Add 3 extra slots
-		 * for fallback_application_name, client_encoding, end marker.
-		 */
-		n = list_length(data_node_options) + list_length(user_options) + 3;
-		keywords = (const char **) palloc(n * sizeof(char *));
-		values = (const char **) palloc(n * sizeof(char *));
-
-		n = 0;
-		n += extract_connection_options(data_node_options, keywords + n, values + n);
-		n += extract_connection_options(user_options, keywords + n, values + n);
-
-		/* Use "timescaledb_fdw" as fallback_application_name. */
-		keywords[n] = "fallback_application_name";
-		values[n] = "timescaledb";
-		n++;
-
-		/* Set client_encoding so that libpq can convert encoding properly. */
-		keywords[n] = "client_encoding";
-		values[n] = GetDatabaseEncodingName();
-		n++;
-
-		keywords[n] = values[n] = NULL;
-
-		/* verify connection parameters and make connection */
-		check_conn_params(keywords, values);
-
-		pg_conn = PQconnectdbParams(keywords, values, false);
-		if (!pg_conn || PQstatus(pg_conn) != CONNECTION_OK)
+		if (!conn || PQstatus(conn->pg_conn) != CONNECTION_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
-					 errmsg("could not connect to data node \"%s\"", data_node_name),
-					 errdetail_internal("%s", pchomp(PQerrorMessage(pg_conn)))));
+					 errmsg("could not connect to \"%s\"", node_name),
+					 errdetail_internal("%s", pchomp(PQerrorMessage(conn->pg_conn)))));
 
 		/*
 		 * Check that non-superuser has used password to establish connection;
 		 * otherwise, he's piggybacking on the postgres server's user
 		 * identity. See also dblink_security_check() in contrib/dblink.
 		 */
-		if (!superuser() && !PQconnectionUsedPassword(pg_conn))
+		if (!superuser() && !PQconnectionUsedPassword(conn->pg_conn))
 			ereport(ERROR,
 					(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
-					 errmsg("password is required"),
-					 errdetail("Non-superuser cannot connect if the data node does not request a "
-							   "password."),
-					 errhint("Target data node's authentication method must be changed.")));
+					 errmsg("athentication required on target host"),
+					 errdetail("Non-superuser cannot connect if the target host does "
+							   "not request a password."),
+					 errhint("Target host's authentication method must be changed.")));
 
-		conn = remote_connection_create(pg_conn, false, data_node_name);
 		/* Prepare new session for use */
 		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
 
-		/* Inform remote data node about instance UUID */
+		/* Inform remote node about instance UUID */
 		if (set_dist_id)
 			remote_connection_set_peer_dist_id(conn);
-
-		pfree(keywords);
-		pfree(values);
 	}
 	PG_CATCH();
 	{
 		/* Release PGconn data structure if we managed to create one */
-		if (pg_conn)
-			PQfinish(pg_conn);
+		if (NULL != conn)
+			remote_connection_close(conn);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -393,31 +413,62 @@ remote_connection_open(const char *data_node_name, List *data_node_options, List
  * it might succeed opening a connection if a current user is a superuser.
  */
 TSConnection *
-remote_connection_open_default(const char *data_node_name)
+remote_connection_open_default(const char *node_name)
 {
-	ForeignServer *fs = GetForeignServerByName(data_node_name, false);
-	volatile UserMapping *um = NULL;
+	ForeignServer *fs = GetForeignServerByName(node_name, false);
+	UserMapping *um = get_user_mapping(GetUserId(), fs->serverid, true);
 
 	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
 	 * user mapping isn't found.  The catch block allows superusers to perform this operation
 	 * without a user mapping. */
-	PG_TRY();
-	{
-		um = GetUserMapping(GetUserId(), fs->serverid);
-	}
-	PG_CATCH();
+
+	if (NULL == um)
 	{
 		elog(DEBUG1,
-			 "UserMapping not found for user id `%u` and data node `%s`. Trying to open remote "
+			 "UserMapping not found for user id `%u` and node `%s`. Trying to open remote "
 			 "connection as superuser",
 			 GetUserId(),
 			 fs->servername);
-		um = NULL;
-		FlushErrorState();
 	}
-	PG_END_TRY();
 
-	return remote_connection_open(data_node_name, fs->options, um ? um->options : NULL, true);
+	return remote_connection_open(node_name, fs->options, um ? um->options : NULL, true);
+}
+
+#define PING_QUERY "SELECT 1"
+
+bool
+remote_connection_ping(const char *server_name)
+{
+	ForeignServer *fs = GetForeignServerByName(server_name, false);
+	UserMapping *um = get_user_mapping(GetUserId(), fs->serverid, true);
+	TSConnection *conn =
+		remote_connection_open_internal(server_name, fs->options, um ? um->options : NULL);
+	PGresult *res;
+	bool success = false;
+	AsyncRequest *req;
+	AsyncResponseResult *rsp;
+
+	if (NULL == conn)
+		return false;
+
+	req = async_request_send(conn, PING_QUERY);
+
+	Assert(NULL != req);
+	rsp = async_request_wait_any_result(req);
+	Assert(NULL != rsp);
+
+	res = async_response_result_get_pg_result(rsp);
+
+	if (PQresultStatus(res) == PGRES_TUPLES_OK)
+		success = true;
+
+	async_response_result_close(rsp);
+
+	pfree(req);
+
+	remote_connection_close(conn);
+
+	return success;
 }
 
 void
@@ -470,7 +521,7 @@ remote_connection_get_prep_stmt_number()
 }
 
 /*
- * Report an error we got from the remote data node.
+ * Report an error we got from the remote host.
  *
  * elevel: error level to use (typically ERROR, but might be less)
  * res: PGresult containing the error
@@ -516,7 +567,7 @@ remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn, bo
 		ereport(elevel,
 				(errcode(sqlstate),
 				 message_primary ?
-					 errmsg_internal("[%s]: %s", NameStr(conn->data_node_name), message_primary) :
+					 errmsg_internal("[%s]: %s", NameStr(conn->node_name), message_primary) :
 					 errmsg("could not obtain message string for remote error"),
 				 message_detail ? errdetail_internal("%s", message_detail) : 0,
 				 message_hint ? errhint("%s", message_hint) : 0,

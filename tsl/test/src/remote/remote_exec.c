@@ -112,27 +112,27 @@ extern List *hypertable_data_node_array_to_list(ArrayType *serverarr);
 Datum
 ts_remote_exec(PG_FUNCTION_ARGS)
 {
-	ArrayType *servers = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType *data_nodes = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
 	char *sql = TextDatumGetCString(PG_GETARG_DATUM(1));
-	List *servername_list;
+	List *data_node_list;
 	ListCell *lc;
 
-	if (servers == NULL)
-		servername_list = data_node_get_node_name_list();
+	if (data_nodes == NULL)
+		data_node_list = data_node_get_node_name_list();
 	else
-		servername_list = hypertable_data_node_array_to_list(servers);
+		data_node_list = data_node_array_to_node_name_list(data_nodes);
 
-	if (list_length(servername_list) == 0)
-		ereport(ERROR, (errcode(ERRCODE_TS_NO_DATA_NODES), errmsg("no servers defined")));
+	if (list_length(data_node_list) == 0)
+		ereport(ERROR, (errcode(ERRCODE_TS_NO_DATA_NODES), errmsg("no data nodes defined")));
 
-	foreach (lc, servername_list)
+	foreach (lc, data_node_list)
 	{
-		const char *server_name = lfirst(lc);
+		const char *node_name = lfirst(lc);
 		ForeignServer *foreign_server;
 		UserMapping *um;
 		TSConnection *conn;
 
-		foreign_server = GetForeignServerByName(server_name, false);
+		foreign_server = GetForeignServerByName(node_name, false);
 		um = GetUserMapping(GetUserId(), foreign_server->serverid);
 		conn = remote_dist_txn_get_connection(um, REMOTE_TXN_USE_PREP_STMT);
 
@@ -140,13 +140,13 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 		set_connection_settings(conn);
 
 		/* Split query into separate commands using ';' as a delimeter */
-		split_query_and_execute(conn, server_name, sql);
+		split_query_and_execute(conn, node_name, sql);
 
 		/* Restore original connection settings */
 		remote_connection_configure(conn);
 	}
 
-	list_free(servername_list);
+	list_free(data_node_list);
 
 	PG_RETURN_VOID();
 }

@@ -19,6 +19,7 @@
 #include <utils/builtins.h>
 #include <utils/inval.h>
 #include <utils/syscache.h>
+#include <utils/acl.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <funcapi.h>
@@ -33,6 +34,7 @@
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
 #include "data_node.h"
+#include "remote/utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "errors.h"
@@ -44,7 +46,48 @@
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
-static const char *ping_query = "SELECT 1";
+/*
+ * Lookup the foreign server by name and verify that it is a TimescaleDB
+ * server. Optionally, do ACL checks.
+ */
+ForeignServer *
+data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_ok)
+{
+	ForeignServer *server;
+	ForeignDataWrapper *fdw;
+
+	if (node_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid node_name: cannot be NULL")));
+
+	fdw = GetForeignDataWrapperByName(TIMESCALEDB_FDW_NAME, false);
+	server = GetForeignServerByName(node_name, missing_ok);
+
+	Assert(NULL != fdw);
+
+	if (NULL == server)
+		return NULL;
+
+	if (server->fdwid != fdw->fdwid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("data node \"%s\" is not a TimescaleDB server", node_name)));
+
+	if (mode != ACL_NO_CHECK)
+	{
+		AclResult aclresult;
+		Oid curuserid = GetUserId();
+
+		/* Must have permissions on the server object */
+		aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+
+		if (aclresult != ACLCHECK_OK)
+			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, node_name);
+	}
+
+	return server;
+}
 
 /*
  * Create a user mapping.
@@ -54,8 +97,8 @@ static const char *ping_query = "SELECT 1";
  * Non-superusers must provide a password.
  */
 static Oid
-create_user_mapping(const char *username, const char *node_username, const char *node_name,
-					const char *password, bool if_not_exists)
+create_user_mapping(const char *username, const char *node_name, const char *password,
+					bool if_not_exists)
 {
 	ObjectAddress objaddr;
 	RoleSpec rolespec = {
@@ -72,24 +115,24 @@ create_user_mapping(const char *username, const char *node_username, const char 
 		.options = NIL,
 	};
 
-	Assert(NULL != username && NULL != node_username && NULL != node_name);
+	Assert(NULL != username && NULL != node_name);
 
 	stmt.options =
-		list_make1(makeDefElemCompat("user", (Node *) makeString(pstrdup(node_username)), -1));
+		list_make1(makeDefElemCompat("user", (Node *) makeString(pstrdup(username)), -1));
 
 	/* Non-superusers must provide a password */
 	if (!superuser() && (NULL == password || password[0] == '\0'))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_PARAMETER),
-				 errmsg("no password specified for user \"%s\"", node_username),
-				 errhint("Specify a password to use when connecting to data node \"%s\"",
-						 node_name)));
+				 errmsg("no password specified for user \"%s\"", username),
+				 errhint("Specify a password to use when connecting to node \"%s\"", node_name)));
 
 	if (NULL != password)
 		stmt.options =
 			lappend(stmt.options,
 					makeDefElemCompat("password", (Node *) makeString(pstrdup(password)), -1));
 
+	/* Permissions checks done in CreateUserMapping() */
 	objaddr = CreateUserMapping(&stmt);
 
 	return objaddr.objectId;
@@ -102,8 +145,9 @@ create_user_mapping(const char *username, const char *node_username, const char 
  */
 static Oid
 create_foreign_server(const char *node_name, const char *host, int32 port, const char *dbname,
-					  bool if_not_exists)
+					  bool if_not_exists, bool *created)
 {
+	ForeignServer *server;
 	ObjectAddress objaddr;
 	CreateForeignServerStmt stmt = {
 		.type = T_CreateForeignServerStmt,
@@ -121,9 +165,40 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 (errmsg("invalid host"),
 				  (errhint("A hostname or IP address must be specified when "
-						   "a foreign server does not already exist.")))));
+						   "a data node does not already exist.")))));
 
+	if (NULL != created)
+		*created = false;
+
+	if (if_not_exists)
+	{
+		server = data_node_get_foreign_server(node_name, ACL_USAGE, true);
+
+		if (NULL != server)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("data node \"%s\" already exists, skipping", node_name)));
+
+			return server->serverid;
+		}
+	}
+
+	/* Permissions checks done in CreateForeignServer() */
 	objaddr = CreateForeignServer(&stmt);
+
+	/* CreateForeignServer returns InvalidOid if server already exists */
+	if (!OidIsValid(objaddr.objectId))
+	{
+		Assert(if_not_exists);
+
+		server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+
+		return server->serverid;
+	}
+
+	if (NULL != created)
+		*created = true;
 
 	return objaddr.objectId;
 }
@@ -135,9 +210,9 @@ enum Anum_create_data_node
 	Anum_create_data_node_host,
 	Anum_create_data_node_port,
 	Anum_create_data_node_dbname,
-	Anum_create_data_node_local_user,
-	Anum_create_data_node_node_user,
-	Anum_create_data_node_created,
+	Anum_create_data_node_node_created,
+	Anum_create_data_node_database_created,
+	Anum_create_data_node_extension_created,
 	_Anum_create_data_node_max,
 };
 
@@ -145,8 +220,8 @@ enum Anum_create_data_node
 
 static Datum
 create_data_node_datum(FunctionCallInfo fcinfo, const char *node_name, const char *host, int32 port,
-					   const char *dbname, const char *username, const char *node_username,
-					   bool created)
+					   const char *dbname, bool node_created, bool database_created,
+					   bool extension_created)
 {
 	TupleDesc tupdesc;
 	Datum values[_Anum_create_data_node_max];
@@ -164,10 +239,13 @@ create_data_node_datum(FunctionCallInfo fcinfo, const char *node_name, const cha
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_host)] = CStringGetTextDatum(host);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_port)] = Int32GetDatum(port);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_dbname)] = CStringGetDatum(dbname);
-	values[AttrNumberGetAttrOffset(Anum_create_data_node_local_user)] = CStringGetDatum(username);
-	values[AttrNumberGetAttrOffset(Anum_create_data_node_node_user)] =
-		CStringGetDatum(node_username);
-	values[AttrNumberGetAttrOffset(Anum_create_data_node_created)] = BoolGetDatum(created);
+	values[AttrNumberGetAttrOffset(Anum_create_data_node_node_created)] =
+		BoolGetDatum(node_created);
+	BoolGetDatum(node_created);
+	values[AttrNumberGetAttrOffset(Anum_create_data_node_database_created)] =
+		BoolGetDatum(database_created);
+	values[AttrNumberGetAttrOffset(Anum_create_data_node_extension_created)] =
+		BoolGetDatum(extension_created);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
@@ -199,25 +277,6 @@ create_hypertable_data_node_datum(FunctionCallInfo fcinfo, HypertableDataNode *n
 	return HeapTupleGetDatum(tuple);
 }
 
-static UserMapping *
-get_user_mapping(Oid userid, Oid serverid)
-{
-	UserMapping *um;
-
-	PG_TRY();
-	{
-		um = GetUserMapping(userid, serverid);
-	}
-	PG_CATCH();
-	{
-		um = NULL;
-		FlushErrorState();
-	}
-	PG_END_TRY();
-
-	return um;
-}
-
 static List *
 create_data_node_options(const char *host, int32 port, const char *dbname, const char *user,
 						 const char *password)
@@ -238,19 +297,29 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 	return node_options;
 }
 
-static void
+static bool
 data_node_bootstrap_database(const char *node_name, const char *host, int32 port,
-							 const char *dbname, bool if_not_exists, const char *bootstrap_database,
-							 const char *bootstrap_user, const char *bootstrap_password)
+							 const char *dbname, const char *username, bool if_not_exists,
+							 const char *bootstrap_database, const char *bootstrap_user,
+							 const char *bootstrap_password)
 {
 	TSConnection *conn;
 	List *node_options;
+	bool created = false;
+
+	Assert(NULL != node_name);
+	Assert(NULL != dbname);
+	Assert(NULL != username);
+	Assert(NULL != host);
+	Assert(NULL != bootstrap_database);
+	Assert(NULL != bootstrap_user);
 
 	node_options = create_data_node_options(host,
 											port,
 											bootstrap_database,
 											bootstrap_user,
 											bootstrap_password);
+
 	conn = remote_connection_open(node_name, node_options, NULL, false);
 
 	PG_TRY();
@@ -275,13 +344,17 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 						 errhint("Set if_not_exists => TRUE to add the node to an existing "
 								 "database.")));
 			else
-				elog(NOTICE, "remote node database \"%s\" already exists, skipping", dbname);
+				elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
 		}
 		else
 		{
-			request = psprintf("CREATE DATABASE %s", quote_identifier(dbname));
+			/* Create the database with the user as owner */
+			request = psprintf("CREATE DATABASE %s OWNER %s",
+							   quote_identifier(dbname),
+							   quote_identifier(username));
 			res = remote_connection_query_ok_result(conn, request);
 			remote_connection_result_close(res);
+			created = true;
 		}
 	}
 	PG_CATCH();
@@ -292,17 +365,20 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 	PG_END_TRY();
 
 	remote_connection_close(conn);
+
+	return created;
 }
 
-static void
+static bool
 data_node_bootstrap_extension(const char *node_name, const char *host, int32 port,
-							  const char *dbname, bool if_not_exists, const char *user,
-							  const char *user_password)
+							  const char *dbname, const char *username, bool if_not_exists,
+							  const char *bootstrap_user, const char *bootstrap_password)
 {
 	TSConnection *conn;
 	List *node_options;
+	bool created = false;
 
-	node_options = create_data_node_options(host, port, dbname, user, user_password);
+	node_options = create_data_node_options(host, port, dbname, bootstrap_user, bootstrap_password);
 	conn = remote_connection_open(node_name, node_options, NULL, false);
 
 	PG_TRY();
@@ -312,20 +388,34 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 		const char *schema_name = ts_extension_schema_name();
 		const char *schema_name_quoted = quote_identifier(schema_name);
 		Oid schema_oid = get_namespace_oid(schema_name, true);
+		bool extension_exists = false;
 
-		if (schema_oid != PG_PUBLIC_NAMESPACE)
+		request = psprintf("SELECT 1 FROM pg_extension WHERE extname = %s",
+						   quote_literal_cstr(EXTENSION_NAME));
+		res = remote_connection_query_any_result(conn, request);
+
+		if (PQntuples(res) > 0)
+			extension_exists = true;
+
+		if (!extension_exists)
 		{
-			request = psprintf("CREATE SCHEMA %s%s",
-							   if_not_exists ? "IF NOT EXISTS " : "",
+			if (schema_oid != PG_PUBLIC_NAMESPACE)
+			{
+				request = psprintf("CREATE SCHEMA %s%s AUTHORIZATION %s",
+								   if_not_exists ? "IF NOT EXISTS " : "",
+								   schema_name_quoted,
+								   quote_identifier(username));
+				res = remote_connection_query_ok_result(conn, request);
+				remote_connection_result_close(res);
+			}
+			request = psprintf("CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
+							   if_not_exists ? "IF NOT EXISTS" : "",
 							   schema_name_quoted);
 			res = remote_connection_query_ok_result(conn, request);
 			remote_connection_result_close(res);
+
+			created = true;
 		}
-		request = psprintf("CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
-						   if_not_exists ? "IF NOT EXISTS" : "",
-						   schema_name_quoted);
-		res = remote_connection_query_ok_result(conn, request);
-		remote_connection_result_close(res);
 	}
 	PG_CATCH();
 	{
@@ -335,29 +425,48 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 	PG_END_TRY();
 
 	remote_connection_close(conn);
+
+	return created;
 }
 
 static void
 data_node_bootstrap(const char *node_name, const char *host, int32 port, const char *dbname,
-					bool if_not_exists, const char *bootstrap_database, const char *bootstrap_user,
-					const char *bootstrap_password)
+					const char *username, bool if_not_exists, const char *bootstrap_database,
+					const char *bootstrap_user, const char *bootstrap_password,
+					bool *database_created, bool *extension_created)
 {
-	data_node_bootstrap_database(node_name,
-								 host,
-								 port,
-								 dbname,
-								 if_not_exists,
-								 bootstrap_database,
-								 bootstrap_user,
-								 bootstrap_password);
+	bool created;
 
-	data_node_bootstrap_extension(node_name,
-								  host,
-								  port,
-								  dbname,
-								  if_not_exists,
-								  bootstrap_user,
-								  bootstrap_password);
+	created = data_node_bootstrap_database(node_name,
+										   host,
+										   port,
+										   dbname,
+										   username,
+										   if_not_exists,
+										   bootstrap_database,
+										   bootstrap_user,
+										   bootstrap_password);
+
+	if (NULL != database_created)
+		*database_created = created;
+
+	/* Always use "if_not_exists" when the database was created since the
+	 * extension could have been pre-installed in the template database and
+	 * thus created with the database. */
+	if (created)
+		if_not_exists = true;
+
+	created = data_node_bootstrap_extension(node_name,
+											host,
+											port,
+											dbname,
+											username,
+											if_not_exists,
+											bootstrap_user,
+											bootstrap_password);
+
+	if (NULL != extension_created)
+		*extension_created = created;
 }
 
 static void
@@ -393,25 +502,11 @@ add_distributed_id_to_data_node(const char *node_name, const char *host, int32 p
 }
 
 static void
-remove_distributed_id_from_data_node(const char *node_name)
+remove_distributed_id_from_backend(ForeignServer *fs, UserMapping *um)
 {
-	ForeignServer *fs = GetForeignServerByName(node_name, false);
-	UserMapping *um;
 	TSConnection *conn;
 
-	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
-	 * user mapping isn't found.  The catch block allows superusers to perform this operation
-	 * without a user mapping. */
-	PG_TRY();
-	{
-		um = GetUserMapping(GetUserId(), fs->serverid);
-	}
-	PG_CATCH();
-	{
-		um = NULL;
-	}
-	PG_END_TRY();
-	conn = remote_connection_open(node_name, fs->options, um ? um->options : NULL, true);
+	conn = remote_connection_open(fs->servername, fs->options, um ? um->options : NULL, true);
 
 	PG_TRY();
 	{
@@ -436,35 +531,24 @@ remove_distributed_id_from_data_node(const char *node_name)
 static Datum
 data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 {
+	Oid userid = GetUserId();
+	const char *username = GetUserNameFromId(userid, false);
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	const char *host =
 		PG_ARGISNULL(1) ? TS_DEFAULT_POSTGRES_HOST : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
 	int32 port = PG_ARGISNULL(3) ? TS_DEFAULT_POSTGRES_PORT : PG_GETARG_INT32(3);
-	Oid userid = PG_ARGISNULL(4) ? GetUserId() : PG_GETARG_OID(4);
-	const char *node_username =
-		PG_ARGISNULL(5) ? GetUserNameFromId(userid, false) : PG_GETARG_CSTRING(5);
-	const char *password = PG_ARGISNULL(6) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(6));
-	bool if_not_exists = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
-	const char *bootstrap_database = PG_ARGISNULL(8) ? NULL : PG_GETARG_CSTRING(8);
-	const char *bootstrap_user = NULL;
-	const char *bootstrap_password = NULL;
+	const char *password = PG_ARGISNULL(4) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(4));
+	bool if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
+	const char *bootstrap_database = PG_ARGISNULL(6) ? dbname : PG_GETARG_CSTRING(6);
+	const char *bootstrap_user = PG_ARGISNULL(7) ? username : PG_GETARG_CSTRING(7);
+	const char *bootstrap_password =
+		PG_ARGISNULL(8) ? password : TextDatumGetCString(PG_GETARG_DATUM(8));
 	UserMapping *um;
-	const char *username;
 	Oid serverid = InvalidOid;
-	bool created = false;
-
-	/* If bootstrap_user is not set, reuse server_username and its password */
-	if (PG_ARGISNULL(9))
-	{
-		bootstrap_user = node_username;
-		bootstrap_password = password;
-	}
-	else
-	{
-		bootstrap_user = PG_GETARG_CSTRING(9);
-		bootstrap_password = PG_ARGISNULL(10) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(10));
-	}
+	bool server_created = false;
+	bool database_created = false;
+	bool extension_created = false;
 
 	if (set_distid && dist_util_membership() == DIST_MEMBER_BACKEND)
 		ereport(ERROR,
@@ -493,39 +577,26 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	 */
 	PreventInTransactionBlock(true, "add_data_node");
 
-	/* First check for existing foreign server */
-	serverid = create_foreign_server(node_name, host, port, dbname, if_not_exists);
-	if (!OidIsValid(serverid))
-	{
-		Assert(if_not_exists);
-		serverid = GetForeignServerByName(node_name, true)->serverid;
-	}
-	else
-	{
-		created = true;
-	}
+	/* Try to create the foreign server, or get the existing one in case of
+	 * if_not_exists = true. */
+	serverid = create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_created);
 
-	/*
-	 * Make the foreign server visible in current transaction so that we can
-	 * reference it when adding the user mapping
-	 */
+	/* Make the foreign server visible in current transaction. */
 	CommandCounterIncrement();
 
-	username = GetUserNameFromId(userid, false);
-
-	um = get_user_mapping(userid, serverid);
+	um = get_user_mapping(userid, serverid, true);
 
 	if (NULL == um)
 	{
-		if (!created)
-			elog(NOTICE, "adding user mapping for \"%s\" to data node \"%s\"", username, node_name);
+		elog(NOTICE, "adding user mapping for \"%s\" to connect to \"%s\"", username, node_name);
 
-		create_user_mapping(username, node_username, node_name, password, if_not_exists);
+		create_user_mapping(username, node_name, password, if_not_exists);
 
 		/* Make user mapping visible */
 		CommandCounterIncrement();
 
 		um = GetUserMapping(userid, serverid);
+		Assert(NULL != um);
 	}
 	else if (!if_not_exists)
 		ereport(ERROR,
@@ -534,15 +605,18 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 						username,
 						node_name)));
 
-	/* Try to create database and extension on remote node */
+	/* Try to create database and extension on remote server */
 	data_node_bootstrap(node_name,
 						host,
 						port,
 						dbname,
+						username,
 						if_not_exists,
 						bootstrap_database,
 						bootstrap_user,
-						bootstrap_password);
+						bootstrap_password,
+						&database_created,
+						&extension_created);
 
 	if (set_distid)
 	{
@@ -563,9 +637,9 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 										   host,
 										   port,
 										   dbname,
-										   username,
-										   node_username,
-										   created));
+										   server_created,
+										   database_created,
+										   extension_created));
 }
 
 Datum
@@ -586,20 +660,18 @@ data_node_attach(PG_FUNCTION_ARGS)
 	Oid table_id = PG_GETARG_OID(0);
 	const char *node_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1)->data;
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	ForeignServer *fserver = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 	Cache *hcache;
 	Hypertable *ht;
 	List *result;
 	ListCell *lc;
 
+	Assert(NULL != fserver);
+
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable: cannot be NULL")));
-
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, table_id);
@@ -609,11 +681,15 @@ data_node_attach(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_id))));
 
+	/* Must have owner permissions on the hypertable to attach a new server.
+	   Must also have USAGE on the foreign server.  */
+	ts_hypertable_permissions_check(table_id, GetUserId());
+
 	foreach (lc, ts_hypertable_data_node_scan(ht->fd.id, CurrentMemoryContext))
 	{
 		HypertableDataNode *node = lfirst(lc);
 
-		if (namestrcmp(&node->fd.node_name, node_name) == 0)
+		if (node->foreign_server_oid == fserver->serverid)
 		{
 			ts_cache_release(hcache);
 			if (if_not_attached)
@@ -762,7 +838,12 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 		Assert(ht != NULL);
 
 		if (!has_privs)
-			if (all_hypertables)
+		{
+			/* If the operation is DELETE, we MUST be able to detach the data
+			 * node from ALL tables since the foreign server object will be
+			 * deleted. Therefore, we fail the operation if we find a table
+			 * that we don't have owner permissions on in this case. */
+			if (all_hypertables && op_type != DELETE)
 				ereport(NOTICE,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 						 errmsg("skipping hypertable \"%s\" due to missing permissions",
@@ -770,7 +851,10 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("permission denied for hypertable \"%s\"", get_rel_name(relid))));
+						 errmsg("permission denied for hypertable \"%s\"", get_rel_name(relid)),
+						 errdetail("The server is attached to hypertables that the current "
+								   "user lacks permissions for.")));
+		}
 		else if (op_type == DETACH || op_type == DELETE)
 		{
 			/* we have permissions to detach */
@@ -883,20 +967,24 @@ data_node_block_or_allow_new_chunks(PG_FUNCTION_ARGS, bool block_chunks)
 	int affected = 0;
 	bool all_hypertables = table_id == InvalidOid ? true : false;
 	List *hypertable_data_nodes = NIL;
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
+	Assert(NULL != server);
 
-	if (table_id != InvalidOid)
-		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, node_name));
+	if (OidIsValid(table_id))
+	{
+		/* Early abort on missing hypertable permissions */
+		ts_hypertable_permissions_check(table_id, GetUserId());
+		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, server->servername));
+	}
 	else
+	{
 		/* block or allow for all hypertables */
 		hypertable_data_nodes =
-			ts_hypertable_data_node_scan_by_node_name(node_name, CurrentMemoryContext);
+			ts_hypertable_data_node_scan_by_node_name(server->servername, CurrentMemoryContext);
+	}
 
-	affected = data_node_block_hypertable_data_nodes(node_name,
+	affected = data_node_block_hypertable_data_nodes(server->servername,
 													 hypertable_data_nodes,
 													 all_hypertables,
 													 block_chunks,
@@ -919,20 +1007,26 @@ data_node_detach(PG_FUNCTION_ARGS)
 	bool force = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
+	Assert(NULL != server);
 
-	if (table_id != InvalidOid)
-		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, node_name));
+	if (OidIsValid(table_id))
+	{
+		/* Early abort on missing hypertable permissions */
+		ts_hypertable_permissions_check(table_id, GetUserId());
+		hypertable_data_nodes = list_make1(get_hypertable_data_node(table_id, server->servername));
+	}
 	else
-		/* detach data node for all hypertables */
+	{
+		/* Detach data node for all hypertables where user has
+		 * permissions. Permissions checks done in
+		 * data_node_detach_hypertable_data_nodes().  */
 		hypertable_data_nodes =
-			ts_hypertable_data_node_scan_by_node_name(node_name, CurrentMemoryContext);
+			ts_hypertable_data_node_scan_by_node_name(server->servername, CurrentMemoryContext);
+	}
 
-	removed = data_node_detach_hypertable_data_nodes(node_name,
+	removed = data_node_detach_hypertable_data_nodes(server->servername,
 													 hypertable_data_nodes,
 													 all_hypertables,
 													 force,
@@ -947,7 +1041,6 @@ data_node_delete(PG_FUNCTION_ARGS)
 	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	bool cascade = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
-	ForeignServer *server = GetForeignServerByName(node_name, if_exists);
 	List *hypertable_data_nodes = NIL;
 	DropStmt stmt;
 	ObjectAddress address;
@@ -955,16 +1048,20 @@ data_node_delete(PG_FUNCTION_ARGS)
 	Node *parsetree = NULL;
 	UserMapping *um = NULL;
 	Cache *conn_cache;
+	ForeignServer *server;
 
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
+	/* Need USAGE to detach. Further owner check done when executing the DROP
+	 * statement. */
+	server = data_node_get_foreign_server(node_name, ACL_USAGE, if_exists);
 
-	if (server == NULL)
+	if (NULL == server)
+	{
+		elog(NOTICE, "data node \"%s\" does not exist, skipping", node_name);
 		PG_RETURN_BOOL(false);
+	}
 
-	um = get_user_mapping(GetUserId(), server->serverid);
+	um = get_user_mapping(GetUserId(), server->serverid, true);
+
 	if (um != NULL)
 	{
 		conn_cache = remote_connection_cache_pin();
@@ -988,12 +1085,12 @@ data_node_delete(PG_FUNCTION_ARGS)
 
 	parsetree = (Node *) &stmt;
 
+	remove_distributed_id_from_backend(server, um);
+
 	/* Make sure event triggers are invoked so that all dropped objects
 	 * are collected during a cascading drop. This ensures all dependent
 	 * objects get cleaned up. */
 	EventTriggerBeginCompleteQuery();
-
-	remove_distributed_id_from_data_node(node_name);
 
 	PG_TRY();
 	{
@@ -1021,8 +1118,11 @@ data_node_delete(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
+/*
+ * Get server list, performing an ACL check on each of them in the process.
+ */
 List *
-data_node_get_node_name_list(void)
+data_node_get_node_name_list_with_aclcheck(AclMode mode)
 {
 	HeapTuple tuple;
 	ScanKeyData scankey[1];
@@ -1045,6 +1145,9 @@ data_node_get_node_name_list(void)
 	{
 		Form_pg_foreign_server form = (Form_pg_foreign_server) GETSTRUCT(tuple);
 
+		if (mode != ACL_NO_CHECK)
+			data_node_get_foreign_server(NameStr(form->srvname), mode, false);
+
 		nodes = lappend(nodes, pstrdup(NameStr(form->srvname)));
 	}
 
@@ -1054,51 +1157,64 @@ data_node_get_node_name_list(void)
 	return nodes;
 }
 
+/*
+ * Get server list without an ACL check.
+ */
+List *
+data_node_get_node_name_list(void)
+{
+	return data_node_get_node_name_list_with_aclcheck(ACL_NO_CHECK);
+}
+
+/*
+ * Turn an array of server names into a list of names.
+ *
+ * The function will verify that all the servers in the list belong to the
+ * TimescaleDB foreign data wrapper. Optionally, perform ACL check on each
+ * data node's foreign server. Checks are skipped when specificing
+ * ACL_NO_CHECK.
+ */
+List *
+data_node_array_to_node_name_list_with_aclcheck(ArrayType *serverarr, AclMode mode)
+{
+	ArrayIterator it = array_create_iterator(serverarr, 0, NULL);
+	Datum node_datum;
+	bool isnull;
+	List *nodes = NIL;
+
+	while (array_iterate(it, &node_datum, &isnull))
+	{
+		if (!isnull)
+		{
+			const char *node_name = DatumGetCString(node_datum);
+			ForeignServer *server = data_node_get_foreign_server(node_name, mode, false);
+
+			nodes = lappend(nodes, server->servername);
+		}
+	}
+
+	array_free_iterator(it);
+
+	return nodes;
+}
+
+List *
+data_node_array_to_node_name_list(ArrayType *nodearr)
+{
+	return data_node_array_to_node_name_list_with_aclcheck(nodearr, ACL_NO_CHECK);
+}
+
 Datum
 data_node_ping(PG_FUNCTION_ARGS)
 {
-	char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	volatile TSConnection *conn = NULL;
-	volatile PGresult *res = NULL;
-	ForeignServer *foregin_server;
-	bool success = false;
-	Oid timescale_fdw_oid;
+	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	bool success;
 
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
+	Assert(NULL != server);
 
-	/* Make sure node is defined, throw ERROR if not */
-	foregin_server = GetForeignServerByName(node_name, false);
-	timescale_fdw_oid = get_foreign_data_wrapper_oid(TIMESCALEDB_FDW_NAME, false);
-	if (foregin_server->fdwid != timescale_fdw_oid)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: data node `%s` is not a TimescaleDB database",
-						node_name)));
+	success = remote_connection_ping(server->servername);
 
-	PG_TRY();
-	{
-		conn = remote_connection_open_default(node_name);
-		res = remote_connection_query_ok_result((TSConnection *) conn, ping_query);
-		success = true;
-	}
-	PG_CATCH();
-	{
-		if (conn == NULL)
-			elog(DEBUG1, "failed to open connection to data node `%s`", node_name);
-		else if (res == NULL)
-			elog(DEBUG1, "query `%s` failed on data node `%s`", ping_query, node_name);
-		FlushErrorState();
-	}
-	PG_END_TRY();
-
-	if (conn)
-		remote_connection_close((TSConnection *) conn);
-
-	if (res)
-		remote_connection_result_close((PGresult *) res);
 	PG_RETURN_DATUM(BoolGetDatum(success));
 }
 
@@ -1108,9 +1224,11 @@ data_node_set_chunk_default_data_node(PG_FUNCTION_ARGS)
 	char *schema_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	char *table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1);
 	char *node_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
-	ForeignServer *server = GetForeignServerByName(node_name, false);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 	Chunk *chunk = chunk_get_by_name(schema_name, table_name, 0, true);
 
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 	ts_chunk_data_node_update_foreign_table_server(chunk->table_id, server->serverid);
+
 	PG_RETURN_BOOL(true);
 }

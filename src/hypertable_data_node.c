@@ -7,11 +7,14 @@
 #include <utils/fmgroids.h>
 #include <utils/builtins.h>
 #include <utils/array.h>
+#include <utils/acl.h>
 #include <foreign/foreign.h>
+#include <miscadmin.h>
 
 #include "hypertable_data_node.h"
 #include "scanner.h"
 #include "catalog.h"
+#include "compat.h"
 
 static void
 hypertable_data_node_insert_relation(Relation rel, int32 hypertable_id, int32 node_hypertable_id,
@@ -44,13 +47,26 @@ ts_hypertable_data_node_insert_multi(List *hypertable_data_nodes)
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	ListCell *lc;
+	Oid curuserid = GetUserId();
 
 	rel = heap_open(catalog->tables[HYPERTABLE_DATA_NODE].id, RowExclusiveLock);
 
 	foreach (lc, hypertable_data_nodes)
 	{
 		HypertableDataNode *node = lfirst(lc);
+		AclResult aclresult;
 
+		/* Must also have usage on the server object */
+		aclresult = pg_foreign_server_aclcheck(node->foreign_server_oid, curuserid, ACL_USAGE);
+
+		if (aclresult != ACLCHECK_OK)
+		{
+#if PG11_GE
+			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, NameStr(node->fd.node_name));
+#else
+			aclcheck_error(aclresult, ACL_KIND_FOREIGN_SERVER, NameStr(node->fd.node_name));
+#endif
+		}
 		hypertable_data_node_insert_relation(rel,
 											 node->fd.hypertable_id,
 											 node->fd.node_hypertable_id,

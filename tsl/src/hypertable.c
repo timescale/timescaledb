@@ -114,10 +114,13 @@ hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes)
 {
 	List *nodelist;
 
+	/* Get the list of servers to attach to the distributed hypertable. We
+	 * require USAGE on the servers to be able to attach them to the
+	 * hypertable. */
 	if (NULL == data_nodes)
-		nodelist = data_node_get_node_name_list();
+		nodelist = data_node_get_node_name_list_with_aclcheck(ACL_USAGE);
 	else
-		nodelist = hypertable_data_node_array_to_list(data_nodes);
+		nodelist = data_node_array_to_node_name_list_with_aclcheck(data_nodes, ACL_USAGE);
 
 	if (list_length(nodelist) == 0)
 		ereport(ERROR,
@@ -127,23 +130,4 @@ hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes)
 				 errhint("Add data nodes using the add_data_node() function.")));
 
 	hypertable_assign_data_nodes(ht->fd.id, nodelist);
-}
-
-List *
-hypertable_data_node_array_to_list(ArrayType *nodearr)
-{
-	ArrayIterator it = array_create_iterator(nodearr, 0, NULL);
-	Datum data_node_datum;
-	bool isnull;
-	List *data_nodes = NIL;
-
-	while (array_iterate(it, &data_node_datum, &isnull))
-	{
-		if (!isnull)
-			data_nodes = lappend(data_nodes, NameStr(*DatumGetName(data_node_datum)));
-	}
-
-	array_free_iterator(it);
-
-	return data_nodes;
 }

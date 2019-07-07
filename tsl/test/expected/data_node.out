@@ -1,17 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
--- Support for remote_exec()
-\c :TEST_DBNAME :ROLE_SUPERUSER
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-CREATE OR REPLACE FUNCTION show_data_nodes()
-RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
-AS :TSL_MODULE_PATHNAME, 'test_data_node_show' LANGUAGE C;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
@@ -19,126 +11,130 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 DROP DATABASE IF EXISTS data_node_4;
 SET client_min_messages TO NOTICE;
-SET ROLE :ROLE_DEFAULT_PERM_USER;
--- Create data node with DDL statements as reference. NOTE, 'IF NOT
--- EXISTS' on 'CREATE SERVER' and 'CREATE USER MAPPING' is not
--- supported on PG 9.6
-CREATE SERVER data_node_1 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '15432', dbname 'data_node_1');
--- Create a user mapping for the server
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER data_node_1 OPTIONS (user 'cluster_user_1');
--- Add data nodes using TimescaleDB data node management API
-RESET ROLE;
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |     username      |   node_username   | created 
--------------+-----------+-------+-------------+-------------------+-------------------+---------
- data_node_2 | localhost | 15432 | data_node_2 | default_perm_user | default_perm_user | t
+-- Must use cluster user for password auth
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Add data nodes using TimescaleDB data_node management API. NOTE that the
+-- extension won't be created since it is installed in the template1
+-- database
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+(1 row)
+
 \set ON_ERROR_STOP 0
 -- Add again
-SELECT * FROM add_data_node('data_node_2', password => 'perm_user_pass');
+SELECT * FROM add_data_node('data_node_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS');
 ERROR:  server "data_node_2" already exists
 -- Add without password
 SELECT * FROM add_data_node('data_node_3');
-ERROR:  no password specified for user "default_perm_user"
--- Add NULL data node
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+ERROR:  no password specified for user "default_cluster_user"
+-- Add NULL data_node
 SELECT * FROM add_data_node(NULL);
 ERROR:  invalid data node name
 \set ON_ERROR_STOP 1
-RESET ROLE;
 -- Should not generate error with if_not_exists option
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
-NOTICE:  server "data_node_2" already exists, skipping
-NOTICE:  remote node database "data_node_2" already exists, skipping
-  node_name  |   host    | port  |  database   |     username      |   node_username   | created 
--------------+-----------+-------+-------------+-------------------+-------------------+---------
- data_node_2 | localhost | 15432 | data_node_2 | default_perm_user | default_perm_user | f
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
+                                     if_not_exists => true);
+NOTICE:  data node "data_node_2" already exists, skipping
+NOTICE:  database "data_node_2" already exists on data node, skipping
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | f            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => 'cluster_user_2', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |     username      | node_username  | created 
--------------+-----------+-------+-------------+-------------------+----------------+---------
- data_node_3 | localhost | 15432 | data_node_3 | default_perm_user | cluster_user_2 | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Data node exists, but no user mapping
 CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '15432', dbname 'data_node_4');
 -- User mapping should be added with NOTICE
-RESET ROLE;
-SELECT * FROM add_data_node('data_node_4', database => 'data_node_4', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
-NOTICE:  server "data_node_4" already exists, skipping
-NOTICE:  adding user mapping for "default_perm_user" to data node "data_node_4"
-  node_name  |   host    | port  |  database   |     username      |   node_username   | created 
--------------+-----------+-------+-------------+-------------------+-------------------+---------
- data_node_4 | localhost | 15432 | data_node_4 | default_perm_user | default_perm_user | f
+SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
+                                     if_not_exists => true);
+NOTICE:  data node "data_node_4" already exists, skipping
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_4"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_4 | localhost | 15432 | data_node_4 | f            | t                | t
 (1 row)
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM show_data_nodes();
- data_node_name |   host    | port  |   dbname    
-----------------+-----------+-------+-------------
- data_node_1    | localhost | 15432 | data_node_1
- data_node_2    | localhost | 15432 | data_node_2
- data_node_3    | localhost | 15432 | data_node_3
- data_node_4    | localhost | 15432 | data_node_4
+-- List foreign data nodes
+SELECT * FROM timescaledb_information.data_node;
+  node_name  | owner |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_1 | 16389 | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
+ data_node_4 | 16389 | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_3 | 16389 | {host=localhost,port=15432,dbname=data_node_3} | t       |               1 |                 | 
+ data_node_2 | 16389 | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
 (4 rows)
 
--- List foreign servers and user mappings
 RESET ROLE;
-SELECT srvname, srvoptions
-FROM pg_foreign_server
-ORDER BY srvname;
-   srvname   |                   srvoptions                   
--------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
- data_node_4 | {host=localhost,port=15432,dbname=data_node_4}
-(4 rows)
-
 SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
 WHERE a.oid = um.umuser AND fs.oid = um.umserver
 ORDER BY srvname;
-      rolname      |   srvname   |                    umoptions                     
--------------------+-------------+--------------------------------------------------
- super_user        | data_node_1 | {user=cluster_user_1}
- default_perm_user | data_node_2 | {user=default_perm_user,password=perm_user_pass}
- default_perm_user | data_node_3 | {user=cluster_user_2}
- default_perm_user | data_node_4 | {user=default_perm_user,password=perm_user_pass}
+       rolname        |   srvname   |                 umoptions                 
+----------------------+-------------+-------------------------------------------
+ default_cluster_user | data_node_1 | {user=default_cluster_user,password=pass}
+ default_cluster_user | data_node_2 | {user=default_cluster_user,password=pass}
+ default_cluster_user | data_node_3 | {user=default_cluster_user,password=pass}
+ default_cluster_user | data_node_4 | {user=default_cluster_user,password=pass}
 (4 rows)
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Delete a data node
 \set ON_ERROR_STOP 0
 -- Cannot delete if not owner
 SELECT * FROM delete_data_node('data_node_3');
-ERROR:  password is required
+ERROR:  cannot drop server data_node_3 because other objects depend on it
 -- Must use cascade because of user mappings
-RESET ROLE;
 SELECT * FROM delete_data_node('data_node_3');
 ERROR:  cannot drop server data_node_3 because other objects depend on it
 \set ON_ERROR_STOP 1
 -- Should work as superuser with cascade
 SELECT * FROM delete_data_node('data_node_3', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server data_node_3
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT srvname, srvoptions
-FROM pg_foreign_server;
-   srvname   |                   srvoptions                   
--------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_4 | {host=localhost,port=15432,dbname=data_node_4}
+-- List data nodes
+SELECT * FROM timescaledb_information.data_node;
+  node_name  | owner |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_4 | 16389 | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_2 | 16389 | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
+ data_node_1 | 16389 | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
 (3 rows)
 
 RESET ROLE;
@@ -146,13 +142,14 @@ SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
 WHERE a.oid = um.umuser AND fs.oid = um.umserver
 ORDER BY srvname;
-      rolname      |   srvname   |                    umoptions                     
--------------------+-------------+--------------------------------------------------
- super_user        | data_node_1 | {user=cluster_user_1}
- default_perm_user | data_node_2 | {user=default_perm_user,password=perm_user_pass}
- default_perm_user | data_node_4 | {user=default_perm_user,password=perm_user_pass}
+       rolname        |   srvname   |                 umoptions                 
+----------------------+-------------+-------------------------------------------
+ default_cluster_user | data_node_1 | {user=default_cluster_user,password=pass}
+ default_cluster_user | data_node_2 | {user=default_cluster_user,password=pass}
+ default_cluster_user | data_node_4 | {user=default_cluster_user,password=pass}
 (3 rows)
 
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
 SELECT * FROM delete_data_node('data_node_3');
@@ -160,75 +157,127 @@ ERROR:  server "data_node_3" does not exist
 \set ON_ERROR_STOP 1
 -- Deleting non-existing data node with "if_exists" set does not generate error
 SELECT * FROM delete_data_node('data_node_3', if_exists => true);
+NOTICE:  data node "data_node_3" does not exist, skipping
  delete_data_node 
 ------------------
  f
 (1 row)
 
-SELECT * FROM show_data_nodes();
- data_node_name |   host    | port  |   dbname    
-----------------+-----------+-------+-------------
- data_node_1    | localhost | 15432 | data_node_1
- data_node_2    | localhost | 15432 | data_node_2
- data_node_4    | localhost | 15432 | data_node_4
+SELECT * FROM timescaledb_information.data_node;
+  node_name  | owner |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_4 | 16389 | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_2 | 16389 | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
+ data_node_1 | 16389 | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
 (3 rows)
 
 DROP SERVER data_node_1 CASCADE;
-NOTICE:  drop cascades to user mapping for super_user on server data_node_1
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
 SELECT * FROM delete_data_node('data_node_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server data_node_2
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_4', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server data_node_4
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_4
  delete_data_node 
 ------------------
  t
 (1 row)
 
+-- No data nodes left
+SELECT * FROM timescaledb_information.data_node;
+ node_name | owner | options | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-----------+-------+---------+---------+-----------------+-----------------+-----------------
+(0 rows)
+
+-- Cleanup databases
+RESET ROLE;
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_4;
 SET client_min_messages TO INFO;
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_1 | localhost | 15432 | data_node_1 | super_user | super_user    | t
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_2 | localhost | 15432 | data_node_2 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_4', database => 'data_node_4', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_4 | localhost | 15432 | data_node_4 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_4"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_4 | localhost | 15432 | data_node_4 | t            | t                | t
 (1 row)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM show_data_nodes();
- data_node_name |   host    | port  |   dbname    
-----------------+-----------+-------+-------------
- data_node_1    | localhost | 15432 | data_node_1
- data_node_2    | localhost | 15432 | data_node_2
- data_node_4    | localhost | 15432 | data_node_4
+SELECT * FROM timescaledb_information.data_node;
+  node_name  | owner |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_4 | 16389 | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_2 | 16389 | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
+ data_node_1 | 16389 | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
 (3 rows)
 
--- Test that data nodes are added to a hypertable
+-- Switch to default user
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Now create a distributed hypertable using the data nodes
 CREATE TABLE disttable(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+-- Test that we can't create the distributed hypertable without USAGE
+-- on data nodes.
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  permission denied for foreign server data_node_1
+\set ON_ERROR_STOP 1
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Grant usage on data nodes and create user mappings
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_4 TO :ROLE_DEFAULT_PERM_USER;
+CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_1
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
+CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_2
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
+CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_4
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Test that data nodes are added to a hypertable
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             1 | public      | disttable  | t
+             2 | public      | disttable  | t
 (1 row)
+
+-- All data nodes should be added.
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             2 |                  1 | data_node_1 | f
+             2 |                  1 | data_node_2 | f
+             2 |                  1 | data_node_4 | f
+(3 rows)
 
 -- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
 SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable';
@@ -237,8 +286,10 @@ SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name 
                   1
 (1 row)
 
-SELECT * FROM test.remote_exec(NULL, $$ SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
-NOTICE:  [data_node_1]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+SELECT * FROM test.remote_exec(NULL, $$ SELECT replication_factor
+FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
+NOTICE:  [data_node_1]:  SELECT replication_factor
+FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
 NOTICE:  [data_node_1]:
 replication_factor
 ------------------
@@ -246,7 +297,8 @@ replication_factor
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+NOTICE:  [data_node_2]:  SELECT replication_factor
+FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
 NOTICE:  [data_node_2]:
 replication_factor
 ------------------
@@ -254,7 +306,8 @@ replication_factor
 (1 row)
 
 
-NOTICE:  [data_node_4]:  SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
+NOTICE:  [data_node_4]:  SELECT replication_factor
+FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
 NOTICE:  [data_node_4]:
 replication_factor
 ------------------
@@ -266,15 +319,6 @@ replication_factor
 -------------
  
 (1 row)
-
--- All data nodes should be added.
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
-             1 |                  1 | data_node_1 | f
-             1 |                  1 | data_node_2 | f
-             1 |                  1 | data_node_4 | f
-(3 rows)
 
 -- Create one chunk
 INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
@@ -297,6 +341,8 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 ----------+---------------+-----------
 (0 rows)
 
+-- Now create tables as cluster user
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Attach data node should fail when called on a non-hypertable
@@ -304,26 +350,26 @@ SELECT * FROM attach_data_node('disttable', 'data_node_1');
 ERROR:  table "disttable" is not a hypertable
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
 ERROR:  invalid replication_factor
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 32768);
 ERROR:  invalid replication_factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
 ERROR:  invalid replication_factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => -1);
 ERROR:  invalid replication_factor
 -- Non-existing data node
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_3" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  server "data_node_3" does not exist
 \set ON_ERROR_STOP 1
 -- Use a subset of data nodes and a replication factor of two so that
--- each chunk is associated with more than one data node
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
+-- each chunk is associated with more than one data_node
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             3 | public      | disttable  | t
+             4 | public      | disttable  | t
 (1 row)
 
 -- Create some chunks
@@ -334,24 +380,24 @@ INSERT INTO disttable VALUES
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_3_2_dist_chunk | 
- _timescaledb_internal._hyper_3_3_dist_chunk | 
- _timescaledb_internal._hyper_3_4_dist_chunk | 
+ _timescaledb_internal._hyper_4_2_dist_chunk | 
+ _timescaledb_internal._hyper_4_3_dist_chunk | 
+ _timescaledb_internal._hyper_4_4_dist_chunk | 
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  2 |             3 | _timescaledb_internal | _hyper_3_2_dist_chunk
-  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
-  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
+  2 |             4 | _timescaledb_internal | _hyper_4_2_dist_chunk
+  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
+  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             3 |                  2 | data_node_2 | f
-             3 |                  2 | data_node_4 | f
+             4 |                  2 | data_node_2 | f
+             4 |                  2 | data_node_4 | f
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -375,8 +421,8 @@ SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_3_3_dist_chunk | 
- _timescaledb_internal._hyper_3_4_dist_chunk | 
+ _timescaledb_internal._hyper_4_3_dist_chunk | 
+ _timescaledb_internal._hyper_4_4_dist_chunk | 
 (2 rows)
 
 SELECT foreign_table_name, foreign_server_name
@@ -384,15 +430,15 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_3_3_dist_chunk | data_node_4
- _hyper_3_4_dist_chunk | data_node_2
+ _hyper_4_3_dist_chunk | data_node_4
+ _hyper_4_4_dist_chunk | data_node_2
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
-  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
+  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
+  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -404,7 +450,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
         4 |             3 | data_node_4
 (4 rows)
 
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'data_node_2');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_2');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -415,11 +461,11 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_3_3_dist_chunk | data_node_2
- _hyper_3_4_dist_chunk | data_node_2
+ _hyper_4_3_dist_chunk | data_node_2
+ _hyper_4_4_dist_chunk | data_node_2
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_4');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -433,7 +479,7 @@ ERROR:  deleting data node "data_node_2" failed because it contains chunks for h
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x', 'x_chunk', 'data_node_4');
 ERROR:  chunk not found
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_3_3_dist_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal', '_hyper_4_3_dist_chunk', 'data_node_0000');
 ERROR:  server "data_node_0000" does not exist
 -- NULL try
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, NULL, 'data_node_4');
@@ -448,7 +494,7 @@ ERROR:  chunk not found
 SELECT * FROM delete_data_node('data_node_2', cascade => true, force => true);
 WARNING:  hypertable "disttable" has under-replicated chunks due to deleting data node "data_node_2"
 WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_2"
-NOTICE:  drop cascades to user mapping for super_user on server data_node_2
+NOTICE:  drop cascades to 2 other objects
  delete_data_node 
 ------------------
  t
@@ -457,8 +503,8 @@ NOTICE:  drop cascades to user mapping for super_user on server data_node_2
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_3_3_dist_chunk | 
- _timescaledb_internal._hyper_3_4_dist_chunk | 
+ _timescaledb_internal._hyper_4_3_dist_chunk | 
+ _timescaledb_internal._hyper_4_4_dist_chunk | 
 (2 rows)
 
 SELECT foreign_table_name, foreign_server_name
@@ -466,21 +512,21 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_3_3_dist_chunk | data_node_4
- _hyper_3_4_dist_chunk | data_node_4
+ _hyper_4_3_dist_chunk | data_node_4
+ _hyper_4_4_dist_chunk | data_node_4
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk
-  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk
+  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk
+  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             3 |                  2 | data_node_4 | f
+             4 |                  2 | data_node_4 | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -497,7 +543,7 @@ ERROR:  deleting data node "data_node_4" would mean a data-loss for hypertable "
 \set ON_ERROR_STOP 1
 -- Should also clean up hypertable_data_node when using standard DDL commands
 DROP SERVER data_node_4 CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 4 other objects
 SELECT * FROM test.show_subtables('disttable');
  Child | Tablespace 
 -------+------------
@@ -522,13 +568,13 @@ SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM attach_data_node('disttable', 'data_node_1');
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
-             3 |                  2 | data_node_1
+             4 |                  2 | data_node_1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             3 |                  2 | data_node_1 | f
+             4 |                  2 | data_node_1 | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -543,8 +589,10 @@ SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1');
 (1 row)
 
 -- Create data node referencing postgres_fdw
+RESET ROLE;
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER pg_data_node_1 FOREIGN DATA WRAPPER postgres_fdw;
+CREATE SERVER pg_server_1 FOREIGN DATA WRAPPER postgres_fdw;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set ON_ERROR_STOP 0
 -- Throw ERROR for non-existing data node
 SELECT * FROM _timescaledb_internal.ping_data_node('data_node_123456789');
@@ -554,7 +602,7 @@ SELECT * FROM _timescaledb_internal.ping_data_node(NULL);
 ERROR:  invalid node_name: cannot be NULL
 -- ERROR when not passing TimescaleDB data node
 SELECT * FROM _timescaledb_internal.ping_data_node('pg_data_node_1');
-ERROR:  invalid node_name: data node `pg_data_node_1` is not a TimescaleDB database
+ERROR:  server "pg_data_node_1" does not exist
 \set ON_ERROR_STOP 1
 -- Some attach data node error cases
 \set ON_ERROR_STOP 0
@@ -566,7 +614,7 @@ ERROR:  invalid node_name: cannot be NULL
 -- Deleted data node
 SELECT * FROM attach_data_node('disttable', 'data_node_2');
 ERROR:  server "data_node_2" does not exist
--- Attchinging to an already attached data node without 'if_not_exists'
+-- Attaching to an already attached data node without 'if_not_exists'
 SELECT * FROM attach_data_node('disttable', 'data_node_1', false);
 ERROR:  data node "data_node_1" is already attached to hypertable "disttable"
 \set ON_ERROR_STOP 1
@@ -575,27 +623,27 @@ SELECT * FROM attach_data_node('disttable', 'data_node_1', true);
 NOTICE:  data node "data_node_1" is already attached to hypertable "disttable", skipping
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
-             3 |                  2 | data_node_1
+             4 |                  2 | data_node_1
 (1 row)
 
--- Creating a distributed hypertable without any data nodes should fail
 DROP TABLE disttable;
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, data_nodes => '{ }');
+-- Creating a distributed hypertable without any data nodes should fail
+SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '{ }');
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  no data nodes can be assigned to "disttable"
 \set ON_ERROR_STOP 1
 SELECT * FROM delete_data_node('data_node_1', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server data_node_1
+NOTICE:  drop cascades to 2 other objects
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM show_data_nodes();
- data_node_name | host | port | dbname 
-----------------+------+------+--------
+SELECT * FROM timescaledb_information.data_node;
+ node_name | owner | options | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-----------+-------+---------+---------+-----------------+-----------------+-----------------
 (0 rows)
 
 SELECT * FROM test.show_subtables('disttable');
@@ -619,15 +667,20 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (0 rows)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+-- No data nodes remain, so should fail
+SELECT * FROM create_distributed_hypertable('disttable', 'time');
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  no data nodes can be assigned to "disttable"
 \set ON_ERROR_STOP 1
 DROP DATABASE IF EXISTS data_node_3;
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_3 | localhost | 15432 | data_node_3 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
 -- Bring down the database but UserMapping should still be there
@@ -643,42 +696,56 @@ DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_4;
 DROP SERVER data_node_3 CASCADE;
-NOTICE:  drop cascades to user mapping for super_user on server data_node_3
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
 -- there should be no data nodes
-SELECT * FROM show_data_nodes();
- data_node_name | host | port | dbname 
-----------------+------+------+--------
+SELECT * FROM timescaledb_information.data_node;
+ node_name | owner | options | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-----------+-------+---------+---------+-----------------+-----------------+-----------------
 (0 rows)
 
 -- let's add some
-SELECT * FROM add_data_node('data_node_1', database => 'data_node_1');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_1 | localhost | 15432 | data_node_1 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', database => 'data_node_2');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_2 | localhost | 15432 | data_node_2 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3');
-  node_name  |   host    | port  |  database   |  username  | node_username | created 
--------------+-----------+-------+-------------+------------+---------------+---------
- data_node_3 | localhost | 15432 | data_node_3 | super_user | super_user    | t
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
 DROP TABLE disttable;
 CREATE TABLE disttable(time timestamptz, device int, temp float);
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2,
+                                            replication_factor => 2,
+                                            data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             6 | public      | disttable  | t
+             7 | public      | disttable  | t
 (1 row)
 
--- Create some chunks on all the data nodes
+-- Create some chunks on all the data_nodes
 INSERT INTO disttable VALUES
        ('2019-02-02 10:45', 1, 23.4),
        ('2019-05-23 10:45', 4, 14.9),
@@ -686,25 +753,25 @@ INSERT INTO disttable VALUES
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_6_5_dist_chunk | 
- _timescaledb_internal._hyper_6_6_dist_chunk | 
- _timescaledb_internal._hyper_6_7_dist_chunk | 
+ _timescaledb_internal._hyper_7_5_dist_chunk | 
+ _timescaledb_internal._hyper_7_6_dist_chunk | 
+ _timescaledb_internal._hyper_7_7_dist_chunk | 
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       
 ----+---------------+-----------------------+-----------------------
-  5 |             6 | _timescaledb_internal | _hyper_6_5_dist_chunk
-  6 |             6 | _timescaledb_internal | _hyper_6_6_dist_chunk
-  7 |             6 | _timescaledb_internal | _hyper_6_7_dist_chunk
+  5 |             7 | _timescaledb_internal | _hyper_7_5_dist_chunk
+  6 |             7 | _timescaledb_internal | _hyper_7_6_dist_chunk
+  7 |             7 | _timescaledb_internal | _hyper_7_7_dist_chunk
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_1 | f
-             6 |                  1 | data_node_2 | f
-             6 |                  1 | data_node_3 | f
+             7 |                  1 | data_node_1 | f
+             7 |                  1 | data_node_2 | f
+             7 |                  1 | data_node_3 | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -714,29 +781,29 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
         5 |             1 | data_node_2
         6 |             2 | data_node_2
         6 |             1 | data_node_3
-        7 |             2 | data_node_3
         7 |             2 | data_node_1
+        7 |             3 | data_node_2
 (6 rows)
 
 -- Add additional hypertable
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
-SELECT * FROM create_distributed_hypertable('disttable_2', 'time', replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
+SELECT * FROM create_distributed_hypertable('disttable_2', 'time', 'device', 2, replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-             7 | public      | disttable_2 | t
+             8 | public      | disttable_2 | t
 (1 row)
 
 CREATE TABLE devices(device int, name text);
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_1 | f
-             6 |                  1 | data_node_2 | f
-             6 |                  1 | data_node_3 | f
-             7 |                  2 | data_node_1 | f
-             7 |                  2 | data_node_2 | f
-             7 |                  2 | data_node_3 | f
+             7 |                  1 | data_node_1 | f
+             7 |                  1 | data_node_2 | f
+             7 |                  1 | data_node_3 | f
+             8 |                  2 | data_node_1 | f
+             8 |                  2 | data_node_2 | f
+             8 |                  2 | data_node_3 | f
 (6 rows)
 
 -- Block one data node for specific hypertable
@@ -757,12 +824,12 @@ NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "d
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_2 | f
-             6 |                  1 | data_node_3 | f
-             7 |                  2 | data_node_2 | f
-             7 |                  2 | data_node_3 | f
-             6 |                  1 | data_node_1 | t
-             7 |                  2 | data_node_1 | t
+             7 |                  1 | data_node_2 | f
+             7 |                  1 | data_node_3 | f
+             8 |                  2 | data_node_2 | f
+             8 |                  2 | data_node_3 | f
+             7 |                  1 | data_node_1 | t
+             8 |                  2 | data_node_1 | t
 (6 rows)
 
 -- insert more data
@@ -778,14 +845,14 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
         5 |             1 | data_node_2
         6 |             2 | data_node_2
         6 |             1 | data_node_3
-        7 |             2 | data_node_3
         7 |             2 | data_node_1
-        8 |             3 | data_node_3
-        8 |             3 | data_node_2
-        9 |             4 | data_node_2
-        9 |             4 | data_node_3
-       10 |             5 | data_node_3
-       10 |             5 | data_node_2
+        7 |             3 | data_node_2
+        8 |             4 | data_node_2
+        8 |             2 | data_node_3
+        9 |             3 | data_node_3
+        9 |             5 | data_node_2
+       10 |             6 | data_node_2
+       10 |             4 | data_node_3
 (12 rows)
 
 -- some ERROR cases
@@ -795,9 +862,9 @@ SELECT * FROM block_new_chunks('data_node_2');
 ERROR:  blocking new chunks on data node "data_node_2" risks making new data for hypertable "disttable" under-replicated
 -- can't block/allow non-existing data node
 SELECT * FROM block_new_chunks('data_node_12345', 'disttable');
-ERROR:  data node "data_node_12345" is not attached to hypertable "disttable"
+ERROR:  server "data_node_12345" does not exist
 SELECT * FROM allow_new_chunks('data_node_12345', 'disttable');
-ERROR:  data node "data_node_12345" is not attached to hypertable "disttable"
+ERROR:  server "data_node_12345" does not exist
 -- NULL data node
 SELECT * FROM block_new_chunks(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
@@ -838,12 +905,12 @@ WARNING:  new data for hypertable "disttable_2" will be under-replicated due to 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_1 | t
-             7 |                  2 | data_node_1 | t
-             6 |                  1 | data_node_2 | t
-             7 |                  2 | data_node_2 | t
-             6 |                  1 | data_node_3 | t
-             7 |                  2 | data_node_3 | t
+             7 |                  1 | data_node_1 | t
+             8 |                  2 | data_node_1 | t
+             7 |                  1 | data_node_2 | t
+             8 |                  2 | data_node_2 | t
+             7 |                  1 | data_node_3 | t
+             8 |                  2 | data_node_3 | t
 (6 rows)
 
 \set ON_ERROR_STOP 0
@@ -851,7 +918,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
 ERROR:  no available data nodes (detached or blocked for new chunks) for hypertable "disttable"
 \set ON_ERROR_STOP 1
--- unblock serves for all hypertables
+-- unblock data nodes for all hypertables
 SELECT * FROM allow_new_chunks('data_node_1');
  allow_new_chunks 
 ------------------
@@ -873,12 +940,12 @@ SELECT * FROM allow_new_chunks('data_node_3');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_1 | f
-             7 |                  2 | data_node_1 | f
-             6 |                  1 | data_node_2 | f
-             7 |                  2 | data_node_2 | f
-             6 |                  1 | data_node_3 | f
-             7 |                  2 | data_node_3 | f
+             7 |                  1 | data_node_1 | f
+             8 |                  2 | data_node_1 | f
+             7 |                  1 | data_node_2 | f
+             8 |                  2 | data_node_2 | f
+             7 |                  1 | data_node_3 | f
+             8 |                  2 | data_node_3 | f
 (6 rows)
 
 -- Detach should work b/c disttable_2 has no data
@@ -891,11 +958,11 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
 \set ON_ERROR_STOP 0
 -- can't detach non-existing data node
 SELECT * FROM detach_data_node('data_node_12345', 'disttable');
-ERROR:  data node "data_node_12345" is not attached to hypertable "disttable"
+ERROR:  server "data_node_12345" does not exist
 -- NULL data node
 SELECT * FROM detach_data_node(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
--- Can't detach data_node_1 b/c it contains data for disttable
+-- Can't detach data node_1 b/c it contains data for disttable
 SELECT * FROM detach_data_node('data_node_1');
 ERROR:  detaching data node "data_node_1" failed because it contains chunks for hypertable "disttable"
 -- can't detach already detached data node
@@ -921,12 +988,12 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
    foreign_table_name   | foreign_server_name 
 ------------------------+---------------------
- _hyper_6_10_dist_chunk | data_node_3
- _hyper_6_5_dist_chunk  | data_node_1
- _hyper_6_6_dist_chunk  | data_node_2
- _hyper_6_7_dist_chunk  | data_node_3
- _hyper_6_8_dist_chunk  | data_node_3
- _hyper_6_9_dist_chunk  | data_node_2
+ _hyper_7_10_dist_chunk | data_node_2
+ _hyper_7_5_dist_chunk  | data_node_1
+ _hyper_7_6_dist_chunk  | data_node_2
+ _hyper_7_7_dist_chunk  | data_node_1
+ _hyper_7_8_dist_chunk  | data_node_2
+ _hyper_7_9_dist_chunk  | data_node_3
 (6 rows)
 
 -- force detach data node with data
@@ -945,17 +1012,18 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
         5 |             1 | data_node_2
         6 |             2 | data_node_2
         7 |             2 | data_node_1
-        8 |             3 | data_node_2
-        9 |             4 | data_node_2
-       10 |             5 | data_node_2
-(7 rows)
+        7 |             3 | data_node_2
+        8 |             4 | data_node_2
+        9 |             5 | data_node_2
+       10 |             6 | data_node_2
+(8 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             6 |                  1 | data_node_1 | f
-             7 |                  2 | data_node_1 | f
-             6 |                  1 | data_node_2 | f
+             7 |                  1 | data_node_1 | f
+             8 |                  2 | data_node_1 | f
+             7 |                  1 | data_node_2 | f
 (3 rows)
 
 -- detached data_node_3 should not show up any more
@@ -964,18 +1032,18 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
    foreign_table_name   | foreign_server_name 
 ------------------------+---------------------
- _hyper_6_10_dist_chunk | data_node_2
- _hyper_6_5_dist_chunk  | data_node_1
- _hyper_6_6_dist_chunk  | data_node_2
- _hyper_6_7_dist_chunk  | data_node_1
- _hyper_6_8_dist_chunk  | data_node_2
- _hyper_6_9_dist_chunk  | data_node_2
+ _hyper_7_10_dist_chunk | data_node_2
+ _hyper_7_5_dist_chunk  | data_node_1
+ _hyper_7_6_dist_chunk  | data_node_2
+ _hyper_7_7_dist_chunk  | data_node_1
+ _hyper_7_8_dist_chunk  | data_node_2
+ _hyper_7_9_dist_chunk  | data_node_2
 (6 rows)
 
 \set ON_ERROR_STOP 0
 -- detaching data node with last data replica should ERROR even when forcing
-SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
-ERROR:  detaching data node "data_node_2" would mean a data-loss for hypertable "disttable" since data node has the only data replica
+SELECT * FROM detach_data_node('server_2', 'disttable', true);
+ERROR:  server "server_2" does not exist
 \set ON_ERROR_STOP 1
 -- drop all chunks
 SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
@@ -998,29 +1066,40 @@ WARNING:  new data for hypertable "disttable" will be under-replicated due to de
                 1
 (1 row)
 
--- Need explicit password for non-super users to connect
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 -- Let's add more data nodes
-SELECT * FROM add_data_node('data_node_4', database => 'data_node_4', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
--------------+-----------+-------+-------------+----------------------+----------------------+---------
- data_node_4 | localhost | 15432 | data_node_4 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_4"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_4 | localhost | 15432 | data_node_4 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_5', database => 'data_node_5', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
-  node_name  |   host    | port  |  database   |       username       |    node_username     | created 
--------------+-----------+-------+-------------+----------------------+----------------------+---------
- data_node_5 | localhost | 15432 | data_node_5 | default_cluster_user | default_cluster_user | t
+SELECT * FROM add_data_node('data_node_5', database => 'data_node_5',
+                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_5"
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_5 | localhost | 15432 | data_node_5 | t            | t                | t
 (1 row)
 
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER data_node_4 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
-CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER data_node_5 OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+-- Create table as super user
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
+-- LIMITATION: currently, even superuser require user mappings
+CREATE USER MAPPING FOR :ROLE_CLUSTER_SUPERUSER  SERVER data_node_4
+OPTIONS (user :'ROLE_CLUSTER_SUPERUSER', password :'ROLE_CLUSTER_SUPERUSER_PASS');
+CREATE USER MAPPING FOR :ROLE_CLUSTER_SUPERUSER  SERVER data_node_5
+OPTIONS (user :'ROLE_CLUSTER_SUPERUSER', password :'ROLE_CLUSTER_SUPERUSER_PASS');
 SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-             8 | public      | disttable_3 | t
+             9 | public      | disttable_3 | t
 (1 row)
 
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -1029,17 +1108,17 @@ SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_f
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-             9 | public      | disttable_4 | t
+            10 | public      | disttable_4 | t
 (1 row)
 
 \set ON_ERROR_STOP 0
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
-ERROR:  permission denied for hypertable "disttable_3"
+ERROR:  must be owner of hypertable "disttable_3"
 SELECT * FROM block_new_chunks('data_node_4', 'disttable_3');
-ERROR:  permission denied for hypertable "disttable_3"
+ERROR:  must be owner of hypertable "disttable_3"
 SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
-ERROR:  permission denied for hypertable "disttable_3"
+ERROR:  must be owner of hypertable "disttable_3"
 \set ON_ERROR_STOP 1
 -- detach table(s) where user has permissions, otherwise show NOTICE
 SELECT * FROM detach_data_node('data_node_4');
@@ -1050,30 +1129,40 @@ NOTICE:  skipping hypertable "disttable_3" due to missing permissions
 (1 row)
 
 -- Cleanup
-RESET ROLE;
 SELECT * FROM delete_data_node('data_node_1', cascade => true, force =>true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_1"
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to deleting data node "data_node_1"
-NOTICE:  drop cascades to user mapping for super_user on server data_node_1
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2', cascade => true, force =>true);
-NOTICE:  drop cascades to user mapping for super_user on server data_node_2
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_3', cascade => true, force =>true);
-NOTICE:  drop cascades to user mapping for super_user on server data_node_3
+NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
  delete_data_node 
 ------------------
  t
 (1 row)
 
+\set ON_ERROR_STOP 0
+-- Cannot delete a data node which is attached to a table that we don't
+-- have owner permissions on
+SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
+ERROR:  permission denied for hypertable "disttable_3"
+SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
+ERROR:  permission denied for hypertable "disttable_3"
+\set ON_ERROR_STOP 1
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+DROP TABLE disttable_3;
+-- Now we should be able to delete the data nodes
 SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
 NOTICE:  drop cascades to 2 other objects
  delete_data_node 
@@ -1082,7 +1171,6 @@ NOTICE:  drop cascades to 2 other objects
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
-WARNING:  new data for hypertable "disttable_3" will be under-replicated due to deleting data node "data_node_5"
 WARNING:  new data for hypertable "disttable_4" will be under-replicated due to deleting data node "data_node_5"
 NOTICE:  drop cascades to 2 other objects
  delete_data_node 

@@ -29,28 +29,29 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
-    local_user             REGROLE = NULL,
-    remote_user            NAME = NULL,
     password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL,
     bootstrap_password     TEXT = NULL
-) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
+) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
+                server_created BOOL, database_created BOOL, extension_created BOOL)
 AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
-NOTICE:  remote node database "db_remote_txn" already exists, skipping
- server_name |   host    | port  |   database    |  username  | server_username | created 
--------------+-----------+-------+---------------+------------+-----------------+---------
- loopback    | localhost | 15432 | db_remote_txn | super_user | super_user      | t
+NOTICE:  adding user mapping for "super_user" to connect to "loopback"
+NOTICE:  database "db_remote_txn" already exists on data node, skipping
+ server_name |   host    | port  |   database    | server_created | database_created | extension_created 
+-------------+-----------+-------+---------------+----------------+------------------+-------------------
+ loopback    | localhost | 15432 | db_remote_txn | t              | f                | f
 (1 row)
 
 SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
-NOTICE:  remote node database "db_remote_txn" already exists, skipping
- server_name |   host    | port  |   database    |  username  | server_username | created 
--------------+-----------+-------+---------------+------------+-----------------+---------
- loopback2   | localhost | 15432 | db_remote_txn | super_user | super_user      | t
+NOTICE:  adding user mapping for "super_user" to connect to "loopback2"
+NOTICE:  database "db_remote_txn" already exists on data node, skipping
+ server_name |   host    | port  |   database    | server_created | database_created | extension_created 
+-------------+-----------+-------+---------------+----------------+------------------+-------------------
+ loopback2   | localhost | 15432 | db_remote_txn | t              | f                | f
 (1 row)
 
 -- ===================================================================
@@ -58,25 +59,25 @@ NOTICE:  remote node database "db_remote_txn" already exists, skipping
 -- ===================================================================
 CREATE SCHEMA "S 1";
 CREATE TABLE "S 1"."T 1" (
-	"C 1" int NOT NULL,
-	c2 int NOT NULL,
-	c3 text,
-	c4 timestamptz,
-	c5 timestamp,
-	c6 varchar(10),
-	c7 char(10),
-	CONSTRAINT t1_pkey PRIMARY KEY ("C 1")
+    "C 1" int NOT NULL,
+    c2 int NOT NULL,
+    c3 text,
+    c4 timestamptz,
+    c5 timestamp,
+    c6 varchar(10),
+    c7 char(10),
+    CONSTRAINT t1_pkey PRIMARY KEY ("C 1")
 );
 ANALYZE "S 1"."T 1";
 INSERT INTO "S 1"."T 1"
-	SELECT id,
-	       id % 10,
-	       to_char(id, 'FM00000'),
-	       '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
-	       '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
-	       id % 10,
-	       id % 10
-	FROM generate_series(1, 1000) id;
+    SELECT id,
+           id % 10,
+           to_char(id, 'FM00000'),
+           '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
+           '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
+           id % 10,
+           id % 10
+    FROM generate_series(1, 1000) id;
 \set ON_ERROR_STOP 0
 SELECT test_remote_txn_persistent_record('loopback');
  test_remote_txn_persistent_record 
@@ -129,7 +130,7 @@ COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-commit', 'loopback');
+    SELECT remote_node_killer_set_event('pre-commit', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -159,7 +160,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 (1 row)
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
+    SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -188,7 +189,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --fail the connection before the abort
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT remote_node_killer_set_event('pre-abort', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -290,7 +291,7 @@ COMMIT;
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -322,7 +323,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 (1 row)
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -370,7 +371,7 @@ SELECT count(*) from _timescaledb_catalog.remote_txn;
 --the following only breaks stuff in post-commit so commit should succeed
 --but leave transaction in an unresolved state.
 BEGIN;
-	SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
+    SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -405,7 +406,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --this fails because heal cannot run inside txn block
 BEGIN;
-	SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+    SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 ERROR:  remote_txn_heal_data_node cannot run inside a transaction block
 COMMIT;
 select count(*) from _timescaledb_catalog.remote_txn;
@@ -441,7 +442,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 (1 row)
 
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
+    SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -500,7 +501,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 (1 row)
 
 BEGIN;
-	SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
+    SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -643,7 +644,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --below will fail the abort and thus ROLLBACK TRANSACTION will never be called leaving
 --a prepared_xact that should be rolled back by heal server
 BEGIN;
-	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT remote_node_killer_set_event('pre-abort', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -717,15 +718,15 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-
  
 (1 row)
 
-	SAVEPOINT save_1;
-    	SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SAVEPOINT save_1;
+        SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-	ROLLBACK TO SAVEPOINT save_1;
+    ROLLBACK TO SAVEPOINT save_1;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -755,7 +756,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --test comm error in subtrans abort
 BEGIN;
-	SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
+    SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
  remote_node_killer_set_event 
 ------------------------------
  
@@ -775,15 +776,15 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-
  
 (1 row)
 
-	SAVEPOINT save_1;
-    	SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SAVEPOINT save_1;
+        SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
  
 (1 row)
 
-	ROLLBACK TO SAVEPOINT save_1;
+    ROLLBACK TO SAVEPOINT save_1;
 WARNING:  kill event: subxact-abort
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: server closed the connection unexpectedly

@@ -2,10 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 -- This test sets explicit UUIDs on the frontends to guarantee stable test output
 GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -43,14 +40,12 @@ SET client_min_messages TO NOTICE;
 \c frontend_b
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
-SET client_min_messages TO NOTICE;
-ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '87c235e9-d857-4f16-b59f-7fbac9b87664', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
 
 -- Connect back to our original database and add a backend to it
@@ -58,36 +53,36 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '77348176-09da-4a80-bc78-e31bdf5e63ec', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
 
 -- We now have two frontends with one backend each and one undistributed database
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 
 -- Adding backend from a different group as a backend
-SELECT * FROM add_data_node('server_b', database => 'backend_3', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_b', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 
 -- Adding a valid backend target but to an existing backend
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 \c backend_2
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \set ON_ERROR_STOP 1
 
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 
 \c backend_2
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -108,7 +103,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
@@ -122,9 +117,9 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => 'pass', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => 'pass', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
 
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
