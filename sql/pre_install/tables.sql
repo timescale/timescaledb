@@ -268,7 +268,7 @@ CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx
 
 -- per cagg copy of invalidation log
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
-    materialization_id INTEGER PRIMARY KEY
+    materialization_id INTEGER 
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
         ON DELETE CASCADE,
     lowest_modified_value BIGINT NOT NULL,
