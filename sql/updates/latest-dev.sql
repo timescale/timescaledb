@@ -3,7 +3,7 @@ ALTER TABLE _timescaledb_catalog.telemetry_metadata ALTER COLUMN include_in_tele
 ALTER TABLE _timescaledb_catalog.telemetry_metadata RENAME TO metadata;
 ALTER INDEX _timescaledb_catalog.telemetry_metadata_pkey RENAME TO metadata_pkey;
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
-    materialization_id INTEGER PRIMARY KEY
+    materialization_id INTEGER
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
         ON DELETE CASCADE,
     lowest_modified_value BIGINT NOT NULL,
