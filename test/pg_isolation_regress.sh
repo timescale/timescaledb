@@ -56,6 +56,9 @@ if [[ -z ${TESTS} ]]; then
                 fi
             done
         done < ${ISOLATION_TEST_SCHEDULE}
+        # no longer needed as the contents has been parsed above
+        # and unsetting it helps take a shortcut later
+        ISOLATION_TEST_SCHEDULE=
     else
         PG_ISOLATION_REGRESS_OPTS="${PG_ISOLATION_REGRESS_OPTS} --schedule=${ISOLATION_TEST_SCHEDULE}"
     fi
@@ -74,6 +77,8 @@ else
             TESTS="${TESTS} $t"
         fi
     done
+    # When TESTS is specified the passed tests scheduler is not used and emptying it helps take a shortcut later
+    ISOLATION_TEST_SCHEDULE=
 fi
 
 if [[ -z ${TESTS} ]] && [[ -z ${ISOLATION_TEST_SCHEDULE} ]]; then
