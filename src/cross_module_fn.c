@@ -349,6 +349,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.remove_reorder_policy = error_no_default_fn_pg_enterprise,
 	.create_upper_paths_hook = NULL,
+	.set_rel_pathlist_hook = NULL,
 	.gapfill_marker = error_no_default_fn_pg_community,
 	.gapfill_int16_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_int32_time_bucket = error_no_default_fn_pg_community,
