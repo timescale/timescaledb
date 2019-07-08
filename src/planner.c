@@ -30,7 +30,7 @@
 
 #include <catalog/pg_constraint.h>
 #include "compat.h"
-#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
 #endif
 #include "compat-msvc-exit.h"
@@ -297,7 +297,7 @@ is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
 static Oid
 get_parentoid(PlannerInfo *root, Index rti)
 {
-#if PG96 || PG10
+#if PG11_LT
 	ListCell *lc;
 	foreach (lc, root->append_rel_list)
 	{
@@ -466,7 +466,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 
 		ts_plan_expand_hypertable_chunks(ht, root, relation_objectid, inhparent, rel);
-#if !PG96 && !PG10
+#if PG11_GE
 		setup_append_rel_array(root);
 #endif
 
@@ -605,7 +605,7 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 }
 
 static void
-#if PG96 || PG10
+#if PG11_LT
 timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 								  RelOptInfo *output_rel)
 {

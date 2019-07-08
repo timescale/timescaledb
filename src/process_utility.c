@@ -35,7 +35,7 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include "compat.h"
-#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/pg_constraint_fn.h>
 #endif
@@ -414,7 +414,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
  * Given this change it seemed easier to take rewrite this completely for 11 to
  * take advantage of the new changes.
  */
-#if PG96 || PG10
+#if PG11_LT
 typedef struct VacuumCtx
 {
 	VacuumStmt *stmt;
@@ -810,7 +810,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
  * so we can't simply #define OBJECT_TABLESPACE ACL_OBJECT_TABLESPACE and have
  * things work correctly for previous versions.
  */
-#if PG96 || PG10
+#if PG11_LT
 		case ACL_OBJECT_TABLESPACE:
 #else
 		case OBJECT_TABLESPACE:
@@ -2474,7 +2474,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
-#if !PG96
+#if PG10_GE
 		case AT_AddIdentity:
 		case AT_SetIdentity:
 		case AT_DropIdentity:
@@ -2518,12 +2518,12 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddColumnToView:		   /* only used with views */
 		case AT_AlterColumnGenericOptions: /* only used with foreign tables */
 		case AT_GenericOptions:			   /* only used with foreign tables */
-#if !PG96 && !PG10
+#if PG11_GE
 		case AT_ReAddDomainConstraint: /* We should handle this in future,
 										* new subset of constraints in PG11
 										* currently not hit in test code */
 #endif
-#if !PG96
+#if PG10_GE
 		case AT_AttachPartition: /* handled in
 								  * process_altertable_start_table but also
 								  * here as failsafe */
@@ -2678,7 +2678,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
 						"aggregate")));
 
-#if !PG96
+#if PG10_GE
 	return ts_cm_functions->process_cagg_viewstmt(stmt,
 												  args->query_string,
 												  args->pstmt,
@@ -3005,13 +3005,13 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
  */
 static void
 timescaledb_ddl_command_start(
-#if !PG96
+#if PG10_GE
 	PlannedStmt *pstmt,
 #else
 	Node *parsetree,
 #endif
 	const char *query_string, ProcessUtilityContext context, ParamListInfo params,
-#if !PG96
+#if PG10_GE
 	QueryEnvironment *queryEnv,
 #endif
 	DestReceiver *dest, char *completion_tag)
@@ -3022,7 +3022,7 @@ timescaledb_ddl_command_start(
 		.params = params,
 		.dest = dest,
 		.completion_tag = completion_tag,
-#if !PG96
+#if PG10_GE
 		.pstmt = pstmt,
 		.parsetree = pstmt->utilityStmt,
 		.queryEnv = queryEnv,

@@ -1591,7 +1591,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Is this the right kind of relation? */
 	switch (get_rel_relkind(table_relid))
 	{
-#if PG10
+#if PG10_GE
 		case RELKIND_PARTITIONED_TABLE:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),

@@ -18,7 +18,7 @@
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_namespace.h>
 #include "compat.h"
-#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
 #include <catalog/pg_inherits_fn.h>
 #endif
@@ -27,10 +27,8 @@
 #include <catalog/pg_type.h>
 #include <utils/errcodes.h>
 #include <utils/syscache.h>
-#if !(PG96 || PG10)
+#if PG11_GE
 #include <partitioning/partbounds.h>
-#endif
-#if !(PG96 || PG10)
 #include <optimizer/cost.h>
 #endif
 
@@ -743,7 +741,7 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		return get_explicit_chunk_oids(ctx, ht);
 }
 
-#if !(PG96 || PG10)
+#if PG11_GE
 
 /*
  * Create partition expressions for a hypertable.
@@ -851,7 +849,7 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 	hyper_rel->boundinfo = palloc(sizeof(PartitionBoundInfoData));
 }
 
-#endif /* !(PG96 || PG10) */
+#endif /* PG11_GE */
 
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
@@ -905,7 +903,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	root->simple_rte_array =
 		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
 
-#if !(PG96 || PG10)
+#if PG11_GE
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
@@ -955,7 +953,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		root->simple_rte_array[child_rtindex] = childrte;
 		root->simple_rel_array[child_rtindex] = NULL;
 
-#if !PG96
+#if PG10_GE
 		Assert(childrte->relkind != RELKIND_PARTITIONED_TABLE);
 #endif
 
@@ -979,7 +977,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	heap_close(oldrelation, NoLock);
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-#if !PG96 && !PG10
+#if PG11_GE
 	/*
 	 * PG11 introduces a separate array to make looking up children faster, see:
 	 * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.

@@ -16,7 +16,7 @@
 #include "trigger.h"
 #include "compat.h"
 
-#if !PG96
+#if PG10_GE
 #include <parser/analyze.h>
 #endif
 
@@ -101,7 +101,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
 {
 	Chunk *chunk = arg;
 
-#if !PG96
+#if PG10_GE
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
 		ereport(ERROR,
@@ -146,7 +146,7 @@ ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
 }
 
-#if !PG96
+#if PG10_GE
 static bool
 check_for_transition_table(Trigger *trigger, void *arg)
 {
@@ -168,7 +168,7 @@ ts_relation_has_transition_table_trigger(Oid relid)
 {
 	bool found = false;
 
-#if !PG96
+#if PG10_GE
 	for_each_trigger(relid, check_for_transition_table, &found);
 #endif
 

@@ -192,7 +192,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
 	rri->ri_junkFilter = rri_orig->ri_junkFilter;
 	rri->ri_projectReturning = rri_orig->ri_projectReturning;
-#if PG96 || PG10
+#if PG11_LT
 	ResultRelInfo_OnConflictProjInfoCompat(rri) = ResultRelInfo_OnConflictProjInfoCompat(rri_orig);
 	ResultRelInfo_OnConflictWhereCompat(rri) = ResultRelInfo_OnConflictWhereCompat(rri_orig);
 #else
@@ -480,7 +480,7 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
 	}
-#if !PG96 && !PG10
+#if PG11_GE
 	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;
 #endif
 }

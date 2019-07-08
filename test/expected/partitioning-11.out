@@ -5,7 +5,7 @@
 \set ON_ERROR_STOP 0
 CREATE TABLE partitioned_ht_create(time timestamptz, temp float, device int) PARTITION BY RANGE (time);
 SELECT create_hypertable('partitioned_ht_create', 'time');
-ERROR:  invalid relation type
+ERROR:  table "partitioned_ht_create" is already partitioned
 \set ON_ERROR_STOP 1
 -- Should expect an error when attaching a hypertable to a partition
 \set ON_ERROR_STOP 0
