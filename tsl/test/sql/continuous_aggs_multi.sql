@@ -88,8 +88,11 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 --now drop cagg_1, should still have materialization_invalidation_log
 drop view cagg_1 cascade;
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+--cagg_2 still exists
+select view_name from timescaledb_information.continuous_aggregates;
 drop table continuous_agg_test cascade;
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+select view_name from timescaledb_information.continuous_aggregates;
 
 --TEST4: invalidations that are copied over by cagg1 are not deleted by cagg2 refresh if
 -- they do not meet materialization invalidation threshold for cagg2.
@@ -133,4 +136,13 @@ refresh materialized view cagg_1;
 select * from cagg_1 order by 1;
 refresh materialized view cagg_2;
 select * from cagg_2 order by 1;
+
+--TEST5 2 inserts with the same value can be copied over to materialization invalidation log
+insert into continuous_agg_test values( 18, -2, 100); 
+insert into continuous_agg_test values( 18, -2, 100); 
+select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+refresh materialized view cagg_1;
+select * from cagg_1 where timed = 18 ;
+--copied over for cagg_2 to process later?
+select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
  
