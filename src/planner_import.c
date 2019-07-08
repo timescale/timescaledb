@@ -946,7 +946,7 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
 }
 
-#if PG96 || PG10
+#if PG11_LT
 /*
  * ExecSetTupleBound
  *
@@ -1188,7 +1188,7 @@ generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod, Oid
 
 	retval = makeNode(Param);
 	retval->paramkind = PARAM_EXEC;
-#if PG96 || PG10
+#if PG11_LT
 	retval->paramid = root->glob->nParamExec++;
 #else
 	retval->paramid = list_length(root->glob->paramExecTypes);

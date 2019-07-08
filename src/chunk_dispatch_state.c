@@ -120,7 +120,7 @@ chunk_dispatch_exec(CustomScanState *node)
 				ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
 			}
 		}
-#if defined(USE_ASSERT_CHECKING) && !PG96 && !PG10
+#if defined(USE_ASSERT_CHECKING) && PG11_GE
 		if (state->parent->mt_conflproj != NULL)
 		{
 			TupleTableSlot *slot = get_projection_info_slot_compat(

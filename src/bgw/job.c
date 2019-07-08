@@ -463,7 +463,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 #if !PG96
 		zero_guc("max_parallel_workers");
 #endif
-#if !(PG96 || PG10)
+#if PG11_GE
 		zero_guc("max_parallel_maintenance_workers");
 #endif
 
