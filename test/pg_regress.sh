@@ -52,6 +52,9 @@ if [[ -z ${TESTS} ]]; then
                 fi
             done
         done < ${TEST_SCHEDULE}
+        # no longer needed as the contents has been parsed above
+        # and unsetting it helps take a shortcut later
+        TEST_SCHEDULE=
     else
         PG_REGRESS_OPTS="${PG_REGRESS_OPTS} --schedule=${TEST_SCHEDULE}"
     fi
@@ -70,6 +73,8 @@ else
             TESTS="${TESTS} $t"
         fi
     done
+    # When TESTS is specified the passed tests scheduler is not used and emptying it helps take a shortcut later
+    TEST_SCHEDULE=
 fi
 
 if [[ -z ${TESTS} ]] && [[ -z ${TEST_SCHEDULE} ]]; then
@@ -80,7 +85,8 @@ function cleanup() {
   rm -rf ${EXE_DIR}/sql/dump
   rm -rf ${TEST_TABLESPACE1_PATH}
   rm -rf ${TEST_TABLESPACE2_PATH}
-  rm -f ${TEST_OUTPUT_DIR}/.pg_init
+  rm -f ${CURRENT_DIR}/.pg_init
+  rm -f ${TEMP_SCHEDULE}
 }
 
 trap cleanup EXIT
