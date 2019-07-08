@@ -341,6 +341,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
 
+	if (ts_cm_functions->set_rel_pathlist_hook != NULL)
+		ts_cm_functions->set_rel_pathlist_hook(root, rel, rti, rte, ht);
+
 	if (!should_optimize_query(ht))
 		goto out_release;
 

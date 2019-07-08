@@ -19,3 +19,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 	}
 }
+
+void
+tsl_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
+						  Hypertable *ht)
+{
+}

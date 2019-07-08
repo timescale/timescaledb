@@ -74,6 +74,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,
 	.remove_reorder_policy = reorder_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
+	.set_rel_pathlist_hook = tsl_set_rel_pathlist_hook,
 	.gapfill_marker = gapfill_marker,
 	.gapfill_int16_time_bucket = gapfill_int16_time_bucket,
 	.gapfill_int32_time_bucket = gapfill_int32_time_bucket,
