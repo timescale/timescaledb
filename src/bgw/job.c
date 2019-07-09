@@ -9,9 +9,11 @@
 #include <access/xact.h>
 #include <pgstat.h>
 #include <utils/memutils.h>
+#include <utils/timestamp.h>
 #include <miscadmin.h>
 #include <storage/ipc.h>
 #include <tcop/tcopprot.h>
+#include <utils/builtins.h>
 
 #include "job.h"
 #include "scanner.h"
@@ -597,10 +599,23 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	BgwJob *updated_job = (BgwJob *) data;
 	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(tuple);
+	TimestampTz nowts, next_start;
 
 	ts_bgw_job_permission_check(updated_job);
+	/* when we update the schedule interval, modify the next start time as well*/
+	if (!DatumGetBool(DirectFunctionCall2(interval_eq,
+										  IntervalPGetDatum(&fd->schedule_interval),
+										  IntervalPGetDatum(&updated_job->fd.schedule_interval))))
+	{
+		nowts = GetCurrentTimestamp();
 
-	fd->schedule_interval = updated_job->fd.schedule_interval;
+		next_start = DatumGetTimestamp(
+			DirectFunctionCall2(timestamp_pl_interval,
+								TimestampGetDatum(nowts),
+								IntervalPGetDatum(&updated_job->fd.schedule_interval)));
+		ts_bgw_job_stat_update_next_start(updated_job, next_start);
+		fd->schedule_interval = updated_job->fd.schedule_interval;
+	}
 	fd->max_runtime = updated_job->fd.max_runtime;
 	fd->max_retries = updated_job->fd.max_retries;
 	fd->retry_period = updated_job->fd.retry_period;
