@@ -1745,7 +1745,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 static Datum
 ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 {
-	Oid table_relid = PG_GETARG_OID(0);
+	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Name time_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
 	Name space_dim_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
@@ -1766,7 +1766,8 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 									  /* partitioning func */
 									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
 	DimensionInfo *space_dim_info = NULL;
-	int32 replication_factor_in = PG_ARGISNULL(14) ? 0 : PG_GETARG_INT32(14);
+	bool replication_factor_is_null = PG_ARGISNULL(14);
+	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
 	int16 replication_factor;
 	ArrayType *data_nodes = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
 	ChunkSizingInfo chunk_sizing_info = {
@@ -1782,11 +1783,29 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	bool created;
 	uint32 flags = 0;
 
+	if (!OidIsValid(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid main_table: cannot be NULL")));
+
+	if (NULL == time_dim_name)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_column_name: cannot be NULL")));
+
 	if (NULL != data_nodes && ARR_NDIM(data_nodes) > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid data nodes format"),
 				 errhint("Specify a one-dimensional array of data nodes.")));
+
+	/*
+	 * Ensure replication factor is a valid value and convert it to
+	 * catalog table format
+	 */
+	replication_factor = validate_replication_factor(replication_factor_in,
+													 replication_factor_is_null,
+													 is_dist_call);
 
 	if (NULL != space_dim_name)
 	{
@@ -1794,9 +1813,16 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 
 		/* If the number of partitions isn't specified, default to setting it
 		 * to the number of data nodes */
-		if (num_partitions < 1 && NULL != data_nodes)
+		if (num_partitions < 1 && replication_factor > 0)
 		{
-			int num_nodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+			int num_nodes;
+
+			if (NULL == data_nodes)
+				num_nodes = list_length(ts_cm_functions->get_data_node_list());
+			else
+				num_nodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+
+			Assert(num_nodes >= 0);
 
 			if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
 				ereport(ERROR,
@@ -1824,23 +1850,6 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
 	if (migrate_data)
 		flags |= HYPERTABLE_CREATE_MIGRATE_DATA;
-
-	if (PG_ARGISNULL(0))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid main_table: cannot be NULL")));
-
-	if (PG_ARGISNULL(1))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid time_column_name: cannot be NULL")));
-
-	/*
-	 * Ensure replication factor is a valid value and convert it to
-	 * catalog table format
-	 */
-	replication_factor =
-		validate_replication_factor(replication_factor_in, PG_ARGISNULL(14), is_dist_call);
 
 	created = ts_hypertable_create_from_info(table_relid,
 											 INVALID_HYPERTABLE_ID,
