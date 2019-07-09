@@ -116,6 +116,16 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
+--alter the refresh interval and check if next_scheduled_run is altered
+ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1h');
+SELECT view_name, 
+case when next_scheduled_run - now() > '59 min'::interval 
+      and  next_scheduled_run - now() < '60 min'::interval then 'Success'
+     else 'Fail'
+end 
+ from 
+timescaledb_information.continuous_aggregate_stats;
+
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
