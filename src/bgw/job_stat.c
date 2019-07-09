@@ -373,6 +373,23 @@ ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
 }
 
+/* update next_start if job stat exists */
+TSDLLEXPORT bool
+ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start)
+{
+	bool found = false;
+	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
+	if (next_start == DT_NOBEGIN)
+		elog(ERROR, "cannot set next start to -infinity");
+
+	found = bgw_job_stat_scan_job_id(job->fd.id,
+									 bgw_job_stat_tuple_set_next_start,
+									 NULL,
+									 &next_start,
+									 RowExclusiveLock);
+	return found;
+}
+
 bool
 ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 {

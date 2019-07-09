@@ -162,6 +162,20 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
    1000 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
 (1 row)
 
+--alter the refresh interval and check if next_scheduled_run is altered
+ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1h');
+SELECT view_name, 
+case when next_scheduled_run - now() > '59 min'::interval 
+      and  next_scheduled_run - now() < '60 min'::interval then 'Success'
+     else 'Fail'
+end 
+ from 
+timescaledb_information.continuous_aggregate_stats;
+        view_name         |  case   
+--------------------------+---------
+ test_continuous_agg_view | Success
+(1 row)
+
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
  time_bucket | value 
