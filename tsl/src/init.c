@@ -86,7 +86,7 @@ error_not_supported(void)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function is not supported under the current PostgreSQL version %s",
-					PG_VERSION_STR),
+					PG_VERSION),
 			 errhint("Upgrade PostgreSQL to version 11 or greater.")));
 	pg_unreachable();
 }
@@ -98,13 +98,20 @@ error_not_supported_default_fn(PG_FUNCTION_ARGS)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function \"%s\" is not supported under the current PostgreSQL version %s",
 					get_func_name(fcinfo->flinfo->fn_oid),
-					PG_VERSION_STR),
+					PG_VERSION),
 			 errhint("Upgrade PostgreSQL to version 11 or greater.")));
 	pg_unreachable();
 }
 
 static void
 error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *data_nodes)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+static List *
+error_get_data_node_list_not_supported(void)
 {
 	error_not_supported();
 	pg_unreachable();
@@ -194,6 +201,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = error_not_supported_default_fn,
 	.create_chunk_on_data_nodes = error_create_chunk_on_data_nodes_not_supported,
 	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
+	.get_data_node_list = error_get_data_node_list_not_supported,
 	.timescaledb_fdw_handler = error_not_supported_default_fn,
 	.timescaledb_fdw_validator = empty_fn,
 	.set_rel_pathlist = NULL,
@@ -219,6 +227,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.hypertable_make_distributed = hypertable_make_distributed,
+	.get_data_node_list = data_node_get_node_name_list,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.remote_txn_id_in = remote_txn_id_in_pg,
