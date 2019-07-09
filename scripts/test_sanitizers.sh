@@ -93,7 +93,7 @@ docker exec -u postgres \
     -e CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O2" \
     -e PG_SOURCE_DIR="/usr/src/postgresql/" \
     timescaledb-san /bin/bash -c \
-    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1 && cd build && make"
+    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1 && cd build && make"
 
 wait_for_pg timescaledb-san
 
