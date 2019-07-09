@@ -444,6 +444,15 @@ hypertable_make_distributed_default_fn(Hypertable *ht, ArrayType *data_nodes)
 	error_no_default_fn_community();
 }
 
+static List *
+get_data_node_list_default_fn(void)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+
+	return NIL;
+}
+
 static void
 cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
 {
@@ -608,6 +617,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_chunk = error_no_default_fn_pg_community,
 	.create_chunk_on_data_nodes = create_chunk_on_data_nodes_default,
 	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
+	.get_data_node_list = get_data_node_list_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
 	.timescaledb_fdw_validator = empty_fn,
 	.cache_syscache_invalidate = cache_syscache_invalidate_default,

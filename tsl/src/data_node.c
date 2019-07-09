@@ -240,7 +240,6 @@ create_data_node_datum(FunctionCallInfo fcinfo, const char *node_name, const cha
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_dbname)] = CStringGetDatum(dbname);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_node_created)] =
 		BoolGetDatum(node_created);
-	BoolGetDatum(node_created);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_database_created)] =
 		BoolGetDatum(database_created);
 	values[AttrNumberGetAttrOffset(Anum_create_data_node_extension_created)] =

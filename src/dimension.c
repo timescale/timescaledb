@@ -1160,7 +1160,6 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	int32 num_slices_arg = PG_ARGISNULL(1) ? -1 : PG_GETARG_INT32(1);
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht;
 	int16 num_slices;
 
 	if (PG_ARGISNULL(0))
@@ -1168,7 +1167,8 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable name: cannot be NULL")));
 
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
+	/* Verify that we're dealing with a hypertable or fail */
+	ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
 	if (PG_ARGISNULL(1) || !IS_VALID_NUM_SLICES(num_slices_arg))
