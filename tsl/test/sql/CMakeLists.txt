@@ -83,6 +83,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
+    dist_query.sql
   )
   list(APPEND TEST_FILES_DEBUG
     data_node.sql
