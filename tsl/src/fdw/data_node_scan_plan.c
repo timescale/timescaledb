@@ -265,109 +265,6 @@ add_server_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, server_scan_path_create);
 }
 
-typedef struct FuncExprContext
-{
-	Index varno;
-	List *funcexprs;
-} FuncExprContext;
-
-static bool
-find_bucketing_exprs_walker(Node *node, FuncExprContext *ctx)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, FuncExpr))
-	{
-		FuncExpr *fexpr = (FuncExpr *) node;
-		FuncInfo *finfo = ts_func_cache_get_bucketing_func(fexpr->funcid);
-
-		if (NULL != finfo)
-		{
-			Relids relids = pull_varnos((Node *) fexpr->args);
-
-			if (bms_is_member(ctx->varno, relids))
-				ctx->funcexprs = lappend(ctx->funcexprs, fexpr);
-		}
-
-		return false;
-	}
-
-	return expression_tree_walker(node, find_bucketing_exprs_walker, (void *) ctx);
-}
-
-/*
- * Find function expressions that include a bucketing function.
- *
- * Given an expression tree, return a list of FuncExpr:s that reference a
- * bucketing function on the given relation (varno).
- */
-static List *
-find_bucketing_func_exprs(Node *expr, Index varno)
-{
-	FuncExprContext ctx = {
-		.varno = varno,
-		.funcexprs = NIL,
-	};
-
-	find_bucketing_exprs_walker(expr, &ctx);
-
-	return ctx.funcexprs;
-}
-
-/*
- * Get function expressions with the given attribute (column) as argument.
- *
- * Given a list of FuncExpr:s, return the subset that has the given attribute
- * as an argument.
- */
-static List *
-get_bucketing_func_exprs_by_attno(List *funcexprs, AttrNumber varattno)
-{
-	ListCell *lc;
-	List *result = NIL;
-
-	foreach (lc, funcexprs)
-	{
-		FuncExpr *funcexpr = lfirst(lc);
-		List *vars;
-		ListCell *lc_var;
-
-		Assert(IsA(funcexpr, FuncExpr));
-
-		vars = pull_var_clause((Node *) funcexpr->args, 0);
-
-		foreach (lc_var, vars)
-		{
-			Var *var = lfirst(lc_var);
-
-			if (var->varattno == varattno)
-			{
-				result = lappend(result, funcexpr);
-				break;
-			}
-		}
-	}
-
-	return result;
-}
-
-static void
-add_bucketing_exprs_for_dimension(Dimension *dim, RelOptInfo *hyper_rel, List *funcexprs,
-								  int partexpr_index)
-{
-	List *result;
-
-	if (!IS_OPEN_DIMENSION(dim))
-		return;
-
-	result = get_bucketing_func_exprs_by_attno(funcexprs, dim->column_attno);
-
-	if (NIL != result)
-		hyper_rel->partexprs[partexpr_index] =
-			list_concat(hyper_rel->partexprs[partexpr_index], result);
-}
-
 /*
  * Force GROUP BY aggregates to be pushed down.
  *
@@ -431,7 +328,6 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 					DataNodeChunkAssignments *scas)
 {
 	Dimension *dim;
-	List *targetlist = root->parse->targetList;
 	bool overlaps;
 
 	Assert(hs->num_dimensions >= 1);
@@ -454,31 +350,17 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 
 	overlaps = data_node_chunk_assignments_are_overlapping(scas, dim->fd.id);
 
-	if (overlaps)
+	if (!overlaps)
 	{
-		List *funcexprs;
-		int i;
-
-		/* When server chunk assignments are overlapping we require that the
-		 * GROUP BY covers all partitioning keys. To push down GROUP BYs with
-		 * bucketing, we need to also add the bucketing expressions as
-		 * partition key expressions. */
-		funcexprs = find_bucketing_func_exprs((Node *) targetlist, hyper_rel->relid);
-
-		if (NIL == funcexprs)
-			return;
-
-		for (i = 0; i < hs->num_dimensions; i++)
-			add_bucketing_exprs_for_dimension(&hs->dimensions[i], hyper_rel, funcexprs, i);
+		/* If server chunk assignments are non-overlapping along the "space"
+		 * dimension, we can treat this as a one-dimensional partitioned table
+		 * since any aggregate GROUP BY that includes the server-assignment
+		 * dimension is safe to execute independently on each server.
+		 */
+		Assert(NULL != dim);
+		hyper_rel->partexprs[0] = ts_dimension_get_partexprs(dim, hyper_rel->relid);
+		hyper_rel->part_scheme->partnatts = 1;
 	}
-
-	/* If server chunk assignments are non-overlapping along the "space"
-	 * dimension, we can treat this as a one-dimensional partitioned table
-	 * since any aggregate GROUP BY that includes the server-assignment
-	 * dimension is safe to execute independently on each server. */
-	Assert(NULL != dim);
-	hyper_rel->partexprs[0] = ts_dimension_get_partexprs(dim, hyper_rel->relid);
-	hyper_rel->part_scheme->partnatts = 1;
 }
 
 /*

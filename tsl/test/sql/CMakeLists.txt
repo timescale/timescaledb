@@ -51,6 +51,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "11")
   list(APPEND TEST_FILES
     chunk_api.sql
     timescaledb_fdw.sql
+    dist_query.sql
     partitionwise_distributed.sql
     hypertable_distributed.sql
     ddl_distributed.sql

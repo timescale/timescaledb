@@ -1,0 +1,202 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+\set TEST_BASE_NAME dist_query
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED",
+       format('%s/results/%s_results_repartitioned.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_REPARTITIONED"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD_1",
+       format('\! diff %s %s', :'TEST_RESULTS_REPARTITIONED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD_2"
+\gset
+\set PREFIX 'EXPLAIN (verbose, costs off)'
+\set TABLE_NAME 'hyper_repart'
+SET client_min_messages TO warning;
+\ir :TEST_LOAD_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Cleanup from other tests that might have created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
+SELECT * FROM add_data_node('data_node_1',
+                            database => 'data_node_1',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2',
+                            database => 'data_node_2',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_3',
+                            database => 'data_node_3',
+                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+(1 row)
+
+CREATE TABLE hyper (time TIMESTAMPTZ, device INT, temp FLOAT);
+CREATE TABLE hyper_repart (LIKE hyper);
+SELECT create_distributed_hypertable('hyper', 'time', 'device', 3,
+                                     chunk_time_interval => interval '18 hours');
+ create_distributed_hypertable 
+-------------------------------
+ (1,public,hyper,t)
+(1 row)
+
+SELECT create_distributed_hypertable('hyper_repart', 'time', 'device', 3,
+                                     chunk_time_interval => interval '18 hours');
+ create_distributed_hypertable 
+-------------------------------
+ (2,public,hyper_repart,t)
+(1 row)
+
+SELECT setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+INSERT INTO hyper
+SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 80
+FROM generate_series('2019-01-01'::timestamptz, '2019-01-04'::timestamptz, '1 minute') as t;
+-- Repartition the data set on one table so that we can compare
+-- queries on repartitioned and non-repartitioned tables
+INSERT INTO hyper_repart
+SELECT * FROM hyper
+WHERE time < '2019-01-02 05:10'::timestamptz;
+SELECT * FROM set_number_partitions('hyper_repart', 2);
+ set_number_partitions 
+-----------------------
+ 
+(1 row)
+
+INSERT INTO hyper_repart
+SELECT * FROM hyper
+WHERE time >= '2019-01-02 05:10'::timestamptz
+AND time < '2019-01-03 01:22'::timestamptz;
+SELECT * FROM set_number_partitions('hyper_repart', 5);
+ set_number_partitions 
+-----------------------
+ 
+(1 row)
+
+INSERT INTO hyper_repart
+SELECT * FROM hyper
+WHERE time >= '2019-01-03 01:22'::timestamptz;
+SELECT d.hypertable_id, d.id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.dimension d, _timescaledb_catalog.dimension_slice ds
+WHERE num_slices IS NOT NULL
+AND d.id = ds.dimension_id
+ORDER BY 1, 2, 3;
+ hypertable_id | id |     range_start      |      range_end      
+---------------+----+----------------------+---------------------
+             1 |  2 | -9223372036854775808 |           715827882
+             1 |  2 |            715827882 |          1431655764
+             1 |  2 |           1431655764 | 9223372036854775807
+             2 |  4 | -9223372036854775808 |          1073741823
+             2 |  4 | -9223372036854775808 |           715827882
+             2 |  4 | -9223372036854775808 |           429496729
+             2 |  4 |            429496729 |           858993458
+             2 |  4 |            715827882 |          1431655764
+             2 |  4 |            858993458 |          1288490187
+             2 |  4 |           1073741823 | 9223372036854775807
+             2 |  4 |           1288490187 |          1717986916
+             2 |  4 |           1431655764 | 9223372036854775807
+             2 |  4 |           1717986916 | 9223372036854775807
+(13 rows)
+
+-- Run the EXPLAINs
+SET enable_partitionwise_aggregate = ON;
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Bucketing not safe to push down on repartitioned table
+:PREFIX
+SELECT time_bucket('2 days', time) AS time, device, avg(temp)
+FROM :TABLE_NAME
+WHERE time BETWEEN '2019-01-01' AND '2019-01-03'
+GROUP BY 1,2
+ORDER BY 1,2;
+                                                                                                                                             QUERY PLAN                                                                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, avg(hyper_repart.temp)
+   Group Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
+   ->  Sort
+         Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, hyper_repart.temp
+         Sort Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
+         ->  Append
+               ->  Custom Scan (ServerScan) on public.hyper_repart
+                     Output: time_bucket('@ 2 days'::interval, hyper_repart."time"), hyper_repart.device, hyper_repart.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_2_17_dist_chunk, _hyper_2_16_dist_chunk, _hyper_2_22_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+               ->  Custom Scan (ServerScan) on public.hyper_repart hyper_repart_1
+                     Output: time_bucket('@ 2 days'::interval, hyper_repart_1."time"), hyper_repart_1.device, hyper_repart_1.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_2_18_dist_chunk, _hyper_2_19_dist_chunk, _hyper_2_23_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6, 7, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+               ->  Custom Scan (ServerScan) on public.hyper_repart hyper_repart_2
+                     Output: time_bucket('@ 2 days'::interval, hyper_repart_2."time"), hyper_repart_2.device, hyper_repart_2.temp
+                     Data node: data_node_3
+                     Chunks: _hyper_2_21_dist_chunk, _hyper_2_20_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+(22 rows)
+
+-- Query doesn't cover repartitioning boundary, so safe to push down
+-- bucketing
+:PREFIX
+SELECT time_bucket('2 days', time) AS time, device, avg(temp)
+FROM :TABLE_NAME
+WHERE time BETWEEN '2019-01-01' AND '2019-01-01 15:00'
+GROUP BY 1,2
+ORDER BY 1,2;
+                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
+   Sort Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
+   ->  Custom Scan (ServerScan)
+         Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, (avg(hyper_repart.temp))
+         Relations: Aggregate on (public.hyper_repart)
+         Data node: data_node_1
+         Chunks: _hyper_2_16_dist_chunk
+         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+   ->  Custom Scan (ServerScan)
+         Output: (time_bucket('@ 2 days'::interval, hyper_repart_1."time")), hyper_repart_1.device, (avg(hyper_repart_1.temp))
+         Relations: Aggregate on (public.hyper_repart)
+         Data node: data_node_2
+         Chunks: _hyper_2_18_dist_chunk
+         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+   ->  Custom Scan (ServerScan)
+         Output: (time_bucket('@ 2 days'::interval, hyper_repart_2."time")), hyper_repart_2.device, (avg(hyper_repart_2.temp))
+         Relations: Aggregate on (public.hyper_repart)
+         Data node: data_node_3
+         Chunks: _hyper_2_21_dist_chunk
+         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+(20 rows)
+
+-- Run the queries for each setting. Each setting's result is
+-- generated into its own file
+\set ECHO errors

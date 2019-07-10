@@ -1593,23 +1593,26 @@ SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                                                                            QUERY PLAN                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
-   ->  Custom Scan (ServerScan)
-         Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
-         Relations: Aggregate on (public.hyper)
-         Data node: data_node_1
-         Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
-         Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
-   ->  Custom Scan (ServerScan)
-         Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, (avg(hyper_1.temp))
-         Relations: Aggregate on (public.hyper)
-         Data node: data_node_2
-         Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
-         Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
-(14 rows)
+                                                                                                                                                  QUERY PLAN                                                                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Output: (date_trunc('month'::text, hyper."time")), hyper.device, avg(hyper.temp)
+   Group Key: (date_trunc('month'::text, hyper."time")), hyper.device
+   ->  Merge Append
+         Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper."time")), hyper.device, (PARTIAL avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Data node: data_node_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
+         ->  Custom Scan (ServerScan)
+               Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, (PARTIAL avg(hyper_1.temp))
+               Relations: Aggregate on (public.hyper)
+               Data node: data_node_2
+               Chunks: _hyper_1_2_dist_chunk, _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+               Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
+(17 rows)
 
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
