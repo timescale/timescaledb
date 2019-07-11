@@ -52,6 +52,8 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+	HYPERTABLE_COMPRESSION,
+	BGW_COMPRESS_CHUNKS_POLICY,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -1036,6 +1038,83 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 
 #define Natts_continuous_aggs_materialization_invalidation_log_idx                                 \
 	(_Anum_continuous_aggs_materialization_invalidation_log_idx_max - 1)
+
+#define HYPERTABLE_COMPRESSION_TABLE_NAME "hypertable_compression"
+typedef enum Anum_hypertable_compression
+{
+	Anum_hypertable_compression_hypertable_id = 1,
+	Anum_hypertable_compression_attname,
+	Anum_hypertable_compression_algo_id,
+	Anum_hypertable_compression_segmentby_column_index,
+	Anum_hypertable_compression_orderby_column_index,
+	Anum_hypertable_compression_orderby_asc,
+	Anum_hypertable_compression_orderby_nullsfirst,
+	_Anum_hypertable_compression_max,
+} Anum_hypertable_compression;
+
+#define Natts_hypertable_compression (_Anum_hypertable_compression_max - 1)
+
+typedef struct FormData_hypertable_compression
+{
+	int32 hypertable_id;
+	NameData attname;
+	int16 algo_id;
+	int16 segmentby_column_index;
+	int16 orderby_column_index;
+	bool orderby_asc;
+	bool orderby_nullsfirst;
+} FormData_hypertable_compression;
+
+typedef FormData_hypertable_compression *Form_hypertable_compression;
+
+enum
+{
+	HYPERTABLE_COMPRESSION_PKEY = 0,
+	_MAX_HYPERTABLE_COMPRESSION_INDEX,
+};
+typedef enum Anum_hypertable_compression_pkey
+{
+	Anum_hypertable_compression_pkey_hypertable_id = 1,
+	Anum_hypertable_compression_pkey_attname,
+	_Anum_hypertable_compression_pkey_max,
+} Anum_hypertable_compression_pkey;
+
+#define Natts_hypertable_compression_pkey (_Anum_hypertable_compression_pkey_max - 1)
+
+#define BGW_COMPRESS_CHUNKS_POLICY_TABLE_NAME "bgw_compress_chunks_policy"
+typedef enum Anum_bgw_compress_chunks_policy
+{
+	Anum_bgw_compress_chunks_policy_hypertable_id = 1,
+	Anum_bgw_compress_chunks_policy_older_than,
+	Anum_bgw_compress_chunks_policy_job_id,
+	_Anum_bgw_compress_chunks_policy_max,
+} Anum_bgw_compress_chunks_policy;
+
+#define Natts_bgw_compress_chunks_policy (_Anum_bgw_compress_chunks_policy_max - 1)
+
+typedef struct FormData_bgw_compress_chunks_policy
+{
+	int32 hypertable_id;
+	int64 older_than;
+	int16 job_id;
+} FormData_bgw_compress_chunks_policy;
+
+typedef FormData_bgw_compress_chunks_policy *Form_bgw_compress_chunks_policy;
+
+enum
+{
+	BGW_COMPRESS_CHUNKS_POLICY_HYPERTABLE_ID_JOB_ID_KEY = 0,
+	_MAX_BGW_COMPRESS_CHUNKS_POLICY_INDEX,
+};
+typedef enum Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key
+{
+	Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key_hypertable_id = 1,
+	Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key_job_id,
+	_Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key_max,
+} Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key;
+
+#define Natts_bgw_compress_chunks_policy_hypertable_id_job_id_key                                  \
+	(_Anum_bgw_compress_chunks_policy_hypertable_id_job_id_key_max - 1)
 
 /*
  * The maximum number of indexes a catalog table can have.

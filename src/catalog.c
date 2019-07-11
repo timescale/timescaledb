@@ -98,6 +98,14 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
 	},
+	[HYPERTABLE_COMPRESSION] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_COMPRESSION_TABLE_NAME,
+	},
+	[BGW_COMPRESS_CHUNKS_POLICY] = {
+		.schema_name = CONFIG_SCHEMA_NAME,
+		.table_name = BGW_COMPRESS_CHUNKS_POLICY_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -226,6 +234,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
             [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
         },
     },
+	[HYPERTABLE_COMPRESSION] = {
+		.length =  _MAX_HYPERTABLE_COMPRESSION_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_COMPRESSION_PKEY] = "hypertable_compression_pkey",
+		},
+	},
+	[BGW_COMPRESS_CHUNKS_POLICY] = {
+		.length = _MAX_BGW_COMPRESS_CHUNKS_POLICY_INDEX,
+		.names = (char *[]) {
+			[BGW_COMPRESS_CHUNKS_POLICY_HYPERTABLE_ID_JOB_ID_KEY] = "bgw_compress_chunks_policy_hypertable_id_job_id_key",
+		},
+	},
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -244,6 +264,8 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
+	[HYPERTABLE_COMPRESSION] = NULL,
+	[BGW_COMPRESS_CHUNKS_POLICY] = NULL,
 };
 
 typedef struct InternalFunctionDef
