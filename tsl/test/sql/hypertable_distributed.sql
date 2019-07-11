@@ -433,7 +433,7 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.hypertable_data_nod
 WHERE h.id = hdn.hypertable_id
 AND h.table_name = 'Param_Table';
 
-SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_1');
+SELECT * FROM attach_data_node('data_node_1', '"Table\\Schema"."Param_Table"');
 
 -- Show updated metadata after attach
 SELECT h.table_name, d.column_name, d.num_slices
@@ -447,7 +447,7 @@ AND h.table_name = 'Param_Table';
 
 -- Attach another data node but do not auto-repartition, i.e.,
 -- increase the number of slices.
-SELECT * FROM attach_data_node('"Table\\Schema"."Param_Table"', 'data_node_2', repartition => false);
+SELECT * FROM attach_data_node('data_node_2', '"Table\\Schema"."Param_Table"', repartition => false);
 
 -- Number of slices should not be increased
 SELECT h.table_name, d.column_name, d.num_slices
@@ -478,7 +478,7 @@ SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => 
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
 SELECT * FROM _timescaledb_catalog.dimension;
-SELECT * FROM attach_data_node('dimented_table', 'data_node_2');
+SELECT * FROM attach_data_node('data_node_2', 'dimented_table');
 
 SELECT * FROM _timescaledb_catalog.dimension;
 

@@ -656,8 +656,8 @@ data_node_add_without_dist_id(PG_FUNCTION_ARGS)
 Datum
 data_node_attach(PG_FUNCTION_ARGS)
 {
-	Oid table_id = PG_GETARG_OID(0);
-	const char *node_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1)->data;
+	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	Oid table_id = PG_GETARG_OID(1);
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	ForeignServer *fserver;
@@ -669,7 +669,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 	int num_nodes;
 	ListCell *lc;
 
-	if (PG_ARGISNULL(0))
+	if (PG_ARGISNULL(1))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable: cannot be NULL")));
