@@ -182,8 +182,8 @@ CREATE OR REPLACE FUNCTION delete_data_node(
 
 -- Attach a data node to a distributed hypertable
 CREATE OR REPLACE FUNCTION attach_data_node(
-    hypertable             REGCLASS,
     node_name              NAME,
+    hypertable             REGCLASS,
     if_not_attached        BOOLEAN = FALSE,
     repartition            BOOLEAN = TRUE
 ) RETURNS TABLE(hypertable_id INTEGER, node_hypertable_id INTEGER, node_name NAME)
