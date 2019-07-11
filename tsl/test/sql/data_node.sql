@@ -206,7 +206,7 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 
 \set ON_ERROR_STOP 0
 -- Attach data node should fail when called on a non-hypertable
-SELECT * FROM attach_data_node('disttable', 'data_node_1');
+SELECT * FROM attach_data_node('data_node_1', 'disttable');
 
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
@@ -305,7 +305,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 
 -- Attach data node should now succeed
 SET client_min_messages TO NOTICE;
-SELECT * FROM attach_data_node('disttable', 'data_node_1');
+SELECT * FROM attach_data_node('data_node_1', 'disttable');
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -330,18 +330,18 @@ SELECT * FROM _timescaledb_internal.ping_data_node('pg_data_node_1');
 -- Some attach data node error cases
 \set ON_ERROR_STOP 0
 -- Invalid arguments
-SELECT * FROM attach_data_node(NULL, 'data_node_1', true);
-SELECT * FROM attach_data_node('disttable', NULL, true);
+SELECT * FROM attach_data_node('data_node_1', NULL, true);
+SELECT * FROM attach_data_node(NULL, 'disttable', true);
 
 -- Deleted data node
-SELECT * FROM attach_data_node('disttable', 'data_node_2');
+SELECT * FROM attach_data_node('data_node_2', 'disttable');
 
 -- Attaching to an already attached data node without 'if_not_exists'
-SELECT * FROM attach_data_node('disttable', 'data_node_1', false);
+SELECT * FROM attach_data_node('data_node_1', 'disttable', false);
 \set ON_ERROR_STOP 1
 
 -- Attach if not exists
-SELECT * FROM attach_data_node('disttable', 'data_node_1', true);
+SELECT * FROM attach_data_node('data_node_1', 'disttable', true);
 
 -- Should repartition too. First show existing number of slices in
 -- 'device' dimension
@@ -355,7 +355,7 @@ SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
                                      bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                                      bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
                                      if_not_exists => true);
-SELECT * FROM attach_data_node('disttable', 'data_node_3');
+SELECT * FROM attach_data_node('data_node_3', 'disttable');
 
 -- Show updated number of slices in 'device' dimension.
 SELECT column_name, num_slices
