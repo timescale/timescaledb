@@ -107,3 +107,45 @@ INSERT INTO _timescaledb_internal.bgw_job_stat
 
 DROP TABLE _timescaledb_internal.bgw_job_stat_tmp;
 GRANT SELECT ON _timescaledb_internal.bgw_job_stat TO PUBLIC;
+
+
+
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
+	id SMALLINT PRIMARY KEY,
+	version SMALLINT NOT NULL,
+	name NAME NOT NULL,
+	description TEXT
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_algorithm', '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
+	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+	attname NAME NOT NULL,
+	compression_algorithm_id SMALLINT REFERENCES _timescaledb_catalog.compression_algorithm(id),
+    segmentby_column_index SMALLINT ,
+    orderby_column_index SMALLINT,
+    orderby_asc BOOLEAN,
+    orderby_nullsfirst BOOLEAN,
+	PRIMARY KEY (hypertable_id, attname),
+    UNIQUE (hypertable_id, segmentby_column_index),
+    UNIQUE (hypertable_id, orderby_column_index)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_compress_chunks_policy(
+	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+	older_than BIGINT NOT NULL,
+	job_id SMALLINT  REFERENCES _timescaledb_config.bgw_job(id),
+	UNIQUE (hypertable_id, job_id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_compress_chunks_policy', '');
+
+
+GRANT SELECT ON _timescaledb_catalog.compression_algorithm TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.hypertable_compression TO PUBLIC;
+GRANT SELECT ON _timescaledb_config.bgw_compress_chunks_policy TO PUBLIC;
+
