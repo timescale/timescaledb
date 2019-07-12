@@ -337,12 +337,6 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
 	if (NULL == pg_conn)
 		return NULL;
 
-	if (PQstatus(pg_conn) != CONNECTION_OK)
-	{
-		PQfinish(pg_conn);
-		return NULL;
-	}
-
 	return remote_connection_create(pg_conn, false, hostname);
 }
 
@@ -369,7 +363,14 @@ remote_connection_open(const char *node_name, List *node_options, List *user_opt
 	{
 		conn = remote_connection_open_internal(node_name, node_options, user_options);
 
-		if (!conn || PQstatus(conn->pg_conn) != CONNECTION_OK)
+		if (NULL == conn)
+			ereport(ERROR,
+					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+					 errmsg("could not connect to \"%s\"", node_name)));
+
+		Assert(NULL != conn->pg_conn);
+
+		if (PQstatus(conn->pg_conn) != CONNECTION_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
 					 errmsg("could not connect to \"%s\"", node_name),
@@ -443,28 +444,32 @@ remote_connection_ping(const char *server_name)
 	UserMapping *um = get_user_mapping(GetUserId(), fs->serverid, true);
 	TSConnection *conn =
 		remote_connection_open_internal(server_name, fs->options, um ? um->options : NULL);
-	PGresult *res;
 	bool success = false;
-	AsyncRequest *req;
-	AsyncResponseResult *rsp;
 
 	if (NULL == conn)
 		return false;
 
-	req = async_request_send(conn, PING_QUERY);
+	if (PQstatus(conn->pg_conn) == CONNECTION_OK)
+	{
+		AsyncRequest *req;
+		AsyncResponseResult *rsp;
+		PGresult *res;
 
-	Assert(NULL != req);
-	rsp = async_request_wait_any_result(req);
-	Assert(NULL != rsp);
+		req = async_request_send(conn, PING_QUERY);
 
-	res = async_response_result_get_pg_result(rsp);
+		Assert(NULL != req);
+		rsp = async_request_wait_any_result(req);
+		Assert(NULL != rsp);
 
-	if (PQresultStatus(res) == PGRES_TUPLES_OK)
-		success = true;
+		res = async_response_result_get_pg_result(rsp);
 
-	async_response_result_close(rsp);
+		if (PQresultStatus(res) == PGRES_TUPLES_OK)
+			success = true;
 
-	pfree(req);
+		async_response_result_close(rsp);
+
+		pfree(req);
+	}
 
 	remote_connection_close(conn);
 
