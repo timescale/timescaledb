@@ -1,10 +1,11 @@
 /*
- * This file and its contents are licensed under the Timescale License.
+ * This file and its contents are licensed under the Apache License 2.0.
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_CONTIGUOUS_AGG_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_CONTIGUOUS_AGG_H
+
+#ifndef TIMESCALEDB_CONTINUOUS_AGG_H
+#define TIMESCALEDB_CONTINUOUS_AGG_H
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
@@ -73,4 +74,4 @@ extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 
 extern Oid ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg);
 
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CONTIGUOUS_AGG_H */
+#endif /* TIMESCALEDB_CONTINUOUS_AGG_H */

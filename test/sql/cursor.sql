@@ -1,3 +1,6 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 
 CREATE TABLE cursor_test(time timestamptz, device_id int, temp float);
 SELECT create_hypertable('cursor_test','time');

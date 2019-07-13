@@ -1,10 +1,11 @@
 /*
- * This file and its contents are licensed under the Timescale License.
+ * This file and its contents are licensed under the Apache License 2.0.
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
 
-/* This file handles commands on continuous aggs that should be allowed in
+/*
+ * This file handles commands on continuous aggs that should be allowed in
  * apache only mode. Right now this consists mostly of drop commands
  */
 

@@ -1,3 +1,7 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
 --telemetry tests that require a community license
 
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs');
