@@ -306,7 +306,7 @@ chunk_append_get_scan_plan(Plan *plan)
 	if (plan != NULL && (IsA(plan, Sort) || IsA(plan, Result)))
 		plan = plan->lefttree;
 
-	if (plan == NULL || IsA(plan, MergeAppend) || IsA(plan, CustomScan))
+	if (plan == NULL)
 		return NULL;
 
 	switch (nodeTag(plan))
@@ -325,6 +325,15 @@ chunk_append_get_scan_plan(Plan *plan)
 		case T_ValuesScan:
 		case T_WorkTableScan:
 			return (Scan *) plan;
+			break;
+		case T_CustomScan:
+			if (castNode(CustomScan, plan)->scan.scanrelid > 0)
+				return (Scan *) plan;
+			else
+				return NULL;
+			break;
+		case T_MergeAppend:
+			return NULL;
 			break;
 		default:
 			elog(ERROR, "invalid child of chunk append: %u", nodeTag(plan));
