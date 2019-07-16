@@ -59,6 +59,15 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
+-- Verify lack of tables
+SELECT * FROM timescaledb_information.data_node;
+  node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+(3 rows)
+
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
@@ -388,9 +397,9 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
 SELECT * FROM timescaledb_information.data_node;
   node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               1 |               2 | 112 kB
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |               2 | 112 kB
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |               2 | 112 kB
+ data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               2 |               2 | 112 kB
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               2 |               2 | 112 kB
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               2 |               2 | 112 kB
 (3 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('disttable');
@@ -1207,7 +1216,7 @@ ORDER BY table_schema, table_name;
  table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
 --------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
  public       | disttable       | default_cluster_user |              2 |          9 | 72 kB      | 720 kB     |            | 792 kB     | t
- public       | underreplicated | default_cluster_user |              1 |          1 |            |            |            |            | t
+ public       | underreplicated | default_cluster_user |              1 |          1 | 24 kB      | 48 kB      |            | 72 kB      | t
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters

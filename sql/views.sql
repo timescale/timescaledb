@@ -249,7 +249,7 @@ AS
 
 CREATE OR REPLACE VIEW timescaledb_information.data_node AS
   SELECT s.node_name, s.owner, s.options, s.node_up,
-    COUNT(s.node_name) AS num_dist_tables,
+    COUNT(size.table_name) AS num_dist_tables,
     SUM(size.num_chunks) AS num_dist_chunks,
     pg_size_pretty(SUM(size.total_bytes)) AS total_dist_size
   FROM (SELECT srvname AS node_name, srvowner::regrole::name AS owner, srvoptions AS options, _timescaledb_internal.ping_data_node(srvname) AS node_up
