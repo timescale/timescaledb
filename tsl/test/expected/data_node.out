@@ -91,10 +91,10 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 SELECT * FROM timescaledb_information.data_node;
   node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               1 |                 | 
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
+ data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
+ data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
 (4 rows)
 
 RESET ROLE;
@@ -132,9 +132,9 @@ NOTICE:  drop cascades to user mapping for default_cluster_user on server data_n
 SELECT * FROM timescaledb_information.data_node;
   node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+ data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
 (3 rows)
 
 RESET ROLE;
@@ -166,9 +166,9 @@ NOTICE:  data node "data_node_3" does not exist, skipping
 SELECT * FROM timescaledb_information.data_node;
   node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+ data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
 (3 rows)
 
 DROP SERVER data_node_1 CASCADE;
@@ -234,9 +234,9 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 SELECT * FROM timescaledb_information.data_node;
   node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               1 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               1 |                 | 
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               1 |                 | 
+ data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+ data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
 (3 rows)
 
 -- Switch to default user

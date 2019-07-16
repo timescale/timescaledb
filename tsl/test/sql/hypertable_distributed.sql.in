@@ -40,6 +40,9 @@ SELECT * FROM add_data_node('data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
 
+-- Verify lack of tables
+SELECT * FROM timescaledb_information.data_node;
+
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
