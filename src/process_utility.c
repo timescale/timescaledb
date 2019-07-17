@@ -62,6 +62,7 @@
 #include "with_clause_parser.h"
 #include "cross_module_fn.h"
 #include "continuous_agg.h"
+#include "compress_hypertable.h"
 #include "partitioning.h"
 
 #include "cross_module_fn.h"
@@ -72,6 +73,7 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
+static bool process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -2142,7 +2144,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	ts_cache_release(hcache);
 }
 
-static void
+static bool
 process_altertable_start_table(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2150,9 +2152,11 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	ListCell *lc;
+	bool handled = false;
+	int num_cmds;
 
 	if (!OidIsValid(relid))
-		return;
+		return false;
 
 	check_chunk_alter_table_operation_allowed(relid, stmt);
 
@@ -2165,7 +2169,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		relation_not_only(stmt->relation);
 		process_add_hypertable(args, ht);
 	}
-
+	num_cmds = list_length(stmt->cmds);
 	foreach (lc, stmt->cmds)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
@@ -2240,14 +2244,32 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 							 errmsg("hypertables do not support native "
 									"postgres partitioning")));
 				}
+				break;
 			}
 #endif
+			case AT_SetRelOptions:
+			{
+				if (num_cmds != 1)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("ALTER TABLE <hypertable> SET does not support multiple "
+									"clauses")));
+				}
+				if (ht != NULL)
+				{
+					handled = process_altertable_set_options(cmd, ht);
+				}
+				break;
+			}
+
 			default:
 				break;
 		}
 	}
 
 	ts_cache_release(hcache);
+	return handled;
 }
 
 static void
@@ -2343,8 +2365,7 @@ process_altertable_start(ProcessUtilityArgs *args)
 	switch (stmt->relkind)
 	{
 		case OBJECT_TABLE:
-			process_altertable_start_table(args);
-			return false;
+			return process_altertable_start_table(args);
 		case OBJECT_VIEW:
 			return process_altertable_start_view(args);
 		default:
@@ -2652,10 +2673,40 @@ process_create_rule_start(ProcessUtilityArgs *args)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
 }
 
+/* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
+static bool
+process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
+{
+	List *pg_options = NIL, *compress_options = NIL;
+	WithClauseResult *parse_results = NULL;
+	List *inpdef = NIL;
+	bool is_compress = false;
+	/* is this a compress table stmt */
+	Assert(IsA(cmd->def, List));
+	inpdef = (List *) cmd->def;
+	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	if (compress_options)
+	{
+		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+		is_compress = DatumGetBool(parse_results[CompressEnabled].parsed);
+	}
+
+	if (!is_compress)
+		return false;
+
+	if (pg_options != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
+						"parameters for hypertable")));
+	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
+	return true;
+}
+
 static bool
 process_viewstmt(ProcessUtilityArgs *args)
 {
-	WithClauseResult *parse_results;
+	WithClauseResult *parse_results = NULL;
 	bool is_cagg = false;
 	Node *parsetree = args->parsetree;
 	ViewStmt *stmt = (ViewStmt *) parsetree;

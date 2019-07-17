@@ -35,8 +35,8 @@ extern void ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id,
 														   Relation hypertable_idxrel,
 														   int32 chunk_id, Relation chunkrel,
 														   IndexInfo *indexinfo);
-extern void ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id,
-									  Oid chunkrelid);
+extern TSDLLEXPORT void ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid,
+												  int32 chunk_id, Oid chunkrelid);
 extern Oid ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
 										   int32 hypertable_id, Oid hypertable_indexrelid);
 extern int ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index);

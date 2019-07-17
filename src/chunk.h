@@ -16,6 +16,8 @@
 #include "chunk_constraint.h"
 #include "hypertable.h"
 
+#define INVALID_CHUNK_ID 0
+
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
@@ -79,7 +81,7 @@ typedef struct ChunkScanEntry
 } ChunkScanEntry;
 
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
-extern Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
+extern TSDLLEXPORT Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
 extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
@@ -90,6 +92,9 @@ extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 													   const char *table_name,
 													   int16 num_constraints, MemoryContext mctx,
 													   bool fail_if_not_found);
+extern TSDLLEXPORT void ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock);
+
+extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints,
 											 bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints,
@@ -104,6 +109,8 @@ extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
+extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
+													  bool isnull);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
 												 Datum newer_than_datum, Oid older_than_type,
 												 Oid newer_than_type, bool cascade,

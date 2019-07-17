@@ -603,8 +603,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
  *
  * Parameter 'info' will be updated with the function's information
  */
-static void
-chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
+void
+ts_chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
 {
 	HeapTuple tuple;
 	Form_pg_proc form;
@@ -699,7 +699,7 @@ ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" does not exist", info->colname)));
 
-	chunk_sizing_func_validate(info->func, info);
+	ts_chunk_sizing_func_validate(info->func, info);
 
 	if (NULL == info->target_size)
 		info->target_size_bytes = 0;
@@ -790,7 +790,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	}
 	else if (OidIsValid(ht->chunk_sizing_func))
 	{
-		chunk_sizing_func_validate(ht->chunk_sizing_func, &info);
+		ts_chunk_sizing_func_validate(ht->chunk_sizing_func, &info);
 		values[0] = ObjectIdGetDatum(ht->chunk_sizing_func);
 	}
 	else

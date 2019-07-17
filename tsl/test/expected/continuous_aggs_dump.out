@@ -145,6 +145,14 @@ SELECT count(*) FROM conditions_after;
 --dump & restore
 \c postgres :ROLE_SUPERUSER
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
 --\! cp dump/pg_dump.sql /tmp/dump.sql
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql

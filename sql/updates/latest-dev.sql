@@ -111,6 +111,15 @@ GRANT SELECT ON _timescaledb_internal.bgw_job_stat TO PUBLIC;
 
 
 
+
+ALTER TABLE _timescaledb_catalog.hypertable add column compressed boolean NOT NULL default false;
+ALTER TABLE _timescaledb_catalog.hypertable add column compressed_hypertable_id          INTEGER   REFERENCES _timescaledb_catalog.hypertable(id);
+ALTER TABLE _timescaledb_catalog.hypertable drop constraint hypertable_num_dimensions_check;
+ALTER TABLE _timescaledb_catalog.hypertable add constraint hypertable_dim_compress_check check ( num_dimensions > 0  or compressed = true );
+alter table _timescaledb_catalog.hypertable add constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null ));
+
+ALTER TABLE _timescaledb_catalog.chunk add column compressed_chunk_id integer references _timescaledb_catalog.chunk(id);
+
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
 	id SMALLINT PRIMARY KEY,
 	version SMALLINT NOT NULL,

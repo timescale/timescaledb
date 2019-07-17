@@ -80,6 +80,14 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 -- Now make sure that only the exported_uuid is exported on pg_dump
 \c postgres :ROLE_SUPERUSER
 \! ${PG_BINDIR}/pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
 \! ${PG_BINDIR}/dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
 \! ${PG_BINDIR}/createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';

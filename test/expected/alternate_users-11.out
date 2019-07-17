@@ -134,12 +134,12 @@ SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name  |  table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+--------------+---------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public       | one_Partition | one_Partition          | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  2 | public       | 1dim          | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  3 | public       | Hypertable_1  | _timescaledb_internal  | _hyper_3                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  4 | customSchema | Hypertable_1  | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name  |  table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+--------------+---------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public       | one_Partition | one_Partition          | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+  2 | public       | 1dim          | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+  3 | public       | Hypertable_1  | _timescaledb_internal  | _hyper_3                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+  4 | customSchema | Hypertable_1  | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (4 rows)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");

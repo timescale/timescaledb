@@ -38,11 +38,11 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | test_ts    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  2 | public      | test_tz    | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  3 | public      | test_dt    | _timescaledb_internal  | _hyper_3                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | test_ts    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+  2 | public      | test_tz    | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+  3 | public      | test_dt    | _timescaledb_internal  | _hyper_3                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (3 rows)
 
 INSERT INTO test_ts VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');

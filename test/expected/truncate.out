@@ -35,18 +35,18 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 \set QUIET on
 \o
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    
-----+---------------+-----------------------+------------------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id 
+----+---------------+-----------------------+------------------+---------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                    
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                    
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                    
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                    
 (4 rows)
 
 SELECT * FROM test.show_subtables('"two_Partitions"');
@@ -78,14 +78,14 @@ SELECT * FROM "two_Partitions";
 SET client_min_messages = WARNING;
 TRUNCATE "two_Partitions";
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name 
-----+---------------+-------------+------------
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id 
+----+---------------+-------------+------------+---------------------
 (0 rows)
 
 -- should be empty
@@ -105,11 +105,11 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    
-----+---------------+-----------------------+------------------
-  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk
-  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk
-  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id 
+----+---------------+-----------------------+------------------+---------------------
+  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                    
+  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                    
+  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk |                    
 (3 rows)
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_5_chunk;

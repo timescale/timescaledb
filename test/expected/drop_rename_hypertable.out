@@ -146,9 +146,9 @@ SELECT * FROM "newname";
 (12 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -173,15 +173,15 @@ SELECT * FROM "newschema"."newname";
 (12 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 DROP TABLE "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+------------+--------------------------
 (0 rows)
 
 \dt  "public".*
