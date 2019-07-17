@@ -4,18 +4,41 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.4.0 (unreleased)
+## 1.4.0 (2019-07-18)
+
+This release contains major new functionality for continuous aggregates
+and adds performance improvements for analytical queries.
+
+In version 1.3.0 we added support for continuous aggregates which
+was initially limited to one continuous aggregate per hypertable.
+With this release, we remove this restriction and allow multiple
+continuous aggregates per hypertable.
+
+This release adds a new custom node ChunkAppend that can perform
+execution time constraint exclusion and is also used for ordered
+append. Ordered append no longer requires a LIMIT clause and now
+supports space partitioning and ordering by time_bucket.
 
 **Major features**
 * #1270 Use ChunkAppend to replace Append nodes
+* #1257 Support for multiple continuous aggregates
 
 **Minor features**
+* #1181 Remove LIMIT clause restriction from ordered append
 * #1273 Propagate quals to joined hypertables
+* #1317 Support time bucket functions in Ordered Append
 * #1331 Add warning message for REFRESH MATERIALIZED VIEW
 * #1332 Add job statistics columns to timescaledb_information.continuous_aggregate_stats view
+* #1326 Add architecture and bit size to telemetry
 
 **Bugfixes**
+* #1288 Do not remove Result nodes with one-time filter
 * #1300 Fix telemetry report return value
+* #1339 Fix continuous agg catalog table insert failure
+* #1344 Update continuous agg bgw job start time
+
+**Thanks**
+* @ik9999 for reporting a bug with continuous aggregates and negative refresh lag
 
 ## 1.3.2 (2019-06-24)
 
