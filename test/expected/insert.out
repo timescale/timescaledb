@@ -157,12 +157,12 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
 (28 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    
-----+---------------+-----------------------+------------------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id 
+----+---------------+-----------------------+------------------+---------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                    
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                    
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                    
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                    
 (4 rows)
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;

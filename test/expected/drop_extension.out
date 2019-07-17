@@ -10,9 +10,9 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
@@ -55,9 +55,9 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');

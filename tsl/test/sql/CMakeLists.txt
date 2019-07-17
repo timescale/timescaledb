@@ -18,6 +18,7 @@ set(TEST_FILES_DEBUG
     continuous_aggs_bgw.sql
     continuous_aggs_materialize.sql
     continuous_aggs_multi.sql
+    compression.sql
     ddl_hook.sql
     tsl_tables.sql
 )

@@ -268,6 +268,14 @@ cagg_materialize_default_fn(int32 materialization_id, bool verbose)
 	pg_unreachable();
 }
 
+static bool
+process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
+							   WithClauseResult *with_clause_options)
+{
+	error_no_default_fn_enterprise();
+	pg_unreachable();
+}
+
 static Datum
 error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
@@ -368,6 +376,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
+	.process_compress_table = process_compress_table_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

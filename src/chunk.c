@@ -94,14 +94,21 @@ chunk_insert_relation(Relation rel, Chunk *chunk)
 		Int32GetDatum(chunk->fd.hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&chunk->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&chunk->fd.table_name);
-
+	/*when we insert a chunk the compressed chunk id is always NULL */
+	if (chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
+			Int32GetDatum(chunk->fd.compressed_chunk_id);
+	}
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 }
 
-static void
-chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
+void
+ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -112,9 +119,20 @@ chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 }
 
 static void
-chunk_fill(Chunk *chunk, HeapTuple tuple)
+chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
 {
+	bool isnull;
+	Datum compress_id;
+
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
+	/* this is valid because NULLS are only at the end of the struct */
+	/* compressed_chunk_id can be null, so retrieve it */
+	compress_id = heap_getattr(tuple, Anum_chunk_compressed_chunk_id, desc, &isnull);
+	if (isnull)
+		chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
+	else
+		chunk->fd.compressed_chunk_id = DatumGetInt32(compress_id);
+
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
 	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
@@ -526,8 +544,8 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
  * table creation will fail. If the schema doesn't yet exist, the table owner
  * instead needs the proper permissions on the database to create the schema.
  */
-static Oid
-chunk_create_table(Chunk *chunk, Hypertable *ht)
+Oid
+ts_chunk_create_table(Chunk *chunk, Hypertable *ht)
 {
 	Relation rel;
 	ObjectAddress objaddr;
@@ -617,7 +635,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
 
 	/* Insert chunk */
-	chunk_insert_lock(chunk, RowExclusiveLock);
+	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* Insert any new dimension slices */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
@@ -626,7 +644,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	chunk_add_constraints(chunk);
 
 	/* Create the actual table relation for the chunk */
-	chunk->table_id = chunk_create_table(chunk, ht);
+	chunk->table_id = ts_chunk_create_table(chunk, ht);
 
 	if (!OidIsValid(chunk->table_id))
 		elog(ERROR, "could not create chunk table");
@@ -679,6 +697,7 @@ ts_chunk_create_stub(int32 id, int16 num_constraints)
 
 	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
+	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
 
 	if (num_constraints > 0)
 		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
@@ -691,7 +710,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 {
 	Chunk *chunk = arg;
 
-	chunk_fill(chunk, ti->tuple);
+	chunk_fill(chunk, ti->tuple, ti->desc);
 	return SCAN_DONE;
 }
 
@@ -1819,6 +1838,64 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 	namestrcpy(&chunk->fd.schema_name, newschema);
 
 	return chunk_update_form(&chunk->fd);
+}
+
+static ScanTupleResult
+chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
+{
+	bool nulls[Natts_chunk];
+	Datum values[Natts_chunk];
+	bool repl[Natts_chunk] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	HeapTuple tuple;
+	int32 compressed_chunk_id = *((int32 *) data);
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	if (compressed_chunk_id == INVALID_CHUNK_ID)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = false;
+		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
+			Int32GetDatum(compressed_chunk_id);
+	}
+	repl[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+	ts_catalog_update(ti->scanrel, tuple);
+	heap_freetuple(tuple);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return SCAN_DONE;
+}
+
+/*Assume permissions are already checked */
+bool
+ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id, bool isnull)
+{
+	int32 compress_id;
+	ScanKeyData scankey[1];
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk->fd.id));
+	if (isnull)
+		compress_id = INVALID_CHUNK_ID;
+	else
+		compress_id = compressed_chunk_id;
+	return chunk_scan_internal(CHUNK_ID_INDEX,
+							   scankey,
+							   1,
+							   chunk_set_compressed_id_in_tuple,
+							   &compress_id,
+							   0,
+							   ForwardScanDirection,
+							   AccessShareLock,
+							   CurrentMemoryContext) > 0;
 }
 
 /* Used as a tuple found function */

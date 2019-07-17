@@ -17,6 +17,8 @@ set(SOURCES
   constraint_aware_append.c
   cross_module_fn.c
   copy.c
+  compress_hypertable.h
+  compress_hypertable.c
   dimension.c
   dimension_slice.c
   dimension_vector.c

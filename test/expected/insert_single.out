@@ -242,22 +242,22 @@ SELECT * FROM "1dim_neg";
 (7 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name     
-----+---------------+-----------------------+-------------------
-  1 |             1 | one_Partition         | _hyper_1_1_chunk
-  2 |             1 | one_Partition         | _hyper_1_2_chunk
-  3 |             1 | one_Partition         | _hyper_1_3_chunk
-  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk
-  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk
-  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk
-  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk
-  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk
- 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk
- 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk
- 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk
- 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk
- 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk
- 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk
+ id | hypertable_id |      schema_name      |    table_name     | compressed_chunk_id 
+----+---------------+-----------------------+-------------------+---------------------
+  1 |             1 | one_Partition         | _hyper_1_1_chunk  |                    
+  2 |             1 | one_Partition         | _hyper_1_2_chunk  |                    
+  3 |             1 | one_Partition         | _hyper_1_3_chunk  |                    
+  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk  |                    
+  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk  |                    
+  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk  |                    
+  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk  |                    
+  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk  |                    
+ 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk |                    
+ 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk |                    
+ 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk |                    
+ 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk |                    
+ 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk |                    
+ 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk |                    
 (14 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;

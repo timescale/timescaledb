@@ -118,11 +118,28 @@ ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 }
 
+static void
+hypertable_fill(Hypertable *h, HeapTuple tuple, TupleDesc desc)
+{
+	bool isnull;
+	Datum compress_id;
+
+	memcpy((void *) &h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
+	/* this is valid because NULLS are only at the end of the struct */
+	/* compressed_hypertable_id can be null, so retrieve it */
+	compress_id = heap_getattr(tuple, Anum_hypertable_compressed_hypertable_id, desc, &isnull);
+	if (isnull)
+		h->fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+	else
+		h->fd.compressed_hypertable_id = DatumGetInt32(compress_id);
+}
+
 static Hypertable *
 hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 {
 	Oid namespace_oid;
-	Hypertable *h = STRUCT_FROM_TUPLE(tuple, mctx, Hypertable, FormData_hypertable);
+	Hypertable *h = MemoryContextAllocZero(mctx, sizeof(Hypertable));
+	hypertable_fill(h, tuple, desc);
 
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
@@ -362,8 +379,17 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 	}
 	else
 	{
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = true;
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = true;
+		elog(ERROR, "hypertable_tuple_update chunk_sizing_function cannot be NULL");
+	}
+	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(ht->fd.compressed);
+	if (ht->fd.compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
+			Int32GetDatum(ht->fd.compressed_hypertable_id);
 	}
 
 	copy = heap_form_tuple(ti->desc, values, nulls);
@@ -724,7 +750,7 @@ static void
 hypertable_insert_relation(Relation rel, int32 hypertable_id, Name schema_name, Name table_name,
 						   Name associated_schema_name, Name associated_table_prefix,
 						   Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-						   int64 chunk_target_size, int16 num_dimensions)
+						   int64 chunk_target_size, int16 num_dimensions, bool compressed)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_hypertable];
@@ -771,6 +797,9 @@ hypertable_insert_relation(Relation rel, int32 hypertable_id, Name schema_name, 
 		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
 			NameGetDatum(&default_associated_table_prefix);
 	}
+	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(compressed);
+	/* associated compressed hypertable id is always NULL when we create a new hypertable*/
+	nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
@@ -780,7 +809,7 @@ static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 				  Name associated_schema_name, Name associated_table_prefix,
 				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-				  int64 chunk_target_size, int16 num_dimensions)
+				  int64 chunk_target_size, int16 num_dimensions, bool compressed)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -795,7 +824,8 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 							   chunk_sizing_func_schema,
 							   chunk_sizing_func_name,
 							   chunk_target_size,
-							   num_dimensions);
+							   num_dimensions,
+							   compressed);
 	heap_close(rel, RowExclusiveLock);
 }
 
@@ -1719,7 +1749,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_schema,
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
-					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1);
+					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1,
+					  false);
 
 	/* Get the a Hypertable object via the cache */
 	hcache = ts_hypertable_cache_pin();
@@ -1979,4 +2010,129 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 
 	ts_cache_release(hcache);
 	PG_RETURN_NULL();
+}
+
+static ScanTupleResult
+hypertable_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
+{
+	bool nulls[Natts_hypertable];
+	Datum values[Natts_hypertable];
+	bool repl[Natts_hypertable] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	HeapTuple tuple;
+	int32 compressed_hypertable_id = *((int32 *) data);
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+	Assert(DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]) == false);
+	nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = false;
+	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
+		Int32GetDatum(compressed_hypertable_id);
+
+	repl[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+	ts_catalog_update(ti->scanrel, tuple);
+	heap_freetuple(tuple);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return SCAN_DONE;
+}
+
+/*Assume permissions are already checked */
+bool
+ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
+{
+	int32 compress_id;
+	ScanKeyData scankey[1];
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(ht->fd.id));
+	compress_id = compressed_hypertable_id;
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  HYPERTABLE_ID_INDEX,
+										  hypertable_set_compressed_id_in_tuple,
+										  &compress_id,
+										  1,
+										  RowExclusiveLock,
+										  false,
+										  CurrentMemoryContext) > 0;
+}
+
+/* create a compressed hypertable
+ * table_relid - already created table which we are going to
+ *               set up as a compressed hypertable
+ * hypertable_id - id to be used while creating hypertable with
+ *                  compression property set
+ * NOTE:
+ * compressed hypertable has no dimensions.
+ */
+bool
+ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
+{
+	Oid user_oid = GetUserId();
+	Oid tspc_oid = get_rel_tablespace(table_relid);
+	NameData schema_name, table_name, associated_schema_name;
+	ChunkSizingInfo *chunk_sizing_info;
+	Relation rel;
+
+	rel = heap_open(table_relid, AccessExclusiveLock);
+	/*
+	 * Check that the user has permissions to make this table to a compressed
+	 * hypertable
+	 */
+	ts_hypertable_permissions_check(table_relid, user_oid);
+	if (ts_is_hypertable(table_relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
+				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
+		heap_close(rel, AccessExclusiveLock);
+	}
+
+	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
+	namestrcpy(&table_name, get_rel_name(table_relid));
+
+	/* we don't use the chunking size info for managing the compressed table.
+	 * But need this to satisfy hypertable constraints
+	 */
+	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
+	ts_chunk_sizing_func_validate(chunk_sizing_info->func, chunk_sizing_info);
+
+	/* Checks pass, now we can create the catalog information */
+	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
+	namestrcpy(&table_name, get_rel_name(table_relid));
+	namestrcpy(&associated_schema_name, INTERNAL_SCHEMA_NAME);
+
+	/* compressed hypertable has no dimensions of its own , shares the original hypertable dims*/
+	hypertable_insert(hypertable_id,
+					  &schema_name,
+					  &table_name,
+					  &associated_schema_name,
+					  NULL,
+					  &chunk_sizing_info->func_schema,
+					  &chunk_sizing_info->func_name,
+					  chunk_sizing_info->target_size_bytes,
+					  0 /*num_dimensions*/,
+					  true);
+
+	/* No indexes are created for the compressed hypertable here */
+
+	/* Attach tablespace, if any */
+	if (OidIsValid(tspc_oid))
+	{
+		NameData tspc_name;
+
+		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
+		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
+	}
+
+	insert_blocker_trigger_add(table_relid);
+	/* lock will be released after the transaction is done */
+	heap_close(rel, NoLock);
+	return true;
 }

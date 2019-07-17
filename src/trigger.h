@@ -17,7 +17,7 @@
 
 extern void ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name,
 									   char *chunk_table_name);
-extern void ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk);
+extern TSDLLEXPORT void ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk);
 extern bool ts_relation_has_transition_table_trigger(Oid relid);
 
 #endif /* TIMESCALEDB_TRIGGER_H */

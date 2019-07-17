@@ -53,7 +53,7 @@ enum Anum_create_hypertable
 
 extern int ts_number_of_hypertables(void);
 
-extern Oid ts_rel_get_owner(Oid relid);
+extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
 
 typedef enum HypertableCreateFlags
@@ -69,7 +69,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hy
 													   Name associated_schema_name,
 													   Name associated_table_prefix,
 													   ChunkSizingInfo *chunk_sizing_info);
-
+extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
@@ -109,6 +109,8 @@ extern bool ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern List *ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx);
 extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
+extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
+														int32 compressed_hypertable_id);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

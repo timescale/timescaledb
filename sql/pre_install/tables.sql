@@ -44,13 +44,17 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     table_name               NAME      NOT NULL,
     associated_schema_name   NAME      NOT NULL,
     associated_table_prefix  NAME      NOT NULL,
-    num_dimensions           SMALLINT  NOT NULL CHECK (num_dimensions > 0),
+    num_dimensions           SMALLINT  NOT NULL,
     chunk_sizing_func_schema NAME      NOT NULL,
     chunk_sizing_func_name   NAME      NOT NULL,
     chunk_target_size        BIGINT    NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
+    compressed               BOOLEAN   NOT NULL DEFAULT false,
+    compressed_hypertable_id INTEGER   REFERENCES _timescaledb_catalog.hypertable(id),
     UNIQUE (id, schema_name),
     UNIQUE (schema_name, table_name),
-    UNIQUE (associated_schema_name, associated_table_prefix)
+    UNIQUE (associated_schema_name, associated_table_prefix),
+    constraint hypertable_dim_compress_check check ( num_dimensions > 0  or compressed = true ),
+   constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null )) 
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
@@ -119,6 +123,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id),
     schema_name     NAME    NOT NULL,
     table_name      NAME    NOT NULL,
+    compressed_chunk_id   INTEGER  REFERENCES _timescaledb_catalog.chunk(id),
     UNIQUE (schema_name, table_name)
 );
 CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx
