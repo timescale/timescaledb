@@ -15,7 +15,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 
-TAGS="1.3.0-pg10 1.3.1-pg10 1.3.2-pg10"
+TAGS="1.3.0-pg10 1.3.1-pg10 1.3.2-pg10 1.4.0-pg10"
 TEST_VERSION="v3"
 
 TAGS=$TAGS TEST_VERSION=$TEST_VERSION bash ${SCRIPT_DIR}/test_updates.sh
