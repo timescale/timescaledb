@@ -19,6 +19,7 @@
 #include <optimizer/plancat.h>
 #include <optimizer/prep.h>
 #include <parser/parsetree.h>
+#include <rewrite/rewriteManip.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
@@ -134,9 +135,11 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	Plan *subplan = copyObject(state->subplan);
 	List *chunk_ri_clauses = lsecond(cscan->custom_private);
+	List *chunk_relids = lthird(cscan->custom_private);
 	List **appendplans, *old_appendplans;
 	ListCell *lc_plan;
 	ListCell *lc_clauses;
+	ListCell *lc_relid;
 
 	/*
 	 * create skeleton plannerinfo to reuse some PostgreSQL planner functions
@@ -190,8 +193,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	 * thats the base for building the lists
 	 */
 	Assert(list_length(old_appendplans) == list_length(chunk_ri_clauses));
+	Assert(list_length(chunk_relids) == list_length(chunk_ri_clauses));
 
-	forboth (lc_plan, old_appendplans, lc_clauses, chunk_ri_clauses)
+	forthree (lc_plan, old_appendplans, lc_clauses, chunk_ri_clauses, lc_relid, chunk_relids)
 	{
 		Plan *plan = get_plans_for_exclusion(lfirst(lc_plan));
 
@@ -228,6 +232,15 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				{
 					RestrictInfo *ri = makeNode(RestrictInfo);
 					ri->clause = lfirst(lc);
+
+					/*
+					 * The index of the RangeTblEntry might have changed between planning
+					 * because of flattening, so we need to adjust the expressions
+					 * for the RestrictInfos if they are not equal.
+					 */
+					if (lfirst_oid(lc_relid) != scanrelid)
+						ChangeVarNodes((Node *) ri->clause, lfirst_oid(lc_relid), scanrelid, 0);
+
 					restrictinfos = lappend(restrictinfos, ri);
 				}
 				restrictinfos = constify_restrictinfos(&root, restrictinfos);
@@ -377,6 +390,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 	Plan *subplan;
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	List *chunk_ri_clauses = NIL;
+	List *chunk_relids = NIL;
 	List *children = NIL;
 	ListCell *lc_child;
 
@@ -463,6 +477,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 					chunk_clauses = lappend(chunk_clauses, clause);
 				}
 				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);
+				chunk_relids = lappend_oid(chunk_relids, scanrelid);
 				break;
 			}
 			default:
@@ -471,7 +486,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 		}
 	}
 
-	cscan->custom_private = list_make2(list_make1_oid(rte->relid), chunk_ri_clauses);
+	cscan->custom_private = list_make3(list_make1_oid(rte->relid), chunk_ri_clauses, chunk_relids);
 	cscan->custom_scan_tlist = subplan->targetlist; /* Target list of tuples
 													 * we expect as input */
 	cscan->flags = path->flags;

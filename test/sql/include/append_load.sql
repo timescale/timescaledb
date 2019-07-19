@@ -60,7 +60,10 @@ SELECT create_hypertable('metrics_timestamp','time');
 INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
 
 -- create hypertable with TIMESTAMPTZ time dimension
-CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL);
+CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL, device_id INT NOT NULL);
+CREATE INDEX ON metrics_timestamptz(device_id,time);
 SELECT create_hypertable('metrics_timestamptz','time');
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
 
