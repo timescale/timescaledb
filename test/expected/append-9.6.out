@@ -7,7 +7,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
        format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
        format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
 \gset
-SELECT format('\! diff %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_UNOPTIMIZED') as "DIFF_CMD"
+SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
@@ -91,28 +91,40 @@ SELECT create_hypertable('metrics_timestamp','time');
 
 INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
 -- create hypertable with TIMESTAMPTZ time dimension
-CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL);
+CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL, device_id INT NOT NULL);
+CREATE INDEX ON metrics_timestamptz(device_id,time);
 SELECT create_hypertable('metrics_timestamptz','time');
         create_hypertable         
 ----------------------------------
  (5,public,metrics_timestamptz,t)
 (1 row)
 
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+-- canary for results diff
+-- this should be the only output of the results diff
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
+              setting              | value 
+-----------------------------------+-------
+ timescaledb.disable_optimizations | off
+ timescaledb.enable_chunk_append   | on
+(2 rows)
+
 -- query should exclude all chunks with optimization on
 :PREFIX
 SELECT * FROM append_test WHERE time > now_s() + '1 month'
 ORDER BY time DESC;
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
                 QUERY PLAN                
 ------------------------------------------
  Custom Scan (ChunkAppend) on append_test
@@ -124,12 +136,12 @@ psql:include/append_query.sql:8: NOTICE:  Stable function now_s() called!
 :PREFIX
 SELECT * FROM append_test WHERE time > now_s() + '1 month'
 ORDER BY time DESC limit 1;
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
                    QUERY PLAN                   
 ------------------------------------------------
  Limit
@@ -144,12 +156,12 @@ psql:include/append_query.sql:13: NOTICE:  Stable function now_s() called!
 -- cannot hold tuples
 :PREFIX
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months';
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on append_test
@@ -163,12 +175,12 @@ psql:include/append_query.sql:20: NOTICE:  Stable function now_s() called!
 :PREFIX
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time LIMIT 3;
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
  Limit
@@ -185,7 +197,7 @@ psql:include/append_query.sql:26: NOTICE:  Stable function now_s() called!
 :PREFIX
 SELECT * FROM append_test WHERE time > now_i() - interval '2 months'
 ORDER BY time;
-psql:include/append_query.sql:33: NOTICE:  Immutable function now_i() called!
+psql:include/append_query.sql:37: NOTICE:  Immutable function now_i() called!
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on append_test
@@ -221,12 +233,12 @@ PREPARE query_opt AS
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time;
 :PREFIX EXECUTE query_opt;
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:49: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on append_test
@@ -243,12 +255,12 @@ SELECT date_trunc('year', time) t, avg(temp) FROM append_test
 WHERE time > now_s() - interval '4 months'
 GROUP BY t
 ORDER BY t DESC;
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:58: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  GroupAggregate
@@ -289,7 +301,7 @@ PREPARE query_param AS
 SELECT * FROM append_test WHERE time > $1 ORDER BY time;
 :PREFIX
 EXECUTE query_param(now_s() - interval '2 months');
-psql:include/append_query.sql:78: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:82: NOTICE:  Stable function now_s() called!
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on append_test
@@ -317,12 +329,12 @@ SELECT period.btime, VALUE
     FROM period
     LEFT JOIN DATA USING (btime)
     ORDER BY period.btime;
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:98: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Merge Left Join
@@ -367,15 +379,15 @@ SELECT period.btime, VALUE
     FROM period
     LEFT JOIN DATA USING (btime)
     ORDER BY period.btime;
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:115: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
             btime             | value 
 ------------------------------+-------
  Fri Mar 03 16:00:00 2017 PST |  22.5
@@ -395,18 +407,18 @@ set enable_material = 'off';
 :PREFIX
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
 WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:126: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
                                          QUERY PLAN                                         
 --------------------------------------------------------------------------------------------
  Nested Loop
@@ -666,7 +678,7 @@ reset enable_material;
 
 -- test constraint_exclusion with timestamptz time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -680,7 +692,7 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
 (9 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -694,7 +706,7 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 (9 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -709,7 +721,7 @@ reset enable_material;
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -723,7 +735,7 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
 (9 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -737,7 +749,7 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 (9 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -752,7 +764,7 @@ reset enable_material;
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -764,7 +776,7 @@ reset enable_material;
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
 (7 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
                                                                            QUERY PLAN                                                                            
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -776,7 +788,7 @@ reset enable_material;
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
 (7 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
                                                                             QUERY PLAN                                                                             
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -789,7 +801,7 @@ reset enable_material;
 
 -- test CURRENT_DATE
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
                 QUERY PLAN                 
 -------------------------------------------
  Custom Scan (ChunkAppend) on metrics_date
@@ -797,7 +809,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
                    QUERY PLAN                   
 ------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamp
@@ -805,7 +817,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
                     QUERY PLAN                    
 --------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -815,7 +827,7 @@ reset enable_material;
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
                 QUERY PLAN                 
 -------------------------------------------
  Custom Scan (ChunkAppend) on metrics_date
@@ -823,7 +835,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
                    QUERY PLAN                   
 ------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamp
@@ -831,7 +843,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
                     QUERY PLAN                    
 --------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -841,7 +853,7 @@ reset enable_material;
 
 -- test now()
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
                 QUERY PLAN                 
 -------------------------------------------
  Custom Scan (ChunkAppend) on metrics_date
@@ -849,7 +861,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > now() ORDER BY time;
                    QUERY PLAN                   
 ------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamp
@@ -857,7 +869,7 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > now() ORDER BY time;
                     QUERY PLAN                    
 --------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_timestamptz
@@ -1119,5 +1131,57 @@ ORDER BY time DESC;
                      Index Cond: ("time" > m1."time")
 (20 rows)
 
+-- test constraint exclusion for subqueries with append
+-- should include 2 chunks
+:PREFIX SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+-- test constraint exclusion for subqueries with mergeappend
+-- should include 2 chunks
+:PREFIX SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
 --generate the results into two different files
 \set ECHO errors
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+               setting              | value 
+ -----------------------------------+-------
+- timescaledb.disable_optimizations | on
++ timescaledb.disable_optimizations | off
+  timescaledb.enable_chunk_append   | on
+ (2 rows)
+ 
+--- Unoptimized results
++++ Optimized results
+@@ -1,7 +1,7 @@
+               setting              | value 
+ -----------------------------------+-------
+- timescaledb.disable_optimizations | on
+- timescaledb.enable_chunk_append   | on
++ timescaledb.disable_optimizations | off
++ timescaledb.enable_chunk_append   | off
+ (2 rows)
+ 
+  time | temp | colorid 

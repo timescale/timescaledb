@@ -7,10 +7,12 @@ accidentally triggering the load of a previous DB version.**
 ## 1.4.1 (unreleased)
 
 **Bugfixes**
+* #1362 Fix ConstraintAwareAppend subquery exclusion
 * #1363 Mark drop_chunks as VOLATILE and not PARALLEL SAFE
 
 **Thanks**
 * @overhacked for reporting an issue with drop_chunks and parallel queries
+* @fvannee for reporting an issue with ConstraintAwareAppend and subqueries
 
 ## 1.4.0 (2019-07-18)
 
