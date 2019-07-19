@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- canary for results diff
+-- this should be the only output of the results diff
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
+
 -- query should exclude all chunks with optimization on
 :PREFIX
 SELECT * FROM append_test WHERE time > now_s() + '1 month'
@@ -167,39 +171,39 @@ reset enable_material;
 
 -- test constraint_exclusion with timestamptz time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
 
 -- test CURRENT_DATE
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
 
 -- test now()
 -- should be 0 chunks
-:PREFIX SELECT * FROM metrics_date WHERE time > now() ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamp WHERE time > now() ORDER BY time;
-:PREFIX SELECT * FROM metrics_timestamptz WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamp WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time > now() ORDER BY time;
 
 -- query with tablesample and planner exclusion
 :PREFIX
@@ -237,4 +241,11 @@ ORDER BY time DESC;
 -- test EXISTS
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE EXISTS(SELECT 1 FROM metrics_timestamptz m2 WHERE m1.time < m2.time) ORDER BY m1.time DESC limit 1000;
 
+-- test constraint exclusion for subqueries with append
+-- should include 2 chunks
+:PREFIX SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
+
+-- test constraint exclusion for subqueries with mergeappend
+-- should include 2 chunks
+:PREFIX SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
 
