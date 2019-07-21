@@ -77,7 +77,7 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
-LANGUAGE C STABLE PARALLEL SAFE;
+LANGUAGE C VOLATILE PARALLEL UNSAFE;
 
 -- show chunks older than or newer than a specific time.
 -- `hypertable` argument can be a valid hypertable or NULL.
