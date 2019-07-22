@@ -46,6 +46,12 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 INSERT 0 1
 \set QUIET on
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- make sure tablespace1 exists
+-- since there is no CREATE TABLESPACE IF EXISTS we drop with if exists and recreate
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 --needed for ddl ops:
 CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 --needed for ROLE_DEFAULT_PERM_USER_2 to write to the 'one_Partition' schema which
@@ -68,7 +74,7 @@ ERROR:  must be owner of hypertable "one_Partition"
 select add_dimension('"one_Partition"', 'device_id', 2);
 ERROR:  must be owner of hypertable "one_Partition"
 select attach_tablespace('tablespace1', '"one_Partition"');
-ERROR:  tablespace "tablespace1" does not exist
+ERROR:  must be owner of hypertable "one_Partition"
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');

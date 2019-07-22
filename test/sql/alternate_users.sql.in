@@ -6,6 +6,13 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- make sure tablespace1 exists
+-- since there is no CREATE TABLESPACE IF EXISTS we drop with if exists and recreate
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+
 --needed for ddl ops:
 CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 
