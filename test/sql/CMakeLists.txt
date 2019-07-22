@@ -59,20 +59,16 @@ if(NOT APACHE_ONLY)
 endif()
 
 # tests that fail or are unreliable when run in parallel
+# bgw tests need to run first otherwise they are flaky
 set(SOLO_TESTS
   bgw_db_scheduler
   bgw_launcher
-  net
-  pg_dump_unprivileged
-  telemetry
-)
-
-# tests run in parallel after all other tests because they operate
-# on output of previous tests
-set(POST_TESTS
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
+  net
+  pg_dump_unprivileged
+  telemetry
 )
 
 # only test custom type if we are in 64-bit architecture
@@ -101,22 +97,22 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 if (${PG_VERSION_MAJOR} EQUAL "9" )
   list(APPEND TEST_FILES
     rowsecurity-9.6.sql
-    )
+  )
 else() #everything else gets generated_as_identity
   list(APPEND TEST_FILES
     generated_as_identity.sql
-    )
+  )
 endif ()
 if(${PG_VERSION_MAJOR} EQUAL "10")
   list(APPEND TEST_FILES
-   rowsecurity-10.sql
-   )
+    rowsecurity-10.sql
+  )
 endif()
 if(${PG_VERSION_MAJOR} EQUAL "11")
   list(APPEND TEST_FILES
     rowsecurity-11.sql
     vacuum_multi.sql
-    )
+  )
 endif()
 
 if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
@@ -170,31 +166,17 @@ else()
 endif()
 
 # append solo tests to schedule first
-foreach(TEST_FILE ${TEST_FILES})
-  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(TESTS_TO_RUN IN_LIST SOLO_TESTS)
-    file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
-  endif()
-endforeach(TEST_FILE)
+foreach(SOLO_TEST_NAME ${SOLO_TESTS})
+  string(REGEX REPLACE "(.+)" "\\1.sql" TEST_FILE ${SOLO_TEST_NAME})
+  if(TEST_FILE IN_LIST TEST_FILES)
+    file(APPEND ${TEST_SCHEDULE} "test: ${SOLO_TEST_NAME}\n")
+  endif ()
+endforeach(SOLO_TEST_NAME)
 
 set(GROUP_MEMBERS 0)
 foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if((NOT (TESTS_TO_RUN IN_LIST SOLO_TESTS)) AND (NOT (TESTS_TO_RUN IN_LIST POST_TESTS)))
-    if(GROUP_MEMBERS EQUAL 0)
-      file(APPEND ${TEST_SCHEDULE} "\ntest: ")
-    endif()
-    file(APPEND ${TEST_SCHEDULE} "${TESTS_TO_RUN} ")
-    MATH(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
-  endif()
-endforeach(TEST_FILE)
-file(APPEND ${TEST_SCHEDULE} "\n")
-
-
-set(GROUP_MEMBERS 0)
-foreach(TEST_FILE ${TEST_FILES})
-  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(TESTS_TO_RUN IN_LIST POST_TESTS)
+  if(NOT (TESTS_TO_RUN IN_LIST SOLO_TESTS))
     if(GROUP_MEMBERS EQUAL 0)
       file(APPEND ${TEST_SCHEDULE} "\ntest: ")
     endif()
