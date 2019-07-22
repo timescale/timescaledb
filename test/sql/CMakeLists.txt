@@ -1,6 +1,4 @@
 set(TEST_FILES
-  agg_bookends_results_optimized.sql
-  agg_bookends_results_diff.sql
   alter.sql
   chunk_adaptive.sql
   chunk_utils.sql
@@ -72,7 +70,6 @@ set(SOLO_TESTS
 # tests run in parallel after all other tests because they operate
 # on output of previous tests
 set(POST_TESTS
-  agg_bookends_results_diff
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
@@ -128,8 +125,7 @@ if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
 endif()
 
 set(TEST_TEMPLATES
-  #some error messages changed in PG11 from "relation" to "table" so alternate_users has different output
-  agg_bookends_optimized.sql.in
+  agg_bookends.sql.in
   append.sql.in
   alternate_users.sql.in
   insert_many.sql.in

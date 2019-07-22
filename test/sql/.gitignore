@@ -1,4 +1,4 @@
-/agg_bookends_optimized-*.sql
+/agg_bookends-*.sql
 /alternate_users-*.sql
 /append-*.sql
 /insert_many-*.sql
