@@ -253,6 +253,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.is_frontend_session = NULL,
 	.remove_from_distributed_db = NULL,
 	.remote_hypertable_info = error_not_supported_default_fn,
+	.validate_as_data_node = NULL,
 #else
 	.add_data_node = data_node_add,
 	.delete_data_node = data_node_delete,
@@ -282,6 +283,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.is_frontend_session = dist_util_is_frontend_session,
 	.remove_from_distributed_db = dist_util_remove_from_db,
 	.remote_hypertable_info = dist_util_remote_hypertable_info,
+	.validate_as_data_node = validate_data_node_settings,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
