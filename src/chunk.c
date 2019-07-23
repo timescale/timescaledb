@@ -1055,10 +1055,16 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
 	return chunk;
 }
 
+/*
+ * Create a chunk through insertion of a tuple at a given point.
+ */
 Chunk *
 ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Chunk *chunk;
+
+	if (hypertable_is_distributed_member(ht))
+		elog(ERROR, "cannot create chunk on distributed hypertable member");
 
 	/*
 	 * Serialize chunk creation around a lock on the "main table" to avoid
