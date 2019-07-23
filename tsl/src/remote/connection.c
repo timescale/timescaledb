@@ -30,6 +30,7 @@
 #include <commands/defrem.h>
 #include <export.h>
 #include <telemetry/telemetry_metadata.h>
+#include <extension_constants.h>
 #include "connection.h"
 #include "guc.h"
 #include "async.h"
@@ -314,9 +315,9 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
 	n += extract_connection_options(host_options, keywords + n, values + n);
 	n += extract_connection_options(user_options, keywords + n, values + n);
 
-	/* Use "timescaledb_fdw" as fallback_application_name. */
+	/* Use the extension name as fallback_application_name. */
 	keywords[n] = "fallback_application_name";
-	values[n] = "timescaledb";
+	values[n] = EXTENSION_NAME;
 	n++;
 
 	/* Set client_encoding so that libpq can convert encoding properly. */

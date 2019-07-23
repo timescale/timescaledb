@@ -64,6 +64,12 @@ SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
                                      bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
                                      if_not_exists => true);
 
+
+-- Test altering some server options
+ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
+ALTER SERVER data_node_1 OPTIONS (ADD fdw_startup_cost '110.0');
+ALTER SERVER data_node_1 OPTIONS (ADD connect_timeout '3');
+
 -- List foreign data nodes
 SELECT * FROM timescaledb_information.data_node;
 
