@@ -15,6 +15,8 @@
 #include <utils/fmgrprotos.h>
 #include "remote/dist_commands.h"
 #include "funcapi.h"
+#include <access/twophase.h>
+#include <miscadmin.h>
 
 /*
  * When added to a distributed database, this key in the metadata table will be set to match the
@@ -204,4 +206,10 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 
 	ts_dist_cmd_close_response(funcctx->user_fctx);
 	SRF_RETURN_DONE(funcctx);
+}
+
+bool
+validate_data_node_settings(void)
+{
+	return MaxConnections > 0 && max_prepared_xacts >= MaxConnections;
 }

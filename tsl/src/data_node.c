@@ -387,6 +387,7 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 		const char *schema_name_quoted = quote_identifier(schema_name);
 		Oid schema_oid = get_namespace_oid(schema_name, true);
 		bool extension_exists = false;
+		bool data_node_valid = false;
 
 		request = psprintf("SELECT 1 FROM pg_extension WHERE extname = %s",
 						   quote_literal_cstr(EXTENSION_NAME));
@@ -394,6 +395,8 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 
 		if (PQntuples(res) > 0)
 			extension_exists = true;
+
+		remote_connection_result_close(res);
 
 		if (!extension_exists)
 		{
@@ -414,6 +417,20 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 
 			created = true;
 		}
+
+		request = "SELECT _timescaledb_internal.validate_as_data_node()";
+		res = remote_connection_query_any_result(conn, request);
+		data_node_valid =
+			PQntuples(res) == 1 && PQnfields(res) == 1 && PQgetvalue(res, 0, 0)[0] == 't';
+		remote_connection_result_close(res);
+
+		if (!data_node_valid)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+					 (errmsg("postgres instance for data node is not properly configured for "
+							 "TimescaleDB distributed operations"),
+					  errhint("max_prepared_transactions should be >= max_connections, note that "
+							  "changing these setting requires a postgres restart"))));
 	}
 	PG_CATCH();
 	{
