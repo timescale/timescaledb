@@ -60,7 +60,7 @@ data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_o
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid node_name: cannot be NULL")));
 
-	fdw = GetForeignDataWrapperByName(TIMESCALEDB_FDW_NAME, false);
+	fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
 	server = GetForeignServerByName(node_name, missing_ok);
 
 	Assert(NULL != fdw);
@@ -151,7 +151,7 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 	CreateForeignServerStmt stmt = {
 		.type = T_CreateForeignServerStmt,
 		.servername = (char *) node_name,
-		.fdwname = TIMESCALEDB_FDW_NAME,
+		.fdwname = EXTENSION_FDW_NAME,
 		.options =
 			list_make3(makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1),
 					   makeDefElemCompat("port", (Node *) makeInteger(port), -1),
@@ -1202,7 +1202,7 @@ data_node_get_node_name_list_with_aclcheck(AclMode mode)
 	ScanKeyData scankey[1];
 	SysScanDesc scandesc;
 	Relation rel;
-	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(TIMESCALEDB_FDW_NAME, false);
+	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
 	List *nodes = NIL;
 
 	rel = table_open(ForeignServerRelationId, AccessShareLock);

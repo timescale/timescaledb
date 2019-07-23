@@ -55,7 +55,7 @@ data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 	HypertableDataNode *hdn = palloc0(sizeof(HypertableDataNode));
 	ForeignDataWrapper *fdw = GetForeignDataWrapper(server->fdwid);
 
-	if (strcmp(fdw->fdwname, TIMESCALEDB_FDW_NAME) != 0)
+	if (strcmp(fdw->fdwname, EXTENSION_FDW_NAME) != 0)
 		elog(ERROR, "invalid foreign data wrapper \"%s\" for hypertable", fdw->fdwname);
 
 	hdn->fd.hypertable_id = hypertable_id;

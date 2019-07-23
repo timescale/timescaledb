@@ -43,6 +43,11 @@ SELECT * FROM add_data_node('data_node_3',
 -- Verify lack of tables
 SELECT * FROM timescaledb_information.data_node;
 
+\set ON_ERROR_STOP 0
+-- Test that one cannot directly create TimescaleDB foreign tables
+CREATE FOREIGN TABLE foreign_table (time timestamptz, device int, temp float) SERVER data_node_1;
+\set ON_ERROR_STOP 1
+
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));

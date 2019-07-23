@@ -10,6 +10,7 @@
  * loader*/
 
 #define EXTENSION_NAME "timescaledb"
+#define EXTENSION_FDW_NAME "timescaledb_fdw"
 #define TSL_LIBRARY_NAME "timescaledb-tsl"
 #define TS_LIBDIR "$libdir/"
 #define EXTENSION_SO TS_LIBDIR "" EXTENSION_NAME
