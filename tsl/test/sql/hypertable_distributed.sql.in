@@ -292,12 +292,26 @@ SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
+
 \set ON_ERROR_STOP 0
 -- ON CONFLICT only works with DO NOTHING
 INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-09 08:13', 7, 3, 27.5)
 ON CONFLICT (time) DO UPDATE SET temp = 3.2;
+
+-- Test that an INSERT that would create a chunk does not work on a
+-- data node
+SELECT * FROM test.remote_exec('{ data_node_1 }',
+$$
+    INSERT INTO disttable VALUES ('2019-01-02 12:34', 1, 2, 9.3)
+$$);
 \set ON_ERROR_STOP 1
+
+-- However, INSERTs on a data node that does not create a chunk works.
+SELECT * FROM test.remote_exec('{ data_node_1 }',
+$$
+    INSERT INTO disttable VALUES ('2017-09-03 06:09', 1, 2, 9.3)
+$$);
 
 -- Test updates
 UPDATE disttable SET "Color" = 4 WHERE "Color" = 3;
