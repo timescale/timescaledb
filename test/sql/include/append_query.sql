@@ -249,3 +249,49 @@ ORDER BY time DESC;
 -- should include 2 chunks
 :PREFIX SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
 
+-- test prepared statements
+-- executor startup exclusion with no chunks excluded
+PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
+-- executor startup exclusion with chunks excluded
+PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
+-- runtime exclusion with LATERAL and 2 hypertables
+PREPARE prep AS SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
+-- executor startup exclusion with subquery
+PREPARE prep AS SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
+-- test constraint exclusion for subqueries with mergeappend
+PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
