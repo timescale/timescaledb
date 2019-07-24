@@ -736,13 +736,13 @@ process_truncate(ProcessUtilityArgs *args)
 	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *cell;
-
-	/* Call standard process utility first to truncate all tables */
-	prev_ProcessUtility(args);
+	List *hypertables = NIL;
+	List *relations = NIL;
 
 	/* For all hypertables, we drop the now empty chunks. We also propogate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
 	 */
+	/* Preprocess and filter out distributed hypertables */
 	foreach (cell, stmt->relations)
 	{
 		RangeVar *rv = lfirst(cell);
@@ -751,7 +751,9 @@ process_truncate(ProcessUtilityArgs *args)
 		if (NULL == rv)
 			continue;
 
-		relid = RangeVarGetRelid(rv, NoLock, true);
+		/* Grab AccessExclusiveLock, same as regular TRUNCATE processing grabs
+		 * below. We just do it preemptively here. */
+		relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
 
 		if (OidIsValid(relid))
 		{
@@ -787,33 +789,51 @@ process_truncate(ProcessUtilityArgs *args)
 							 errhint("Do not specify the ONLY keyword, or use truncate"
 									 " only on the chunks directly.")));
 
-				handle_truncate_hypertable(args, stmt, ht);
-				process_add_hypertable(args, ht);
+				hypertables = lappend(hypertables, ht);
 
-				/* Delete the metadata */
-				ts_chunk_delete_by_hypertable_id(ht->fd.id);
-
-				/* Drop the chunk tables */
-				foreach_chunk(ht, process_truncate_chunk, stmt);
-
-				/* propogate to the compressed hypertable */
-				if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
-				{
-					Hypertable *compressed_ht =
-						ts_hypertable_cache_get_entry_by_id(hcache,
-															ht->fd.compressed_hypertable_id);
-					TruncateStmt compressed_stmt = *stmt;
-					compressed_stmt.relations =
-						list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
-												NameStr(compressed_ht->fd.table_name),
-												-1));
-
-					/* TRUNCATE the compressed hypertable */
-					ExecuteTruncate(&compressed_stmt);
-
-					handle_truncate_hypertable(args, stmt, compressed_ht);
-				}
+				if (!hypertable_is_distributed(ht))
+					relations = lappend(relations, rv);
 			}
+			else
+				relations = lappend(relations, rv);
+		}
+	}
+
+	/* Update relations list to include only tables that hold data. On an
+	 * access node, distributed hypertables hold no data and chunks are
+	 * foreign tables, so those tables are excluded. */
+	stmt->relations = relations;
+
+	if (stmt->relations != NIL)
+	{
+		/* Call standard PostgreSQL handler for remaining tables */
+		prev_ProcessUtility(args);
+	}
+
+	/* For all hypertables, we drop the now empty chunks */
+	foreach (cell, hypertables)
+	{
+		Hypertable *ht = lfirst(cell);
+
+		Assert(ht != NULL);
+
+		handle_truncate_hypertable(args, stmt, ht);
+
+		/* propogate to the compressed hypertable */
+		if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+		{
+			Hypertable *compressed_ht =
+				ts_hypertable_cache_get_entry_by_id(hcache, ht->fd.compressed_hypertable_id);
+			TruncateStmt compressed_stmt = *stmt;
+			compressed_stmt.relations =
+				list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
+										NameStr(compressed_ht->fd.table_name),
+										-1));
+
+			/* TRUNCATE the compressed hypertable */
+			ExecuteTruncate(&compressed_stmt);
+
+			handle_truncate_hypertable(args, stmt, compressed_ht);
 		}
 	}
 

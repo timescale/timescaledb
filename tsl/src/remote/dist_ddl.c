@@ -84,25 +84,40 @@ dist_ddl_error_raise_blocked(void)
 }
 
 static void
-dist_ddl_inspect_hypertable_list(ProcessUtilityArgs *args, Cache *hcache, bool *has_distributed_ht,
-								 bool *has_distributed_ht_member)
+dist_ddl_inspect_hypertable_list(ProcessUtilityArgs *args, Cache *hcache,
+								 unsigned int *num_hypertables, unsigned int *num_dist_hypertables,
+								 unsigned int *num_dist_hypertable_members)
 {
 	Hypertable *ht;
 	ListCell *lc;
+
+	if (NULL != num_hypertables)
+		*num_hypertables = 0;
+
+	if (NULL != num_dist_hypertables)
+		*num_dist_hypertables = 0;
+
+	if (NULL != num_dist_hypertable_members)
+		*num_dist_hypertable_members = 0;
 
 	foreach (lc, args->hypertable_list)
 	{
 		ht = ts_hypertable_cache_get_entry(hcache, lfirst_oid(lc), CACHE_FLAG_NONE);
 		Assert(ht != NULL);
+
 		switch (ts_hypertable_get_type(ht))
 		{
 			case HYPERTABLE_REGULAR:
+				if (NULL != num_hypertables)
+					(*num_hypertables)++;
 				break;
 			case HYPERTABLE_DISTRIBUTED:
-				*has_distributed_ht = true;
+				if (NULL != num_dist_hypertables)
+					(*num_dist_hypertables)++;
 				break;
 			case HYPERTABLE_DISTRIBUTED_MEMBER:
-				*has_distributed_ht_member = true;
+				if (NULL != num_dist_hypertable_members)
+					(*num_dist_hypertable_members)++;
 				break;
 		}
 	}
@@ -165,8 +180,9 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	Oid relid = InvalidOid;
-	bool has_distributed_ht_member = false;
-	bool has_distributed_ht = false;
+	unsigned int num_hypertables;
+	unsigned int num_dist_hypertables;
+	unsigned int num_dist_hypertable_members;
 
 	/*
 	 * This function is executed for any Utility/DDL operation and for any
@@ -228,15 +244,18 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	 * involved in the query.
 	 */
 	hcache = ts_hypertable_cache_pin();
-	dist_ddl_inspect_hypertable_list(args, hcache, &has_distributed_ht, &has_distributed_ht_member);
-
+	dist_ddl_inspect_hypertable_list(args,
+									 hcache,
+									 &num_hypertables,
+									 &num_dist_hypertables,
+									 &num_dist_hypertable_members);
 	/*
 	 * Allow DDL operations on data nodes executed only from frontend connection.
 	 */
-	if (has_distributed_ht_member)
+	if (num_dist_hypertable_members > 0)
 		dist_ddl_check_session();
 
-	if (!has_distributed_ht)
+	if (num_dist_hypertables == 0)
 	{
 		ts_cache_release(hcache);
 		return;
@@ -320,8 +339,29 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 		case T_VacuumStmt:
 			dist_ddl_state.exec_type = dist_ddl_process_vacuum((VacuumStmt *) args->parsetree);
 			break;
-		/* Currently unsupported */
 		case T_TruncateStmt:
+		{
+			TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
+			/* Calculate number of regular tables. Note that distributed
+			 * hypertables are filtered from the relations list in
+			 * process_utility.c, so the list might actually be empty. */
+			unsigned int num_regular_tables =
+				list_length(stmt->relations) - num_hypertables - num_dist_hypertable_members;
+
+			Assert(num_regular_tables <= list_length(stmt->relations));
+
+			/* We only support TRUNCATE on single distributed hypertables
+			 * since other tables might not exist on data nodes and multiple
+			 * distributed hypertables might be distributed across different
+			 * sets of nodes. */
+			if (num_dist_hypertables == 1 && num_regular_tables == 0 && num_hypertables == 0 &&
+				num_dist_hypertable_members == 0)
+				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+			else
+				dist_ddl_error_raise_unsupported();
+			break;
+		}
+		/* Currently unsupported */
 		case T_RenameStmt:
 		case T_ReindexStmt:
 		case T_ClusterStmt:
