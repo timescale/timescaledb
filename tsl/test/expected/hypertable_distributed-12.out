@@ -964,6 +964,116 @@ Sun Sep 03 06:18:00 2017 PDT|     9| 8.7|    4
  
 (1 row)
 
+-- Test TRUNCATE
+TRUNCATE disttable;
+-- No data should remain
+SELECT * FROM disttable;
+ time | device | temp | Color 
+------+--------+------+-------
+(0 rows)
+
+-- Metadata and tables cleaned up
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped 
+----+---------------+-------------+------------+---------------------+---------
+(0 rows)
+
+SELECT * FROM show_chunks('disttable');
+ show_chunks 
+-------------
+(0 rows)
+
+-- Also cleaned up remotely
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM _timescaledb_catalog.chunk;
+SELECT * FROM show_chunks('disttable');
+SELECT * FROM disttable;
+$$);
+NOTICE:  [data_node_1]: 
+SELECT * FROM _timescaledb_catalog.chunk
+NOTICE:  [data_node_1]:
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped
+--+-------------+-----------+----------+-------------------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_1]: 
+SELECT * FROM show_chunks('disttable')
+NOTICE:  [data_node_1]:
+show_chunks
+-----------
+(0 rows)
+
+
+NOTICE:  [data_node_1]: 
+SELECT * FROM disttable
+NOTICE:  [data_node_1]:
+time|device|temp|Color
+----+------+----+-----
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT * FROM _timescaledb_catalog.chunk
+NOTICE:  [data_node_2]:
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped
+--+-------------+-----------+----------+-------------------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT * FROM show_chunks('disttable')
+NOTICE:  [data_node_2]:
+show_chunks
+-----------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT * FROM disttable
+NOTICE:  [data_node_2]:
+time|device|temp|Color
+----+------+----+-----
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT * FROM _timescaledb_catalog.chunk
+NOTICE:  [data_node_3]:
+id|hypertable_id|schema_name|table_name|compressed_chunk_id|dropped
+--+-------------+-----------+----------+-------------------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT * FROM show_chunks('disttable')
+NOTICE:  [data_node_3]:
+show_chunks
+-----------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT * FROM disttable
+NOTICE:  [data_node_3]:
+time|device|temp|Color
+----+------+----+-----
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- The hypertable view also shows no chunks and no data
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
+--------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
+ public       | underreplicated | default_cluster_user |              1 |          0 |            |            |            |            | t
+ public       | disttable       | default_cluster_user |              2 |          0 |            |            |            |            | t
+(2 rows)
+
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
@@ -971,19 +1081,10 @@ WARNING:  new chunks for hypertable "underreplicated" will be under-replicated d
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
  chunk_id | node_chunk_id |  node_name  
 ----------+---------------+-------------
-        1 |             1 | data_node_1
-        2 |             1 | data_node_3
-        3 |             1 | data_node_2
-        4 |             2 | data_node_1
-        5 |             2 | data_node_2
-        6 |             2 | data_node_3
-        7 |             3 | data_node_2
-        8 |             3 | data_node_3
-        9 |             3 | data_node_1
        10 |             4 | data_node_1
        10 |             4 | data_node_2
        10 |             4 | data_node_3
-(12 rows)
+(3 rows)
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
@@ -996,19 +1097,10 @@ FROM show_chunks('underreplicated');
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
  chunk_id | node_chunk_id |  node_name  
 ----------+---------------+-------------
-        1 |             1 | data_node_1
-        2 |             1 | data_node_3
-        3 |             1 | data_node_2
-        4 |             2 | data_node_1
-        5 |             2 | data_node_2
-        6 |             2 | data_node_3
-        7 |             3 | data_node_2
-        8 |             3 | data_node_3
-        9 |             3 | data_node_1
        10 |             4 | data_node_1
        10 |             4 | data_node_2
        10 |             4 | data_node_3
-(12 rows)
+(3 rows)
 
 -- Show that chunks are created on remote data nodes and that all
 -- data nodes/chunks have the same data due to replication
@@ -1220,7 +1312,7 @@ SELECT * FROM timescaledb_information.hypertable
 ORDER BY table_schema, table_name;
  table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
 --------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | disttable       | default_cluster_user |              2 |          9 | 72 kB      | 720 kB     |            | 792 kB     | t
+ public       | disttable       | default_cluster_user |              2 |          0 |            |            |            |            | t
  public       | underreplicated | default_cluster_user |              1 |          1 | 24 kB      | 48 kB      |            | 72 kB      | t
 (2 rows)
 

@@ -339,6 +339,26 @@ SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
+-- Test TRUNCATE
+TRUNCATE disttable;
+
+-- No data should remain
+SELECT * FROM disttable;
+
+-- Metadata and tables cleaned up
+SELECT * FROM _timescaledb_catalog.chunk;
+SELECT * FROM show_chunks('disttable');
+
+-- Also cleaned up remotely
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM _timescaledb_catalog.chunk;
+SELECT * FROM show_chunks('disttable');
+SELECT * FROM disttable;
+$$);
+
+-- The hypertable view also shows no chunks and no data
+SELECT * FROM timescaledb_information.hypertable;
+
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);

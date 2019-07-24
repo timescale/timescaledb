@@ -64,7 +64,7 @@ CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_
 CREATE UNIQUE INDEX disttable_pk ON disttable(time);
 
 -- CREATE TABLE
-SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 3);
 SELECT * FROM test.show_columns('disttable');
 SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
@@ -103,14 +103,27 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_columns('disttab
 CREATE INDEX disttable_description_idx ON disttable (description);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
 
+-- TRUNCATE
+CREATE TABLE non_disttable1(time timestamptz);
+CREATE TABLE non_disttable2(time timestamptz);
+SELECT create_hypertable('non_disttable2', 'time');
+
+-- Truncating two non-distribued hypertables should be OK.
+TRUNCATE non_disttable1, non_disttable2;
+-- Truncating one distributed hypertable should be OK
+TRUNCATE disttable;
+
 -- Test unsupported operations on distributed hypertable
 \set ON_ERROR_STOP 0
 
+-- Combining one distributed hypertable with any other tables should
+-- be blocked since not all nodes might have all tables and we
+-- currently don't rewrite the command.
+TRUNCATE disttable, non_disttable1;
+TRUNCATE disttable, non_disttable2;
+
 CLUSTER disttable USING disttable_description_idx;
 REINDEX TABLE disttable;
-TRUNCATE disttable;
--- test block several hypertables
-TRUNCATE disttable, disttable;
 
 ALTER TABLE disttable ALTER COLUMN description TYPE INT;
 ALTER TABLE disttable RENAME TO disttable2;
@@ -120,8 +133,6 @@ ALTER INDEX disttable_description_idx RENAME to disttable_descr_idx;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 ALTER TABLE disttable SET SCHEMA some_schema;
 
-CREATE TABLE non_disttable1(id int);
-CREATE TABLE non_disttable2(id int);
 
 DROP TABLE non_disttable1, disttable;
 DROP TABLE disttable, non_disttable2;
@@ -367,14 +378,14 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
 ALTER TABLE disttable DROP CONSTRAINT color_check;
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
 SELECT * FROM test.remote_exec(NULL, $$
 SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_15_1_dist_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
 $$);
 DROP TABLE disttable;
 
@@ -417,14 +428,14 @@ SELECT * FROM test.show_indexes('disttable');
 
 \set ON_ERROR_STOP 0
 
+-- Test TRUNCATE blocked on data node
+TRUNCATE disttable;
+
 -- Test ALTER by non-frontend session
 ALTER TABLE disttable ADD CONSTRAINT device_check CHECK (device > 0);
 
 -- Test path for delayed relid resolving
 ALTER TABLE disttable RENAME TO disttable2;
-
--- Test for multiple hypertables
-TRUNCATE disttable, disttable;
 
 -- Test for hypertables collected during drop
 DROP INDEX disttable_device_idx;
