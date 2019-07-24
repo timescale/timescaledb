@@ -31,6 +31,11 @@ SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
 SELECT * FROM add_data_node('data_node_2');
 -- Add NULL data_node
 SELECT * FROM add_data_node(NULL);
+-- Adding a data node via ADD SERVER is blocked
+CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
+OPTIONS (host 'localhost', port '15432', dbname 'data_node_4');
+-- Dropping a data node via DROP SERVER is also blocked
+DROP SERVER data_node_1, data_node_2;
 \set ON_ERROR_STOP 1
 
 -- Should not generate error with if_not_exists option
@@ -39,8 +44,8 @@ SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
                             if_not_exists => true);
 
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            if_not_exists => true);
 
 -- Test altering server command is blocked
 \set ON_ERROR_STOP 0
@@ -70,7 +75,7 @@ SELECT * FROM delete_data_node('data_node_3', if_exists => true);
 
 SELECT * FROM timescaledb_information.data_node;
 
-DROP SERVER data_node_1 CASCADE;
+SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
@@ -81,15 +86,16 @@ RESET ROLE;
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_4;
+DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO INFO;
 SET ROLE :ROLE_1;
 
+-- Add new data nodes
 SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
+SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 SELECT * FROM timescaledb_information.data_node;
@@ -152,13 +158,13 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => -1);
 
 -- Non-existing data node
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_3" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_4" }');
 \set ON_ERROR_STOP 1
 
 -- Use a subset of data nodes and a replication factor of two so that
 -- each chunk is associated with more than one data node. Set
 -- number_partitions lower than number of servers to raise a warning
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_4" }');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_3" }');
 
 -- Create some chunks
 INSERT INTO disttable VALUES
@@ -185,7 +191,7 @@ _timescaledb_catalog.chunk_data_node cdn
 WHERE c.id = cdn.chunk_id;
 
 -- Setting the same data node should do nothing and return false
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
 
 -- Should update the default data node and return true
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_2');
@@ -195,19 +201,19 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 
 -- Reset the default data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
 SELECT * FROM delete_data_node('data_node_2');
 -- non-existing chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
 -- non-existing data node
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_0000');
 -- data node exists but does not store the chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_1');
 -- NULL try
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_3');
 \set ON_ERROR_STOP 1
 
 -- Deleting a data node removes the "foreign" chunk table(s) that
@@ -228,11 +234,13 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 \set ON_ERROR_STOP 0
 -- can't delete b/c it's last data replica
-SELECT * FROM delete_data_node('data_node_4', force => true);
+SELECT * FROM delete_data_node('data_node_3', force => true);
 \set ON_ERROR_STOP 1
 
--- Should also clean up hypertable_data_node when using standard DDL commands
-DROP SERVER data_node_4 CASCADE;
+-- Removing all data allows us to delete the data node by force, but
+-- with WARNING that new data will be under-replicated
+TRUNCATE disttable;
+SELECT * FROM delete_data_node('data_node_3', force => true);
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -291,10 +299,10 @@ FROM _timescaledb_catalog.dimension
 WHERE num_slices IS NOT NULL
 AND column_name = 'device';
 
-SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
+SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             if_not_exists => true);
-SELECT * FROM attach_data_node('data_node_3', 'disttable');
+SELECT * FROM attach_data_node('data_node_4', 'disttable');
 
 -- Show updated number of slices in 'device' dimension.
 SELECT column_name, num_slices
@@ -304,7 +312,7 @@ AND column_name = 'device';
 
 -- Clean up
 DROP TABLE disttable;
-SELECT * FROM delete_data_node('data_node_3');
+SELECT * FROM delete_data_node('data_node_4');
 
 -- Creating a distributed hypertable without any servers should fail
 CREATE TABLE disttable(time timestamptz, device int, temp float);
@@ -331,16 +339,25 @@ DROP DATABASE IF EXISTS data_node_3;
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
--- Bring down the database
-DROP DATABASE IF EXISTS data_node_3;
--- Return false if data node is down
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_3');
-
+-- These data nodes have been deleted, so safe to remove their databases.
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_4;
 
-DROP SERVER data_node_3 CASCADE;
+-- data node 3 is not yet deleted. Drop the database to mimic a failed node
+DROP DATABASE IF EXISTS data_node_3;
+-- Return false if data node is down
+SELECT * FROM _timescaledb_internal.ping_data_node('data_node_3');
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- deleting a failed data node without force => true should fail
+SELECT delete_data_node('data_node_3');
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
+-- Should work with force option
+SELECT delete_data_node('data_node_3', force => true);
 
 -- there should be no data nodes
 SELECT * FROM timescaledb_information.data_node;
@@ -431,9 +448,14 @@ SELECT * FROM allow_new_chunks('data_node_1');
 SELECT * FROM allow_new_chunks('data_node_2');
 SELECT * FROM allow_new_chunks('data_node_3');
 
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT table_name, node_name, block_chunks
+FROM _timescaledb_catalog.hypertable_data_node dn,
+_timescaledb_catalog.hypertable h
+WHERE dn.hypertable_id = h.id
+ORDER BY table_name;
 
--- Detach should work b/c disttable_2 has no data
+-- Detach should work b/c disttable_2 has no data and more data nodes
+-- than replication factor
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
 
 \set ON_ERROR_STOP 0
@@ -452,17 +474,22 @@ SELECT * FROM detach_data_node('data_node_3', 'devices');
 \set ON_ERROR_STOP 1
 
 -- force detach data node to become under-replicated for new data
-SELECT * FROM detach_data_node('data_node_3', 'disttable_2', true);
+SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
 
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 -- force detach data node with data
-SELECT * FROM detach_data_node('data_node_3', 'disttable', true);
+SELECT * FROM detach_data_node('data_node_3', 'disttable', force => true);
 
 -- chunk and hypertable metadata should be deleted as well
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT table_name, node_name, block_chunks
+FROM _timescaledb_catalog.hypertable_data_node dn,
+_timescaledb_catalog.hypertable h
+WHERE dn.hypertable_id = h.id
+ORDER BY table_name;
+
 -- detached data_node_3 should not show up any more
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
@@ -470,7 +497,7 @@ ORDER BY foreign_table_name;
 
 \set ON_ERROR_STOP 0
 -- detaching data node with last data replica should ERROR even when forcing
-SELECT * FROM detach_data_node('server_2', 'disttable', true);
+SELECT * FROM detach_data_node('server_2', 'disttable', force => true);
 \set ON_ERROR_STOP 1
 
 -- drop all chunks

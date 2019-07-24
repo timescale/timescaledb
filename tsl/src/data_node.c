@@ -12,6 +12,7 @@
 #include <catalog/pg_foreign_server.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_namespace.h>
+#include <catalog/pg_inherits.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
@@ -465,15 +466,26 @@ add_distributed_id_to_data_node(const char *node_name, const char *host, int32 p
 	remote_connection_close(conn);
 }
 
-static void
-remove_distributed_id_from_backend(ForeignServer *fs)
+static bool
+remove_distributed_id_from_backend(TSConnection *conn, char **errmsg)
 {
-	TSConnection *conn = remote_connection_open(fs->serverid, GetUserId());
-	PGresult *res = remote_connection_query_ok(conn,
-											   "SELECT * FROM "
-											   "_timescaledb_internal.remove_from_dist_db();");
-	remote_result_close(res);
-	remote_connection_close(conn);
+	bool result = false;
+	PGresult *pgres;
+
+	Assert(NULL != conn);
+
+	pgres = remote_connection_exec(conn,
+								   "SELECT * FROM "
+								   "_timescaledb_internal.remove_from_dist_db();");
+
+	if (PQresultStatus(pgres) == PGRES_TUPLES_OK)
+		result = true;
+	else if (NULL != errmsg)
+		*errmsg = pchomp(PQresultErrorMessage(pgres));
+
+	remote_result_close(pgres);
+
+	return result;
 }
 
 /**
@@ -1083,13 +1095,17 @@ data_node_delete(PG_FUNCTION_ARGS)
 		.objectSubId = 0,
 	};
 	Node *parsetree = NULL;
+	TSConnection *conn;
 	TSConnectionId cid;
 	Cache *conn_cache;
 	ForeignServer *server;
+	char *errstr;
 
 	/* Need USAGE to detach. Further owner check done when executing the DROP
 	 * statement. */
 	server = data_node_get_foreign_server(node_name, ACL_USAGE, if_exists);
+
+	Assert(server == NULL ? if_exists : true);
 
 	if (NULL == server)
 	{
@@ -1123,7 +1139,30 @@ data_node_delete(PG_FUNCTION_ARGS)
 
 	parsetree = (Node *) &stmt;
 
-	remove_distributed_id_from_backend(server);
+	/* Try to remove the distribute database ID from the remote data node. We
+	 * need to allow failures here if "force" option is set, otherwise we
+	 * won't be able to delete a failed data node. */
+	conn = remote_connection_open_nothrow(server->serverid, GetUserId(), &errstr);
+
+	if (NULL == conn)
+	{
+		ereport(force ? WARNING : ERROR,
+				(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+				 errmsg("could not connect to data node \"%s\"", node_name),
+				 errdetail("%s", errstr),
+				 force ? 0 : errhint("Use the force option to delete the data node anyway.")));
+	}
+	else
+	{
+		if (!remove_distributed_id_from_backend(conn, &errstr))
+			ereport(force ? WARNING : ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("could not remove distributed ID from data node \"%s\"", node_name),
+					 errdetail("%s", errstr),
+					 force ? 0 : errhint("Use the force option to delete the data node anyway.")));
+
+		remote_connection_close(conn);
+	}
 
 	/* Make sure event triggers are invoked so that all dropped objects
 	 * are collected during a cascading drop. This ensures all dependent

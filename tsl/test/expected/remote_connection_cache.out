@@ -6,18 +6,18 @@ CREATE FUNCTION _timescaledb_internal.test_remote_connection_cache()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_connection_cache'
 LANGUAGE C STRICT;
+CREATE FUNCTION _timescaledb_internal.test_alter_data_node(node_name NAME)
+RETURNS BOOL
+AS :TSL_MODULE_PATHNAME, 'tsl_test_alter_data_node'
+LANGUAGE C STRICT;
 DO $d$
     BEGIN
-        EXECUTE $$CREATE SERVER loopback_1 FOREIGN DATA WRAPPER timescaledb_fdw
-            OPTIONS (dbname '$$||current_database()||$$',
-                     host 'localhost',
-                     port '$$||current_setting('port')||$$'
-            )$$;
-        EXECUTE $$CREATE SERVER loopback_2 FOREIGN DATA WRAPPER timescaledb_fdw
-            OPTIONS (dbname '$$||current_database()||$$',
-                     host 'localhost',
-                     port '$$||current_setting('port')||$$'
-            )$$;
+        EXECUTE $$SELECT add_data_node('loopback_1',
+                database => 'loopback_1',
+                port => current_setting('port')::int)$$;
+        EXECUTE $$SELECT add_data_node('loopback_2',
+                database => 'loopback_2',
+                port => current_setting('port')::int)$$;
     END;
 $d$;
 SELECT _timescaledb_internal.test_remote_connection_cache();
