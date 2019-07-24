@@ -147,15 +147,12 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	ListCell *lc;
 	int i;
 
-	Assert(list_length(cscan->custom_plans) == list_length(state->initial_subplans));
 	initialize_constraints(state, lthird(cscan->custom_private));
 
 	if (state->startup_exclusion)
 		do_startup_exclusion(state);
 
-	cscan->custom_plans = state->filtered_subplans;
-
-	state->num_subplans = list_length(cscan->custom_plans);
+	state->num_subplans = list_length(state->filtered_subplans);
 
 	if (state->num_subplans == 0)
 		return;
@@ -163,7 +160,7 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	state->subplanstates = palloc0(state->num_subplans * sizeof(PlanState *));
 
 	i = 0;
-	foreach (lc, cscan->custom_plans)
+	foreach (lc, state->filtered_subplans)
 	{
 		/*
 		 * we use an array for the states but put it in custom_ps as well

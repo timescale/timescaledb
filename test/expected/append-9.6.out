@@ -1161,6 +1161,427 @@ ORDER BY time DESC;
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (9 rows)
 
+-- test prepared statements
+-- executor startup exclusion with no chunks excluded
+PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(13 rows)
+
+DEALLOCATE prep;
+-- executor startup exclusion with chunks excluded
+PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
+(7 rows)
+
+DEALLOCATE prep;
+-- runtime exclusion with LATERAL and 2 hypertables
+PREPARE prep AS SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
+:PREFIX EXECUTE prep;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+:PREFIX EXECUTE prep;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+:PREFIX EXECUTE prep;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+:PREFIX EXECUTE prep;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+:PREFIX EXECUTE prep;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5
+                     Index Cond: ("time" = m1."time")
+(20 rows)
+
+DEALLOCATE prep;
+-- executor startup exclusion with subquery
+PREPARE prep AS SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+:PREFIX EXECUTE prep;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(7 rows)
+
+DEALLOCATE prep;
+-- test constraint exclusion for subqueries with mergeappend
+PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
+:PREFIX EXECUTE prep;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: metrics_timestamptz
+   Chunks left after exclusion: 2
+   ->  Merge Append
+         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
+(9 rows)
+
+DEALLOCATE prep;
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results
