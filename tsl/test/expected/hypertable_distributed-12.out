@@ -61,7 +61,7 @@ SELECT * FROM timescaledb_information.data_node;
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
 CREATE FOREIGN TABLE foreign_table (time timestamptz, device int, temp float) SERVER data_node_1;
-ERROR:  timescaledb foreign tables must be chunks
+ERROR:  operation not supported
 \set ON_ERROR_STOP 1
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work

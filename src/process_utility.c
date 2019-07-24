@@ -290,9 +290,47 @@ process_create_foreign_table_start(ProcessUtilityArgs *args)
 		if (fdw->fdwid == server->fdwid)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("timescaledb foreign tables must be chunks"),
-					 errdetail("It is not possible to create stand-alone foreign "
-							   "tables using the timescaledb foreign data wrapper.")));
+					 errmsg("operation not supported"),
+					 errdetail("It is not possible to create stand-alone TimescaleDB "
+							   "foreign tables.")));
+	}
+}
+
+static void
+process_create_foreign_server_start(ProcessUtilityArgs *args)
+{
+	CreateForeignServerStmt *stmt = (CreateForeignServerStmt *) args->parsetree;
+
+	if (strcmp(EXTENSION_FDW_NAME, stmt->fdwname) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("operation not supported on a TimescaleDB data node"),
+				 errhint("Use add_data_node() to add data nodes to a "
+						 "TimescaleDB distributed database.")));
+}
+
+static void
+process_drop_foreign_server_start(DropStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		Value *value = lfirst(lc);
+		const char *servername = strVal(value);
+		ForeignServer *server = GetForeignServerByName(servername, true);
+
+		if (NULL != server)
+		{
+			ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
+
+			if (fdw->fdwid == server->fdwid)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on a TimescaleDB data node"),
+						 errhint("Use delete_data_node() to remove data nodes from a "
+								 "TimescaleDB distributed database.")));
+		}
 	}
 }
 
@@ -1158,7 +1196,7 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 }
 
 static void
-process_drop(ProcessUtilityArgs *args)
+process_drop_start(ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = (DropStmt *) args->parsetree;
 
@@ -1173,6 +1211,9 @@ process_drop(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_VIEW:
 			block_dropping_continuous_aggregates_without_cascade(args, stmt);
+			break;
+		case OBJECT_FOREIGN_SERVER:
+			process_drop_foreign_server_start(stmt);
 			break;
 		default:
 			break;
@@ -3233,6 +3274,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_AlterOwnerStmt:
 			process_alter_owner(args);
 			break;
+		case T_CreateForeignServerStmt:
+			process_create_foreign_server_start(args);
+			break;
 		case T_AlterObjectSchemaStmt:
 			process_alterobjectschema(args);
 			break;
@@ -3262,7 +3306,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			 * table is dropped, the drop respects CASCADE in the expected
 			 * way.
 			 */
-			process_drop(args);
+			process_drop_start(args);
 			break;
 		case T_DropTableSpaceStmt:
 			process_drop_tablespace(args);
