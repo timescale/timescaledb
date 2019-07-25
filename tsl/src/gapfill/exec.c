@@ -142,6 +142,8 @@ gapfill_internal_get_datum(int64 value, Oid type)
 static inline int64
 interval_to_usec(Interval *interval)
 {
+	if (interval == NULL)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("interval cannot be NULL")));
 	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
 		   interval->time;
 }
@@ -273,7 +275,10 @@ is_simple_expr_walker(Node *node, void *context)
 		case T_CoerceViaIO:
 		case T_CaseExpr:
 		case T_CaseWhen:
+			break;
 		case T_Param:
+			if (castNode(Param, node)->paramkind != PARAM_EXTERN)
+				return true;
 			break;
 		default:
 			return true;
@@ -530,6 +535,16 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_period =
 		gapfill_period_get_internal(func->funcresulttype, exprType(linitial(args)), arg_value);
+
+	/*
+	 * this would error when trying to align start and stop to bucket_width as well below
+	 * but checking this explicitly here will make a nicer error message
+	 */
+	if (state->gapfill_period <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "invalid time_bucket_gapfill argument: bucket_width must be greater than 0")));
 
 	/*
 	 * check if gapfill start was left out so we have to infer from WHERE
