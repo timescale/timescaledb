@@ -208,6 +208,56 @@ SELECT
   time_bucket_gapfill(1,time,1,NULL)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
+
+-- test 0 bucket_width
+SELECT
+  time_bucket_gapfill(0,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('0d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::date),('2000-02-01'::date)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('0d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2000-02-01'::timestamptz)) v(time)
+GROUP BY 1;
+
+-- test negative bucket_width
+SELECT
+  time_bucket_gapfill(-1,time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('-1d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::date),('2000-02-01'::date)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('-1d',time,'2000-01-01','2000-02-01')
+FROM (VALUES ('2000-01-01'::timestamptz),('2000-02-01'::timestamptz)) v(time)
+GROUP BY 1;
+
+-- test subqueries as interval, start and stop (not supported atm)
+SELECT
+  time_bucket_gapfill((SELECT 1),time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill(1,time,(SELECT 1),11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill(1,time,1,(SELECT 11))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+
 \set ON_ERROR_STOP 1
 
 -- test time_bucket_gapfill without aggregation
