@@ -34,6 +34,8 @@
 #include "gorilla.h"
 
 #define MAX_ROWS_PER_COMPRESSION 1000
+#define COMPRESSIONCOL_IS_SEGMENT_BY(col) (col->segmentby_column_index > 0)
+#define COMPRESSIONCOL_IS_ORDER_BY(col) (col->orderby_column_index > 0)
 
 static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORITHMS] = {
 	[COMPRESSION_ALGORITHM_ARRAY] = ARRAY_ALGORITHM_DEFINITION,
@@ -181,12 +183,10 @@ compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns
 
 	for (i = 0; i < n_columns; i++)
 	{
-		bool is_segmentby = columns[i]->segmentby_column_index >= 0;
-		bool is_orderby = columns[i]->orderby_column_index >= 0;
-		if (is_segmentby)
+		if (COMPRESSIONCOL_IS_SEGMENT_BY(columns[i]))
 			n_segment_keys += 1;
 
-		if (is_segmentby || is_orderby)
+		if (COMPRESSIONCOL_IS_SEGMENT_BY(columns[i]) || COMPRESSIONCOL_IS_ORDER_BY(columns[i]))
 			*n_keys_out += 1;
 	}
 
@@ -195,13 +195,14 @@ compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns
 	for (i = 0; i < n_columns; i++)
 	{
 		const ColumnCompressionInfo *column = columns[i];
-		int16 segment_offset = column->segmentby_column_index;
-		int16 orderby_offset = column->orderby_column_index;
+		/* valid values for segmentby_columnn_index and orderby_column_index
+		   are > 0 */
+		int16 segment_offset = column->segmentby_column_index - 1;
+		int16 orderby_offset = column->orderby_column_index - 1;
 		AttrNumber compressed_att;
-		if (segment_offset >= 0)
+		if (COMPRESSIONCOL_IS_SEGMENT_BY(column))
 			(*keys_out)[segment_offset] = column;
-
-		if (columns[i]->orderby_column_index >= 0)
+		else if (COMPRESSIONCOL_IS_ORDER_BY(column))
 			(*keys_out)[n_segment_keys + orderby_offset] = column;
 
 		compressed_att = get_attnum(in_table, NameStr(column->attname));
@@ -294,11 +295,11 @@ compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionI
 
 	*att_nums = att_tup->attnum;
 	*collation = att_tup->attcollation;
-	*nulls_first = column->segmentby_column_index < 0 && column->orderby_nullsfirst;
+	*nulls_first = (!(COMPRESSIONCOL_IS_SEGMENT_BY(column))) && column->orderby_nullsfirst;
 
 	tentry = lookup_type_cache(att_tup->atttypid, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
 
-	if (column->segmentby_column_index >= 0 || column->orderby_asc)
+	if (COMPRESSIONCOL_IS_SEGMENT_BY(column) || column->orderby_asc)
 		*sort_operator = tentry->lt_opr;
 	else
 		*sort_operator = tentry->gt_opr;
@@ -362,8 +363,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		row_compressor->uncompressed_col_to_compressed_col[in_column_offset] =
 			AttrNumberGetAttrOffset(compressed_colnum);
 		Assert(AttrNumberGetAttrOffset(compressed_colnum) < num_compressed_columns);
-
-		if (compression_info->segmentby_column_index < 0)
+		if (!COMPRESSIONCOL_IS_SEGMENT_BY(compression_info))
 		{
 			*column = (PerColumn){
 				.compressor = compressor_for_algorithm_and_type(compression_info->algo_id,

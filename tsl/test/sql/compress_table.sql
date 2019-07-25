@@ -14,24 +14,27 @@ CREATE OR REPLACE FUNCTION ts_decompress_table(in_table REGCLASS, out_table REGC
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- column name, algorithm, idx, asc, nulls_first
+--no sgement_byindex (use 0 to indicate that)
 CREATE FUNCTION ord(TEXT, INT, INT, BOOL = true, BOOL = false)
     RETURNS _timescaledb_catalog.hypertable_compression
     AS $$
-        SELECT (1, $1, $2::SMALLINT, -1, $3::SMALLINT, $4, $5)::_timescaledb_catalog.hypertable_compression
+        SELECT (1, $1, $2::SMALLINT, 0, $3::SMALLINT+1, $4, $5)::_timescaledb_catalog.hypertable_compression
     $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 -- column name, idx, asc, nulls_first
+-- no orderby_index. use 0 to indicate that.
 CREATE FUNCTION seg(TEXT, INT, BOOL = true, BOOL = false)
     RETURNS _timescaledb_catalog.hypertable_compression
     AS $$
-        SELECT (1, $1, 0, $2::SMALLINT, -1, $3, $4)::_timescaledb_catalog.hypertable_compression
+        SELECT (1, $1, 0, $2::SMALLINT+1, 0, $3, $4)::_timescaledb_catalog.hypertable_compression
     $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 -- column name, algorithm
+--no orderby or segment by index (use 0 to indicate that)
 CREATE FUNCTION com(TEXT, INT)
     RETURNS _timescaledb_catalog.hypertable_compression
     AS $$
-        SELECT (1, $1, $2::SMALLINT, -1, -1, true, false)::_timescaledb_catalog.hypertable_compression
+        SELECT (1, $1, $2::SMALLINT, 0, 0, true, false)::_timescaledb_catalog.hypertable_compression
     $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 SELECT * FROM ord('time', 4, 0);

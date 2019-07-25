@@ -33,6 +33,7 @@
 #include "process_utility.h"
 #include "hypertable.h"
 #include "compression/create.h"
+#include "compression/compress_utils.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -105,6 +106,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_append = tsl_array_compressor_append,
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.process_compress_table = tsl_process_compress_table,
+	.compress_chunk = tsl_compress_chunk,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

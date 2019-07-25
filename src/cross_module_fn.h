@@ -88,6 +88,7 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_finish;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
+	PGFunction compress_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
