@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 --TEST1 ---
 --basic test with count
-create table foo (a integer, b integer, c integer);
+create table foo (a integer, b integer, c integer, d integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
  table_name 
@@ -11,11 +11,11 @@ NOTICE:  adding not-null constraint to column "a"
  foo
 (1 row)
 
-insert into foo values( 3 , 16 , 20);
-insert into foo values( 10 , 10 , 20);
-insert into foo values( 20 , 11 , 20);
-insert into foo values( 30 , 12 , 20);
-alter table foo set (timescaledb.compress);
+insert into foo values( 3 , 16 , 20, 11);
+insert into foo values( 10 , 10 , 20, 120);
+insert into foo values( 20 , 11 , 20, 13);
+insert into foo values( 30 , 12 , 20, 14);
+alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
@@ -24,15 +24,38 @@ _timescaledb_catalog.hypertable order by id;
   2 | _timescaledb_internal | _compressed_hypertable_2 | t          |                         
 (2 rows)
 
--- should error out --
-\set ON_ERROR_STOP 0
-ALTER TABLE foo ALTER b SET NOT NULL, set (timescaledb.compress);
-ERROR:  ALTER TABLE <hypertable> SET does not support multiple clauses
-\set ON_ERROR_STOP 1
-ALTER TABLE foo ALTER b SET NOT NULL;
-select attname, attnotnull from pg_attribute where attrelid = (select oid from pg_class where relname like 'foo') and attname like 'b';
- attname | attnotnull 
----------+------------
- b       | t
+select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
+ hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
+             1 | a       |                        0 |                      1 |                      |             | 
+             1 | b       |                        0 |                      2 |                      |             | 
+             1 | c       |                        4 |                        |                    1 | f           | f
+             1 | d       |                        4 |                        |                    2 | t           | f
+(4 rows)
+
+select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+ compress_chunk 
+----------------
+ 
 (1 row)
 
+select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+select  ch1.id, ch1.schema_name, ch1.table_name ,  ch2.table_name as compress_table
+from
+_timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
+where ch1.compressed_chunk_id = ch2.id;
+ id |      schema_name      |    table_name    |      compress_table      
+----+-----------------------+------------------+--------------------------
+  2 | _timescaledb_internal | _hyper_1_2_chunk | compress_hyper_2_5_chunk
+  1 | _timescaledb_internal | _hyper_1_1_chunk | compress_hyper_2_6_chunk
+(2 rows)
+
+\set ON_ERROR_STOP 0
+--cannot recompress the chunk the second time around
+select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  chunk is already compressed

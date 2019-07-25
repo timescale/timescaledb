@@ -10,8 +10,9 @@
 
 #include "with_clause_parser.h"
 #include "hypertable.h"
+#include "chunk.h"
 
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
-
+Chunk *create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk);
 #endif /* TIMESCALEDB_TSL_COMPRESSION_CREATE_H */

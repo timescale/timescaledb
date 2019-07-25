@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPRESS_HYPERTABLE_H
-#define TIMESCALEDB_COMPRESS_HYPERTABLE_H
+#ifndef TIMESCALEDB_COMPRESSION_WITH_CLAUSE_H
+#define TIMESCALEDB_COMPRESSION_WITH_CLAUSE_H
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
@@ -20,6 +20,16 @@ typedef enum CompressHypertableOption
 	CompressOrderBy,
 } CompressHypertableOption;
 
+typedef struct
+{
+	short index;
+	NameData colname;
+	bool nullsfirst;
+	bool asc;
+} CompressedParsedCol;
+
 WithClauseResult *ts_compress_hypertable_set_clause_parse(const List *defelems);
+extern TSDLLEXPORT List *ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options);
+extern TSDLLEXPORT List *ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options);
 
 #endif

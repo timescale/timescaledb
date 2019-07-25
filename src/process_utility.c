@@ -62,7 +62,7 @@
 #include "with_clause_parser.h"
 #include "cross_module_fn.h"
 #include "continuous_agg.h"
-#include "compress_hypertable.h"
+#include "compression_with_clause.h"
 #include "partitioning.h"
 
 #include "cross_module_fn.h"

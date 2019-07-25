@@ -293,7 +293,8 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
 /* the source of this data is the enum from the source code that lists
-   the algorithms */
+ *  the algorithms. This table is NOT dumped. 
+*/
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
 	id SMALLINT PRIMARY KEY,
 	version SMALLINT NOT NULL,
@@ -301,7 +302,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
 	description TEXT
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_algorithm', '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
 	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,

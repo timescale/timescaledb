@@ -120,14 +120,12 @@ alter table _timescaledb_catalog.hypertable add constraint hypertable_compress_c
 
 ALTER TABLE _timescaledb_catalog.chunk add column compressed_chunk_id integer references _timescaledb_catalog.chunk(id);
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
+CREATE TABLE _timescaledb_catalog.compression_algorithm(
 	id SMALLINT PRIMARY KEY,
 	version SMALLINT NOT NULL,
 	name NAME NOT NULL,
 	description TEXT
 );
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_algorithm', '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
 	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
@@ -190,3 +188,13 @@ CREATE TYPE _timescaledb_internal.compressed_data (
     RECEIVE = _timescaledb_internal.compressed_data_recv,
     SEND = _timescaledb_internal.compressed_data_send
 );
+
+--insert data for compression_algorithm --
+insert into _timescaledb_catalog.compression_algorithm values
+( 0, 1, 'COMPRESSION_ALGORITHM_NONE', 'no compression'),
+( 1, 1, 'COMPRESSION_ALGORITHM_ARRAY', 'array'),
+( 2, 1, 'COMPRESSION_ALGORITHM_DICTIONARY', 'dictionary'),
+( 3, 1, 'COMPRESSION_ALGORITHM_GORILLA', 'gorilla'),
+( 4, 1, 'COMPRESSION_ALGORITHM_DELTADELTA', 'deltadelta')
+on conflict(id) do update set (version, name, description) 
+= (excluded.version, excluded.name, excluded.description);

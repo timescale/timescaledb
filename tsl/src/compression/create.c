@@ -14,6 +14,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <nodes/makefuncs.h>
+#include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
 
@@ -25,9 +26,24 @@
 #include "trigger.h"
 #include "scan_iterator.h"
 #include "hypertable_cache.h"
+#include "compression_with_clause.h"
+#include "compression.h"
+#include "hypertable_compression.h"
+
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
  */
+typedef struct CompressColInfo
+{
+	int numcols;
+	FormData_hypertable_compression
+		*col_meta;	/* metadata about columns from src hypertable that will be compressed*/
+	List *coldeflist; /*list of ColumnDef for the compressed column */
+} CompressColInfo;
+
+static void compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols,
+								 List *orderby_cols);
+static void compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid);
 
 #define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
 	do                                                                                             \
@@ -41,20 +57,59 @@
 		}                                                                                          \
 	} while (0);
 
-static void test_compresschunk(Hypertable *ht, int32 compress_htid);
-
 #define COMPRESSEDDATA_TYPE_NAME "_timescaledb_internal.compressed_data"
 
-/* return ColumnDef list - dups columns of passed in relid
- *                         new columns have BYTEA type
+static enum CompressionAlgorithms
+get_default_algorithm_id(Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case INT4OID:
+		case INT2OID:
+		case INT8OID:
+		case INTERVALOID:
+		case DATEOID:
+		case TIMESTAMPOID:
+		{
+			return COMPRESSION_ALGORITHM_DELTADELTA;
+		}
+		case FLOAT4OID:
+		case FLOAT8OID:
+		{
+			return COMPRESSION_ALGORITHM_GORILLA;
+		}
+		case NUMERICOID:
+		{
+			return COMPRESSION_ALGORITHM_ARRAY;
+		}
+		case TEXTOID:
+		case CHAROID:
+		{
+			return COMPRESSION_ALGORITHM_DICTIONARY;
+		}
+		default:
+			return COMPRESSION_ALGORITHM_DICTIONARY;
+	}
+}
+
+/*
+ * return the columndef list for compressed hypertable.
+ * we do this by getting the source hypertable's attrs,
+ * 1.  validate the segmentby cols and orderby cols exists in this list and
+ * 2. create the columndefs for the new compressed hypertable
+ *     segmentby_cols have same datatype as the original table
+ *     all other cols have COMPRESSEDDATA_TYPE type
  */
-static List *
-get_compress_columndef_from_table(Oid srctbl_relid)
+static void
+compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols,
+					 List *orderby_cols)
 {
 	Relation rel;
 	TupleDesc tupdesc;
-	int attno;
-	List *collist = NIL;
+	int i, colno, attno;
+	int32 *segorder_colindex;
+	int seg_attnolen = 0;
+	ListCell *lc;
 	const Oid compresseddata_oid =
 		DatumGetObjectId(DirectFunctionCall1(regtypein, CStringGetDatum(COMPRESSEDDATA_TYPE_NAME)));
 
@@ -62,28 +117,129 @@ get_compress_columndef_from_table(Oid srctbl_relid)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("type \"%s\" does not exist", COMPRESSEDDATA_TYPE_NAME)));
-	/* Get the tupledesc and turn it over to expandTupleDesc */
+	seg_attnolen = list_length(segmentby_cols);
 	rel = relation_open(srctbl_relid, AccessShareLock);
+	segorder_colindex = palloc0(sizeof(int32) * (rel->rd_att->natts));
 	tupdesc = rel->rd_att;
+	i = 1;
+	foreach (lc, segmentby_cols)
+	{
+		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
+		AttrNumber col_attno = attno_find_by_attname(tupdesc, &col->colname);
+		if (col_attno == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("column %s in compress_segmentby list does not exist",
+							NameStr(col->colname))));
+		}
+		segorder_colindex[col_attno - 1] = i++;
+	}
+	/* the column indexes are numbered as seg_attnolen + <orderby_index>
+	 */
+	Assert(seg_attnolen == (i - 1));
+	foreach (lc, orderby_cols)
+	{
+		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
+		AttrNumber col_attno = attno_find_by_attname(tupdesc, &col->colname);
+		if (col_attno == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("column %s in compress_orderby list does not exist",
+							NameStr(col->colname))));
+		}
+		/* check if orderby_cols and segmentby_cols are distinct */
+		if (segorder_colindex[col_attno - 1] != 0)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("cannot use the same column %s in compress_orderby and "
+							"compress_segmentby",
+							NameStr(col->colname))));
+		}
+		segorder_colindex[col_attno - 1] = i++;
+	}
+
+	cc->numcols = 0;
+	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * tupdesc->natts);
+	cc->coldeflist = NIL;
+	colno = 0;
 	for (attno = 0; attno < tupdesc->natts; attno++)
 	{
+		Oid attroid = InvalidOid;
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno);
-
-		if (!attr->attisdropped)
+		ColumnDef *coldef;
+		if (attr->attisdropped)
+			continue;
+		namestrcpy(&cc->col_meta[colno].attname, NameStr(attr->attname));
+		if (segorder_colindex[attno] > 0)
 		{
-			ColumnDef *col = makeColumnDef(NameStr(attr->attname),
-										   compresseddata_oid,
-										   -1 /*typmod*/,
-										   0 /*collation*/);
-			collist = lappend(collist, col);
+			if (segorder_colindex[attno] <= seg_attnolen)
+			{
+				attroid = attr->atttypid; /*segment by columns have original type */
+				cc->col_meta[colno].segmentby_column_index = segorder_colindex[attno];
+			}
+			else
+			{
+				int orderby_index = segorder_colindex[attno] - seg_attnolen;
+				CompressedParsedCol *ordercol = list_nth(orderby_cols, orderby_index - 1);
+				cc->col_meta[colno].orderby_column_index = orderby_index;
+				cc->col_meta[colno].orderby_asc = ordercol->asc;
+				cc->col_meta[colno].orderby_nullsfirst = ordercol->nullsfirst;
+			}
 		}
+		if (attroid == InvalidOid)
+		{
+			attroid = compresseddata_oid; /* default type for column */
+			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);
+		}
+		else
+		{
+			cc->col_meta[colno].algo_id = 0; // invalid algo number
+		}
+		coldef = makeColumnDef(NameStr(attr->attname), attroid, -1 /*typmod*/, 0 /*collation*/);
+		cc->coldeflist = lappend(cc->coldeflist, coldef);
+		colno++;
 	}
+	cc->numcols = colno;
 	relation_close(rel, AccessShareLock);
-	return collist;
+}
+
+/* prevent concurrent transactions from inserting into
+ * hypertable_compression for the same table, acquire the lock but don't free
+ * here
+ * i.e. 2 concurrent ALTER TABLE to compressed will not succeed.
+ */
+static void
+compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+	Datum values[Natts_hypertable_compression];
+	bool nulls[Natts_hypertable_compression] = { false };
+	TupleDesc desc;
+	int i;
+	CatalogSecurityContext sec_ctx;
+
+	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE_COMPRESSION), RowExclusiveLock);
+	desc = RelationGetDescr(rel);
+
+	for (i = 0; i < compress_cols->numcols; i++)
+	{
+		FormData_hypertable_compression *fd = &compress_cols->col_meta[i];
+		fd->hypertable_id = htid;
+		hypertable_compression_fill_tuple_values(fd, &values[0], &nulls[0]);
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		ts_catalog_insert_values(rel, desc, values, nulls);
+		ts_catalog_restore_user(&sec_ctx);
+	}
+
+	heap_close(rel, NoLock); /*lock will be released at end of transaction only*/
 }
 
 static int32
-create_compression_table(Oid relid, Oid owner)
+create_compression_table(Oid owner, CompressColInfo *compress_cols)
 {
 	ObjectAddress tbladdress;
 	char relnamebuf[NAMEDATALEN];
@@ -94,12 +250,10 @@ create_compression_table(Oid relid, Oid owner)
 
 	CreateStmt *create;
 	RangeVar *compress_rel;
-	List *collist;
 	int32 compress_hypertable_id;
 
-	collist = get_compress_columndef_from_table(relid);
 	create = makeNode(CreateStmt);
-	create->tableElts = collist;
+	create->tableElts = compress_cols->coldeflist;
 	create->inhRelations = NIL;
 	create->ofTypename = NULL;
 	create->constraints = NIL;
@@ -128,14 +282,12 @@ create_compression_table(Oid relid, Oid owner)
 	return compress_hypertable_id;
 }
 
-/* this function will change in the follow up PR. Please do not review */
-static Chunk *
-create_compress_chunk(Hypertable *compress_ht, int32 compress_hypertable_id, Chunk *src_chunk)
+Chunk *
+create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 {
 	Hyperspace *hs = compress_ht->space;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
-	// Hypercube *cube;
 	Chunk *compress_chunk;
 
 	/* Create a new chunk based on the hypercube */
@@ -150,7 +302,7 @@ create_compress_chunk(Hypertable *compress_ht, int32 compress_hypertable_id, Chu
 	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
 	snprintf(compress_chunk->fd.table_name.data,
 			 NAMEDATALEN,
-			 "compress_%s_%d_chunk",
+			 "compress%s_%d_chunk",
 			 NameStr(compress_ht->fd.associated_table_prefix),
 			 compress_chunk->fd.id);
 	compress_chunk->constraints = NULL;
@@ -161,15 +313,12 @@ create_compress_chunk(Hypertable *compress_ht, int32 compress_hypertable_id, Chu
 	compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht);
 
 	if (!OidIsValid(compress_chunk->table_id))
-		elog(ERROR, "could not create chunk table");
+		elog(ERROR, "could not create compress chunk table");
 
-	/* Create the chunk's constraints, triggers, and indexes */
-	/*   ts_chunk_constraints_create(compress_chunk->constraints,
-								   compress_chunk->table_id,
-								   compress_chunk->fd.id,
-								   compress_chunk->hypertable_relid,
-								   compress_chunk->fd.hypertable_id);
-   */
+	/* compressed chunk has no constraints. But inherits indexes and triggers
+	 * from the compressed hypertable
+	 */
+
 	ts_trigger_create_all_on_chunk(compress_ht, compress_chunk);
 
 	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
@@ -191,45 +340,22 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 						   WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
+	struct CompressColInfo compress_cols;
+
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
+	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options);
+	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options);
+	/* we need an AccessShare lock on the hypertable so that there are
+	 * no DDL changes while we create the compressed hypertable
+	 */
+	LockRelationOid(ht->main_table_relid, AccessShareLock);
+	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 
-	compress_htid = create_compression_table(ht->main_table_relid, ownerid);
+	compress_htid = create_compression_table(ownerid, &compress_cols);
+	/* block concurrent DDL that creates same compressed hypertable*/
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	ts_hypertable_set_compressed_id(ht, compress_htid);
-
-	// TODO remove this after we have compress_chunks function
-	test_compresschunk(ht, compress_htid);
+	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
+	/* do not release any locks, will get released by xact end */
 	return true;
-}
-
-static List *
-get_chunk_ids(int32 hypertable_id)
-{
-	List *chunk_ids = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	ts_scanner_foreach(&iterator)
-	{
-		FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
-
-		if (form->hypertable_id == hypertable_id)
-			chunk_ids = lappend_int(chunk_ids, form->id);
-	}
-	return chunk_ids;
-}
-static void
-test_compresschunk(Hypertable *ht, int32 compress_htid)
-{
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *compress_ht = ts_hypertable_cache_get_entry_by_id(hcache, compress_htid);
-
-	// compress chunk from origin table */
-	List *ht_chks = get_chunk_ids(ht->fd.id);
-	ListCell *lc;
-	foreach (lc, ht_chks)
-	{
-		int chkid = lfirst_int(lc);
-		Chunk *src_chunk = ts_chunk_get_by_id(chkid, 0, true);
-		Chunk *compress_chunk = create_compress_chunk(compress_ht, compress_ht->fd.id, src_chunk);
-		ts_chunk_set_compressed_chunk(src_chunk, compress_chunk->fd.id, false);
-	}
-	ts_cache_release(hcache);
 }
