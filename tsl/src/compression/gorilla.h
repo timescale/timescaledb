@@ -72,10 +72,12 @@ typedef struct GorillaCompressor GorillaCompressor;
 typedef struct GorillaCompressed GorillaCompressed;
 typedef struct GorillaDecompressionIterator GorillaDecompressionIterator;
 
+extern Compressor *gorilla_compressor_for_type(Oid element_type);
+
 extern GorillaCompressor *gorilla_compressor_alloc(void);
 extern void gorilla_compressor_append_null(GorillaCompressor *compressor);
 extern void gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val);
-extern GorillaCompressed *gorilla_compressor_finish(GorillaCompressor *compressor);
+extern void *gorilla_compressor_finish(GorillaCompressor *compressor);
 
 extern DecompressionIterator *
 gorilla_decompression_iterator_from_datum_forward(Datum dictionary_compressed, Oid element_type);
@@ -99,6 +101,7 @@ extern Datum tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS);
 		.iterator_init_reverse = gorilla_decompression_iterator_from_datum_reverse,                \
 		.compressed_data_send = gorilla_compressed_send,                                           \
 		.compressed_data_recv = gorilla_compressed_recv,                                           \
+		.compressor_for_type = gorilla_compressor_for_type,                                        \
 	}
 
 #endif

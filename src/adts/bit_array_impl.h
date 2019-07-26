@@ -161,7 +161,11 @@ bytes_store_bit_array_and_advance(char *dest, size_t expected_size, const BitArr
 	*num_buckets_out = bit_array_num_buckets(array);
 	*bits_in_last_bucket_out = array->bits_used_in_last_bucket;
 
-	memcpy(dest, array->buckets.data, size);
+	if (size > 0)
+	{
+		Assert(array->buckets.data != NULL);
+		memcpy(dest, array->buckets.data, size);
+	}
 	return dest + size;
 }
 

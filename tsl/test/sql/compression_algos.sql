@@ -172,6 +172,11 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
 \ir include/compression_test.sql
 DROP TABLE  base_doubles;
 
+-- all 0s
+CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as item FROM (SELECT generate_series(1, 1000) ) j;
+\ir include/compression_test.sql
+DROP TABLE  base_doubles;
+
 -- NULLs
 CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
 \ir include/compression_test.sql
