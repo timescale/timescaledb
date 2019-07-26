@@ -133,26 +133,27 @@ typedef struct Simple8bRleDecompressResult
 	bool is_done;
 } Simple8bRleDecompressResult;
 
-static void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
-static Simple8bRleSerialized *simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
-static void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
+static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
+static inline Simple8bRleSerialized *simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
+static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
+static inline bool simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor);
 
-static void simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator *iter,
+static inline void simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator *iter,
 															Simple8bRleSerialized *compressed);
-static void simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
+static inline void simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
 															Simple8bRleSerialized *compressed);
-static Simple8bRleDecompressResult
+static inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter);
-static Simple8bRleDecompressResult
+static inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIterator *iter);
 
-static void simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data);
-static char *bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
+static inline void simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data);
+static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
 												  const Simple8bRleSerialized *data);
-static Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(const char **data);
-static size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
-static size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
-static size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
+static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(const char **data);
+static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
+static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
+static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
 
 /*********************
  ***  Private API  ***
@@ -303,6 +304,12 @@ simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val)
 	compressor->num_uncompressed_elements += 1;
 }
 
+static bool
+simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor)
+{
+	return compressor->num_elements == 0;
+}
+
 static size_t
 simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor)
 {
@@ -357,11 +364,11 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 	uint64 bits;
 
 	simple8brle_compressor_flush(compressor);
-	Assert(compressor->last_block_set);
-	simple8brle_compressor_push_block(compressor, compressor->last_block);
-
 	if (compressor->num_elements == 0)
 		return NULL;
+
+	Assert(compressor->last_block_set);
+	simple8brle_compressor_push_block(compressor, compressor->last_block);
 
 	compressed_size = simple8brle_compressor_compressed_size(compressor);
 	/* we use palloc0 despite initializing the entire structure,

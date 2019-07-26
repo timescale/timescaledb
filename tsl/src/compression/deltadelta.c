@@ -13,6 +13,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
+#include <utils/date.h>
 #include <funcapi.h>
 #include <lib/stringinfo.h>
 
@@ -70,6 +71,159 @@ typedef struct DeltaDeltaCompressor
 	Simple8bRleCompressor nulls;
 	bool has_nulls;
 } DeltaDeltaCompressor;
+
+typedef struct ExtendedCompressor
+{
+	Compressor base;
+	DeltaDeltaCompressor *internal;
+} ExtendedCompressor;
+
+static void
+deltadelta_compressor_append_int16(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetInt16(val));
+}
+
+static void
+deltadelta_compressor_append_int32(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetInt32(val));
+}
+
+static void
+deltadelta_compressor_append_int64(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetInt64(val));
+}
+
+static void
+deltadelta_compressor_append_date(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetDateADT(val));
+}
+
+static void
+deltadelta_compressor_append_timestamp(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetTimestamp(val));
+}
+
+static void
+deltadelta_compressor_append_timestamptz(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetTimestampTz(val));
+}
+
+static void
+deltadelta_compressor_append_null_value(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_null(extended->internal);
+}
+
+static void *delta_delta_compressor_finish(DeltaDeltaCompressor *compressor);
+
+static void *
+deltadelta_compressor_finish_and_reset(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	void *compressed = delta_delta_compressor_finish(extended->internal);
+	pfree(extended->internal);
+	extended->internal = NULL;
+	return compressed;
+}
+
+const Compressor deltadelta_uint16_compressor = {
+	.append_val = deltadelta_compressor_append_int16,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+const Compressor deltadelta_uint32_compressor = {
+	.append_val = deltadelta_compressor_append_int32,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+const Compressor deltadelta_uint64_compressor = {
+	.append_val = deltadelta_compressor_append_int64,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+
+const Compressor deltadelta_date_compressor = {
+	.append_val = deltadelta_compressor_append_date,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+
+const Compressor deltadelta_timestamp_compressor = {
+	.append_val = deltadelta_compressor_append_timestamp,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+
+const Compressor deltadelta_timestamptz_compressor = {
+	.append_val = deltadelta_compressor_append_timestamptz,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+
+Compressor *
+delta_delta_compressor_for_type(Oid element_type)
+{
+	ExtendedCompressor *compressor = palloc(sizeof(*compressor));
+	switch (element_type)
+	{
+		case INT2OID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_uint16_compressor };
+			return &compressor->base;
+		case INT4OID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_uint32_compressor };
+			return &compressor->base;
+		case INT8OID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_uint64_compressor };
+			return &compressor->base;
+		case DATEOID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_date_compressor };
+			return &compressor->base;
+#ifdef HAVE_INT64_TIMESTAMP
+		case TIMESTAMPOID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_timestamp_compressor };
+			return &compressor->base;
+		case TIMESTAMPTZOID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_timestamptz_compressor };
+			return &compressor->base;
+#endif
+		default:
+			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
+	}
+}
 
 Datum
 tsl_deltadelta_compressor_append(PG_FUNCTION_ARGS)
@@ -157,20 +311,38 @@ delta_delta_from_parts(uint64 first_value, uint64 last_value, uint64 last_delta,
 	return compressed;
 }
 
+static void *
+delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
+{
+	Simple8bRleSerialized *deltas = simple8brle_compressor_finish(&compressor->delta_delta);
+	Simple8bRleSerialized *nulls = simple8brle_compressor_finish(&compressor->nulls);
+	DeltaDeltaCompressed *compressed;
+
+	if (deltas == NULL)
+		return NULL;
+
+	compressed = delta_delta_from_parts(compressor->start,
+										compressor->prev_val,
+										compressor->prev_delta,
+										deltas,
+										compressor->has_nulls ? nulls : NULL);
+
+	Assert(compressed->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
+	return compressed;
+}
+
 Datum
 tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS)
 {
-	DeltaDeltaCompressor *compressor = (DeltaDeltaCompressor *) PG_GETARG_POINTER(0);
+	DeltaDeltaCompressor *compressor =
+		PG_ARGISNULL(0) ? NULL : (DeltaDeltaCompressor *) PG_GETARG_POINTER(0);
+	void *compressed;
+	if (compressor == NULL)
+		PG_RETURN_NULL();
 
-	Simple8bRleSerialized *deltas = simple8brle_compressor_finish(&compressor->delta_delta);
-	Simple8bRleSerialized *nulls = simple8brle_compressor_finish(&compressor->nulls);
-	DeltaDeltaCompressed *compressed = delta_delta_from_parts(compressor->start,
-															  compressor->prev_val,
-															  compressor->prev_delta,
-															  deltas,
-															  compressor->has_nulls ? nulls : NULL);
-
-	Assert(compressed->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
+	compressed = delta_delta_compressor_finish(compressor);
+	if (compressed == NULL)
+		PG_RETURN_NULL();
 	PG_RETURN_POINTER(compressed);
 }
 

@@ -48,6 +48,17 @@ typedef struct DecompressResult
 	bool is_done;
 } DecompressResult;
 
+/* Forward declaration of ColumnCompressionInfo so we don't need to include catalog.h */
+typedef struct FormData_hypertable_compression ColumnCompressionInfo;
+
+typedef struct Compressor Compressor;
+struct Compressor
+{
+	void (*append_null)(Compressor *compressord);
+	void (*append_val)(Compressor *compressor, Datum val);
+	void *(*finish)(Compressor *data);
+};
+
 typedef struct DecompressionIterator
 {
 	uint8 compression_algorithm;
@@ -63,6 +74,8 @@ typedef struct CompressionAlgorithmDefinition
 	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
+
+	Compressor *(*compressor_for_type)(Oid element_type);
 } CompressionAlgorithmDefinition;
 
 typedef enum CompressionAlgorithms
@@ -74,8 +87,8 @@ typedef enum CompressionAlgorithms
 	COMPRESSION_ALGORITHM_DICTIONARY,
 	COMPRESSION_ALGORITHM_GORILLA,
 	COMPRESSION_ALGORITHM_DELTADELTA,
-	/* When adding an algorithm also add a static assert statement below */
 
+	/* When adding an algorithm also add a static assert statement below */
 	/* end of real values */
 	_END_COMPRESSION_ALGORITHMS,
 	_MAX_NUM_COMPRESSION_ALGORITHMS = 128,
@@ -108,5 +121,8 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 5,
 					 "number of algorithms have changed, the asserts should be updated");
 }
+
+extern void compress_chunk(Oid in_table, Oid out_table,
+						   const ColumnCompressionInfo **column_compression_info, int num_columns);
 
 #endif

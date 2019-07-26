@@ -29,6 +29,7 @@ typedef struct DeltaDeltaCompressor DeltaDeltaCompressor;
 typedef struct DeltaDeltaCompressed DeltaDeltaCompressed;
 typedef struct DeltaDeltaDecompressionIterator DeltaDeltaDecompressionIterator;
 
+extern Compressor *delta_delta_compressor_for_type(Oid element_type);
 extern DeltaDeltaCompressor *delta_delta_compressor_alloc(void);
 extern void delta_delta_compressor_append_null(DeltaDeltaCompressor *compressor);
 extern void delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next_val);
@@ -56,6 +57,7 @@ extern Datum tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS);
 		.iterator_init_reverse = delta_delta_decompression_iterator_from_datum_reverse,            \
 		.compressed_data_send = deltadelta_compressed_send,                                        \
 		.compressed_data_recv = deltadelta_compressed_recv,                                        \
+		.compressor_for_type = delta_delta_compressor_for_type,                                    \
 	}
 
 #endif

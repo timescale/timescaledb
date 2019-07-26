@@ -93,6 +93,13 @@ typedef struct ArrayCompressor
 	bool has_nulls;
 } ArrayCompressor;
 
+typedef struct ExtendedCompressor
+{
+	Compressor base;
+	ArrayCompressor *internal;
+	Oid element_type;
+} ExtendedCompressor;
+
 typedef struct ArrayDecompressionIterator
 {
 	DecompressionIterator base;
@@ -110,6 +117,53 @@ typedef struct ArrayDecompressionIterator
 /******************
  *** Compressor ***
  ******************/
+
+static void
+array_compressor_append_datum(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = array_compressor_alloc(extended->element_type);
+
+	array_compressor_append(extended->internal, val);
+}
+
+static void
+array_compressor_append_null_value(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = array_compressor_alloc(extended->element_type);
+
+	array_compressor_append_null(extended->internal);
+}
+
+static void *
+array_compressor_finish_and_reset(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	void *compressed = array_compressor_finish(extended->internal);
+	pfree(extended->internal);
+	extended->internal = NULL;
+	return compressed;
+}
+
+const Compressor array_compressor = {
+	.append_val = array_compressor_append_datum,
+	.append_null = array_compressor_append_null_value,
+	.finish = array_compressor_finish_and_reset,
+};
+
+Compressor *
+array_compressor_for_type(Oid element_type)
+{
+	ExtendedCompressor *compressor = palloc(sizeof(*compressor));
+	*compressor = (ExtendedCompressor){
+		.base = array_compressor,
+		.element_type = element_type,
+	};
+	return &compressor->base;
+}
 
 ArrayCompressor *
 array_compressor_alloc(Oid type_to_compress)
@@ -193,7 +247,9 @@ array_compressor_get_serialization_info(ArrayCompressor *compressor)
 	if (info->nulls != NULL)
 		info->total += simple8brle_serialized_total_size(info->nulls);
 
-	info->total += simple8brle_serialized_total_size(info->sizes);
+	if (info->sizes != NULL)
+		info->total += simple8brle_serialized_total_size(info->sizes);
+
 	info->total += compressor->data.num_elements;
 	return info;
 }
@@ -262,10 +318,13 @@ array_compressed_from_serialization_info(ArrayCompressorSerializationInfo *info,
 	return compressed_array;
 }
 
-ArrayCompressed *
+void *
 array_compressor_finish(ArrayCompressor *compressor)
 {
 	ArrayCompressorSerializationInfo *info = array_compressor_get_serialization_info(compressor);
+	if (info->sizes == NULL)
+		return NULL;
+
 	return array_compressed_from_serialization_info(info, compressor->type);
 }
 
@@ -738,8 +797,13 @@ tsl_array_compressor_finish(PG_FUNCTION_ARGS)
 {
 	ArrayCompressor *compressor =
 		(ArrayCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	void *compressed;
 	if (compressor == NULL)
 		PG_RETURN_NULL();
 
-	PG_RETURN_POINTER(array_compressor_finish(compressor));
+	compressed = array_compressor_finish(compressor);
+	if (compressed == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_POINTER(compressed);
 }

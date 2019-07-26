@@ -100,6 +100,12 @@ typedef struct GorillaCompressor
 	bool has_nulls;
 } GorillaCompressor;
 
+typedef struct ExtendedCompressor
+{
+	Compressor base;
+	GorillaCompressor *internal;
+} ExtendedCompressor;
+
 typedef struct GorillaDecompressionIterator
 {
 	DecompressionIterator base;
@@ -203,6 +209,131 @@ pg_rightmost_one_pos64(uint64 word)
  ***  Compressor  ***
  ********************/
 
+static void
+gorilla_compressor_append_float(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	uint64 value = float_get_bits(DatumGetFloat4(val));
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_value(extended->internal, value);
+}
+
+static void
+gorilla_compressor_append_double(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	uint64 value = double_get_bits(DatumGetFloat8(val));
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_value(extended->internal, value);
+}
+
+static void
+gorilla_compressor_append_int16(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_value(extended->internal, (uint16) DatumGetInt16(val));
+}
+
+static void
+gorilla_compressor_append_int32(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_value(extended->internal, (uint32) DatumGetInt32(val));
+}
+
+static void
+gorilla_compressor_append_int64(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_value(extended->internal, DatumGetInt64(val));
+}
+
+static void
+gorilla_compressor_append_null_value(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = gorilla_compressor_alloc();
+
+	gorilla_compressor_append_null(extended->internal);
+}
+
+static void *
+gorilla_compressor_finish_and_reset(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	void *compressed = gorilla_compressor_finish(extended->internal);
+	pfree(extended->internal);
+	extended->internal = NULL;
+	return compressed;
+}
+
+const Compressor gorilla_float_compressor = {
+	.append_val = gorilla_compressor_append_float,
+	.append_null = gorilla_compressor_append_null_value,
+	.finish = gorilla_compressor_finish_and_reset,
+};
+
+const Compressor gorilla_double_compressor = {
+	.append_val = gorilla_compressor_append_double,
+	.append_null = gorilla_compressor_append_null_value,
+	.finish = gorilla_compressor_finish_and_reset,
+};
+const Compressor gorilla_uint16_compressor = {
+	.append_val = gorilla_compressor_append_int16,
+	.append_null = gorilla_compressor_append_null_value,
+	.finish = gorilla_compressor_finish_and_reset,
+};
+const Compressor gorilla_uint32_compressor = {
+	.append_val = gorilla_compressor_append_int32,
+	.append_null = gorilla_compressor_append_null_value,
+	.finish = gorilla_compressor_finish_and_reset,
+};
+const Compressor gorilla_uint64_compressor = {
+	.append_val = gorilla_compressor_append_int64,
+	.append_null = gorilla_compressor_append_null_value,
+	.finish = gorilla_compressor_finish_and_reset,
+};
+
+Compressor *
+gorilla_compressor_for_type(Oid element_type)
+{
+	ExtendedCompressor *compressor = palloc(sizeof(*compressor));
+	switch (element_type)
+	{
+		case FLOAT4OID:
+			*compressor = (ExtendedCompressor){ .base = gorilla_float_compressor };
+			return &compressor->base;
+		case FLOAT8OID:
+			*compressor = (ExtendedCompressor){ .base = gorilla_double_compressor };
+			return &compressor->base;
+		case INT2OID:
+			*compressor = (ExtendedCompressor){ .base = gorilla_uint16_compressor };
+			return &compressor->base;
+		case INT4OID:
+			*compressor = (ExtendedCompressor){ .base = gorilla_uint32_compressor };
+			return &compressor->base;
+		case INT8OID:
+			*compressor = (ExtendedCompressor){ .base = gorilla_uint64_compressor };
+			return &compressor->base;
+		default:
+			elog(ERROR, "invalid type for Gorilla compression %d", element_type);
+	}
+}
+
 GorillaCompressor *
 gorilla_compressor_alloc(void)
 {
@@ -261,30 +392,41 @@ gorilla_compressor_append_null(GorillaCompressor *compressor)
 void
 gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val)
 {
+	bool has_values;
 	uint64 xor = compressor->prev_val ^ val;
 	simple8brle_compressor_append(&compressor->nulls, 0);
 
-	if (xor == 0)
+	/* for the first value we store the bitsize even if the xor is all zeroes,
+	 * this ensures that the bits-per-xor isn't empty, and that we can calculate
+	 * the remaining offsets correctly.
+	 */
+	has_values = !simple8brle_compressor_is_empty(&compressor->bits_used_per_xor);
+
+	if (has_values && xor == 0)
 		simple8brle_compressor_append(&compressor->tag0s, 0);
 	else
 	{
-		int leading_zeros = 63 - pg_leftmost_one_pos64(xor);
-		int trailing_zeros = pg_rightmost_one_pos64(xor);
+		/* leftmost/rightmost 1 is not well-defined when all the bits in the number
+		 * are 0; the C implementations of these functions will ERROR, while the
+		 * assembly versions may return any value. We special-case 0 to to use
+		 * values for leading and trailing-zeroes that we know will work.
+		 */
+		int leading_zeros = xor != 0 ? 63 - pg_leftmost_one_pos64(xor) : 63;
+		int trailing_zeros = xor != 0 ? pg_rightmost_one_pos64(xor) : 1;
 		/*   TODO this can easily get stuck with a bad value for trailing_zeroes
 		 *   we use a new trailing_zeroes if th delta is too large, but the
 		 *   threshold was picked in a completely unprincipled manner.
 		 *   Needs benchmarking
 		 */
-		bool reuse_bitsizes = leading_zeros >= compressor->prev_leading_zeroes &&
+		bool reuse_bitsizes = has_values && leading_zeros >= compressor->prev_leading_zeroes &&
 							  trailing_zeros >= compressor->prev_trailing_zeros &&
-							  (leading_zeros - compressor->prev_leading_zeroes) +
-									  (trailing_zeros - compressor->prev_trailing_zeros) <=
-								  12;
+							  ((leading_zeros - compressor->prev_leading_zeroes) +
+								   (trailing_zeros - compressor->prev_trailing_zeros) <=
+							   12);
 		uint8 num_bits_used;
 
 		simple8brle_compressor_append(&compressor->tag0s, 1);
 		simple8brle_compressor_append(&compressor->tag1s, reuse_bitsizes ? 0 : 1);
-
 		if (!reuse_bitsizes)
 		{
 			compressor->prev_leading_zeroes = leading_zeros;
@@ -357,7 +499,7 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 	return compressed;
 }
 
-GorillaCompressed *
+void *
 gorilla_compressor_finish(GorillaCompressor *compressor)
 {
 	GorillaCompressed header = {
@@ -367,11 +509,22 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
 	};
 	CompressedGorillaData data = { .header = &header };
 	data.tag0s = simple8brle_compressor_finish(&compressor->tag0s);
+	if (data.tag0s == NULL)
+		return NULL;
+
 	data.tag1s = simple8brle_compressor_finish(&compressor->tag1s);
+	Assert(data.tag1s != NULL);
 	data.leading_zeros = compressor->leading_zeros;
+	/* if all elements in the compressed are the same, there will be no xors,
+	 * and thus bits_used_per_xor will be empty. Since we need to store the header
+	 * to get the sizing right, we force at least one bits_used_per_xor to be created
+	 * in append, above
+	 */
 	data.num_bits_used_per_xor = simple8brle_compressor_finish(&compressor->bits_used_per_xor);
+	Assert(data.num_bits_used_per_xor != NULL);
 	data.xors = compressor->xors;
 	data.nulls = simple8brle_compressor_finish(&compressor->nulls);
+	Assert(compressor->has_nulls || data.nulls != NULL);
 
 	return compressed_gorilla_data_serialize(&data);
 }
@@ -381,10 +534,15 @@ tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
 {
 	GorillaCompressor *compressor =
 		(GorillaCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	void *compressed;
 	if (compressor == NULL)
 		PG_RETURN_NULL();
 
-	PG_RETURN_POINTER(gorilla_compressor_finish(compressor));
+	compressed = gorilla_compressor_finish(compressor);
+	if (compressed == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_POINTER(compressed);
 }
 
 /*******************************
@@ -430,9 +588,9 @@ compressed_gorilla_data_init_from_pointer(CompressedGorillaData *expanded,
 static void
 compressed_gorilla_data_init_from_datum(CompressedGorillaData *data, Datum gorilla_compressed)
 {
-	return compressed_gorilla_data_init_from_pointer(data,
-													 (GorillaCompressed *) PG_DETOAST_DATUM(
-														 gorilla_compressed));
+	compressed_gorilla_data_init_from_pointer(data,
+											  (GorillaCompressed *) PG_DETOAST_DATUM(
+												  gorilla_compressed));
 }
 
 DecompressionIterator *

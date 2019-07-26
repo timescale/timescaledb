@@ -24,10 +24,13 @@ typedef struct ArrayCompressor ArrayCompressor;
 typedef struct ArrayCompressed ArrayCompressed;
 typedef struct ArrayDecompressionIterator ArrayDecompressionIterator;
 
+extern const Compressor array_compressor;
+
+extern Compressor *array_compressor_for_type(Oid element_type);
 extern ArrayCompressor *array_compressor_alloc(Oid type_to_compress);
 extern void array_compressor_append_null(ArrayCompressor *compressor);
 extern void array_compressor_append(ArrayCompressor *compressor, Datum val);
-extern ArrayCompressed *array_compressor_finish(ArrayCompressor *compressor);
+extern void *array_compressor_finish(ArrayCompressor *compressor);
 
 extern ArrayDecompressionIterator *array_decompression_iterator_alloc(void);
 extern DecompressionIterator *
@@ -70,6 +73,7 @@ extern Datum tsl_array_compressor_finish(PG_FUNCTION_ARGS);
 		.iterator_init_reverse = tsl_array_decompression_iterator_from_datum_reverse,              \
 		.compressed_data_send = array_compressed_send,                                             \
 		.compressed_data_recv = array_compressed_recv,                                             \
+		.compressor_for_type = array_compressor_for_type,                                          \
 	}
 
 #endif

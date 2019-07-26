@@ -25,10 +25,11 @@ typedef struct DictionaryCompressor DictionaryCompressor;
 typedef struct DictionaryCompressed DictionaryCompressed;
 typedef struct DictionaryDecompressionIterator DictionaryDecompressionIterator;
 
+extern Compressor *dictionary_compressor_for_type(Oid element_type);
 extern DictionaryCompressor *dictionary_compressor_alloc(Oid type_to_compress);
 extern void dictionary_compressor_append_null(DictionaryCompressor *compressor);
 extern void dictionary_compressor_append(DictionaryCompressor *compressor, Datum val);
-extern DictionaryCompressed *dictionary_compressor_finish(DictionaryCompressor *compressor);
+extern void *dictionary_compressor_finish(DictionaryCompressor *compressor);
 
 extern DecompressionIterator *
 tsl_dictionary_decompression_iterator_from_datum_forward(Datum dictionary_compressed,
@@ -54,6 +55,7 @@ extern Datum tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS);
 		.iterator_init_reverse = tsl_dictionary_decompression_iterator_from_datum_reverse,         \
 		.compressed_data_send = dictionary_compressed_send,                                        \
 		.compressed_data_recv = dictionary_compressed_recv,                                        \
+		.compressor_for_type = dictionary_compressor_for_type                                      \
 	}
 
 #endif

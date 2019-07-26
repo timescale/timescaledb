@@ -80,6 +80,60 @@ typedef struct DictionaryCompressor
 	Simple8bRleCompressor nulls;
 } DictionaryCompressor;
 
+typedef struct ExtendedCompressor
+{
+	Compressor base;
+	DictionaryCompressor *internal;
+	Oid element_type;
+} ExtendedCompressor;
+
+static void
+dictionary_compressor_append_datum(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = dictionary_compressor_alloc(extended->element_type);
+
+	dictionary_compressor_append(extended->internal, val);
+}
+
+static void
+dictionary_compressor_append_null_value(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = dictionary_compressor_alloc(extended->element_type);
+
+	dictionary_compressor_append_null(extended->internal);
+}
+
+static void *
+dictionary_compressor_finish_and_reset(Compressor *compressor)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	void *compressed = dictionary_compressor_finish(extended->internal);
+	pfree(extended->internal);
+	extended->internal = NULL;
+	return compressed;
+}
+
+const Compressor dictionary_compressor = {
+	.append_val = dictionary_compressor_append_datum,
+	.append_null = dictionary_compressor_append_null_value,
+	.finish = dictionary_compressor_finish_and_reset,
+};
+
+Compressor *
+dictionary_compressor_for_type(Oid element_type)
+{
+	ExtendedCompressor *compressor = palloc(sizeof(*compressor));
+	*compressor = (ExtendedCompressor){
+		.base = dictionary_compressor,
+		.element_type = element_type,
+	};
+	return &compressor->base;
+}
+
 DictionaryCompressor *
 dictionary_compressor_alloc(Oid type)
 {
@@ -140,6 +194,7 @@ typedef struct DictionaryCompressorSerializationInfo
 	Simple8bRleSerialized *dictionary_compressed_indexes;
 	Simple8bRleSerialized *compressed_nulls;
 	ArrayCompressorSerializationInfo *dictionary_serialization_info;
+	bool is_all_null;
 } DictionaryCompressorSerializationInfo;
 
 static DictionaryCompressorSerializationInfo
@@ -159,6 +214,9 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 		.compressed_nulls = nulls,
 	};
 	Size header_size = sizeof(DictionaryCompressed);
+
+	if (sizes.dictionary_compressed_indexes == NULL)
+		return (DictionaryCompressorSerializationInfo){ .is_all_null = true };
 
 	sizes.bitmaps_size = simple8brle_serialized_total_size(dict_indexes);
 	sizes.total_size = MAXALIGN(header_size) + sizes.bitmaps_size;
@@ -221,10 +279,13 @@ dictionary_compressed_from_serialization_info(DictionaryCompressorSerializationI
 	return bitmap;
 }
 
-DictionaryCompressed *
+void *
 dictionary_compressor_finish(DictionaryCompressor *compressor)
 {
 	DictionaryCompressorSerializationInfo sizes = compressor_get_serialization_info(compressor);
+	if (sizes.is_all_null)
+		return NULL;
+
 	return dictionary_compressed_from_serialization_info(sizes, compressor->type);
 }
 
@@ -439,10 +500,15 @@ tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS)
 {
 	DictionaryCompressor *compressor =
 		(DictionaryCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	void *compressed;
 	if (compressor == NULL)
 		PG_RETURN_NULL();
 
-	PG_RETURN_POINTER(dictionary_compressor_finish(compressor));
+	compressed = dictionary_compressor_finish(compressor);
+	if (compressed == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_POINTER(compressed);
 }
 
 /////////////////////
