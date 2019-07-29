@@ -146,7 +146,24 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
         - docker rm -f docker_arm_emulator
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      # cron tests the earliest patch versions (ABI tests handle the latest)
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 9.6.6"
+      env: PG_VERSION=9.6.6
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 10.2"
+      env: PG_VERSION=10.2
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 11.0"
+      env: PG_VERSION=11.0
+
+      #PRs and branches get tested on the latest released patch
+    - if: (type = pull_request) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6"
       env: PG_VERSION=9.6.6
@@ -197,7 +214,7 @@ jobs:
       script:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg10.sh
 
-    - if: type = cron
+    - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ABI breakage smoketest 9.6"
       before_install:
@@ -208,7 +225,7 @@ jobs:
         # Version >= 9.6.3 is required by TimescaleDB
         - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
 
-    - if: type = cron
+    - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ABI breakage smoketest 10"
       before_install:
@@ -219,7 +236,7 @@ jobs:
         # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
         - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
 
-    - if: type = cron
+    - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ABI breakage smoketest 11"
       before_install:
