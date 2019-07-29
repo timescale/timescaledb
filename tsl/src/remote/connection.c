@@ -13,7 +13,6 @@
 #include <postgres.h>
 
 #include <access/htup_details.h>
-#include <catalog/pg_user_mapping.h>
 #include <catalog/pg_foreign_server.h>
 #include <access/xact.h>
 #include <mb/pg_wchar.h>
@@ -27,10 +26,12 @@
 #include <utils/uuid.h>
 #include <utils/builtins.h>
 
+#include <nodes/makefuncs.h>
 #include <commands/defrem.h>
 #include <export.h>
 #include <telemetry/telemetry_metadata.h>
 #include <extension_constants.h>
+#include "compat.h"
 #include "connection.h"
 #include "guc.h"
 #include "async.h"
@@ -140,35 +141,6 @@ extract_connection_options(List *defelems, const char **keywords, const char **v
 		}
 	}
 	return i;
-}
-
-/*
- * For non-superusers, insist that the connstr specify a password.  This
- * prevents a password from being picked up from .pgpass, a service file,
- * the environment, etc.  We don't want the postgres user's passwords
- * to be accessible to non-superusers.  (See also dblink_connstr_check in
- * contrib/dblink.)
- */
-static void
-check_conn_params(const char **keywords, const char **values)
-{
-	int i;
-
-	/* no check required if superuser */
-	if (superuser())
-		return;
-
-	/* ok if params contain a non-empty password */
-	for (i = 0; keywords[i] != NULL; i++)
-	{
-		if (strcmp(keywords[i], "password") == 0 && values[i][0] != '\0')
-			return;
-	}
-
-	ereport(ERROR,
-			(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
-			 errmsg("password is required"),
-			 errdetail("Non-superusers must provide a password in the user mapping.")));
 }
 
 /*
@@ -294,7 +266,7 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 }
 
 static TSConnection *
-remote_connection_open_internal(const char *hostname, List *host_options, List *user_options)
+remote_connection_open_internal(const char *node_name, List *connection_options)
 {
 	PGconn *pg_conn = NULL;
 	const char **keywords;
@@ -303,17 +275,16 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
 
 	/*
 	 * Construct connection params from generic options of ForeignServer
-	 * and UserMapping.  (Some of them might not be libpq options, in
+	 * and user. (Some of them might not be libpq options, in
 	 * which case we'll just waste a few array slots.)  Add 3 extra slots
 	 * for fallback_application_name, client_encoding, end marker.
 	 */
-	n = list_length(host_options) + list_length(user_options) + 3;
+	n = list_length(connection_options) + 3;
 	keywords = (const char **) palloc(n * sizeof(char *));
 	values = (const char **) palloc(n * sizeof(char *));
 
 	n = 0;
-	n += extract_connection_options(host_options, keywords + n, values + n);
-	n += extract_connection_options(user_options, keywords + n, values + n);
+	n += extract_connection_options(connection_options, keywords + n, values + n);
 
 	/* Use the extension name as fallback_application_name. */
 	keywords[n] = "fallback_application_name";
@@ -327,9 +298,6 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
 
 	keywords[n] = values[n] = NULL;
 
-	/* verify connection parameters and make connection */
-	check_conn_params(keywords, values);
-
 	pg_conn = PQconnectdbParams(keywords, values, false);
 
 	/* Cast to (char **) to silence warning with MSVC compiler */
@@ -339,7 +307,7 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
 	if (NULL == pg_conn)
 		return NULL;
 
-	return remote_connection_create(pg_conn, false, hostname);
+	return remote_connection_create(pg_conn, false, node_name);
 }
 
 /*
@@ -353,8 +321,8 @@ remote_connection_open_internal(const char *hostname, List *host_options, List *
  * that if you can.
  */
 TSConnection *
-remote_connection_open(const char *node_name, List *node_options, List *user_options,
-					   bool set_dist_id)
+remote_connection_open_with_options(const char *node_name, List *connection_options,
+									bool set_dist_id)
 {
 	TSConnection *volatile conn = NULL;
 
@@ -363,7 +331,7 @@ remote_connection_open(const char *node_name, List *node_options, List *user_opt
 	 */
 	PG_TRY();
 	{
-		conn = remote_connection_open_internal(node_name, node_options, user_options);
+		conn = remote_connection_open_internal(node_name, connection_options);
 
 		if (NULL == conn)
 			ereport(ERROR,
@@ -386,13 +354,12 @@ remote_connection_open(const char *node_name, List *node_options, List *user_opt
 		if (!superuser() && !PQconnectionUsedPassword(conn->pg_conn))
 			ereport(ERROR,
 					(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
-					 errmsg("athentication required on target host"),
+					 errmsg("authentication required on target host"),
 					 errdetail("Non-superuser cannot connect if the target host does "
 							   "not request a password."),
 					 errhint("Target host's authentication method must be changed.")));
 
 		/* Prepare new session for use */
-		/* TODO: should this happen in connection or session? */
 		remote_connection_configure(conn);
 
 		/* Inform remote node about instance UUID */
@@ -411,41 +378,41 @@ remote_connection_open(const char *node_name, List *node_options, List *user_opt
 	return conn;
 }
 
-/*
- * Open a connection using current user UserMapping. If UserMapping is not found,
- * it might succeed opening a connection if a current user is a superuser.
- */
-TSConnection *
-remote_connection_open_default(const char *node_name)
+static List *
+add_username_to_server_options(ForeignServer *server, Oid user_id)
 {
-	ForeignServer *fs = GetForeignServerByName(node_name, false);
-	UserMapping *um = get_user_mapping(GetUserId(), fs->serverid, true);
+	const char *user_name = GetUserNameFromId(user_id, false);
+	List *server_options = list_copy(server->options);
 
-	/* This try block is needed as GetUserMapping throws an error rather than returning NULL if a
-	 * user mapping isn't found.  The catch block allows superusers to perform this operation
-	 * without a user mapping. */
+	return lappend(server_options,
+				   makeDefElemCompat("user", (Node *) makeString(pstrdup(user_name)), -1));
+}
 
-	if (NULL == um)
-	{
-		elog(DEBUG1,
-			 "UserMapping not found for user id `%u` and node `%s`. Trying to open remote "
-			 "connection as superuser",
-			 GetUserId(),
-			 fs->servername);
-	}
+TSConnection *
+remote_connection_open_by_id(TSConnectionId id)
+{
+	ForeignServer *server = GetForeignServer(id.server_id);
+	List *connection_options = add_username_to_server_options(server, id.user_id);
 
-	return remote_connection_open(node_name, fs->options, um ? um->options : NULL, true);
+	return remote_connection_open_with_options(server->servername, connection_options, true);
+}
+
+TSConnection *
+remote_connection_open(Oid server_id, Oid user_id)
+{
+	TSConnectionId id = remote_connection_id(server_id, user_id);
+
+	return remote_connection_open_by_id(id);
 }
 
 #define PING_QUERY "SELECT 1"
 
 bool
-remote_connection_ping(const char *server_name)
+remote_connection_ping(const char *node_name)
 {
-	ForeignServer *fs = GetForeignServerByName(server_name, false);
-	UserMapping *um = get_user_mapping(GetUserId(), fs->serverid, true);
-	TSConnection *conn =
-		remote_connection_open_internal(server_name, fs->options, um ? um->options : NULL);
+	ForeignServer *server = GetForeignServerByName(node_name, false);
+	List *connection_options = add_username_to_server_options(server, GetUserId());
+	TSConnection *conn = remote_connection_open_internal(node_name, connection_options);
 	bool success = false;
 
 	if (NULL == conn)

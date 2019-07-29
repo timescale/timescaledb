@@ -121,8 +121,8 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 						HeapTuple *rows, int targrows, double *totalrows, double *totaldeadrows)
 {
 	TsFdwAnalyzeState astate;
-	UserMapping *user;
 	TSConnection *conn;
+	TSConnectionId id = remote_connection_id(serverid, relation->rd_rel->relowner);
 	StringInfoData sql;
 
 	/* Initialize workspace state */
@@ -139,8 +139,7 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 	 * Get the connection to use.  We do the remote access as the table's
 	 * owner, even if the ANALYZE was started by some other user.
 	 */
-	user = GetUserMapping(relation->rd_rel->relowner, serverid);
-	conn = remote_dist_txn_get_connection(user, REMOTE_TXN_NO_PREP_STMT);
+	conn = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 
 	/*
 	 * Construct cursor that retrieves whole rows from remote.
@@ -212,14 +211,13 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 bool
 fdw_analyze_table(Relation relation, Oid serverid, BlockNumber *totalpages)
 {
-	UserMapping *user;
 	TSConnection *conn;
+	TSConnectionId id = remote_connection_id(serverid, relation->rd_rel->relowner);
 	StringInfoData sql;
 	AsyncRequest *volatile req = NULL;
 	AsyncResponseResult *volatile rsp = NULL;
 
-	user = GetUserMapping(relation->rd_rel->relowner, serverid);
-	conn = remote_dist_txn_get_connection(user, REMOTE_TXN_NO_PREP_STMT);
+	conn = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 
 	/*
 	 * Construct command to get page count for relation.

@@ -18,12 +18,12 @@ SET client_min_messages TO NOTICE;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
--- Super user is required to make remote connection without password
+-- Super user is required to bootstrap
 --
 -- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
 
@@ -32,7 +32,7 @@ SELECT * FROM show_data_nodes();
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 RESET ROLE;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM show_data_nodes();
 
@@ -57,7 +57,7 @@ WHERE e.extnamespace = n.oid;
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
 
@@ -65,7 +65,7 @@ SELECT * FROM show_data_nodes();
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (has local server, has database database but no extension installed)
@@ -84,7 +84,7 @@ FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 \c bootstrap_test :ROLE_SUPERUSER;
 
 SELECT extname, nspname
@@ -109,7 +109,7 @@ SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
 
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test');
 \c bootstrap_test :ROLE_SUPERUSER;
 
 SELECT extname, nspname
@@ -117,7 +117,7 @@ FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
@@ -127,7 +127,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 --
 -- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
 -- bootstrap_database = 'template1'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS', bootstrap_database => 'template1');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_database => 'template1');
 \c bootstrap_test :ROLE_DEFAULT_PERM_USER;
 
 SELECT extname, nspname
@@ -140,7 +140,7 @@ SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
 -- Test for ongoing transaction
 BEGIN;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 \set ON_ERROR_STOP 1
 COMMIT;
 SELECT * FROM show_data_nodes();
@@ -151,11 +151,11 @@ DROP DATABASE bootstrap_test;
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass');
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name');
+SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', if_not_exists => true);
 
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass');
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D');
+SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', if_not_exists => true);
 
 SELECT count(*) FROM show_data_nodes();
 SELECT true FROM pg_database WHERE datname = 'Unusual Name';

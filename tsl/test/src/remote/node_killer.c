@@ -71,8 +71,7 @@ ts_remote_node_killer_set_event(PG_FUNCTION_ARGS)
 	Datum arg2 = PG_GETARG_DATUM(1);
 	char *event;
 	char *server_name;
-	ForeignServer *foreign_server;
-	UserMapping *um;
+	TSConnectionId id;
 	MemoryContext ctx;
 
 	testing_callback_call_hook = remote_node_killer_kill_on_event;
@@ -83,10 +82,12 @@ ts_remote_node_killer_set_event(PG_FUNCTION_ARGS)
 	kill_event = event;
 
 	server_name = TextDatumGetCString(arg2);
-	foreign_server = GetForeignServerByName(server_name, false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
+
+	remote_connection_id_set(&id,
+							 GetForeignServerByName(server_name, false)->serverid,
+							 GetUserId());
 	rnk_event =
-		remote_node_killer_init(remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT));
+		remote_node_killer_init(remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT));
 
 	MemoryContextSwitchTo(ctx);
 	PG_RETURN_VOID();

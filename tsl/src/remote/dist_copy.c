@@ -286,9 +286,11 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 	foreach (lc, chunk->data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		ForeignServer *fs = GetForeignServerByName(NameStr(cdn->fd.node_name), false);
-		UserMapping *um = GetUserMapping(GetUserId(), fs->serverid);
-		TSConnection *connection = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
+		TSConnectionId id =
+			remote_connection_id(GetForeignServerByName(NameStr(cdn->fd.node_name), false)
+									 ->serverid,
+								 GetUserId());
+		TSConnection *connection = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 
 		start_remote_copy_on_new_connection(state, connection);
 		chunk_connections->connections = lappend(chunk_connections->connections, connection);

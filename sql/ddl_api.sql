@@ -163,11 +163,9 @@ CREATE OR REPLACE FUNCTION add_data_node(
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
-    password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
-    bootstrap_user         NAME = NULL,
-    bootstrap_password     TEXT = NULL
+    bootstrap_user         NAME = NULL
 ) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME,
                 node_created BOOL, database_created BOOL, extension_created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;

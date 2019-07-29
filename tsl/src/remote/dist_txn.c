@@ -7,7 +7,6 @@
 
 #include <utils/hsearch.h>
 #include <access/htup_details.h>
-#include <catalog/pg_user_mapping.h>
 #include <access/xact.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
@@ -44,7 +43,7 @@ static void dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySub
 typedef struct DistTxnState
 {
 	bool sub_txn_abort_failure;
-	Oid sub_txn_abort_user_mapping_oid;
+	TSConnectionId sub_txn_abort_cid;
 	RemoteTxnStore *store;
 } DistTxnState;
 
@@ -56,18 +55,17 @@ dist_txn_state_reset()
 	if (state.store != NULL)
 		remote_txn_store_destroy(state.store);
 
-	state = (DistTxnState){
-		.sub_txn_abort_failure = false,
-		.sub_txn_abort_user_mapping_oid = InvalidOid,
-		.store = NULL,
-	};
+	state.sub_txn_abort_failure = false;
+	state.sub_txn_abort_cid.server_id = InvalidOid;
+	state.sub_txn_abort_cid.user_id = InvalidOid;
+	state.store = NULL;
 }
 
 static void
-dist_txn_state_mark_subtxn_error(Oid user_mapping_oid)
+dist_txn_state_mark_subtxn_error(TSConnectionId id)
 {
 	state.sub_txn_abort_failure = true;
-	state.sub_txn_abort_user_mapping_oid = user_mapping_oid;
+	state.sub_txn_abort_cid = id;
 }
 
 /* This is for checking for a deferred txn error that could not be thrown when they occurred
@@ -77,23 +75,13 @@ dist_txn_state_mark_subtxn_error(Oid user_mapping_oid)
 static void
 dist_txn_state_throw_deferred_error()
 {
-	HeapTuple tup;
-	Form_pg_user_mapping umform;
 	ForeignServer *server;
 
 	/* no deferred error */
 	if (!state.sub_txn_abort_failure)
 		return;
 
-	/* find server name to be shown in the message below */
-	tup = SearchSysCache1(USERMAPPINGOID, ObjectIdGetDatum(state.sub_txn_abort_user_mapping_oid));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR,
-			 "cache lookup failed for user mapping %u",
-			 state.sub_txn_abort_user_mapping_oid);
-	umform = (Form_pg_user_mapping) GETSTRUCT(tup);
-	server = GetForeignServer(umform->umserver);
-	ReleaseSysCache(tup);
+	server = GetForeignServer(state.sub_txn_abort_cid.server_id);
 
 	ereport(ERROR,
 			(errcode(ERRCODE_CONNECTION_EXCEPTION),
@@ -111,7 +99,7 @@ dist_txn_state_throw_deferred_error()
  * (not even on error), we need this flag to cue manual cleanup.
  */
 TSConnection *
-remote_dist_txn_get_connection(UserMapping *user, RemoteTxnPrepStmtOption prep_stmt_opt)
+remote_dist_txn_get_connection(TSConnectionId id, RemoteTxnPrepStmtOption prep_stmt_opt)
 {
 	bool found;
 	RemoteTxn *remote_txn;
@@ -123,7 +111,7 @@ remote_dist_txn_get_connection(UserMapping *user, RemoteTxnPrepStmtOption prep_s
 	/* Not critical: but raises error earlier */
 	dist_txn_state_throw_deferred_error();
 
-	remote_txn = remote_txn_store_get(state.store, user, &found);
+	remote_txn = remote_txn_store_get(state.store, id, &found);
 
 	/*
 	 * Start a new transaction or subtransaction if it hasn't yet been started
@@ -209,7 +197,7 @@ dist_txn_xact_callback_abort()
 		if (!remote_txn_abort(remote_txn))
 		{
 			elog(WARNING, "failure aborting remote transaction during local abort");
-			remote_txn_store_remove(state.store, remote_txn_get_user_mapping_oid(remote_txn));
+			remote_txn_store_remove(state.store, remote_txn_get_connection_id(remote_txn));
 		}
 	}
 }
@@ -487,8 +475,8 @@ dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 			Assert(event == SUBXACT_EVENT_ABORT_SUB);
 			if (!remote_txn_sub_txn_abort(remote_txn, curlevel))
 			{
-				dist_txn_state_mark_subtxn_error(remote_txn_get_user_mapping_oid(remote_txn));
-				remote_txn_store_remove(state.store, remote_txn_get_user_mapping_oid(remote_txn));
+				dist_txn_state_mark_subtxn_error(remote_txn_get_connection_id(remote_txn));
+				remote_txn_store_remove(state.store, remote_txn_get_connection_id(remote_txn));
 			}
 		}
 	}

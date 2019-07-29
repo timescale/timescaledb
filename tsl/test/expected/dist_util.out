@@ -45,7 +45,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_3', if_not_exists => true);
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | backend_3 | t            | f                | f
@@ -68,8 +68,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 77348176-09da-4a80-bc78-e31bdf5e63ec | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, skipping
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -87,19 +86,17 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "frontend_b"
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 -- Adding backend from a different group as a backend
-SELECT * FROM add_data_node('data_node_b', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_b"
+SELECT * FROM add_data_node('data_node_b', database => 'backend_3', if_not_exists => true);
 NOTICE:  database "backend_3" already exists on data node, skipping
 ERROR:  [data_node_b]: database is already a member of a distributed database
 -- Adding a valid backend target but to an existing backend
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
 ERROR:  unable to assign data nodes from an existing distributed database
 \c backend_2
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
@@ -110,8 +107,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 (0 rows)
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "frontend_b"
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, skipping
 ERROR:  [frontend_b]: database is already a member of a distributed database
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
@@ -123,8 +119,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
 NOTICE:  database "backend_2" already exists on data node, skipping
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -152,8 +147,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
+SELECT * FROM delete_data_node('data_node_1');
  delete_data_node 
 ------------------
  t
@@ -175,8 +169,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  dist_uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (2 rows)
 
-SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+SELECT * FROM add_data_node('data_node_2', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, skipping
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -194,15 +187,13 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 -- Now remove both backends from frontend_b, then verify that they and frontend_b are now valid backends for TEST_DB
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
+SELECT * FROM delete_data_node('data_node_1');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
+SELECT * FROM delete_data_node('data_node_2');
  delete_data_node 
 ------------------
  t
@@ -216,24 +207,21 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, skipping
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | backend_1 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+SELECT * FROM add_data_node('data_node_3', database => 'backend_3', if_not_exists => true);
 NOTICE:  database "backend_3" already exists on data node, skipping
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | backend_3 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_4"
+SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, skipping
   node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
 -------------+-----------+-------+------------+--------------+------------------+-------------------
@@ -323,29 +311,25 @@ NOTICE:  calling hypertable_data_node_relation_size on a non-distributed hyperta
 
 -- Clean up for future tests
 DROP TABLE disttable;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
+SELECT * FROM delete_data_node('data_node_1');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
+SELECT * FROM delete_data_node('data_node_2');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
+SELECT * FROM delete_data_node('data_node_3');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_4', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_4
+SELECT * FROM delete_data_node('data_node_4');
  delete_data_node 
 ------------------
  t

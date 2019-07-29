@@ -9,6 +9,8 @@
 #include <postgres.h>
 #include <utils/fmgrprotos.h>
 
+#include "connection.h"
+
 /* This is the datanode dist txn id to be used in PREPARE TRANSACTION and friends.
    From the datanode perspective it has to be unique with regard to any concurrent
    prepared transactions.
@@ -23,12 +25,12 @@
    remote_txn table is only populated once the txn is committed.
    Therefore this id contains the frontend's transaction_id directly.
 
-   The current format is: version;xid;user_mapping_oid
+   The current format is: version;xid;server_id;user_id
    Both parts are necessary to guarantee uniqueness from the point of view of the data node.
 	- xid is a unique identifier for the dist txn on the frontend. It is also critical to to make
    sure the transaction has completed on the frontend node.
-	- user_mapping_oid dedups the connections made under different user mappings as part of the same
-   frontend distributed txn.
+	- pair of server_id and user_id dedups the connections made under different TSConnectionId
+   mappings as part of the same frontend distributed txn.
 
 	Note: When moving to multiple frontends, we'll need to add a unique prefix for each frontend.
 */
@@ -38,10 +40,10 @@ typedef struct RemoteTxnId
 	uint8 version;
 	char reserved[3]; /* not currently serialized */
 	TransactionId xid;
-	Oid user_mapping;
+	TSConnectionId id;
 } RemoteTxnId;
 
-extern RemoteTxnId *remote_txn_id_create(TransactionId xid, Oid user_mapping);
+extern RemoteTxnId *remote_txn_id_create(TransactionId xid, TSConnectionId id);
 extern RemoteTxnId *remote_txn_id_in(const char *gid_string);
 
 extern bool remote_txn_id_matches_prepared_txn(const char *id_string);

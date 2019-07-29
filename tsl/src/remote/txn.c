@@ -26,14 +26,10 @@
  * This RemoteTxn represents one remote end in a distributed txn.
  * Thus, a distributed txn is made up of a collection remote txn.
  * Each remote txn corresponds to one remote connection and there
- * is a unique remote connection per user-mapping used in the
+ * is a unique remote connection per TSConnectionId used in the
  * distributed txn. Because of this uniqueness property,
- * the user mapping oid appears first in the object, to allow
+ * the connection id appears first in the object, to allow
  * it to be a hash key.
- *
- * Note: Using the user mapping OID rather than
- * the foreign server OID + user OID avoids creating multiple connections when
- * the public user mapping applies to all user OIDs.
  *
  * The "conn" pointer can be NULL if we don't currently have a live connection.
  * When we do have a connection, xact_depth tracks the current depth of
@@ -45,14 +41,13 @@
 
 typedef struct RemoteTxn
 {
-	Oid user_mapping_oid; /* hash key (must be first) */
-	TSConnection *conn;   /* connection to data node, or NULL */
+	TSConnectionId id;  /* hash key (must be first) */
+	TSConnection *conn; /* connection to data node, or NULL */
 	/* Remaining fields are invalid when conn is NULL: */
 	int xact_depth;			/* 0 = no xact open, 1 = main xact open, 2 =
 							 * one level of subxact open, etc */
 	bool have_prep_stmt;	/* have we prepared any stmts in this xact? */
 	bool have_subtxn_error; /* have any subxacts aborted in this xact? */
-	Oid server_id;
 	RemoteTxnId *remote_txn_id;
 } RemoteTxn;
 
@@ -74,7 +69,7 @@ typedef struct RemoteTxn
  * control which remote queries share a snapshot or when a snapshot is refreshed.
  *
  * NOTE: this does not guarantee any kind of snapshot isolation to different connections
- * to the same data node. That only happens if we use multiple user-mapping to the same data node
+ * to the same data node. That only happens if we use multiple connection ids to the same data node
  * in one access node transaction. Thus, such connections that use different users will potentially
  * see inconsistent results. To solve this problem of inconsistent results, we could export the
  * snapshot of the first connection to a remote node using pg_export_snapshot() and then use that
@@ -135,18 +130,16 @@ remote_txn_size()
 }
 
 void
-remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user)
+remote_txn_init(RemoteTxn *entry, TSConnection *conn)
 {
-	ForeignServer *server = GetForeignServer(user->serverid);
+	ForeignServer *server = GetForeignServer(entry->id.server_id);
 
-	Assert(entry->user_mapping_oid == user->umid);
 	Assert(NULL != conn);
 
 	/* Reset all transient state fields, to be sure all are clean */
 	entry->xact_depth = 0;
 	entry->have_prep_stmt = false;
 	entry->have_subtxn_error = false;
-	entry->server_id = user->serverid;
 	entry->remote_txn_id = NULL;
 
 	/* Now try to make the connection */
@@ -154,12 +147,12 @@ remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user)
 	entry->conn = conn;
 
 	elog(DEBUG3,
-		 "new connection %p for data node \"%s\" (user mapping "
+		 "new connection %p for data node \"%s\" (server "
 		 "oid %u, userid %u)",
 		 entry->conn,
 		 server->servername,
-		 user->umid,
-		 user->userid);
+		 entry->id.server_id,
+		 entry->id.user_id);
 }
 
 void
@@ -176,10 +169,10 @@ remote_txn_get_connection(RemoteTxn *txn)
 	return txn->conn;
 }
 
-Oid
-remote_txn_get_user_mapping_oid(RemoteTxn *txn)
+TSConnectionId
+remote_txn_get_connection_id(RemoteTxn *txn)
 {
-	return txn->user_mapping_oid;
+	return txn->id;
 }
 
 void
@@ -431,8 +424,7 @@ remote_txn_async_send_commit(RemoteTxn *entry)
 void
 remote_txn_write_persistent_record(RemoteTxn *entry)
 {
-	entry->remote_txn_id =
-		remote_txn_persistent_record_write(entry->server_id, entry->user_mapping_oid);
+	entry->remote_txn_id = remote_txn_persistent_record_write(entry->id);
 }
 
 AsyncRequest *
@@ -614,13 +606,13 @@ remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid)
 }
 
 static void
-persistent_record_insert_relation(Relation rel, Oid server_oid, RemoteTxnId *id)
+persistent_record_insert_relation(Relation rel, RemoteTxnId *id)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_remote_txn];
 	bool nulls[Natts_remote_txn] = { false };
 	CatalogSecurityContext sec_ctx;
-	ForeignServer *server = GetForeignServer(server_oid);
+	ForeignServer *server = GetForeignServer(id->id.server_id);
 
 	values[AttrNumberGetAttrOffset(Anum_remote_txn_data_node_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(server->servername));
@@ -636,14 +628,14 @@ persistent_record_insert_relation(Relation rel, Oid server_oid, RemoteTxnId *id)
  * Add a commit record to catalog.
  */
 RemoteTxnId *
-remote_txn_persistent_record_write(Oid server_oid, Oid user_mapping_oid)
+remote_txn_persistent_record_write(TSConnectionId cid)
 {
-	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), user_mapping_oid);
+	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), cid);
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
 	rel = table_open(catalog->tables[REMOTE_TXN].id, RowExclusiveLock);
-	persistent_record_insert_relation(rel, server_oid, id);
+	persistent_record_insert_relation(rel, id);
 	table_close(rel, RowExclusiveLock);
 
 	return id;

@@ -29,16 +29,13 @@ OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
 CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg1
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
@@ -46,10 +43,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t

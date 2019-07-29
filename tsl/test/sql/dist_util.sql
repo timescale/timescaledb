@@ -45,7 +45,7 @@ GRANT ALL ON _timescaledb_catalog.metadata TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '87c235e9-d857-4f16-b59f-7fbac9b87664', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_1', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_3', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
 
 -- Connect back to our original database and add a backend to it
@@ -53,36 +53,36 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('uuid', '77348176-09da-4a80-bc78-e31bdf5e63ec', true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
 
 -- We now have two frontends with one backend each and one undistributed database
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
 
 -- Adding backend from a different group as a backend
-SELECT * FROM add_data_node('data_node_b', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_b', database => 'backend_3', if_not_exists => true);
 
 -- Adding a valid backend target but to an existing backend
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
 \c backend_2
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \set ON_ERROR_STOP 1
 
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
 
 \c backend_2
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -96,14 +96,14 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
-SELECT * FROM add_data_node('data_node_2', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', database => 'backend_1', if_not_exists => true);
 \c backend_1
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
@@ -111,15 +111,15 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 -- Now remove both backends from frontend_b, then verify that they and frontend_b are now valid backends for TEST_DB
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
+SELECT * FROM delete_data_node('data_node_2');
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'dist_uuid';
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_3', database => 'backend_3', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
-SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_3', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', if_not_exists => true);
 
 \c frontend_b
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -155,10 +155,10 @@ SELECT * FROM hypertable_data_node_relation_size('nondisttable');
 
 -- Clean up for future tests
 DROP TABLE disttable;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
-SELECT * FROM delete_data_node('data_node_4', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
+SELECT * FROM delete_data_node('data_node_2');
+SELECT * FROM delete_data_node('data_node_3');
+SELECT * FROM delete_data_node('data_node_4');
 DROP DATABASE frontend_b;
 DROP DATABASE backend_1;
 DROP DATABASE backend_2;

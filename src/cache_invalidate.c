@@ -105,7 +105,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 static void
 cache_invalidate_syscache_callback(Datum arg, int cacheid, uint32 hashvalue)
 {
-	Assert(cacheid == FOREIGNSERVEROID || cacheid == USERMAPPINGOID);
+	Assert(cacheid == FOREIGNSERVEROID);
 
 	ts_cm_functions->cache_syscache_invalidate(arg, cacheid, hashvalue);
 }
@@ -176,9 +176,6 @@ _cache_invalidate_init(void)
 
 	/* Specific syscache callbacks */
 	CacheRegisterSyscacheCallback(FOREIGNSERVEROID,
-								  cache_invalidate_syscache_callback,
-								  PointerGetDatum(NULL));
-	CacheRegisterSyscacheCallback(USERMAPPINGOID,
 								  cache_invalidate_syscache_callback,
 								  PointerGetDatum(NULL));
 }

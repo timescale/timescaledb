@@ -21,7 +21,7 @@ remote_txn_store_create(MemoryContext mctx)
 	RemoteTxnStore *store = MemoryContextAlloc(mctx, sizeof(RemoteTxnStore));
 
 	MemSet(&ctl, 0, sizeof(ctl));
-	ctl.keysize = sizeof(Oid);
+	ctl.keysize = sizeof(TSConnectionId);
 	ctl.entrysize = remote_txn_size();
 	ctl.hcxt = mctx;
 	*store = (RemoteTxnStore){
@@ -36,13 +36,12 @@ remote_txn_store_create(MemoryContext mctx)
 }
 
 RemoteTxn *
-remote_txn_store_get(RemoteTxnStore *store, UserMapping *user_mapping, bool *found_out)
+remote_txn_store_get(RemoteTxnStore *store, TSConnectionId id, bool *found_out)
 {
 	bool found;
-	Oid user_mapping_oid = user_mapping->umid;
 	RemoteTxn *entry;
 
-	entry = hash_search(store->hashtable, &user_mapping_oid, HASH_ENTER, &found);
+	entry = hash_search(store->hashtable, &id, HASH_ENTER, &found);
 
 	if (!found)
 	{
@@ -51,7 +50,7 @@ remote_txn_store_get(RemoteTxnStore *store, UserMapping *user_mapping, bool *fou
 
 		PG_TRY();
 		{
-			conn = remote_connection_cache_get_connection(store->cache, user_mapping);
+			conn = remote_connection_cache_get_connection(store->cache, id);
 			Assert(conn != NULL);
 			pg_conn = remote_connection_get_pg_conn(conn);
 
@@ -64,17 +63,17 @@ remote_txn_store_get(RemoteTxnStore *store, UserMapping *user_mapping, bool *fou
 				 * on error, check on first use (here) and restart the
 				 * connection if sick.
 				 */
-				remote_connection_cache_remove(store->cache, user_mapping);
-				conn = remote_connection_cache_get_connection(store->cache, user_mapping);
+				remote_connection_cache_remove(store->cache, id);
+				conn = remote_connection_cache_get_connection(store->cache, id);
 			}
 		}
 		PG_CATCH();
 		{
-			remote_txn_store_remove(store, user_mapping_oid);
+			remote_txn_store_remove(store, id);
 			PG_RE_THROW();
 		}
 		PG_END_TRY();
-		remote_txn_init(entry, conn, user_mapping);
+		remote_txn_init(entry, conn);
 	}
 	if (found_out != NULL)
 		*found_out = found;
@@ -82,13 +81,13 @@ remote_txn_store_get(RemoteTxnStore *store, UserMapping *user_mapping, bool *fou
 }
 
 void
-remote_txn_store_remove(RemoteTxnStore *store, Oid user_mapping_oid)
+remote_txn_store_remove(RemoteTxnStore *store, TSConnectionId id)
 {
 	bool found;
 
-	hash_search(store->hashtable, &user_mapping_oid, HASH_REMOVE, &found);
+	hash_search(store->hashtable, &id, HASH_REMOVE, &found);
 	Assert(found);
-	remote_connection_cache_remove_by_oid(store->cache, user_mapping_oid);
+	remote_connection_cache_remove(store->cache, id);
 }
 
 void

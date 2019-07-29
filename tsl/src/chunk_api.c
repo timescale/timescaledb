@@ -395,8 +395,8 @@ chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 	foreach (lc, chunk->data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		UserMapping *um = GetUserMapping(GetUserId(), cdn->foreign_server_oid);
-		TSConnection *conn = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
+		TSConnectionId id = remote_connection_id(cdn->foreign_server_oid, GetUserId());
+		TSConnection *conn = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 		AsyncRequest *req;
 
 		req = async_request_send_with_params(conn,

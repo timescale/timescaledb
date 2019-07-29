@@ -12,15 +12,9 @@ Cache *connection_cache_current = NULL;
 
 typedef struct ConnectionCacheEntry
 {
-	Oid user_mapping_oid;
+	TSConnectionId id;
 	TSConnection *conn;
 } ConnectionCacheEntry;
-
-typedef struct ConnectionCacheQuery
-{
-	CacheQuery q;
-	UserMapping *user_mapping;
-} ConnectionCacheQuery;
 
 static void
 connection_cache_entry_free(void *gen_entry)
@@ -64,7 +58,7 @@ connection_cache_valid_result(const void *result)
 static void *
 connection_cache_get_key(CacheQuery *query)
 {
-	return &((ConnectionCacheQuery *) query)->user_mapping->umid;
+	return (TSConnectionId *) query->data;
 }
 
 /*
@@ -83,9 +77,8 @@ connection_cache_check_entry(Cache *cache, CacheQuery *query)
 static void *
 connection_cache_create_entry(Cache *cache, CacheQuery *query)
 {
-	ConnectionCacheQuery *q = (ConnectionCacheQuery *) query;
+	TSConnectionId *id = (TSConnectionId *) query->data;
 	ConnectionCacheEntry *entry = query->result;
-	ForeignServer *server = GetForeignServer(q->user_mapping->serverid);
 
 	/*
 	 * Protects against errors in remote_connection_open, necessary since this
@@ -98,8 +91,7 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * because PGconn allocation happens using malloc. Which is why calling
 	 * remote_connection_close at cleanup is critical.
 	 */
-	entry->conn =
-		remote_connection_open(server->servername, server->options, q->user_mapping->options, true);
+	entry->conn = remote_connection_open_by_id(*id);
 	return entry;
 }
 
@@ -138,7 +130,7 @@ connection_cache_create()
 	*cache = (Cache)
 	{
 		.hctl = {
-			.keysize = sizeof(Oid),
+			.keysize = sizeof(TSConnectionId),
 			.entrysize = sizeof(ConnectionCacheEntry),
 			.hcxt = ctx,
 		},
@@ -166,32 +158,24 @@ remote_connection_cache_pin()
 }
 
 TSConnection *
-remote_connection_cache_get_connection(Cache *cache, UserMapping *user_mapping)
+remote_connection_cache_get_connection(Cache *cache, TSConnectionId id)
 {
-	ConnectionCacheQuery query = {
-		.user_mapping = user_mapping,
-	};
-	ConnectionCacheEntry *entry = ts_cache_fetch(cache, &query.q);
+	CacheQuery query = { .data = &id };
+	ConnectionCacheEntry *entry = ts_cache_fetch(cache, &query);
 
 	return entry->conn;
 }
 
 void
-remote_connection_cache_remove(Cache *cache, UserMapping *user_mapping)
+remote_connection_cache_remove(Cache *cache, TSConnectionId id)
 {
-	ts_cache_remove(cache, &user_mapping->umid);
-}
-
-void
-remote_connection_cache_remove_by_oid(Cache *cache, Oid user_mapping_oid)
-{
-	ts_cache_remove(cache, &user_mapping_oid);
+	ts_cache_remove(cache, &id);
 }
 
 /*
  * Connection invalidation callback function
  *
- * After a change to a pg_foreign_server or pg_user_mapping catalog entry,
+ * After a change to a pg_foreign_server catalog entry,
  * mark the cache as invalid.
  */
 void

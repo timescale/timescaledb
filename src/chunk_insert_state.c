@@ -541,21 +541,19 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 }
 
 static List *
-get_chunk_usermappings(Chunk *chunk, Oid userid)
+get_chunk_server_id_list(Chunk *chunk)
 {
-	List *usermappings = NIL;
+	List *list = NIL;
 	ListCell *lc;
 
 	foreach (lc, chunk->data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		UserMapping *um =
-			GetUserMapping(OidIsValid(userid) ? userid : GetUserId(), cdn->foreign_server_oid);
 
-		usermappings = lappend(usermappings, um);
+		list = lappend_oid(list, cdn->foreign_server_oid);
 	}
 
-	return usermappings;
+	return list;
 }
 
 /*
@@ -645,7 +643,9 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 			rt_fetch(resrelinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
 
 		Assert(NULL != rte);
-		state->usermappings = get_chunk_usermappings(chunk, rte->checkAsUser);
+
+		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
+		state->server_id_list = get_chunk_server_id_list(chunk);
 	}
 
 	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)

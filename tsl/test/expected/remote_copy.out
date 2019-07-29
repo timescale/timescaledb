@@ -2,20 +2,17 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
@@ -23,10 +20,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
@@ -34,10 +28,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node_3',
                             database => 'data_node_3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
@@ -314,21 +305,18 @@ select * from show_chunks('"+ri(k33_'')"');
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 DROP TABLE "+ri(k33_')" CASCADE;
 SELECT * FROM delete_data_node('data_node_1', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_1
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_2
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_3', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server data_node_3
  delete_data_node 
 ------------------
  t

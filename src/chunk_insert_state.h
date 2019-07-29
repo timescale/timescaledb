@@ -52,8 +52,8 @@ typedef struct ChunkInsertState
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
-	List *usermappings; /* The user mappings (data nodes) used for remote
-						 * inserts */
+	List *server_id_list; /* foreign server ids of data nodes used for remote inserts */
+	Oid user_id;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

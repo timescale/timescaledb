@@ -14,7 +14,6 @@
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_foreign_server.h>
-#include <catalog/pg_user_mapping.h>
 
 #include "compat.h"
 #include "event_trigger.h"

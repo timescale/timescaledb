@@ -13,14 +13,13 @@ SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS bootstrap_test;
 SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
--- Super user is required to make remote connection without password
+-- Super user is required to bootstrap
 --
 -- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "default_perm_user" to connect to "bootstrap_test"
-ERROR:  athentication required on target host
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
+ERROR:  authentication required on target host
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
  data_node_name | host | port | dbname 
@@ -32,8 +31,7 @@ SELECT * FROM show_data_nodes();
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 RESET ROLE;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -60,7 +58,6 @@ WHERE e.extnamespace = n.oid;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 -- After delete database and extension should still be there
 SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server bootstrap_test
  delete_data_node 
 ------------------
  t
@@ -87,8 +84,7 @@ WHERE e.extnamespace = n.oid;
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 ERROR:  database "bootstrap_test" already exists on the remote node
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
@@ -100,8 +96,7 @@ SELECT * FROM show_data_nodes();
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
@@ -138,7 +133,7 @@ WHERE e.extnamespace = n.oid;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
@@ -158,7 +153,6 @@ WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server bootstrap_test
  delete_data_node 
 ------------------
  t
@@ -182,8 +176,7 @@ WHERE e.extnamespace = n.oid;
  timescaledb | bootstrap_schema
 (2 rows)
 
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test"
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -200,7 +193,7 @@ WHERE e.extnamespace = n.oid;
 (2 rows)
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass', if_not_exists => true);
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
@@ -216,8 +209,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 --
 -- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
 -- bootstrap_database = 'template1'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS', bootstrap_database => 'template1');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "bootstrap_test"
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_database => 'template1');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -235,7 +227,6 @@ WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
-NOTICE:  drop cascades to user mapping for default_cluster_user on server bootstrap_test
  delete_data_node 
 ------------------
  t
@@ -244,7 +235,7 @@ NOTICE:  drop cascades to user mapping for default_cluster_user on server bootst
 -- Test for ongoing transaction
 BEGIN;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', password => 'perm_user_pass');
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
 ERROR:  add_data_node cannot run inside a transaction block
 \set ON_ERROR_STOP 1
 COMMIT;
@@ -258,14 +249,13 @@ DROP DATABASE bootstrap_test;
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test1"
+SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', password => 'perm_user_pass', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', if_not_exists => true);
 NOTICE:  data node "bootstrap_test1" already exists, skipping
 NOTICE:  database "Unusual Name" already exists on data node, skipping
  bool 
@@ -273,14 +263,13 @@ NOTICE:  database "Unusual Name" already exists on data node, skipping
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass');
-NOTICE:  adding user mapping for "super_user" to connect to "bootstrap_test2"
+SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', password => 'perm_user_pass', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', if_not_exists => true);
 NOTICE:  data node "bootstrap_test2" already exists, skipping
 NOTICE:  database "слон" already exists on data node, skipping
  bool 
@@ -307,14 +296,12 @@ SELECT true FROM pg_database WHERE datname = U&'\0441\043B\043E\043D';
 (1 row)
 
 SELECT true FROM delete_data_node('bootstrap_test1', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server bootstrap_test1
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM delete_data_node('bootstrap_test2', cascade => true);
-NOTICE:  drop cascades to user mapping for super_user on server bootstrap_test2
  bool 
 ------
  t

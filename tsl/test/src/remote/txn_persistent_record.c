@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <miscadmin.h>
 
+#include "remote/connection.h"
 #include "remote/txn_id.h"
 #include "export.h"
 #include "connection.h"
@@ -17,15 +18,15 @@
 TS_FUNCTION_INFO_V1(tsl_test_remote_txn_persistent_record);
 
 static void
-test_basic_persistent_record(Oid server_oid, Oid user_mapping_oid)
+test_basic_persistent_record(TSConnectionId cid)
 {
-	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), user_mapping_oid);
+	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), cid);
 
 	TestAssertTrue(!remote_txn_persistent_record_exists(id));
-	remote_txn_persistent_record_write(server_oid, user_mapping_oid);
+	remote_txn_persistent_record_write(cid);
 	TestAssertTrue(remote_txn_persistent_record_exists(id));
 
-	remote_txn_persistent_record_delete_for_data_node(server_oid);
+	remote_txn_persistent_record_delete_for_data_node(cid.server_id);
 	TestAssertTrue(!remote_txn_persistent_record_exists(id));
 }
 
@@ -33,12 +34,10 @@ Datum
 tsl_test_remote_txn_persistent_record(PG_FUNCTION_ARGS)
 {
 	Name server_name = DatumGetName(PG_GETARG_DATUM(0));
-	ForeignServer *foreign_server;
-	UserMapping *um;
+	TSConnectionId id =
+		remote_connection_id(GetForeignServerByName(NameStr(*server_name), false)->serverid,
+							 GetUserId());
 
-	foreign_server = GetForeignServerByName(NameStr(*server_name), false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
-
-	test_basic_persistent_record(foreign_server->serverid, um->umid);
+	test_basic_persistent_record(id);
 	PG_RETURN_VOID();
 }

@@ -47,16 +47,13 @@ Datum
 remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 {
 	Oid foreign_server_oid = PG_GETARG_OID(0);
-	UserMapping *user = GetUserMapping(GetUserId(), foreign_server_oid);
-	ForeignServer *server = GetForeignServer(foreign_server_oid);
+	TSConnection *conn = remote_connection_open(foreign_server_oid, GetUserId());
 	int resolved = 0;
 
 	/*
 	 * Use a raw connection since you need to be out of transaction to do
 	 * COMMIT/ROLLBACK PREPARED
 	 */
-	TSConnection *conn =
-		remote_connection_open(server->servername, server->options, user->options, true);
 	PGresult *res;
 	int row;
 	List *unknown_txn_gid = NIL;

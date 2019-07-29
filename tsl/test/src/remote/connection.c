@@ -12,7 +12,6 @@
 #include <foreign/fdwapi.h>
 #include <miscadmin.h>
 #include <access/reloptions.h>
-#include <catalog/pg_user_mapping.h>
 #include <catalog/pg_foreign_server.h>
 #include <commands/dbcommands.h>
 #include <nodes/makefuncs.h>
@@ -30,23 +29,16 @@ static const char *sql_get_application_name =
 TSConnection *
 get_connection()
 {
-	return remote_connection_open("testdb",
-								  list_make3(makeDefElem("user",
-														 (Node *) makeString(
-															 GetUserNameFromId(GetUserId(), false)),
-														 -1),
-											 makeDefElem("dbname",
-														 (Node *) makeString(
-															 get_database_name(MyDatabaseId)),
-														 -1),
-											 makeDefElem("port",
-														 (Node *) makeString(
-															 pstrdup(GetConfigOption("port",
-																					 false,
-																					 false))),
-														 -1)),
-								  NIL,
-								  false);
+	return remote_connection_open_with_options(
+		"testdb",
+		list_make3(makeDefElem("user",
+							   (Node *) makeString(GetUserNameFromId(GetUserId(), false)),
+							   -1),
+				   makeDefElem("dbname", (Node *) makeString(get_database_name(MyDatabaseId)), -1),
+				   makeDefElem("port",
+							   (Node *) makeString(pstrdup(GetConfigOption("port", false, false))),
+							   -1)),
+		false);
 }
 
 TS_FUNCTION_INFO_V1(tsl_test_remote_connection);

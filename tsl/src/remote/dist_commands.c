@@ -34,10 +34,10 @@ typedef struct DistCmdResult
 static TSConnection *
 ts_dist_cmd_get_connection_for_data_node(const char *data_node, RemoteTxnPrepStmtOption ps_opt)
 {
-	ForeignServer *fs = GetForeignServerByName(data_node, false);
-	UserMapping *um = GetUserMapping(GetUserId(), fs->serverid);
+	TSConnectionId id =
+		remote_connection_id(GetForeignServerByName(data_node, false)->serverid, GetUserId());
 
-	return remote_dist_txn_get_connection(um, ps_opt);
+	return remote_dist_txn_get_connection(id, ps_opt);
 }
 
 static DistCmdResult *

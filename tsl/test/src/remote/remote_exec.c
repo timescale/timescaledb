@@ -178,13 +178,9 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 	foreach (lc, data_node_list)
 	{
 		const char *node_name = lfirst(lc);
-		ForeignServer *foreign_server;
-		UserMapping *um;
-		TSConnection *conn;
-
-		foreign_server = GetForeignServerByName(node_name, false);
-		um = GetUserMapping(GetUserId(), foreign_server->serverid);
-		conn = remote_dist_txn_get_connection(um, REMOTE_TXN_USE_PREP_STMT);
+		TSConnectionId id =
+			remote_connection_id(GetForeignServerByName(node_name, false)->serverid, GetUserId());
+		TSConnection *conn = remote_dist_txn_get_connection(id, REMOTE_TXN_USE_PREP_STMT);
 
 		/* Configure connection to be compatible with current options of the test env */
 		set_connection_settings(conn);
