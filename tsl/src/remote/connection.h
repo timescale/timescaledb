@@ -15,6 +15,13 @@
 
 typedef struct TSConnection TSConnection;
 
+/* Associated with a connection foreign server and user id */
+typedef struct TSConnectionId
+{
+	Oid server_id;
+	Oid user_id;
+} TSConnectionId;
+
 typedef enum ConnOptionType
 {
 	CONN_OPTION_TYPE_NONE,
@@ -27,10 +34,11 @@ typedef enum ConnOptionType
  * malloc. Most users should use `remote_dist_txn_get_connection` or
  * `remote_connection_cache_get_connection` instead. Must be closed with `remote_connection_close`
  */
-TSConnection *remote_connection_open_default(const char *node_name);
-TSConnection *remote_connection_open(const char *node_name, List *node_options, List *user_options,
-									 bool set_dist_id);
-bool remote_connection_ping(const char *server_name);
+TSConnection *remote_connection_open_with_options(const char *node_name, List *connection_options,
+												  bool set_dist_id);
+TSConnection *remote_connection_open_by_id(TSConnectionId id);
+TSConnection *remote_connection_open(Oid server_id, Oid user_id);
+bool remote_connection_ping(const char *node_name);
 void remote_connection_close(TSConnection *conn);
 
 extern void remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn,
@@ -52,6 +60,18 @@ extern void remote_connection_set_processing(TSConnection *conn, bool processing
 extern void remote_connection_configure_if_changed(TSConnection *conn);
 
 /* wrappers around async stuff to emulate sync communication */
+
+#define remote_connection_id(server_oid, user_oid)                                                 \
+	{                                                                                              \
+		.server_id = (server_oid), .user_id = (user_oid)                                           \
+	}
+
+#define remote_connection_id_set(id, server_oid, user_oid)                                         \
+	do                                                                                             \
+	{                                                                                              \
+		(id)->server_id = (server_oid);                                                            \
+		(id)->user_id = (user_oid);                                                                \
+	} while (0)
 
 #define remote_connection_query_ok_result(conn, query)                                             \
 	async_response_result_get_pg_result(                                                           \

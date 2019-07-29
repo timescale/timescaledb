@@ -4,9 +4,11 @@
 local   all             all                                                         trust
 # IPv4 local connections:
 host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER@    127.0.0.1/32            password
+host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER_2@  127.0.0.1/32            password
 host    all             @TEST_ROLE_CLUSTER_SUPERUSER@       127.0.0.1/32            password
 host    all             all                                 127.0.0.1/32            trust
 # IPv6 local connections:
 host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER@    ::1/128                 password
+host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER_2@  ::1/128                 password
 host    all             @TEST_ROLE_CLUSTER_SUPERUSER@       ::1/128                 password
 host    all             all                                 ::1/128                 trust

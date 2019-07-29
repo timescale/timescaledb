@@ -89,55 +89,6 @@ data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_o
 }
 
 /*
- * Create a user mapping.
- *
- * Returns the OID of the created user mapping.
- *
- * Non-superusers must provide a password.
- */
-static Oid
-create_user_mapping(const char *username, const char *node_name, const char *password,
-					bool if_not_exists)
-{
-	ObjectAddress objaddr;
-	RoleSpec rolespec = {
-		.type = T_RoleSpec,
-		.roletype = ROLESPEC_CSTRING,
-		.rolename = (char *) username,
-		.location = -1,
-	};
-	CreateUserMappingStmt stmt = {
-		.type = T_CreateUserMappingStmt,
-		.user = &rolespec,
-		.if_not_exists = if_not_exists,
-		.servername = (char *) node_name,
-		.options = NIL,
-	};
-
-	Assert(NULL != username && NULL != node_name);
-
-	stmt.options =
-		list_make1(makeDefElemCompat("user", (Node *) makeString(pstrdup(username)), -1));
-
-	/* Non-superusers must provide a password */
-	if (!superuser() && (NULL == password || password[0] == '\0'))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_PARAMETER),
-				 errmsg("no password specified for user \"%s\"", username),
-				 errhint("Specify a password to use when connecting to node \"%s\"", node_name)));
-
-	if (NULL != password)
-		stmt.options =
-			lappend(stmt.options,
-					makeDefElemCompat("password", (Node *) makeString(pstrdup(password)), -1));
-
-	/* Permissions checks done in CreateUserMapping() */
-	objaddr = CreateUserMapping(&stmt);
-
-	return objaddr.objectId;
-}
-
-/*
  * Create a foreign server.
  *
  * Returns the OID of the created foreign server.
@@ -276,30 +227,20 @@ create_hypertable_data_node_datum(FunctionCallInfo fcinfo, HypertableDataNode *n
 }
 
 static List *
-create_data_node_options(const char *host, int32 port, const char *dbname, const char *user,
-						 const char *password)
+create_data_node_options(const char *host, int32 port, const char *dbname, const char *user)
 {
-	List *node_options;
 	DefElem *host_elm = makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1);
 	DefElem *port_elm = makeDefElemCompat("port", (Node *) makeInteger(port), -1);
 	DefElem *dbname_elm = makeDefElemCompat("dbname", (Node *) makeString(pstrdup(dbname)), -1);
 	DefElem *user_elm = makeDefElemCompat("user", (Node *) makeString(pstrdup(user)), -1);
-	DefElem *password_elm;
 
-	node_options = list_make4(host_elm, port_elm, dbname_elm, user_elm);
-	if (password)
-	{
-		password_elm = makeDefElemCompat("password", (Node *) makeString(pstrdup(password)), -1);
-		lappend(node_options, password_elm);
-	}
-	return node_options;
+	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }
 
 static bool
 data_node_bootstrap_database(const char *node_name, const char *host, int32 port,
 							 const char *dbname, const char *username, bool if_not_exists,
-							 const char *bootstrap_database, const char *bootstrap_user,
-							 const char *bootstrap_password)
+							 const char *bootstrap_database, const char *bootstrap_user)
 {
 	TSConnection *conn;
 	List *node_options;
@@ -312,13 +253,9 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 	Assert(NULL != bootstrap_database);
 	Assert(NULL != bootstrap_user);
 
-	node_options = create_data_node_options(host,
-											port,
-											bootstrap_database,
-											bootstrap_user,
-											bootstrap_password);
+	node_options = create_data_node_options(host, port, bootstrap_database, bootstrap_user);
 
-	conn = remote_connection_open(node_name, node_options, NULL, false);
+	conn = remote_connection_open_with_options(node_name, node_options, false);
 
 	PG_TRY();
 	{
@@ -370,14 +307,14 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 static bool
 data_node_bootstrap_extension(const char *node_name, const char *host, int32 port,
 							  const char *dbname, const char *username, bool if_not_exists,
-							  const char *bootstrap_user, const char *bootstrap_password)
+							  const char *bootstrap_user)
 {
 	TSConnection *conn;
 	List *node_options;
 	bool created = false;
 
-	node_options = create_data_node_options(host, port, dbname, bootstrap_user, bootstrap_password);
-	conn = remote_connection_open(node_name, node_options, NULL, false);
+	node_options = create_data_node_options(host, port, dbname, bootstrap_user);
+	conn = remote_connection_open_with_options(node_name, node_options, false);
 
 	PG_TRY();
 	{
@@ -447,8 +384,7 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 static void
 data_node_bootstrap(const char *node_name, const char *host, int32 port, const char *dbname,
 					const char *username, bool if_not_exists, const char *bootstrap_database,
-					const char *bootstrap_user, const char *bootstrap_password,
-					bool *database_created, bool *extension_created)
+					const char *bootstrap_user, bool *database_created, bool *extension_created)
 {
 	bool created;
 
@@ -459,8 +395,7 @@ data_node_bootstrap(const char *node_name, const char *host, int32 port, const c
 										   username,
 										   if_not_exists,
 										   bootstrap_database,
-										   bootstrap_user,
-										   bootstrap_password);
+										   bootstrap_user);
 
 	if (NULL != database_created)
 		*database_created = created;
@@ -477,8 +412,7 @@ data_node_bootstrap(const char *node_name, const char *host, int32 port, const c
 											dbname,
 											username,
 											if_not_exists,
-											bootstrap_user,
-											bootstrap_password);
+											bootstrap_user);
 
 	if (NULL != extension_created)
 		*extension_created = created;
@@ -486,14 +420,13 @@ data_node_bootstrap(const char *node_name, const char *host, int32 port, const c
 
 static void
 add_distributed_id_to_data_node(const char *node_name, const char *host, int32 port,
-								const char *dbname, bool if_not_exists, const char *user,
-								const char *user_password)
+								const char *dbname, bool if_not_exists, const char *user)
 {
 	TSConnection *conn;
 	List *node_options;
 
-	node_options = create_data_node_options(host, port, dbname, user, user_password);
-	conn = remote_connection_open(node_name, node_options, NULL, false);
+	node_options = create_data_node_options(host, port, dbname, user);
+	conn = remote_connection_open_with_options(node_name, node_options, false);
 
 	PG_TRY();
 	{
@@ -517,11 +450,9 @@ add_distributed_id_to_data_node(const char *node_name, const char *host, int32 p
 }
 
 static void
-remove_distributed_id_from_backend(ForeignServer *fs, UserMapping *um)
+remove_distributed_id_from_backend(ForeignServer *fs)
 {
-	TSConnection *conn;
-
-	conn = remote_connection_open(fs->servername, fs->options, um ? um->options : NULL, true);
+	TSConnection *conn = remote_connection_open(fs->serverid, GetUserId());
 
 	PG_TRY();
 	{
@@ -553,14 +484,9 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		PG_ARGISNULL(1) ? TS_DEFAULT_POSTGRES_HOST : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
 	int32 port = PG_ARGISNULL(3) ? TS_DEFAULT_POSTGRES_PORT : PG_GETARG_INT32(3);
-	const char *password = PG_ARGISNULL(4) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(4));
-	bool if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
-	const char *bootstrap_database = PG_ARGISNULL(6) ? dbname : PG_GETARG_CSTRING(6);
-	const char *bootstrap_user = PG_ARGISNULL(7) ? username : PG_GETARG_CSTRING(7);
-	const char *bootstrap_password =
-		PG_ARGISNULL(8) ? password : TextDatumGetCString(PG_GETARG_DATUM(8));
-	UserMapping *um;
-	Oid serverid = InvalidOid;
+	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	const char *bootstrap_database = PG_ARGISNULL(5) ? dbname : PG_GETARG_CSTRING(5);
+	const char *bootstrap_user = PG_ARGISNULL(6) ? username : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
@@ -594,31 +520,10 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 	/* Try to create the foreign server, or get the existing one in case of
 	 * if_not_exists = true. */
-	serverid = create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_created);
+	create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_created);
 
 	/* Make the foreign server visible in current transaction. */
 	CommandCounterIncrement();
-
-	um = get_user_mapping(userid, serverid, true);
-
-	if (NULL == um)
-	{
-		elog(NOTICE, "adding user mapping for \"%s\" to connect to \"%s\"", username, node_name);
-
-		create_user_mapping(username, node_name, password, if_not_exists);
-
-		/* Make user mapping visible */
-		CommandCounterIncrement();
-
-		um = GetUserMapping(userid, serverid);
-		Assert(NULL != um);
-	}
-	else if (!if_not_exists)
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("user mapping for user \"%s\" and data node \"%s\" already exists",
-						username,
-						node_name)));
 
 	/* Try to create database and extension on remote server */
 	data_node_bootstrap(node_name,
@@ -629,7 +534,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 						if_not_exists,
 						bootstrap_database,
 						bootstrap_user,
-						bootstrap_password,
 						&database_created,
 						&extension_created);
 
@@ -643,8 +547,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 										port,
 										dbname,
 										if_not_exists,
-										bootstrap_user,
-										bootstrap_password);
+										bootstrap_user);
 	}
 
 	PG_RETURN_DATUM(create_data_node_datum(fcinfo,
@@ -1132,7 +1035,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 		.objectSubId = 0,
 	};
 	Node *parsetree = NULL;
-	UserMapping *um = NULL;
+	TSConnectionId cid;
 	Cache *conn_cache;
 	ForeignServer *server;
 
@@ -1146,14 +1049,11 @@ data_node_delete(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	um = get_user_mapping(GetUserId(), server->serverid, true);
-
-	if (um != NULL)
-	{
-		conn_cache = remote_connection_cache_pin();
-		remote_connection_cache_remove(conn_cache, um);
-		ts_cache_release(conn_cache);
-	}
+	/* close any pending connections */
+	remote_connection_id_set(&cid, server->serverid, GetUserId());
+	conn_cache = remote_connection_cache_pin();
+	remote_connection_cache_remove(conn_cache, cid);
+	ts_cache_release(conn_cache);
 
 	/* detach data node */
 	hypertable_data_nodes =
@@ -1175,7 +1075,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 
 	parsetree = (Node *) &stmt;
 
-	remove_distributed_id_from_backend(server, um);
+	remove_distributed_id_from_backend(server);
 
 	/* Make sure event triggers are invoked so that all dropped objects
 	 * are collected during a cascading drop. This ensures all dependent

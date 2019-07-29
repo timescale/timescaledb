@@ -21,7 +21,7 @@ typedef enum
 } RemoteTxnPrepStmtOption;
 
 /* actions */
-extern void remote_txn_init(RemoteTxn *entry, TSConnection *conn, UserMapping *user);
+extern void remote_txn_init(RemoteTxn *entry, TSConnection *conn);
 extern void remote_txn_begin(RemoteTxn *entry, int txnlevel);
 extern bool remote_txn_abort(RemoteTxn *entry);
 extern void remote_txn_write_persistent_record(RemoteTxn *entry);
@@ -33,7 +33,7 @@ extern void remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel);
 extern void remote_txn_set_will_prep_statement(RemoteTxn *entry,
 											   RemoteTxnPrepStmtOption prep_stmt_option);
 extern TSConnection *remote_txn_get_connection(RemoteTxn *txn);
-extern Oid remote_txn_get_user_mapping_oid(RemoteTxn *txn);
+extern TSConnectionId remote_txn_get_connection_id(RemoteTxn *txn);
 extern bool remote_txn_is_still_in_progress(TransactionId frontend_xid);
 extern size_t remote_txn_size(void);
 extern bool remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel);
@@ -45,7 +45,7 @@ extern AsyncRequest *remote_txn_async_send_commit_prepared(RemoteTxn *entry);
 extern void remote_txn_report_prepare_transaction_result(RemoteTxn *txn, bool success);
 
 /* Persitent record */
-extern RemoteTxnId *remote_txn_persistent_record_write(Oid server_oid, Oid user_mapping_oid);
+extern RemoteTxnId *remote_txn_persistent_record_write(TSConnectionId id);
 extern bool remote_txn_persistent_record_exists(const RemoteTxnId *gid);
 extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid);
 

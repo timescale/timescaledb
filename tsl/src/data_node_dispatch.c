@@ -200,12 +200,12 @@ enum CustomScanPrivateIndex
  * statement, since the number of rows do not match, and therefore a one-time
  * statement is created for the last insert.
  *
- * Note that, since we use one DataNodeState per connection/user-mapping, we
+ * Note that, since we use one DataNodeState per connection, we
  * could technically have multiple DataNodeStates per data node.
  */
 typedef struct DataNodeState
 {
-	Oid umid; /* Must be first */
+	TSConnectionId id; /* Must be first */
 	TSConnection *conn;
 	Tuplestorestate *primary_tupstore; /* Tuples this data node is primary
 										* for. These tuples are returned when
@@ -226,32 +226,37 @@ typedef struct DataNodeState
 	 ((ss)->replica_tupstore != NULL ? tuplestore_tuple_count((ss)->replica_tupstore) : 0))
 
 static void
-data_node_state_init(DataNodeState *ss, DataNodeDispatchState *sds, UserMapping *um)
+data_node_state_init(DataNodeState *ss, DataNodeDispatchState *sds, TSConnectionId id)
 {
 	MemoryContext old = MemoryContextSwitchTo(sds->mcxt);
 
 	memset(ss, 0, sizeof(DataNodeState));
-	ss->umid = um->umid;
-	ss->primary_tupstore = tuplestore_begin_heap(true, false, TUPSTORE_MEMSIZE_KB);
+	ss->id = id;
+	ss->primary_tupstore = tuplestore_begin_heap(false, false, TUPSTORE_MEMSIZE_KB);
 	if (sds->replication_factor > 1)
 		ss->replica_tupstore = tuplestore_begin_heap(false, false, TUPSTORE_MEMSIZE_KB);
 	else
 		ss->replica_tupstore = NULL;
 
-	ss->conn = remote_dist_txn_get_connection(um, REMOTE_TXN_USE_PREP_STMT);
+	ss->conn = remote_dist_txn_get_connection(id, REMOTE_TXN_USE_PREP_STMT);
+	ss->pstmt = NULL;
+	ss->next_tuple = 0;
+	ss->num_tuples_sent = 0;
+	ss->num_tuples_inserted = 0;
+
 	MemoryContextSwitchTo(old);
 }
 
 static DataNodeState *
-data_node_state_get_or_create(DataNodeDispatchState *sds, UserMapping *um)
+data_node_state_get_or_create(DataNodeDispatchState *sds, TSConnectionId id)
 {
 	DataNodeState *ss;
 	bool found;
 
-	ss = hash_search(sds->nodestates, &um->umid, HASH_ENTER, &found);
+	ss = hash_search(sds->nodestates, &id, HASH_ENTER, &found);
 
 	if (!found)
-		data_node_state_init(ss, sds, um);
+		data_node_state_init(ss, sds, id);
 
 	return ss;
 }
@@ -301,7 +306,7 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	MemoryContext mcxt =
 		AllocSetContextCreate(estate->es_query_cxt, "DataNodeState", ALLOCSET_SMALL_SIZES);
 	HASHCTL hctl = {
-		.keysize = sizeof(Oid),
+		.keysize = sizeof(TSConnectionId),
 		.entrysize = sizeof(DataNodeState),
 		.hcxt = mcxt,
 	};
@@ -698,10 +703,11 @@ handle_read(DataNodeDispatchState *sds)
 			/* Total count */
 			num_tuples_read++;
 
-			foreach (lc, cis->usermappings)
+			foreach (lc, cis->server_id_list)
 			{
-				UserMapping *um = lfirst(lc);
-				DataNodeState *ss = data_node_state_get_or_create(sds, um);
+				Oid server_id = lfirst_oid(lc);
+				TSConnectionId id = remote_connection_id(server_id, cis->user_id);
+				DataNodeState *ss = data_node_state_get_or_create(sds, id);
 
 				/* This will store one copy of the tuple per data node, which is
 				 * a bit inefficient. Note that we put the tuple in the

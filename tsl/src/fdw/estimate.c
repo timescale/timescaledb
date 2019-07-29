@@ -156,7 +156,7 @@ get_remote_estimate(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds, 
 							fpinfo->sca);
 
 	/* Get the remote estimate */
-	conn = remote_dist_txn_get_connection(fpinfo->user, REMOTE_TXN_NO_PREP_STMT);
+	conn = remote_dist_txn_get_connection(fpinfo->cid, REMOTE_TXN_NO_PREP_STMT);
 	send_remote_estimate_query(sql.data, conn, ce);
 
 	ce->retrieved_rows = ce->rows;

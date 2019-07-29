@@ -758,7 +758,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	 */
 	fpinfo->table = ifpinfo->table;
 	fpinfo->server = ifpinfo->server;
-	fpinfo->user = ifpinfo->user;
+	fpinfo->cid = ifpinfo->cid;
 	fpinfo->sca = ifpinfo->sca;
 	merge_fdw_options(fpinfo, ifpinfo, NULL);
 

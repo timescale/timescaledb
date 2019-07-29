@@ -22,11 +22,11 @@ using xact hooks to automatically perform commit/abort operations on the remote 
 event happens. We allow either 2-pc or 1-pc commit protocols to be used (controlled by a guc). When using the
 2-pc variant, fate-sharing is guaranteed, while in 1-pc it is best effort.
 
-`dist_txn` uses a `txn_store` to keep a map of `user_mapping` to `txn`s. A `txn` corresponds to the state maintained
+`dist_txn` uses a `txn_store` to keep a map of `server_id`+`user_id` to `txn`s. A `txn` corresponds to the state maintained
 for every remote connection that is part of a `dist_txn`. Thus a `dist_txn` contains multiple `txn`s. Note that since
 a `txn` represents a remote connection and a txn on the remote side, it maintains a consistent snapshot throughout
-its lifetime. We make sure that there is a unique `txn` for each `user_mapping` so that each local user maintains a
-consistent snapshot to each remote node within one distributed txn. However, snapshots are not consistent across user
+its lifetime. We make sure that there is a unique `txn` for each `server_id`+`user_id` so that each local user maintains a
+consistent snapshot to each remote node within one distributed txn. However, snapshots are not consistent across
 mappings, even to the same data node.
 
 For 2-pc transactions, two other objects are used:

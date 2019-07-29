@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -12,22 +11,18 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_3',
                             database => 'data_node_3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 -- Start out testing text copy code
 SET timescaledb.enable_connection_binary_data=false;

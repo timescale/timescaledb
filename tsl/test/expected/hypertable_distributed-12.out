@@ -14,7 +14,6 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
--- Need explicit password for non-super users to connect
 -- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
@@ -28,10 +27,7 @@ SET client_min_messages TO NOTICE;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_1"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
@@ -39,10 +35,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_2"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
@@ -50,10 +43,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node_3',
                             database => 'data_node_3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node_3"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
@@ -2260,31 +2250,31 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- Insert data with custom type
 INSERT INTO disttable_with_ct VALUES
-    ('2019-01-01 01:01', 'ts-1-10-20', 1.1, 'a'),
-    ('2019-01-01 01:02', 'ts-1-11-20', 2.0, repeat('abc', 1000000)); -- TOAST
+    ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
+    ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
 -- Test queries on distributed table with custom type
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
-             time             |   txn_id   | val |      substring       
-------------------------------+------------+-----+----------------------
- Tue Jan 01 01:01:00 2019 PST | ts-1-10-20 | 1.1 | a
- Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+             time             |    txn_id     | val |      substring       
+------------------------------+---------------+-----+----------------------
+ Tue Jan 01 01:01:00 2019 PST | ts-1-10-20-30 | 1.1 | a
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20-30 |   2 | abcabcabcabcabcabcab
 (2 rows)
 
 SET timescaledb.enable_connection_binary_data=false;
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
-             time             |   txn_id   | val |      substring       
-------------------------------+------------+-----+----------------------
- Tue Jan 01 01:01:00 2019 PST | ts-1-10-20 | 1.1 | a
- Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+             time             |    txn_id     | val |      substring       
+------------------------------+---------------+-----+----------------------
+ Tue Jan 01 01:01:00 2019 PST | ts-1-10-20-30 | 1.1 | a
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20-30 |   2 | abcabcabcabcabcabcab
 (2 rows)
 
 -- Test DELETE with replication
 DELETE FROM disttable_with_ct WHERE info = 'a';
 -- Check if row is gone
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
-             time             |   txn_id   | val |      substring       
-------------------------------+------------+-----+----------------------
- Tue Jan 01 01:02:00 2019 PST | ts-1-11-20 |   2 | abcabcabcabcabcabcab
+             time             |    txn_id     | val |      substring       
+------------------------------+---------------+-----+----------------------
+ Tue Jan 01 01:02:00 2019 PST | ts-1-11-20-30 |   2 | abcabcabcabcabcabcab
 (1 row)
 
 -- Connect to data nodes to see if data is gone
@@ -2294,18 +2284,18 @@ $$);
 NOTICE:  [data_node_1]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
 NOTICE:  [data_node_1]:
-time                        |txn_id    |val|substring           
-----------------------------+----------+---+--------------------
-Tue Jan 01 01:02:00 2019 PST|ts-1-11-20|  2|abcabcabcabcabcabcab
+time                        |txn_id       |val|substring           
+----------------------------+-------------+---+--------------------
+Tue Jan 01 01:02:00 2019 PST|ts-1-11-20-30|  2|abcabcabcabcabcabcab
 (1 row)
 
 
 NOTICE:  [data_node_2]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
 NOTICE:  [data_node_2]:
-time                        |txn_id    |val|substring           
-----------------------------+----------+---+--------------------
-Tue Jan 01 01:02:00 2019 PST|ts-1-11-20|  2|abcabcabcabcabcabcab
+time                        |txn_id       |val|substring           
+----------------------------+-------------+---+--------------------
+Tue Jan 01 01:02:00 2019 PST|ts-1-11-20-30|  2|abcabcabcabcabcabcab
 (1 row)
 
 

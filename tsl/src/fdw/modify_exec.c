@@ -54,8 +54,7 @@ enum FdwModifyPrivateIndex
 
 typedef struct TsFdwDataNodeState
 {
-	Oid node_serverid;
-	UserMapping *user;
+	TSConnectionId id;
 	/* for remote query execution */
 	TSConnection *conn;   /* connection for the scan */
 	PreparedStmt *p_stmt; /* prepared statement handle, if created */
@@ -88,12 +87,10 @@ typedef struct TsFdwModifyState
 	(sizeof(TsFdwModifyState) + (sizeof(TsFdwDataNodeState) * num_data_nodes))
 
 static void
-initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, UserMapping *um)
+initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, TSConnectionId id)
 {
-	fdw_data_node->user = um;
-	fdw_data_node->node_serverid = um->serverid;
-	fdw_data_node->conn =
-		remote_dist_txn_get_connection(fdw_data_node->user, REMOTE_TXN_USE_PREP_STMT);
+	fdw_data_node->id = id;
+	fdw_data_node->conn = remote_dist_txn_get_connection(id, REMOTE_TXN_USE_PREP_STMT);
 	fdw_data_node->p_stmt = NULL;
 }
 
@@ -105,13 +102,14 @@ initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, UserMapping *u
 static TsFdwModifyState *
 create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check_as_user,
 					  Plan *subplan, char *query, List *target_attrs, bool has_returning,
-					  List *retrieved_attrs, List *usermappings)
+					  List *retrieved_attrs, List *server_id_list)
 {
 	TsFdwModifyState *fmstate;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	ListCell *lc;
+	Oid user_id = OidIsValid(check_as_user) ? check_as_user : GetUserId();
 	int i = 0;
-	int num_data_nodes = usermappings == NIL ? 1 : list_length(usermappings);
+	int num_data_nodes = server_id_list == NIL ? 1 : list_length(server_id_list);
 
 	/* Begin constructing TsFdwModifyState. */
 	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_data_nodes));
@@ -122,7 +120,7 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 	 * ExecCheckRTEPerms() does.
 	 */
 
-	if (NIL != usermappings)
+	if (NIL != server_id_list)
 	{
 		/*
 		 * This is either (1) an INSERT on a hypertable chunk, or (2) an
@@ -132,11 +130,12 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 		 * in the FDW planning callback.
 		 */
 
-		foreach (lc, usermappings)
+		foreach (lc, server_id_list)
 		{
-			UserMapping *um = lfirst(lc);
+			Oid server_id = lfirst_oid(lc);
+			TSConnectionId id = remote_connection_id(server_id, user_id);
 
-			initialize_fdw_data_node_state(&fmstate->data_nodes[i++], um);
+			initialize_fdw_data_node_state(&fmstate->data_nodes[i++], id);
 		}
 	}
 	else
@@ -147,10 +146,9 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 		 * We must get the data node from the foreign table's metadata.
 		 */
 		ForeignTable *table = GetForeignTable(rel->rd_id);
-		Oid userid = OidIsValid(check_as_user) ? check_as_user : GetUserId();
-		UserMapping *um = GetUserMapping(userid, table->serverid);
+		TSConnectionId id = remote_connection_id(table->serverid, user_id);
 
-		initialize_fdw_data_node_state(&fmstate->data_nodes[0], um);
+		initialize_fdw_data_node_state(&fmstate->data_nodes[0], id);
 	}
 
 	/* Set up remote query information. */
@@ -230,7 +228,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 	List *target_attrs;
 	bool has_returning;
 	List *retrieved_attrs;
-	List *usermappings = NIL;
+	List *server_id_list = NIL;
 	ChunkInsertState *cis = NULL;
 	RangeTblEntry *rte;
 
@@ -251,13 +249,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 		ListCell *lc;
 
 		foreach (lc, data_nodes)
-		{
-			Oid serverid = lfirst_oid(lc);
-			Oid userid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
-			UserMapping *um = GetUserMapping(userid, serverid);
-
-			usermappings = lappend(usermappings, um);
-		}
+			server_id_list = lappend_oid(server_id_list, lfirst_oid(lc));
 	}
 
 	if (list_length(fdw_private) > FdwModifyPrivateChunkInsertState)
@@ -288,7 +280,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 		 * If there's a chunk insert state, then it has the authoritative
 		 * data node list.
 		 */
-		usermappings = cis->usermappings;
+		server_id_list = cis->server_id_list;
 	}
 
 	/* Construct an execution state. */
@@ -301,7 +293,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 									target_attrs,
 									has_returning,
 									retrieved_attrs,
-									usermappings);
+									server_id_list);
 
 	rri->ri_FdwState = fmstate;
 }

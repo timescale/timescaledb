@@ -14,55 +14,32 @@ SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
-DROP DATABASE IF EXISTS data_node_4;
 SET client_min_messages TO NOTICE;
 
--- Must use cluster user for password auth
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Add data nodes using TimescaleDB data_node management API. NOTE that the
 -- extension won't be created since it is installed in the template1
 -- database
 SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 \set ON_ERROR_STOP 0
 -- Add again
-SELECT * FROM add_data_node('data_node_2', password => :'ROLE_DEFAULT_CLUSTER_USER_PASS');
--- Add without password
-SELECT * FROM add_data_node('data_node_3');
+SELECT * FROM add_data_node('data_node_2');
 -- Add NULL data_node
 SELECT * FROM add_data_node(NULL);
 \set ON_ERROR_STOP 1
 
 -- Should not generate error with if_not_exists option
 SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
-                                     if_not_exists => true);
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            if_not_exists => true);
 
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-
--- Data node exists, but no user mapping
-CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '15432', dbname 'data_node_4');
-
--- User mapping should be added with NOTICE
-SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
-                                     if_not_exists => true);
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 
 -- Test altering some server options
@@ -73,33 +50,11 @@ ALTER SERVER data_node_1 OPTIONS (ADD connect_timeout '3');
 -- List foreign data nodes
 SELECT * FROM timescaledb_information.data_node;
 
-RESET ROLE;
-SELECT rolname, srvname, umoptions
-FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
-WHERE a.oid = um.umuser AND fs.oid = um.umserver
-ORDER BY srvname;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-
 -- Delete a data node
-\set ON_ERROR_STOP 0
--- Cannot delete if not owner
 SELECT * FROM delete_data_node('data_node_3');
--- Must use cascade because of user mappings
-
-SELECT * FROM delete_data_node('data_node_3');
-\set ON_ERROR_STOP 1
--- Should work as superuser with cascade
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
 
 -- List data nodes
 SELECT * FROM timescaledb_information.data_node;
-
-RESET ROLE;
-SELECT rolname, srvname, umoptions
-FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
-WHERE a.oid = um.umuser AND fs.oid = um.umserver
-ORDER BY srvname;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
@@ -113,7 +68,6 @@ SELECT * FROM timescaledb_information.data_node;
 
 DROP SERVER data_node_1 CASCADE;
 SELECT * FROM delete_data_node('data_node_2', cascade => true);
-SELECT * FROM delete_data_node('data_node_4', cascade => true);
 
 -- No data nodes left
 SELECT * FROM timescaledb_information.data_node;
@@ -128,44 +82,16 @@ SET client_min_messages TO INFO;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 SELECT * FROM timescaledb_information.data_node;
 
--- Switch to default user
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-
 -- Now create a distributed hypertable using the data nodes
 CREATE TABLE disttable(time timestamptz, device int, temp float);
-
--- Test that we can't create the distributed hypertable without USAGE
--- on data nodes.
-\set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
-\set ON_ERROR_STOP 1
-
-RESET ROLE;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
--- Grant usage on data nodes and create user mappings
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_4 TO :ROLE_DEFAULT_PERM_USER;
-CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_1
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
-CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_2
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
-CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER SERVER data_node_4
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
-RESET ROLE;
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Test that all data nodes are added to a hypertable and that the
 -- slices in the device dimension equals the number of data nodes.
@@ -255,17 +181,17 @@ _timescaledb_catalog.chunk_data_node cdn
 WHERE c.id = cdn.chunk_id;
 
 -- Setting the same data node should do nothing and return false
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_5_3_dist_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
 
 -- Should update the default data node and return true
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_5_3_dist_chunk', 'data_node_2');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_2');
 
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 
 -- Reset the default data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_5_3_dist_chunk', 'data_node_4');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_4');
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
@@ -273,9 +199,9 @@ SELECT * FROM delete_data_node('data_node_2', cascade => true);
 -- non-existing chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_4');
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_5_3_dist_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_0000');
 -- data node exists but does not store the chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_5_3_dist_chunk', 'data_node_1');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_1');
 -- NULL try
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_4');
 \set ON_ERROR_STOP 1
@@ -357,10 +283,8 @@ WHERE num_slices IS NOT NULL
 AND column_name = 'device';
 
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS',
-                                     if_not_exists => true);
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                            if_not_exists => true);
 SELECT * FROM attach_data_node('data_node_3', 'disttable');
 
 -- Show updated number of slices in 'device' dimension.
@@ -396,11 +320,9 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time');
 
 DROP DATABASE IF EXISTS data_node_3;
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
--- Bring down the database but UserMapping should still be there
+-- Bring down the database
 DROP DATABASE IF EXISTS data_node_3;
 -- Return false if data node is down
 SELECT * FROM _timescaledb_internal.ping_data_node('data_node_3');
@@ -416,17 +338,11 @@ SELECT * FROM timescaledb_information.data_node;
 
 -- let's add some
 SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 DROP TABLE disttable;
 
@@ -558,22 +474,12 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
 
 -- Let's add more data nodes
 SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_5', database => 'data_node_5',
-                                     password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                                     bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                                     bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 -- Create table as super user
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
--- LIMITATION: currently, even superuser require user mappings
-CREATE USER MAPPING FOR :ROLE_CLUSTER_SUPERUSER  SERVER data_node_4
-OPTIONS (user :'ROLE_CLUSTER_SUPERUSER', password :'ROLE_CLUSTER_SUPERUSER_PASS');
-CREATE USER MAPPING FOR :ROLE_CLUSTER_SUPERUSER  SERVER data_node_5
-OPTIONS (user :'ROLE_CLUSTER_SUPERUSER', password :'ROLE_CLUSTER_SUPERUSER_PASS');
-
 SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
 
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
@@ -608,8 +514,19 @@ DROP TABLE disttable_3;
 SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
 SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
 
+-- Test case for missing pgpass user password
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER_2;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER_2;
+SELECT * FROM add_data_node('data_node_6', database => 'data_node_6',
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+-- Must return false
+SELECT * FROM _timescaledb_internal.ping_data_node('data_node_6');
+
+RESET ROLE;
+
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 DROP DATABASE data_node_5;
+DROP DATABASE data_node_6;

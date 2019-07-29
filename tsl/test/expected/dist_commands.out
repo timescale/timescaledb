@@ -5,10 +5,7 @@
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM add_data_node('data_node1',
                             database => 'data_node1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node1"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
  node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
 ------------+-----------+-------+------------+--------------+------------------+-------------------
  data_node1 | localhost | 15432 | data_node1 | t            | t                | t
@@ -16,10 +13,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node2',
                             database => 'data_node2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node2"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
  node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
 ------------+-----------+-------+------------+--------------+------------------+-------------------
  data_node2 | localhost | 15432 | data_node2 | t            | t                | t
@@ -27,10 +21,7 @@ NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node
 
 SELECT * FROM add_data_node('data_node3',
                             database => 'data_node3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
-NOTICE:  adding user mapping for "default_cluster_user" to connect to "data_node3"
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
  node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
 ------------+-----------+-------+------------+--------------+------------------+-------------------
  data_node3 | localhost | 15432 | data_node3 | t            | t                | t

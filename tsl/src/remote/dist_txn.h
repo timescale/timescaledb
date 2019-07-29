@@ -14,7 +14,7 @@
 
 /* Get a remote connection for a distributed txn corresponding to the current local txn. */
 
-extern TSConnection *remote_dist_txn_get_connection(UserMapping *user,
+extern TSConnection *remote_dist_txn_get_connection(TSConnectionId id,
 													RemoteTxnPrepStmtOption prep_stmt);
 
 #ifdef DEBUG

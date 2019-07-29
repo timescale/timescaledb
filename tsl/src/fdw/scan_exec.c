@@ -182,11 +182,9 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 	Scan *scan = (Scan *) ss->ps.plan;
 	EState *estate = ss->ps.state;
 	RangeTblEntry *rte;
-	Oid userid;
-	UserMapping *user;
+	TSConnectionId id;
 	int rtindex;
 	int num_params;
-	int server_id;
 
 	/*
 	 * Do nothing in EXPLAIN (no ANALYZE) case.  fdw_state stays NULL.
@@ -210,18 +208,18 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 		rtindex = bms_next_member(scanrelids, -1);
 
 	rte = rt_fetch(rtindex, estate->es_range_table);
-	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 	/* Get info about foreign server. */
-	server_id = intVal(list_nth(fdw_private, FdwScanPrivateServerId));
-	user = GetUserMapping(userid, server_id);
+	remote_connection_id_set(&id,
+							 intVal(list_nth(fdw_private, FdwScanPrivateServerId)),
+							 rte->checkAsUser ? rte->checkAsUser : GetUserId());
 
 	/*
 	 * Get connection to the foreign server.  Connection manager will
 	 * establish new connection if necessary.
 	 */
 	fsstate->conn =
-		remote_dist_txn_get_connection(user,
+		remote_dist_txn_get_connection(id,
 									   list_length(fdw_exprs) > 0 ? REMOTE_TXN_USE_PREP_STMT :
 																	REMOTE_TXN_NO_PREP_STMT);
 

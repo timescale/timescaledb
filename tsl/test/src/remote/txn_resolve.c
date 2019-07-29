@@ -16,11 +16,11 @@ TS_FUNCTION_INFO_V1(tsl_test_remote_txn_resolve_create_records);
 TS_FUNCTION_INFO_V1(tsl_test_remote_txn_resolve_create_records_with_concurrent_heal);
 
 static RemoteTxn *
-prepared_txn(UserMapping *um, const char *sql)
+prepared_txn(TSConnectionId *id, const char *sql)
 {
 	RemoteTxn *tx = palloc0(remote_txn_size());
-	memcpy(tx, &um->umid, sizeof(Oid));
-	remote_txn_init(tx, get_connection(), um);
+	memcpy(tx, id, sizeof(*id));
+	remote_txn_init(tx, get_connection());
 	remote_txn_begin(tx, 1);
 	remote_connection_query_ok_result(remote_txn_get_connection(tx), sql);
 	remote_txn_write_persistent_record(tx);
@@ -29,44 +29,41 @@ prepared_txn(UserMapping *um, const char *sql)
 }
 
 static void
-create_commited_txn(UserMapping *um)
+create_commited_txn(TSConnectionId *id)
 {
 	RemoteTxn *tx =
-		prepared_txn(um, "INSERT INTO public.table_modified_by_txns VALUES ('committed');");
+		prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('committed');");
 	async_request_wait_ok_command(remote_txn_async_send_commit_prepared(tx));
 }
 
 static void
-create_prepared_txn(UserMapping *um)
+create_prepared_txn(TSConnectionId *id)
 {
-	prepared_txn(um, "INSERT INTO public.table_modified_by_txns VALUES ('prepared not comitted');");
+	prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('prepared not comitted');");
 }
 
 static void
-create_rollback_prepared_txn(UserMapping *um)
+create_rollback_prepared_txn(TSConnectionId *id)
 {
 	RemoteTxn *tx =
-		prepared_txn(um, "INSERT INTO public.table_modified_by_txns VALUES ('rollback prepared');");
+		prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('rollback prepared');");
 	remote_txn_abort(tx);
 }
 
 Datum
 tsl_test_remote_txn_resolve_create_records(PG_FUNCTION_ARGS)
 {
-	ForeignServer *foreign_server;
-	UserMapping *um;
+	TSConnectionId id;
 
-	foreign_server = GetForeignServerByName("loopback", false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
-	create_commited_txn(um);
+	id.server_id = GetForeignServerByName("loopback", false)->serverid;
+	id.user_id = GetUserId();
+	create_commited_txn(&id);
 
-	foreign_server = GetForeignServerByName("loopback2", false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
-	create_prepared_txn(um);
+	id.server_id = GetForeignServerByName("loopback2", false)->serverid;
+	create_prepared_txn(&id);
 
-	foreign_server = GetForeignServerByName("loopback3", false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
-	create_rollback_prepared_txn(um);
+	id.server_id = GetForeignServerByName("loopback3", false)->serverid;
+	create_rollback_prepared_txn(&id);
 
 	PG_RETURN_VOID();
 }
@@ -81,11 +78,11 @@ send_heal()
 }
 
 static void
-create_commited_txn_with_concurrent_heal(UserMapping *um)
+create_commited_txn_with_concurrent_heal(TSConnectionId *id)
 {
 	RemoteTxn *tx = palloc0(remote_txn_size());
-	memcpy(tx, &um->umid, sizeof(Oid));
-	remote_txn_init(tx, get_connection(), um);
+	memcpy(tx, id, sizeof(*id));
+	remote_txn_init(tx, get_connection());
 	remote_txn_begin(tx, 1);
 	remote_connection_query_ok_result(remote_txn_get_connection(tx),
 									  "INSERT INTO public.table_modified_by_txns VALUES "
@@ -102,12 +99,10 @@ create_commited_txn_with_concurrent_heal(UserMapping *um)
 Datum
 tsl_test_remote_txn_resolve_create_records_with_concurrent_heal(PG_FUNCTION_ARGS)
 {
-	ForeignServer *foreign_server;
-	UserMapping *um;
+	TSConnectionId id = { .server_id = GetForeignServerByName("loopback2", false)->serverid,
+						  .user_id = GetUserId() };
 
-	foreign_server = GetForeignServerByName("loopback2", false);
-	um = GetUserMapping(GetUserId(), foreign_server->serverid);
-	create_commited_txn_with_concurrent_heal(um);
+	create_commited_txn_with_concurrent_heal(&id);
 
 	PG_RETURN_VOID();
 }

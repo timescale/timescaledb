@@ -12,6 +12,7 @@
 #include <access/transam.h>
 #include <miscadmin.h>
 
+#include "connection.h"
 #include "txn_id.h"
 
 #define GID_SEP "-"
@@ -22,8 +23,8 @@
 
 #define REMOTE_TXN_ID_VERSION ((uint8) 1)
 
-/* current_pattern: ts-version-xid-user_mapping_oid */
-#define FMT_PATTERN GID_PREFIX GID_SEP "%hhu" GID_SEP "%u" GID_SEP "%u"
+/* current_pattern: ts-version-xid-server_id-user_id */
+#define FMT_PATTERN GID_PREFIX GID_SEP "%hhu" GID_SEP "%u" GID_SEP "%u" GID_SEP "%u"
 
 static char *
 remote_txn_id_get_sql(const char *command, RemoteTxnId *id)
@@ -69,7 +70,13 @@ remote_txn_id_in(const char *id_string)
 	RemoteTxnId *id = palloc0(sizeof(RemoteTxnId));
 	char dummy;
 
-	if (sscanf(id_string, FMT_PATTERN "%c", &id->version, &id->xid, &id->user_mapping, &dummy) != 3)
+	if (sscanf(id_string,
+			   FMT_PATTERN "%c",
+			   &id->version,
+			   &id->xid,
+			   &id->id.server_id,
+			   &id->id.user_id,
+			   &dummy) != 4)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for remote transaction ID: '%s'", id_string)));
@@ -94,8 +101,13 @@ remote_txn_id_out(const RemoteTxnId *id)
 	char *out = palloc0(sizeof(char) * GID_MAX_SIZE);
 	int written;
 
-	written =
-		snprintf(out, GID_MAX_SIZE, FMT_PATTERN, REMOTE_TXN_ID_VERSION, id->xid, id->user_mapping);
+	written = snprintf(out,
+					   GID_MAX_SIZE,
+					   FMT_PATTERN,
+					   REMOTE_TXN_ID_VERSION,
+					   id->xid,
+					   id->id.server_id,
+					   id->id.user_id);
 
 	if (written < 0 || written >= GID_MAX_SIZE)
 		elog(ERROR, "unexpected length when generating a 2pc transaction name: %d", written);
@@ -112,12 +124,12 @@ remote_txn_id_out_pg(PG_FUNCTION_ARGS)
 }
 
 RemoteTxnId *
-remote_txn_id_create(TransactionId xid, Oid user_mapping_oid)
+remote_txn_id_create(TransactionId xid, TSConnectionId cid)
 {
 	RemoteTxnId *id = palloc0(sizeof(RemoteTxnId));
 
 	id->xid = xid;
-	id->user_mapping = user_mapping_oid;
+	id->id = cid;
 
 	return id;
 }

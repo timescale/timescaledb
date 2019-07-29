@@ -7,19 +7,13 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 SELECT * FROM add_data_node('data_node1',
                             database => 'data_node1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node2',
                             database => 'data_node2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node3',
                             database => 'data_node3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 \des+
 

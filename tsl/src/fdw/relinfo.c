@@ -17,6 +17,7 @@
 #include <extension_constants.h>
 #include <planner.h>
 
+#include "remote/connection.h"
 #include "option.h"
 #include "deparse.h"
 #include "relinfo.h"
@@ -140,10 +141,14 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	{
 		Oid userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
-		fpinfo->user = GetUserMapping(userid, fpinfo->server->serverid);
+		fpinfo->cid.server_id = fpinfo->server->serverid;
+		fpinfo->cid.user_id = userid;
 	}
 	else
-		fpinfo->user = NULL;
+	{
+		fpinfo->cid.server_id = InvalidOid;
+		fpinfo->cid.user_id = InvalidOid;
+	}
 
 	/*
 	 * Identify which baserestrictinfo clauses can be sent to the data

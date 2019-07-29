@@ -24,21 +24,17 @@ OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
 CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg1
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password 'pass');
+OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
 
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 -- Create a 2-dimensional partitioned table for comparision
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);

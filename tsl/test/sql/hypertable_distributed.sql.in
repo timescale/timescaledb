@@ -5,7 +5,6 @@
 -- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
--- Need explicit password for non-super users to connect
 
 -- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
@@ -26,19 +25,13 @@ SET client_min_messages TO NOTICE;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_2',
                             database => 'data_node_2',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SELECT * FROM add_data_node('data_node_3',
                             database => 'data_node_3',
-                            password => :'ROLE_DEFAULT_CLUSTER_USER_PASS',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                            bootstrap_password => :'ROLE_CLUSTER_SUPERUSER_PASS');
+                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 -- Verify lack of tables
 SELECT * FROM timescaledb_information.data_node;
@@ -672,8 +665,8 @@ SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor 
 
 -- Insert data with custom type
 INSERT INTO disttable_with_ct VALUES
-    ('2019-01-01 01:01', 'ts-1-10-20', 1.1, 'a'),
-    ('2019-01-01 01:02', 'ts-1-11-20', 2.0, repeat('abc', 1000000)); -- TOAST
+    ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
+    ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
 
 -- Test queries on distributed table with custom type
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
