@@ -10,9 +10,9 @@
 #include <nodes/plannodes.h>
 #include <optimizer/cost.h>
 
-extern void server_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
-extern void server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage,
-										   RelOptInfo *input_rel, RelOptInfo *output_rel,
-										   void *extra);
+extern void data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
+extern void data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage,
+											  RelOptInfo *input_rel, RelOptInfo *output_rel,
+											  void *extra);
 
 #endif /* TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H */

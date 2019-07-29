@@ -36,7 +36,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 		case TS_REL_HYPERTABLE:
 		case TS_REL_HYPERTABLE_CHILD:
 			if (hypertable_is_distributed(ht))
-				server_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
+				data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 			break;
 		default:
 			break;
