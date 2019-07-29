@@ -44,34 +44,35 @@
 #include "data_node_scan_exec.h"
 
 /*
- * ServerScan is a custom scan implementation for scanning hypertables on
- * remote servers instead of scanning individual remote chunks.
+ * DataNodeScan is a custom scan implementation for scanning hypertables on
+ * remote data nodes instead of scanning individual remote chunks.
  *
- * A ServerScan plan is created by taking a regular per-chunk scan plan and
- * then assigning each chunk to a server, and treating each server as a
- * "partition" of the distributed hypertable. For each resulting server, we
- * create a server rel which is essentially a base rel representing a remote
- * hypertable partition. Since we treat a server rel as a base rel, although
- * it has no corresponding server table, we point each server rel to the root
- * hypertable. This is conceptually the right thing to do, since each server
+ * A DataNodeScan plan is created by taking a regular per-chunk scan plan and
+ * then assigning each chunk to a data node, and treating each data node as a
+ * "partition" of the distributed hypertable. For each resulting data node, we
+ * create a data node rel which is essentially a base rel representing a remote
+ * hypertable partition. Since we treat a data node rel as a base rel, although
+ * it has no corresponding data node table, we point each data node rel to the root
+ * hypertable. This is conceptually the right thing to do, since each data node
  * rel is a partition of the same distributed hypertable.
  *
- * For each server rel, we plan a ServerScan instead of a ForeignScan since a
- * server rel does not correspond to a real foreign table. A ForeignScan of a
- * server rel would fail when trying to lookup the ForeignServer via the
- * server rel's RTE relid. The only other option to get around the
- * ForeignTable lookup is to make a server rel an upper rel instead of a base
+ * For each data node rel, we plan a DataNodeScan instead of a ForeignScan since a
+ * data node rel does not correspond to a real foreign table. A ForeignScan of a
+ * data node rel would fail when trying to lookup the ForeignServer via the
+ * data node rel's RTE relid. The only other option to get around the
+ * ForeignTable lookup is to make a data node rel an upper rel instead of a base
  * rel (see nodeForeignscan.c). However, that leads to other issues in
  * setrefs.c that messes up our target lists for some queries.
  */
 
-static Path *server_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target,
-									 double rows, Cost startup_cost, Cost total_cost,
-									 List *pathkeys, Relids required_outer, Path *fdw_outerpath,
-									 List *private);
-static Path *server_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target,
-										   double rows, Cost startup_cost, Cost total_cost,
-										   List *pathkeys, Path *fdw_outerpath, List *private);
+static Path *data_node_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target,
+										double rows, Cost startup_cost, Cost total_cost,
+										List *pathkeys, Relids required_outer, Path *fdw_outerpath,
+										List *private);
+static Path *data_node_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel,
+											  PathTarget *target, double rows, Cost startup_cost,
+											  Cost total_cost, List *pathkeys, Path *fdw_outerpath,
+											  List *private);
 
 static AppendRelInfo *
 create_append_rel_info(PlannerInfo *root, Index childrelid, Index parentrelid)
@@ -93,22 +94,22 @@ create_append_rel_info(PlannerInfo *root, Index childrelid, Index parentrelid)
 }
 
 /*
- * Build a new RelOptInfo representing a server.
+ * Build a new RelOptInfo representing a data node.
  *
  * Note that the relid index should point to the corresponding range table
- * entry (RTE) we created for the server rel when expanding the
+ * entry (RTE) we created for the data node rel when expanding the
  * hypertable. Each such RTE's relid (OID) refers to the hypertable's root
  * table. This has the upside that the planner can use the hypertable's
  * indexes to plan remote queries more efficiently. In contrast, chunks are
  * foreign tables and they cannot have indexes.
  */
 static RelOptInfo *
-build_server_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *parent)
+build_data_node_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *parent)
 {
 	RelOptInfo *rel = build_simple_rel(root, relid, parent);
 
 	/* Use relevant exprs and restrictinfos from the parent rel. These will be
-	 * adjusted to match the server rel's relid later. */
+	 * adjusted to match the data node rel's relid later. */
 	rel->reltarget->exprs = copyObject(parent->reltarget->exprs);
 	rel->baserestrictinfo = parent->baserestrictinfo;
 	rel->baserestrictcost = parent->baserestrictcost;
@@ -123,7 +124,7 @@ build_server_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *paren
 	 * called for upper rels of type UPPERREL_PARTIAL_GROUP_AGG, which is odd
 	 * (see end of PostgreSQL planner.c:create_partial_grouping_paths). Until
 	 * this gets fixed in the PostgreSQL planner, we're forced to set
-	 * fdwroutine here although we will scan this rel with a ServerScan and
+	 * fdwroutine here although we will scan this rel with a DataNodeScan and
 	 * not a ForeignScan. */
 	rel->fdwroutine = GetFdwRoutineByServerId(serverid);
 
@@ -131,40 +132,40 @@ build_server_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *paren
 }
 
 /*
- * Adjust the attributes of server rel quals.
+ * Adjust the attributes of data node rel quals.
  *
  * Code adapted from allpaths.c: set_append_rel_size.
  *
- * For each server child rel, copy the quals/restrictions from the parent
+ * For each data node child rel, copy the quals/restrictions from the parent
  * (hypertable) rel and adjust the attributes (e.g., Vars) to point to the
  * child rel instead of the parent.
  *
  * Normally, this happens as part of estimating the rel size of an append
  * relation in standard planning, where constraint exclusion and partition
  * pruning also happens for each child. Here, however, we don't prune any
- * server rels since they are created based on assignment of already pruned
- * chunk child rels at an earlier stage. Server rels that aren't assigned any
+ * data node rels since they are created based on assignment of already pruned
+ * chunk child rels at an earlier stage. Data node rels that aren't assigned any
  * chunks will never be created in the first place.
  */
 static void
-adjust_server_rel_attrs(PlannerInfo *root, RelOptInfo *server_rel, RelOptInfo *hyper_rel,
-						AppendRelInfo *appinfo)
+adjust_data_node_rel_attrs(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptInfo *hyper_rel,
+						   AppendRelInfo *appinfo)
 {
-	List *serverquals = NIL;
+	List *nodequals = NIL;
 	ListCell *lc;
 
 	foreach (lc, hyper_rel->baserestrictinfo)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
-		Node *serverqual;
+		Node *nodequal;
 		ListCell *lc2;
 
-		serverqual = adjust_appendrel_attrs_compat(root, (Node *) rinfo->clause, appinfo);
+		nodequal = adjust_appendrel_attrs_compat(root, (Node *) rinfo->clause, appinfo);
 
-		serverqual = eval_const_expressions(root, serverqual);
+		nodequal = eval_const_expressions(root, nodequal);
 
 		/* might have gotten an AND clause, if so flatten it */
-		foreach (lc2, make_ands_implicit((Expr *) serverqual))
+		foreach (lc2, make_ands_implicit((Expr *) nodequal))
 		{
 			Node *onecq = (Node *) lfirst(lc2);
 			bool pseudoconstant;
@@ -177,44 +178,44 @@ adjust_server_rel_attrs(PlannerInfo *root, RelOptInfo *server_rel, RelOptInfo *h
 				root->hasPseudoConstantQuals = true;
 			}
 			/* reconstitute RestrictInfo with appropriate properties */
-			serverquals = lappend(serverquals,
-								  make_restrictinfo((Expr *) onecq,
-													rinfo->is_pushed_down,
-													rinfo->outerjoin_delayed,
-													pseudoconstant,
-													rinfo->security_level,
-													NULL,
-													NULL,
-													NULL));
+			nodequals = lappend(nodequals,
+								make_restrictinfo((Expr *) onecq,
+												  rinfo->is_pushed_down,
+												  rinfo->outerjoin_delayed,
+												  pseudoconstant,
+												  rinfo->security_level,
+												  NULL,
+												  NULL,
+												  NULL));
 		}
 	}
 
-	server_rel->baserestrictinfo = serverquals;
-	server_rel->joininfo =
+	data_node_rel->baserestrictinfo = nodequals;
+	data_node_rel->joininfo =
 		(List *) adjust_appendrel_attrs_compat(root, (Node *) hyper_rel->joininfo, appinfo);
 
-	server_rel->reltarget->exprs =
+	data_node_rel->reltarget->exprs =
 		(List *) adjust_appendrel_attrs_compat(root, (Node *) hyper_rel->reltarget->exprs, appinfo);
 
 	/* Add equivalence class for rel to push down joins and sorts */
 	if (hyper_rel->has_eclass_joins || has_useful_pathkeys(root, hyper_rel))
-		add_child_rel_equivalences(root, appinfo, hyper_rel, server_rel);
+		add_child_rel_equivalences(root, appinfo, hyper_rel, data_node_rel);
 
-	server_rel->has_eclass_joins = hyper_rel->has_eclass_joins;
+	data_node_rel->has_eclass_joins = hyper_rel->has_eclass_joins;
 }
 
 /*
- * Build RelOptInfos for each server.
+ * Build RelOptInfos for each data node.
  *
- * Each server rel will point to the root hypertable table, which is
+ * Each data node rel will point to the root hypertable table, which is
  * conceptually correct since we query the identical (partial) hypertables on
- * the servers.
+ * the data nodes.
  */
 static RelOptInfo **
-build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
+build_data_node_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 {
 	TimescaleDBPrivate *priv = hyper_rel->fdw_private;
-	/* Update the partitioning to reflect the new per-server plan */
+	/* Update the partitioning to reflect the new per-data node plan */
 	RelOptInfo **part_rels = palloc(sizeof(RelOptInfo *) * list_length(priv->serverids));
 	ListCell *lc;
 	int n = 0;
@@ -225,8 +226,8 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 
 	foreach (lc, priv->serverids)
 	{
-		Oid serverid = lfirst_oid(lc);
-		RelOptInfo *server_rel;
+		Oid data_node_id = lfirst_oid(lc);
+		RelOptInfo *data_node_rel;
 		AppendRelInfo *appinfo;
 
 		i = bms_next_member(priv->server_relids, i);
@@ -239,9 +240,9 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 		 * information. */
 		appinfo = create_append_rel_info(root, i, hyper_rel->relid);
 		root->append_rel_array[i] = appinfo;
-		server_rel = build_server_rel(root, i, serverid, hyper_rel);
-		part_rels[n++] = server_rel;
-		adjust_server_rel_attrs(root, server_rel, hyper_rel, appinfo);
+		data_node_rel = build_data_node_rel(root, i, data_node_id, hyper_rel);
+		part_rels[n++] = data_node_rel;
+		adjust_data_node_rel_attrs(root, data_node_rel, hyper_rel, appinfo);
 	}
 
 	if (nparts != NULL)
@@ -251,7 +252,7 @@ build_server_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 }
 
 static void
-add_server_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
+add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 {
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(baserel);
 	Path *path;
@@ -261,20 +262,20 @@ add_server_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("foreign joins are not supported")));
 
-	path = server_scan_path_create(root,
-								   baserel,
-								   NULL, /* default pathtarget */
-								   fpinfo->rows,
-								   fpinfo->startup_cost,
-								   fpinfo->total_cost,
-								   NIL, /* no pathkeys */
-								   NULL,
-								   NULL /* no extra plan */,
-								   NIL);
+	path = data_node_scan_path_create(root,
+									  baserel,
+									  NULL, /* default pathtarget */
+									  fpinfo->rows,
+									  fpinfo->startup_cost,
+									  fpinfo->total_cost,
+									  NIL, /* no pathkeys */
+									  NULL,
+									  NULL /* no extra plan */,
+									  NIL);
 	add_path(baserel, path);
 
 	/* Add paths with pathkeys */
-	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, server_scan_path_create);
+	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, data_node_scan_path_create);
 }
 
 typedef struct FuncExprContext
@@ -388,7 +389,7 @@ add_bucketing_exprs_for_dimension(Dimension *dim, RelOptInfo *hyper_rel, List *f
  * partitioning. This makes the planner believe partitioning and GROUP BYs
  * line up perfectly. Forcing a push down is useful because the PostgreSQL
  * planner is not smart enough to realize it can always push things down if
- * there's, e.g., only one partition (or server) involved in the query.
+ * there's, e.g., only one partition (or data node) involved in the query.
  */
 static void
 force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
@@ -420,7 +421,7 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 /*
  * Check if it is safe to push down GROUP BYs to remote nodes. A push down is
  * safe if the chunks that are part of the query are disjointedly partitioned
- * on servers along the first closed "space" dimension, or all dimensions are
+ * on data nodes along the first closed "space" dimension, or all dimensions are
  * covered in the GROUP BY expresssion.
  *
  * If we knew that the GROUP BY covers all partitioning keys, we would not
@@ -430,7 +431,7 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
  *
  * There are other "base" cases when we can always safely push down--even if
  * the GROUP BY does NOT cover the partitioning keys--for instance, when only
- * one server is involved in the query. We try to account for such cases too
+ * one data node is involved in the query. We try to account for such cases too
  * and "trick" the PG planner to do the "right" thing.
  *
  * We also want to add any bucketing expression (on, e.g., time) as a "meta"
@@ -449,7 +450,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 	Assert(hs->num_dimensions >= 1);
 	Assert(hyper_rel->part_scheme->partnatts == hs->num_dimensions);
 
-	/* Check for special case when there is only one server with chunks. This
+	/* Check for special case when there is only one data node with chunks. This
 	 * can always be safely pushed down irrespective of partitioning */
 	if (scas->num_nodes_with_chunks == 1)
 	{
@@ -458,7 +459,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 	}
 
 	/* Get first closed dimension that we use for assigning chunks to
-	 * servers. If there is no closed dimension, we are done. */
+	 * data nodes. If there is no closed dimension, we are done. */
 	dim = hyperspace_get_closed_dimension(hs, 0);
 
 	if (NULL == dim)
@@ -471,7 +472,7 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 		List *funcexprs;
 		int i;
 
-		/* When server chunk assignments are overlapping we require that the
+		/* When data node chunk assignments are overlapping we require that the
 		 * GROUP BY covers all partitioning keys. To push down GROUP BYs with
 		 * bucketing, we need to also add the bucketing expressions as
 		 * partition key expressions. */
@@ -484,36 +485,36 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 			add_bucketing_exprs_for_dimension(&hs->dimensions[i], hyper_rel, funcexprs, i);
 	}
 
-	/* If server chunk assignments are non-overlapping along the "space"
+	/* If data node chunk assignments are non-overlapping along the "space"
 	 * dimension, we can treat this as a one-dimensional partitioned table
-	 * since any aggregate GROUP BY that includes the server-assignment
-	 * dimension is safe to execute independently on each server. */
+	 * since any aggregate GROUP BY that includes the data node-assignment
+	 * dimension is safe to execute independently on each data node. */
 	Assert(NULL != dim);
 	hyper_rel->partexprs[0] = ts_dimension_get_partexprs(dim, hyper_rel->relid);
 	hyper_rel->part_scheme->partnatts = 1;
 }
 
 /*
- * Turn chunk append paths into server append paths.
+ * Turn chunk append paths into data node append paths.
  *
  * By default, a hypertable produces append plans where each child is a chunk
  * to be scanned. This function computes alternative append plans where each
- * child corresponds to a server.
+ * child corresponds to a data node.
  *
  * In the future, additional assignment algorithms can create their own
  * append paths and have the cost optimizer pick the best one.
  */
 void
-server_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
+data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
 	RelOptInfo **chunk_rels = hyper_rel->part_rels;
 	int nchunk_rels = hyper_rel->nparts;
 	RangeTblEntry *hyper_rte = planner_rt_fetch(hyper_rel->relid, root);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hyper_rte->relid, CACHE_FLAG_NONE);
-	List *server_rels_list = NIL;
-	RelOptInfo **server_rels;
-	int nserver_rels;
+	List *data_node_rels_list = NIL;
+	RelOptInfo **data_node_rels;
+	int ndata_node_rels;
 	DataNodeChunkAssignments scas;
 	int i;
 
@@ -525,66 +526,67 @@ server_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 		return;
 	}
 
-	/* Create the RelOptInfo for each server */
-	server_rels = build_server_part_rels(root, hyper_rel, &nserver_rels);
+	/* Create the RelOptInfo for each data node */
+	data_node_rels = build_data_node_part_rels(root, hyper_rel, &ndata_node_rels);
 
-	Assert(nserver_rels > 0);
+	Assert(ndata_node_rels > 0);
 
-	data_node_chunk_assignments_init(&scas, SCA_STRATEGY_ATTACHED_DATA_NODE, root, nserver_rels);
+	data_node_chunk_assignments_init(&scas, SCA_STRATEGY_ATTACHED_DATA_NODE, root, ndata_node_rels);
 
-	/* Assign chunks to servers */
+	/* Assign chunks to data nodes */
 	data_node_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
 
 	/* Try to push down GROUP BY expressions and bucketing, if possible */
 	push_down_group_bys(root, hyper_rel, ht->space, &scas);
 
-	/* Create estimates and paths for each server rel based on server chunk
+	/* Create estimates and paths for each data node rel based on data node chunk
 	 * assignments */
-	for (i = 0; i < nserver_rels; i++)
+	for (i = 0; i < ndata_node_rels; i++)
 	{
-		RelOptInfo *server_rel = server_rels[i];
-		DataNodeChunkAssignment *sca = data_node_chunk_assignment_get_or_create(&scas, server_rel);
+		RelOptInfo *data_node_rel = data_node_rels[i];
+		DataNodeChunkAssignment *sca =
+			data_node_chunk_assignment_get_or_create(&scas, data_node_rel);
 		TsFdwRelInfo *fpinfo;
 
 		/* Update the number of tuples and rows based on the chunk
 		 * assignments */
-		server_rel->tuples = sca->tuples;
-		server_rel->rows = sca->rows;
+		data_node_rel->tuples = sca->tuples;
+		data_node_rel->rows = sca->rows;
 
 		fpinfo = fdw_relinfo_create(root,
-									server_rel,
-									server_rel->serverid,
+									data_node_rel,
+									data_node_rel->serverid,
 									hyper_rte->relid,
 									TS_FDW_RELINFO_HYPERTABLE_DATA_NODE);
 		fpinfo->sca = sca;
 
 		if (!bms_is_empty(sca->chunk_relids))
 		{
-			add_server_scan_paths(root, server_rel);
-			server_rels_list = lappend(server_rels_list, server_rel);
+			add_data_node_scan_paths(root, data_node_rel);
+			data_node_rels_list = lappend(data_node_rels_list, data_node_rel);
 		}
 		else
-			ts_set_dummy_rel_pathlist(server_rel);
+			ts_set_dummy_rel_pathlist(data_node_rel);
 
-		set_cheapest(server_rel);
+		set_cheapest(data_node_rel);
 	}
 
-	Assert(list_length(server_rels_list) > 0);
+	Assert(list_length(data_node_rels_list) > 0);
 
-	/* Reset the pathlist since server scans are preferred */
+	/* Reset the pathlist since data node scans are preferred */
 	hyper_rel->pathlist = NIL;
 
 	/* Must keep partitioning info consistent with the append paths we create */
-	hyper_rel->part_rels = server_rels;
-	hyper_rel->nparts = nserver_rels;
+	hyper_rel->part_rels = data_node_rels;
+	hyper_rel->nparts = ndata_node_rels;
 
-	add_paths_to_append_rel(root, hyper_rel, server_rels_list);
+	add_paths_to_append_rel(root, hyper_rel, data_node_rels_list);
 	ts_cache_release(hcache);
 }
 
 void
-server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
-							   RelOptInfo *output_rel, void *extra)
+data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
+								  RelOptInfo *output_rel, void *extra)
 {
 	TimescaleDBPrivate *rel_private = input_rel->fdw_private;
 	TsFdwRelInfo *fpinfo;
@@ -595,7 +597,7 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 
 	fpinfo = fdw_relinfo_get(input_rel);
 
-	/* Verify that this is a server rel */
+	/* Verify that this is a data node rel */
 	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
 		return;
 
@@ -605,22 +607,22 @@ server_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOp
 						   input_rel,
 						   output_rel,
 						   extra,
-						   server_scan_upper_path_create);
+						   data_node_scan_upper_path_create);
 }
 
-static CustomScanMethods server_scan_plan_methods = {
-	.CustomName = "ServerScan",
+static CustomScanMethods data_node_scan_plan_methods = {
+	.CustomName = "DataNodeScan",
 	.CreateCustomScanState = data_node_scan_state_create,
 };
 
-typedef struct ServerScanPath
+typedef struct DataNodeScanPath
 {
 	CustomPath cpath;
-} ServerScanPath;
+} DataNodeScanPath;
 
 static Plan *
-server_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path, List *tlist,
-						List *clauses, List *custom_plans)
+data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path, List *tlist,
+						   List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	ScanInfo scaninfo;
@@ -629,7 +631,7 @@ server_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_pat
 
 	fdw_scan_info_init(&scaninfo, root, rel, &best_path->path, clauses);
 
-	cscan->methods = &server_scan_plan_methods;
+	cscan->methods = &data_node_scan_plan_methods;
 	cscan->custom_plans = custom_plans;
 	cscan->scan.plan.targetlist = tlist;
 	cscan->scan.scanrelid = scaninfo.scan_relid;
@@ -696,17 +698,17 @@ server_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_pat
 	return &cscan->scan.plan;
 }
 
-static CustomPathMethods server_scan_path_methods = {
-	.CustomName = "ServerScanPath",
-	.PlanCustomPath = server_scan_plan_create,
+static CustomPathMethods data_node_scan_path_methods = {
+	.CustomName = "DataNodeScanPath",
+	.PlanCustomPath = data_node_scan_plan_create,
 };
 
 static Path *
-server_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
-						Cost startup_cost, Cost total_cost, List *pathkeys, Relids required_outer,
-						Path *fdw_outerpath, List *private)
+data_node_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
+						   Cost startup_cost, Cost total_cost, List *pathkeys,
+						   Relids required_outer, Path *fdw_outerpath, List *private)
 {
-	ServerScanPath *scanpath = palloc0(sizeof(ServerScanPath));
+	DataNodeScanPath *scanpath = palloc0(sizeof(DataNodeScanPath));
 
 	if (rel->lateral_relids && !bms_is_subset(rel->lateral_relids, required_outer))
 		required_outer = bms_union(required_outer, rel->lateral_relids);
@@ -717,7 +719,7 @@ server_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, 
 	scanpath->cpath.path.type = T_CustomPath;
 	scanpath->cpath.path.pathtype = T_CustomScan;
 	scanpath->cpath.custom_paths = fdw_outerpath == NULL ? NIL : list_make1(fdw_outerpath);
-	scanpath->cpath.methods = &server_scan_path_methods;
+	scanpath->cpath.methods = &data_node_scan_path_methods;
 	scanpath->cpath.path.parent = rel;
 	scanpath->cpath.path.pathtarget = target ? target : rel->reltarget;
 	scanpath->cpath.path.param_info = get_baserel_parampathinfo(root, rel, required_outer);
@@ -733,11 +735,11 @@ server_scan_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, 
 }
 
 static Path *
-server_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
-							  Cost startup_cost, Cost total_cost, List *pathkeys,
-							  Path *fdw_outerpath, List *private)
+data_node_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *target,
+								 double rows, Cost startup_cost, Cost total_cost, List *pathkeys,
+								 Path *fdw_outerpath, List *private)
 {
-	ServerScanPath *scanpath = palloc0(sizeof(ServerScanPath));
+	DataNodeScanPath *scanpath = palloc0(sizeof(DataNodeScanPath));
 
 	/*
 	 * Upper relations should never have any lateral references, since joining
@@ -748,7 +750,7 @@ server_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget *ta
 	scanpath->cpath.path.type = T_CustomPath;
 	scanpath->cpath.path.pathtype = T_CustomScan;
 	scanpath->cpath.custom_paths = fdw_outerpath == NULL ? NIL : list_make1(fdw_outerpath);
-	scanpath->cpath.methods = &server_scan_path_methods;
+	scanpath->cpath.methods = &data_node_scan_path_methods;
 	scanpath->cpath.path.parent = rel;
 	scanpath->cpath.path.pathtarget = target ? target : rel->reltarget;
 	scanpath->cpath.path.param_info = NULL;

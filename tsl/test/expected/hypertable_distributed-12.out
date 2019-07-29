@@ -382,17 +382,17 @@ SELECT * FROM disttable;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Custom Scan (ServerScan) on public.disttable
+   ->  Custom Scan (DataNodeScan) on public.disttable
          Output: disttable."time", disttable.device, disttable.temp
          Data node: data_node_1
          Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
          Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
-   ->  Custom Scan (ServerScan) on public.disttable disttable_1
+   ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
          Output: disttable_1."time", disttable_1.device, disttable_1.temp
          Data node: data_node_2
          Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
          Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
-   ->  Custom Scan (ServerScan) on public.disttable disttable_2
+   ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
          Output: disttable_2."time", disttable_2.device, disttable_2.temp
          Data node: data_node_3
          Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
@@ -424,17 +424,17 @@ ORDER BY 1;
    Group Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
    ->  Merge Append
          Sort Key: (time_bucket('@ 3 hours'::interval, disttable."time")), disttable.device
-         ->  Custom Scan (ServerScan) on public.disttable
+         ->  Custom Scan (DataNodeScan) on public.disttable
                Output: time_bucket('@ 3 hours'::interval, disttable."time"), disttable.device, disttable.temp
                Data node: data_node_1
                Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
                Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-         ->  Custom Scan (ServerScan) on public.disttable disttable_1
+         ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
                Output: time_bucket('@ 3 hours'::interval, disttable_1."time"), disttable_1.device, disttable_1.temp
                Data node: data_node_2
                Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
                Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY public.time_bucket('03:00:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-         ->  Custom Scan (ServerScan) on public.disttable disttable_2
+         ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
                Output: time_bucket('@ 3 hours'::interval, disttable_2."time"), disttable_2.device, disttable_2.temp
                Data node: data_node_3
                Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
@@ -1537,17 +1537,17 @@ SELECT * FROM disttable_replicated;
                                                                              QUERY PLAN                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=8 loops=1)
-   ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=4 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated (actual rows=4 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
          Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
          Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
          Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
@@ -1594,17 +1594,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0;
                                                                                               QUERY PLAN                                                                                               
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=2 loops=1)
-   ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=0 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated (actual rows=0 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
          Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND ((temp > 2::double precision))
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
          Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND ((temp > 2::double precision))
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
          Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
@@ -1617,17 +1617,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
                                                                                                         QUERY PLAN                                                                                                         
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=3 loops=1)
-   ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=1 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated (actual rows=1 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
          Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND (((temp > 2::double precision) OR ("Color" = 11)))
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
          Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
          Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
@@ -1640,12 +1640,12 @@ SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
                                                                                                              QUERY PLAN                                                                                                              
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=2 loops=1)
-   ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated (actual rows=2 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
          Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
          Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk
@@ -1671,17 +1671,17 @@ SELECT * FROM cte;
                                                                              QUERY PLAN                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=8 loops=1)
-   ->  Custom Scan (ServerScan) on public.disttable_replicated (actual rows=4 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated (actual rows=4 loops=1)
          Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
          Data node: data_node_1
          Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
          Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
          Data node: data_node_2
          Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
          Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[6, 8])
-   ->  Custom Scan (ServerScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
+   ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
          Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
          Data node: data_node_3
          Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
