@@ -163,6 +163,15 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 
 		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 		{
+			/*
+			 * If the planner injected a Result node to do projection
+			 * we can safely remove the Result node if it does not have
+			 * a one-time filter because ChunkAppend can do projection.
+			 */
+			if (IsA(lfirst(lc_plan), Result) &&
+				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL)
+				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
+
 			if (IsA(lfirst(lc_plan), MergeAppend))
 			{
 				ListCell *lc_childpath, *lc_childplan;
