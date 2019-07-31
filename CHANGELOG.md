@@ -4,7 +4,15 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.4.1 (unreleased)
+## 1.4.1 (2019-08-01)
+
+This maintenance release contains bugfixes since the 1.4.0 release. We deem it medium
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address 2 potential
+segfaults and no other security vulnerabilities. The bugfixes are related to queries
+with prepared statements, PL/pgSQL functions and interoperability with other extensions.
+More details below.
 
 **Bugfixes**
 * #1362 Fix ConstraintAwareAppend subquery exclusion
