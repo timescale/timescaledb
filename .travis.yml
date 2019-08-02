@@ -9,6 +9,7 @@ env:
     - secure: "TurskgAodG44RKCUPfoUb4JlT+UZwaPjUN73MS4+2ED2ayf46iUpcMODovDf7CPQRriMAvii/5xQ9UWTGYZejJy/Si3aE0fQeSKHIOPmuHqmmBkC3jgK9A5vOMpaAwljSNvIAMfwhIjVsq87nyvxHYWReDWl5SrdxTvh91RJvOiMRNdqwBbnj2j1cC30783ICGZUazrUyhDDnXispyBJYFxlHJmQJpfs6428dTRNJY/X8nVDXFwQkRjlIXarquTsrifCfzdq40Ykb8/1CS0295R8/kdKamQqXM0aS7iIkw3JFmZIz08OHKc7wcJuv6KSnCfNSftJqy2+nb1gkyIqkr3mrpYUa+2tKVwpA6OfET2S2kC5B3bOTcyBgihhnivAOS9zG8PTouLSUzqZzo+H893xdaMlX4kX3oOrOqzbj8YvTw6Dgw8PWERfnOngpKmKJFb8yboXPmGY7luSVxOplnPnYO0jaAXPU4ESsFYL3EBG5Zo4rVIuA5g7aJ0Ex+e5GQWiHDM1ubUo2vcuVVlurs/Aj8eSpNhqo0S5MjI05Jcz82X+9+asFcP+QV81UrueiXTlQ/7buAyMyVtKOgOhZwR4ImA1zzWkJjNNbZMJqeO9tPEgU7IxrqLhMgIpBB/pn0gzJZ8LN7C2oyznMYGzS5lrYaavojFUViv8vFyAQ24="
     - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
     - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
+    - CODECOV_FLAGS="-F cron"
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL regression tests
   - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
@@ -42,7 +43,7 @@ after_failure:
   - docker exec -u postgres -it pgbuild find /build -name postmaster.log -exec cat {} +
 after_success:
   - ci_env=`bash <(curl -s https://codecov.io/env)`
-  - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "
+  - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 after_script:
   - docker rm -f pgbuild
 
@@ -84,7 +85,7 @@ jobs:
       stage: test
       name: "Regression 9.6 ARM processors"
       env:
-        - PG_VERSION=9.6.6
+        - PG_VERSION=9.6.6 CODECOV_FLAGS="-F arm"
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -106,7 +107,7 @@ jobs:
       stage: test
       name: "Regression 10.2 ARM processors"
       env:
-        - PG_VERSION=10.2
+        - PG_VERSION=10.2 CODECOV_FLAGS="-F arm"
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -128,7 +129,7 @@ jobs:
       stage: test
       name: "Regression 11.0 ARM processors"
       env:
-        - PG_VERSION=11.0
+        - PG_VERSION=11.0 CODECOV_FLAGS="-F arm"
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -146,37 +147,37 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator cat /build/test/regression.diffs /build/tsl/test/regression.diffs /build/test/isolation/regression.diffs /build/tsl/test/isolation/regression.diffs /build/test/pgtest/regression.diffs
         - docker rm -f docker_arm_emulator
 
-      # cron tests the earliest patch versions (ABI tests handle the latest)
+    # to maximize code code coverage on PRs we run tests on earliest 9.6, latest 10 and earliest and latest 11
+    # cron and prerelease runs regression tests on earliest and latest for each major version
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 9.6.6"
       env: PG_VERSION=9.6.6
+
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 9.6.14"
+      env: PG_VERSION=9.6.14 CODECOV_FLAGS="-F cron -F pr"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 10.2"
       env: PG_VERSION=10.2
 
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 10.9"
+      env: PG_VERSION=10.9 CODECOV_FLAGS="-F cron -F pr"
+
+    - if: (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 11.0"
       env: PG_VERSION=11.0
 
-      #PRs and branches get tested on the latest released patch
-    - if: (type = pull_request) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 9.6"
-      env: PG_VERSION=9.6.14
-
-    - if: (type = pull_request) OR NOT (branch = master)
-      stage: test
-      name: "Regression 10"
-      env: PG_VERSION=10.9
-
-    - if: (type = pull_request) OR NOT (branch = master)
-      stage: test
-      name: "Regression 11"
-      env: PG_VERSION=11.4
+      name: "Regression 11.4"
+      env: PG_VERSION=11.4 CODECOV_FLAGS="-F cron -F pr"
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: (type = cron) OR (branch = prerelease_test)
@@ -187,6 +188,7 @@ jobs:
       install:
       after_failure:
       after_script:
+      after_success:
       script:
         - ${RETRY_PREFIX} bash -x ./scripts/test_updates_no_constraints.sh
 
@@ -199,6 +201,7 @@ jobs:
       install:
       after_failure:
       after_script:
+      after_success:
       script:
         - ${RETRY_PREFIX} bash -x ./scripts/test_updates_with_constraints.sh
 
@@ -211,6 +214,7 @@ jobs:
       install:
       after_failure:
       after_script:
+      after_success:
       script:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg10.sh
 
@@ -285,6 +289,7 @@ jobs:
       before_install:
       install:
       after_failure:
+      after_success:
       after_script:
       env:
         - PG_VERSION=10.2
