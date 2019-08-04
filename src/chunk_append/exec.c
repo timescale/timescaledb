@@ -29,6 +29,11 @@
 #include "chunk_append/planner.h"
 #include "compat.h"
 
+#define INVALID_SUBPLAN_INDEX -1
+#define NO_MATCHING_SUBPLANS -2
+
+static void choose_next_subplan(ChunkAppendState *state);
+
 static TupleTableSlot *chunk_append_exec(CustomScanState *node);
 static void chunk_append_begin(CustomScanState *node, EState *estate, int eflags);
 static void chunk_append_end(CustomScanState *node);
@@ -69,6 +74,8 @@ chunk_append_state_create(CustomScan *cscan)
 
 	state->filtered_subplans = state->initial_subplans;
 	state->filtered_ri_clauses = state->initial_ri_clauses;
+
+	state->current = INVALID_SUBPLAN_INDEX;
 
 	return (Node *) state;
 }
@@ -155,7 +162,10 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	state->num_subplans = list_length(state->filtered_subplans);
 
 	if (state->num_subplans == 0)
+	{
+		state->current = NO_MATCHING_SUBPLANS;
 		return;
+	}
 
 	state->subplanstates = palloc0(state->num_subplans * sizeof(PlanState *));
 
@@ -258,22 +268,8 @@ chunk_append_exec(CustomScanState *node)
 	ExprDoneCond isDone;
 #endif
 
-	/*
-	 * Check if all append subplans were pruned. In that case there is nothing
-	 * to do.
-	 */
-	if (state->num_subplans == 0)
-		return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
-
-	if (state->runtime_exclusion && !state->runtime_initialized)
-	{
-		initialize_runtime_exclusion(state);
-
-		if (bms_is_empty(state->valid_subplans))
-			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
-
-		state->current = bms_next_member(state->valid_subplans, -1);
-	}
+	if (state->current == INVALID_SUBPLAN_INDEX)
+		choose_next_subplan(state);
 
 #if PG96
 	if (node->ss.ps.ps_TupFromTlist)
@@ -293,9 +289,11 @@ chunk_append_exec(CustomScanState *node)
 
 		CHECK_FOR_INTERRUPTS();
 
-		/*
-		 * figure out which subplan we are currently processing
-		 */
+		if (state->current == NO_MATCHING_SUBPLANS)
+			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
+
+		Assert(state->current >= 0 && state->current < state->num_subplans);
+
 		subnode = state->subplanstates[state->current];
 
 		/*
@@ -333,15 +331,38 @@ chunk_append_exec(CustomScanState *node)
 		 * more subplans, return the empty slot set up for us by
 		 * chunk_append_begin.
 		 */
-		if (state->runtime_exclusion)
-			state->current = bms_next_member(state->valid_subplans, state->current);
-		else
-			state->current++;
-
-		if (state->current >= state->num_subplans || state->current < 0)
-			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
+		choose_next_subplan(state);
 
 		/* Else loop back and try to get a tuple from the new subplan */
+	}
+}
+
+static void
+choose_next_subplan(ChunkAppendState *state)
+{
+	if (state->num_subplans == 0)
+	{
+		state->current = NO_MATCHING_SUBPLANS;
+		return;
+	}
+
+	if (state->runtime_exclusion)
+	{
+		if (!state->runtime_initialized)
+			initialize_runtime_exclusion(state);
+
+		/*
+		 * bms_next_member will return -2 (NO_MATCHING_SUBPLANS) if there are
+		 * no more members
+		 */
+		state->current = bms_next_member(state->valid_subplans, state->current);
+	}
+	else
+	{
+		state->current++;
+
+		if (state->current >= state->num_subplans)
+			state->current = NO_MATCHING_SUBPLANS;
 	}
 }
 
@@ -370,7 +391,7 @@ chunk_append_rescan(CustomScanState *node)
 
 		ExecReScan(state->subplanstates[i]);
 	}
-	state->current = 0;
+	state->current = INVALID_SUBPLAN_INDEX;
 
 	/*
 	 * detect changed params and reset runtime exclusion state
