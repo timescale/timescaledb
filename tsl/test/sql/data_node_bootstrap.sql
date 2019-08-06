@@ -52,13 +52,11 @@ FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
--- Try to recreate data node with the same name, database and extension exists
+-- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-\set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
-\set ON_ERROR_STOP 1
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
 SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
@@ -157,6 +155,12 @@ SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', if
 SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D');
 SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', if_not_exists => true);
 
+-- Testing that the check for database privileges does not croak on a
+-- strange database name. The check is executed when a database
+-- already exists.
+SELECT true FROM add_data_node('bootstrap_test3', database => 'dat''abase');
+SELECT true FROM add_data_node('bootstrap_test4', database => 'dat''abase');
+
 SELECT count(*) FROM show_data_nodes();
 SELECT true FROM pg_database WHERE datname = 'Unusual Name';
 SELECT true FROM pg_database WHERE datname = U&'\0441\043B\043E\043D';
@@ -166,3 +170,4 @@ SELECT true FROM delete_data_node('bootstrap_test2', cascade => true);
 
 DROP DATABASE "Unusual Name";
 DROP DATABASE U&"\0441\043B\043E\043D";
+DROP DATABASE "dat'abase";
