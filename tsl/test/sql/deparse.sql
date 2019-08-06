@@ -27,4 +27,11 @@ SELECT format('\! diff %s %s', :'CREATE_OUT', :'RECREATE_OUT') as "DIFF_CMD"
 
 :DIFF_CMD
 
-SELECT 'DONE'
+SELECT 'TABLE DEPARSE TEST DONE';
+
+\set ECHO all
+-- test drop_chunks function deparsing
+SELECT * FROM tsl_test_deparse_drop_chunks('2019-01-01'::timestamptz, 'test_table', 'test_schema', cascade => false, verbose => true);
+SELECT * FROM tsl_test_deparse_drop_chunks(interval '1 day', table_name => 'weird nAme\\#^.', cascade_to_materializations => true, cascade => true);
+SELECT * FROM tsl_test_deparse_drop_chunks(newer_than => 12345);
+SELECT * FROM tsl_test_deparse_drop_chunks(older_than => interval '2 years', newer_than => '2015-01-01'::timestamp);

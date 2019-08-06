@@ -582,15 +582,18 @@ drop table drop_chunk_test1;
 drop table drop_chunk_test2;
 drop table drop_chunk_test3;
 CREATE SCHEMA try_schema;
-GRANT CREATE ON SCHEMA try_schema TO :ROLE_DEFAULT_PERM_USER;
-GRANT USAGE ON SCHEMA try_schema TO :ROLE_DEFAULT_PERM_USER;
+CREATE SCHEMA test1;
+CREATE SCHEMA test2;
+CREATE SCHEMA test3;
+GRANT CREATE ON SCHEMA try_schema, test1, test2, test3 TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA try_schema, test1, test2, test3 TO :ROLE_DEFAULT_PERM_USER;
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE try_schema.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('try_schema.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
 INSERT INTO public.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
 INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
-set search_path to try_schema, public;
+set search_path to try_schema, test1, test2, test3, public;
 SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT drop_chunks(table_name=>'drop_chunk_test_date', older_than=> '1 day'::interval);
@@ -600,5 +603,37 @@ INSERT INTO public.drop_chunk_test_date VALUES( '2020-02-11', 100, 'hello');
 INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-02-10', 100, 'hello');
 SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
-SELECT drop_chunks( older_than=> '1 day'::interval);
+SELECT drop_chunks(older_than=> '1 day'::interval);
 
+-- test drop chunks across two tables within the same schema
+CREATE TABLE test1.hyper1 (time bigint, temp float);
+CREATE TABLE test1.hyper2 (time bigint, temp float);
+
+SELECT create_hypertable('test1.hyper1', 'time', chunk_time_interval => 10);
+SELECT create_hypertable('test1.hyper2', 'time', chunk_time_interval => 10);
+
+INSERT INTO test1.hyper1 VALUES (10, 0.5);
+INSERT INTO test1.hyper2 VALUES (10, 0.7);
+
+SELECT drop_chunks(schema_name=>'test1', older_than => 100);
+SELECT show_chunks('test1.hyper1');
+SELECT show_chunks('test1.hyper2');
+
+-- test drop chunks for given table name across all schemas
+CREATE TABLE test2.hyperx (time bigint, temp float);
+CREATE TABLE test3.hyperx (time bigint, temp float);
+
+SELECT create_hypertable('test2.hyperx', 'time', chunk_time_interval => 10);
+SELECT create_hypertable('test3.hyperx', 'time', chunk_time_interval => 10);
+
+INSERT INTO test2.hyperx VALUES (10, 0.5);
+INSERT INTO test3.hyperx VALUES (10, 0.7);
+
+SELECT show_chunks('test2.hyperx');
+SELECT show_chunks('test3.hyperx');
+
+-- This will only drop from one of the tables since the one that is
+-- first in the search path will hide the other one.
+SELECT drop_chunks(table_name=>'hyperx', older_than => 100);
+SELECT show_chunks('test2.hyperx');
+SELECT show_chunks('test3.hyperx');

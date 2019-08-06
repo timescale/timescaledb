@@ -61,6 +61,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "scan_iterator.h"
 #include "compression_chunk_size.h"
+#include "extension.h"
 
 /* Strictly speaking there is no danger to include it always, but it helps to remove it with PG11_LT
  * support. */
@@ -1929,7 +1930,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 
 	/*
 	 * contains the list of hypertables which need to be considered. this is a
-	 * list containing a single hypertable if we are passed an invalid table
+	 * list containing a single hypertable if we are passed a valid table
 	 * OID. Otherwise, it will have the list of all hypertables in the system
 	 */
 	List *hypertables = NIL;
@@ -3211,7 +3212,8 @@ List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,
 						CascadeToMaterializationOption cascades_to_materializations,
-						int32 log_level, bool user_supplied_table_name)
+						int32 log_level, bool user_supplied_table_name, List **affected_data_nodes)
+
 {
 	uint64 i = 0;
 	uint64 num_chunks = 0;
@@ -3220,6 +3222,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
 	bool has_continuous_aggs;
+	List *data_nodes = NIL;
 
 	Assert(OidIsValid(table_relid));
 
@@ -3277,19 +3280,15 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 
 	for (; i < num_chunks; i++)
 	{
-		size_t len;
 		char *chunk_name;
+		ListCell *lc;
 
 		ASSERT_IS_VALID_CHUNK(&chunks[i]);
 
 		/* store chunk name for output */
 		schema_name = quote_identifier(chunks[i].fd.schema_name.data);
 		table_name = quote_identifier(chunks[i].fd.table_name.data);
-
-		len = strlen(schema_name) + strlen(table_name) + 2;
-		chunk_name = palloc(len);
-
-		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
+		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
 		if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_FALSE)
@@ -3298,6 +3297,15 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 											   log_level);
 		else
 			ts_chunk_drop(chunks + i, (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
+
+		/* Collect a list of affected data nodes so that we know which data
+		 * nodes we need to drop chunks on */
+		foreach (lc, chunks[i].data_nodes)
+		{
+			ChunkDataNode *cdn = lfirst(lc);
+
+			data_nodes = list_append_unique_oid(data_nodes, cdn->foreign_server_oid);
+		}
 	}
 
 	if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
@@ -3313,6 +3321,10 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 																log_level,
 																user_supplied_table_name);
 	}
+
+	if (affected_data_nodes)
+		*affected_data_nodes = data_nodes;
+
 	return dropped_chunk_names;
 }
 
@@ -3368,15 +3380,14 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	FuncCallContext *funcctx;
 	ListCell *lc;
 	List *ht_oids, *dc_names = NIL;
-
 	Name table_name, schema_name;
 	Datum older_than_datum, newer_than_datum;
-
 	Oid older_than_type, newer_than_type;
 	bool cascade, verbose;
 	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
 	bool user_supplied_table_name = true;
+	List *data_node_oids = NIL;
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
@@ -3436,6 +3447,19 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	/* Initial multi function call setup */
 	funcctx = SRF_FIRSTCALL_INIT();
+
+	/* We need the table schema when dropping remote chunks because the search
+	 * path on the connection is always set to pg_catalog. Thus we can only
+	 * use the schema if it is already set or there is only one
+	 * hypertable. The presence of a schema is enforced in
+	 * ts_chunk_do_drop_chunks. */
+	if (NULL == schema_name && list_length(ht_oids) == 1)
+	{
+		Oid nspid = get_rel_namespace(linitial_oid(ht_oids));
+
+		schema_name =
+			DatumGetName(DirectFunctionCall1(namein, CStringGetDatum(get_namespace_name(nspid))));
+	}
 
 	/* Drop chunks and build list of dropped chunks */
 	foreach (lc, ht_oids)
@@ -3502,11 +3526,25 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 										  cascade,
 										  cascades_to_materializations,
 										  elevel,
-										  user_supplied_table_name);
+										  user_supplied_table_name,
+										  &data_node_oids);
+
 		dc_names = list_concat(dc_names, dc_temp);
 
 		MemoryContextSwitchTo(oldcontext);
 	}
+
+	if (data_node_oids != NIL)
+		ts_cm_functions->drop_chunks_on_data_nodes(table_name,
+												   schema_name,
+												   older_than_datum,
+												   newer_than_datum,
+												   older_than_type,
+												   newer_than_type,
+												   cascade,
+												   cascades_to_materializations,
+												   verbose,
+												   data_node_oids);
 
 	/* store data for multi function call */
 	funcctx->max_calls = list_length(dc_names);

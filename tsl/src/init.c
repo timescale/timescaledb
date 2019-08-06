@@ -284,6 +284,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remove_from_distributed_db = dist_util_remove_from_db,
 	.remote_hypertable_info = dist_util_remote_hypertable_info,
 	.validate_as_data_node = validate_data_node_settings,
+	.drop_chunks_on_data_nodes = chunk_drop_remote_chunks,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

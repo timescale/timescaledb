@@ -21,11 +21,10 @@
 
 void
 ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks_ptr,
-										  Size num_chunks,
-
-										  Datum older_than_datum, Datum newer_than_datum,
-										  Oid older_than_type, Oid newer_than_type, bool cascade,
-										  int32 log_level, bool user_supplied_table_name)
+										  Size num_chunks, Datum older_than_datum,
+										  Datum newer_than_datum, Oid older_than_type,
+										  Oid newer_than_type, bool cascade, int32 log_level,
+										  bool user_supplied_table_name)
 {
 	ListCell *lc;
 	Oid arg_type = INT4OID;
@@ -45,6 +44,7 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 		SPIPlanPtr delete_plan;
 		ContinuousAgg *agg = lfirst(lc);
 		Hypertable *mat_table = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
+
 		ts_chunk_do_drop_chunks(mat_table->main_table_relid,
 								older_than_datum,
 								newer_than_datum,
@@ -53,7 +53,9 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 								cascade,
 								CASCADE_TO_MATERIALIZATION_FALSE,
 								log_level,
-								user_supplied_table_name);
+								user_supplied_table_name,
+								NULL);
+
 		/* we might still have materialization chunks that have data that refer
 		 * to the dropped chunks from the hypertable. This is because the
 		 * chunk interval on the mat. hypertable is NOT the same as the

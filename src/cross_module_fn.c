@@ -551,6 +551,16 @@ data_node_set_block_new_chunks_default(PG_FUNCTION_ARGS, bool block)
 	pg_unreachable();
 }
 
+static void
+empty_drop_chunks_on_data_nodes(Name table_name, Name schema_name, Datum older_than_datum,
+								Datum newer_than_datum, Oid older_than_type, Oid newer_than_type,
+								bool cascade, bool cascades_to_materializations, bool verbose,
+								List *data_node_oids)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -639,6 +649,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
 	.remote_hypertable_info = error_no_default_fn_pg_community,
 	.validate_as_data_node = error_no_default_fn_bool_void_community,
+	.drop_chunks_on_data_nodes = empty_drop_chunks_on_data_nodes,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
