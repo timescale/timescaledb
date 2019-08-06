@@ -140,6 +140,11 @@ typedef struct CrossModuleFunctions
 	bool (*remove_from_distributed_db)(void);
 	PGFunction remote_hypertable_info;
 	bool (*validate_as_data_node)();
+	void (*drop_chunks_on_data_nodes)(Name table_name, Name schema_name, Datum older_than_datum,
+									  Datum newer_than_datum, Oid older_than_type,
+									  Oid newer_than_type, bool cascade,
+									  bool cascades_to_materializations, bool verbose,
+									  List *data_node_oids);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

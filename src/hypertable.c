@@ -2240,15 +2240,11 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 	if (!OidIsValid(schema_oid))
 		return SCAN_CONTINUE;
 
-	if (accum->schema_name == NULL)
-	{
-		/* only user visible tables will be returned */
-		relid = RelnameGetRelid(NameStr(fd.table_name));
-	}
-	else
-		relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
+	relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
 
-	if (!OidIsValid(relid))
+	/* Only return relations visible in the search path, unless schema is
+	 * specifically specified */
+	if (!OidIsValid(relid) || (accum->schema_name == NULL && !RelationIsVisible(relid)))
 		return SCAN_CONTINUE;
 
 	if ((accum->schema_name == NULL ||
@@ -2262,6 +2258,7 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 											  NameGetDatum(accum->table_name),
 											  NameGetDatum(&fd.table_name)))))
 		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
+
 	return SCAN_CONTINUE;
 }
 

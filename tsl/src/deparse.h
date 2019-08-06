@@ -44,4 +44,9 @@ const char *deparse_get_tabledef_commands_concat(Oid relid);
 
 DeparsedHypertableCommands *deparse_get_distributed_hypertable_create_command(Hypertable *ht);
 
+const char *deparse_drop_chunks_func(Name table_name, Name schema_name, Datum older_than_datum,
+									 Datum newer_than_datum, Oid older_than_type,
+									 Oid newer_than_type, bool cascade,
+									 bool cascades_to_materializations, bool verbose);
+
 #endif

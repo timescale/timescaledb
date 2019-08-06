@@ -473,7 +473,7 @@ async_request_set_create()
 void
 async_request_set_add(AsyncRequestSet *set, AsyncRequest *req)
 {
-	set->requests = list_append_unique(set->requests, req);
+	set->requests = list_append_unique_ptr(set->requests, req);
 }
 
 static AsyncResponse *

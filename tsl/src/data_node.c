@@ -46,32 +46,18 @@
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
 /*
- * Lookup the foreign server by name and verify that it is a TimescaleDB
- * server. Optionally, do ACL checks.
+ * Verify that server is TimescaleDB server and perform optional ACL check
  */
-ForeignServer *
-data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_ok)
+static void
+validate_foreign_server(ForeignServer *server, AclMode mode)
 {
-	ForeignServer *server;
-	ForeignDataWrapper *fdw;
-
-	if (node_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
-
-	fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
-	server = GetForeignServerByName(node_name, missing_ok);
-
+	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
 	Assert(NULL != fdw);
-
-	if (NULL == server)
-		return NULL;
 
 	if (server->fdwid != fdw->fdwid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("data node \"%s\" is not a TimescaleDB server", node_name)));
+				 errmsg("data node \"%s\" is not a TimescaleDB server", server->servername)));
 
 	if (mode != ACL_NO_CHECK)
 	{
@@ -82,12 +68,39 @@ data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_o
 		aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
 
 		if (aclresult != ACLCHECK_OK)
-			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, node_name);
+			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
 	}
+}
+
+/*
+ * Lookup the foreign server by name
+ */
+ForeignServer *
+data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_ok)
+{
+	ForeignServer *server;
+
+	if (node_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid node_name: cannot be NULL")));
+
+	server = GetForeignServerByName(node_name, missing_ok);
+	if (NULL == server)
+		return NULL;
+
+	validate_foreign_server(server, mode);
 
 	return server;
 }
 
+ForeignServer *
+data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
+{
+	ForeignServer *server = GetForeignServer(server_oid);
+	validate_foreign_server(server, mode);
+	return server;
+}
 /*
  * Create a foreign server.
  *
@@ -1263,4 +1276,21 @@ data_node_ping(PG_FUNCTION_ARGS)
 	success = remote_connection_ping(server->servername);
 
 	PG_RETURN_DATUM(BoolGetDatum(success));
+}
+
+List *
+data_node_oids_to_node_name_list(List *data_node_oids, AclMode mode)
+{
+	List *node_names = NIL;
+	ListCell *lc;
+	ForeignServer *fs;
+
+	foreach (lc, data_node_oids)
+	{
+		Oid foreign_server_oid = lfirst_oid(lc);
+		fs = data_node_get_foreign_server_by_oid(foreign_server_oid, mode);
+		node_names = lappend(node_names, pstrdup(fs->servername));
+	}
+
+	return node_names;
 }
