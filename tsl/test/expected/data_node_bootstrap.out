@@ -79,28 +79,33 @@ WHERE e.extnamespace = n.oid;
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
--- Try to recreate data node with the same name, database and extension exists
+-- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-\set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
-ERROR:  database "bootstrap_test" already exists on the remote node
-\set ON_ERROR_STOP 1
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
+NOTICE:  database "bootstrap_test" already exists on data node, skipping
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
+(1 row)
+
 SELECT * FROM show_data_nodes();
- data_node_name | host | port | dbname 
-----------------+------+------+--------
-(0 rows)
+ data_node_name |   host    | port  |     dbname     
+----------------+-----------+-------+----------------
+ bootstrap_test | localhost | 15432 | bootstrap_test
+(1 row)
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
+NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
+ bootstrap_test | localhost | 15432 | bootstrap_test | f            | f                | f
 (1 row)
 
 SELECT * FROM show_data_nodes();
@@ -277,10 +282,26 @@ NOTICE:  database "слон" already exists on data node, skipping
  t
 (1 row)
 
+-- Testing that the check for database privileges does not croak on a
+-- strange database name. The check is executed when a database
+-- already exists.
+SELECT true FROM add_data_node('bootstrap_test3', database => 'dat''abase');
+ bool 
+------
+ t
+(1 row)
+
+SELECT true FROM add_data_node('bootstrap_test4', database => 'dat''abase');
+NOTICE:  database "dat'abase" already exists on data node, skipping
+ bool 
+------
+ t
+(1 row)
+
 SELECT count(*) FROM show_data_nodes();
  count 
 -------
-     2
+     4
 (1 row)
 
 SELECT true FROM pg_database WHERE datname = 'Unusual Name';
@@ -309,3 +330,4 @@ SELECT true FROM delete_data_node('bootstrap_test2', cascade => true);
 
 DROP DATABASE "Unusual Name";
 DROP DATABASE U&"\0441\043B\043E\043D";
+DROP DATABASE "dat'abase";
