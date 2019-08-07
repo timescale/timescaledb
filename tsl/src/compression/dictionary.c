@@ -61,6 +61,16 @@ pg_attribute_unused() assertions(void)
 	StaticAssertStmt(sizeof(DictionaryCompressed) == 16, "CompressedDictionary wrong size");
 }
 
+struct DictionaryDecompressionIterator
+{
+	DecompressionIterator base;
+	const DictionaryCompressed *compressed;
+	Datum *values;
+	Simple8bRleDecompressionIterator bitmap;
+	Simple8bRleDecompressionIterator nulls;
+	bool has_nulls;
+};
+
 //////////////////
 /// Compressor ///
 //////////////////
@@ -193,6 +203,7 @@ typedef struct DictionaryCompressorSerializationInfo
 	uint32 num_distinct;
 	Simple8bRleSerialized *dictionary_compressed_indexes;
 	Simple8bRleSerialized *compressed_nulls;
+	Datum *value_array; /* same as dictionary_serialization_info just as a regular array */
 	ArrayCompressorSerializationInfo *dictionary_serialization_info;
 	bool is_all_null;
 } DictionaryCompressorSerializationInfo;
@@ -204,15 +215,14 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 		simple8brle_compressor_finish(&compressor->dictionary_indexes);
 	Simple8bRleSerialized *nulls = simple8brle_compressor_finish(&compressor->nulls);
 	dictionary_iterator dictionary_item_iterator;
-	Datum *value_array = palloc(compressor->next_index * sizeof(*value_array));
 
 	ArrayCompressor *array_comp = array_compressor_alloc(compressor->type);
 
 	/* the total size is header size + bitmaps size + nulls? + data sizesize */
-	DictionaryCompressorSerializationInfo sizes = {
-		.dictionary_compressed_indexes = dict_indexes,
-		.compressed_nulls = nulls,
-	};
+	DictionaryCompressorSerializationInfo sizes = { .dictionary_compressed_indexes = dict_indexes,
+													.compressed_nulls = nulls,
+													.value_array = palloc(compressor->next_index *
+																		  sizeof(Datum)) };
 	Size header_size = sizeof(DictionaryCompressed);
 
 	if (sizes.dictionary_compressed_indexes == NULL)
@@ -231,12 +241,12 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 		 dict_item != NULL;
 		 dict_item = dictionary_iterate(compressor->dictionary_items, &dictionary_item_iterator))
 	{
-		value_array[dict_item->index] = dict_item->key;
+		sizes.value_array[dict_item->index] = dict_item->key;
 		sizes.num_distinct += 1;
 	}
 	for (int i = 0; i < sizes.num_distinct; i++)
 	{
-		array_compressor_append(array_comp, value_array[i]);
+		array_compressor_append(array_comp, sizes.value_array[i]);
 	}
 	sizes.dictionary_serialization_info = array_compressor_get_serialization_info(array_comp);
 	sizes.dictionary_size =
@@ -279,29 +289,62 @@ dictionary_compressed_from_serialization_info(DictionaryCompressorSerializationI
 	return bitmap;
 }
 
+static void dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter,
+												   const char *data, bool scan_forward,
+												   Oid element_type);
+
+/* there are more efficient ways to do this that use
+ * DictionaryCompressorSerializationInfo, but they are not worth implementing
+ * yet
+ */
+static ArrayCompressed *
+dictionary_compressed_to_array_compressed(DictionaryCompressed *compressed)
+{
+	ArrayCompressor *compressor = array_compressor_alloc(compressed->element_type);
+	DictionaryDecompressionIterator iterator;
+	dictionary_decompression_iterator_init(&iterator,
+										   (void *) compressed,
+										   true,
+										   compressed->element_type);
+
+	for (DecompressResult res = dictionary_decompression_iterator_try_next_forward(&iterator.base);
+		 !res.is_done;
+		 res = dictionary_decompression_iterator_try_next_forward(&iterator.base))
+	{
+		if (res.is_null)
+			array_compressor_append_null(compressor);
+		else
+			array_compressor_append(compressor, res.val);
+	}
+
+	return array_compressor_finish(compressor);
+}
+
 void *
 dictionary_compressor_finish(DictionaryCompressor *compressor)
 {
+	uint64 average_element_size;
+	uint64 expected_array_size;
+	DictionaryCompressed *compressed;
 	DictionaryCompressorSerializationInfo sizes = compressor_get_serialization_info(compressor);
 	if (sizes.is_all_null)
 		return NULL;
 
-	return dictionary_compressed_from_serialization_info(sizes, compressor->type);
+	/* calculate what the expected size would have be if we recompressed this as
+	 * an array, if this is smaller than the current size, recompress as an array.
+	 */
+	average_element_size = sizes.dictionary_size / sizes.num_distinct;
+	expected_array_size = average_element_size * sizes.dictionary_compressed_indexes->num_elements;
+	compressed = dictionary_compressed_from_serialization_info(sizes, compressor->type);
+	if (expected_array_size < sizes.total_size)
+		return dictionary_compressed_to_array_compressed(compressed);
+
+	return compressed;
 }
 
 ////////////////////
 /// Decompressor ///
 ////////////////////
-
-struct DictionaryDecompressionIterator
-{
-	DecompressionIterator base;
-	const DictionaryCompressed *compressed;
-	Datum *values;
-	Simple8bRleDecompressionIterator bitmap;
-	Simple8bRleDecompressionIterator nulls;
-	bool has_nulls;
-};
 
 static void
 dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, const char *data,

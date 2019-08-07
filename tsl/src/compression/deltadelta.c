@@ -86,7 +86,7 @@ deltadelta_compressor_append_bool(Compressor *compressor, Datum val)
 	if (extended->internal == NULL)
 		extended->internal = delta_delta_compressor_alloc();
 
-	delta_delta_compressor_append_value(extended->internal, DatumGetBool(val)? 1: 0);
+	delta_delta_compressor_append_value(extended->internal, DatumGetBool(val) ? 1 : 0);
 }
 
 static void
