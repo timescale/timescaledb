@@ -11,12 +11,6 @@ CREATE OR REPLACE FUNCTION ts_compress_table(in_table REGCLASS, out_table REGCLA
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT * FROM pg_type WHERE typname='hypertable_compression';
-        typname         | typnamespace | typowner | typlen | typbyval | typtype | typcategory | typispreferred | typisdefined | typdelim | typrelid | typelem | typarray | typinput  | typoutput  | typreceive  |   typsend   | typmodin | typmodout | typanalyze | typalign | typstorage | typnotnull | typbasetype | typtypmod | typndims | typcollation | typdefaultbin | typdefault | typacl 
-------------------------+--------------+----------+--------+----------+---------+-------------+----------------+--------------+----------+----------+---------+----------+-----------+------------+-------------+-------------+----------+-----------+------------+----------+------------+------------+-------------+-----------+----------+--------------+---------------+------------+--------
- hypertable_compression |        16390 |    16385 |     -1 | f        | c       | C           | f              | t            | ,        |    16666 |       0 |    16667 | record_in | record_out | record_recv | record_send | -        | -         | -          | d        | x          | f          |           0 |        -1 |        0 |            0 |               |            | 
-(1 row)
-
 -- column name, algorithm, idx, asc, nulls_first
 CREATE FUNCTION ord(TEXT, INT, INT, BOOL = true, BOOL = false)
     RETURNS _timescaledb_catalog.hypertable_compression
