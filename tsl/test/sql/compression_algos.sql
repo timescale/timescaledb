@@ -236,19 +236,19 @@ SELECT pg_total_relation_size(reltoastrelid)
 DROP TABLE base_texts;
 
 -- NULLs
-CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT item FROM generate_series(1, 10) i;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
-CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
-CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
-CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i;
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
