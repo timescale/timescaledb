@@ -17,6 +17,7 @@
 #include "compat.h"
 #include "export.h"
 
+#include <utils.h>
 #include "utils.h"
 
 #include <adts/bit_array.h>
@@ -330,6 +331,11 @@ gorilla_compressor_for_type(Oid element_type)
 			*compressor = (ExtendedCompressor){ .base = gorilla_uint64_compressor };
 			return &compressor->base;
 		default:
+			if (ts_type_is_int8_binary_compatible(element_type))
+			{
+				*compressor = (ExtendedCompressor){ .base = gorilla_uint64_compressor };
+				return &compressor->base;
+			}
 			elog(ERROR, "invalid type for Gorilla compression %d", element_type);
 	}
 }
@@ -655,6 +661,10 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 				.val = Int16GetDatum(res_internal.val),
 			};
 		default:
+			if (ts_type_is_int8_binary_compatible(element_type))
+				return (DecompressResult){
+					.val = Int64GetDatum(res_internal.val),
+				};
 			elog(ERROR, "invalid type requested from gorilla decompression");
 	}
 }

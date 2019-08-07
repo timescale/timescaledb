@@ -55,13 +55,13 @@ CREATE TABLE compressed(
 \set DATA_IN uncompressed
 \set DATA_OUT uncompressed
 
--- 	_INVALID_COMPRESSION_ALGORITHM = 0,
--- 	COMPRESSION_ALGORITHM_ARRAY = 1,
--- 	COMPRESSION_ALGORITHM_DICTIONARY = 2,
--- 	COMPRESSION_ALGORITHM_GORILLA = 3,
--- 	COMPRESSION_ALGORITHM_DELTADELTA = 4,
+-- compression algorithms
+\set array      1
+\set dictionary 2
+\set gorilla    3
+\set deltadelta 4
 
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('data', 4), com('floats', 3), com('nulls', 1), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('data', :deltadelta), com('floats', :gorilla), com('nulls', :array), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 -- TODO NULL decompression doesn't quite work
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(data::_timescaledb_internal.compressed_data, NULL::INT) d, _timescaledb_internal.decompress_forward(floats::_timescaledb_internal.compressed_data, NULL::FLOAT(26)) f, NULL, _timescaledb_internal.decompress_forward(texts::_timescaledb_internal.compressed_data, NULL::TEXT) e
@@ -86,25 +86,25 @@ INSERT INTO uncompressed
 TRUNCATE compressed;
 
 -- test gorilla on ints
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('data', 3), com('floats', 3), com('nulls', 1), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('data', :gorilla), com('floats', :gorilla), com('nulls', :array), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
 
 -- test Dictionary on everything
-SELECT ARRAY[ord('time', 2, 0), seg('device', 0), com('data', 2), com('floats', 2), com('nulls', 2), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :dictionary, 0), seg('device', 0), com('data', :dictionary), com('floats', :dictionary), com('nulls', :dictionary), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
 
 -- test Array on everything
-SELECT ARRAY[ord('time', 1, 0), seg('device', 0), com('data', 1), com('floats', 1), com('nulls', 1), com('texts', 1)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :array, 0), seg('device', 0), com('data', :array), com('floats', :array), com('nulls', :array), com('texts', :array)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
 
 --test reordering compression info
-SELECT ARRAY[com('floats', 3), com('data', 4), seg('device', 0), ord('time', 4, 0), com('nulls', 1), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[com('floats', :gorilla), com('data', :deltadelta), seg('device', 0), ord('time', :deltadelta, 0), com('nulls', :array), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
 
@@ -116,7 +116,7 @@ ALTER TABLE compressed DROP COLUMN nulls;
 
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(floats::_timescaledb_internal.compressed_data, NULL::FLOAT(26)) f, _timescaledb_internal.decompress_forward(texts::_timescaledb_internal.compressed_data, NULL::TEXT) e
 
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('floats', 3), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('floats', :gorilla), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
@@ -129,7 +129,7 @@ ALTER TABLE compressed ADD COLUMN ord _timescaledb_internal.compressed_data;
 
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(floats::_timescaledb_internal.compressed_data, NULL::FLOAT(26)) f, _timescaledb_internal.decompress_forward(texts::_timescaledb_internal.compressed_data, NULL::TEXT) e, _timescaledb_internal.decompress_forward(dat2::_timescaledb_internal.compressed_data, NULL::INT) d2, _timescaledb_internal.decompress_forward(ord::_timescaledb_internal.compressed_data, NULL::INT) o
 
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('floats', 3), com('texts', 2), ord('ord', 4, 1), com('dat2', 4)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('floats', :gorilla), com('texts', :dictionary), ord('ord', :deltadelta, 1), com('dat2', :deltadelta)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
@@ -140,7 +140,7 @@ CREATE TABLE missing_columns AS SELECT time, device, dat2 FROM uncompressed;
 
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(dat2::_timescaledb_internal.compressed_data, NULL::INT) d2
 
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('dat2', 4)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('dat2', :deltadelta)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 \ir include/compress_table_test.sql
 TRUNCATE compressed;
@@ -149,11 +149,37 @@ TRUNCATE compressed;
 \set ON_ERROR_STOP 0
 
 -- test compressing a non-existent column
-SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('floats', 3), com('texts', 2), ord('ord', 4, 1), com('dat2', 4), com('fictional', 4)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('floats', :gorilla), com('texts', :dictionary), ord('ord', :deltadelta, 1), com('dat2', :deltadelta), com('fictional', :deltadelta)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 SELECT ts_compress_table(:'DATA_IN'::REGCLASS, 'compressed'::REGCLASS,:'COMPRESSION_INFO'::_timescaledb_catalog.hypertable_compression[]);
 TRUNCATE compressed;
 
 \set ON_ERROR_STOP 1
+TRUNCATE uncompressed;
 
+
+DROP TABLE compressed;
+DROP TABLE uncompressed;
+
+-- test other types
+CREATE TABLE uncompressed(
+    b BOOL,
+    device SMALLINT,
+    time FLOAT);
+
+CREATE TABLE compressed(
+    b _timescaledb_internal.compressed_data,
+    device _timescaledb_internal.compressed_data,
+    time _timescaledb_internal.compressed_data);
+
+\set DATA_IN uncompressed
+\set DATA_OUT uncompressed
+
+INSERT INTO uncompressed SELECT (i % 3)::BOOL, i, i / 3 FROM generate_series(1, 20) i;
+
+SELECT ARRAY[ord('device', :deltadelta, 0), com('b', :deltadelta), com('time', :gorilla)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
+
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(b::_timescaledb_internal.compressed_data, NULL::BOOL) b, _timescaledb_internal.decompress_forward(device::_timescaledb_internal.compressed_data, NULL::SMALLINT) device, _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::FLOAT) t
+\ir include/compress_table_test.sql
+TRUNCATE compressed;
 TRUNCATE uncompressed;
