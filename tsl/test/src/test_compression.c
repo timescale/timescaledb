@@ -38,6 +38,7 @@
 
 TS_FUNCTION_INFO_V1(ts_test_compression);
 TS_FUNCTION_INFO_V1(ts_compress_table);
+TS_FUNCTION_INFO_V1(ts_decompress_table);
 
 #define AssertInt64Eq(a, b)                                                                        \
 	do                                                                                             \
@@ -528,6 +529,17 @@ ts_compress_table(PG_FUNCTION_ARGS)
 				   out_table,
 				   (const ColumnCompressionInfo **) compression_info->data,
 				   compression_info->num_elements);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+ts_decompress_table(PG_FUNCTION_ARGS)
+{
+	Oid in_table = PG_GETARG_OID(0);
+	Oid out_table = PG_GETARG_OID(1);
+
+	decompress_chunk(in_table, out_table);
 
 	PG_RETURN_VOID();
 }

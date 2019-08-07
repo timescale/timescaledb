@@ -9,7 +9,7 @@ SELECT ts_compress_table(:'DATA_IN'::REGCLASS, 'compressed'::REGCLASS, :'COMPRES
 
 --test that decompression gives same result in forward direction
 WITH original AS (
-  SELECT * FROM :DATA_OUT ORDER BY device, time
+  SELECT * FROM :DATA_OUT
 ),
 decompressed AS (
   SELECT * FROM (SELECT :DECOMPRESS_FORWARD_CMD FROM compressed ORDER BY device) AS q
@@ -19,8 +19,8 @@ FROM original
 FULL OUTER JOIN decompressed ON (original.device = decompressed.device AND original.time = decompressed.t)
 WHERE (original.*) IS DISTINCT FROM (decompressed.*);
 
-with original AS (
-  SELECT * FROM :DATA_OUT AS q ORDER BY device, time
+WITH original AS (
+  SELECT * FROM :DATA_OUT AS q
 ),
 decompressed AS (
   SELECT * FROM (SELECT :DECOMPRESS_FORWARD_CMD FROM compressed) AS q
@@ -29,5 +29,34 @@ SELECT *
 FROM original
 FULL OUTER JOIN decompressed ON (original.device = decompressed.device AND original.time = decompressed.t)
 WHERE (original.*) IS DISTINCT FROM (decompressed.*);
+
+-- test that decompress_table works
+CREATE TABLE decompressed_table AS SELECT * FROM :DATA_OUT LIMIT 0;
+
+SELECT ts_decompress_table('compressed'::REGCLASS, 'decompressed_table'::REGCLASS);
+
+WITH original AS (
+  SELECT * FROM :DATA_OUT
+),
+decompressed AS (
+  SELECT * FROM decompressed_table
+)
+SELECT 'Number of rows different between original and decompress_table (expect 0)', count(*)
+FROM original
+FULL OUTER JOIN decompressed ON (original.device = decompressed.device AND original.time = decompressed.time)
+WHERE (original.*) IS DISTINCT FROM (decompressed.*);
+
+WITH original AS (
+  SELECT * FROM :DATA_OUT
+),
+decompressed AS (
+  SELECT * FROM decompressed_table
+)
+SELECT *
+FROM original
+FULL OUTER JOIN decompressed ON (original.device = decompressed.device AND original.time = decompressed.time)
+WHERE (original.*) IS DISTINCT FROM (decompressed.*);
+
+DROP TABLE decompressed_table;
 
 \set ECHO all

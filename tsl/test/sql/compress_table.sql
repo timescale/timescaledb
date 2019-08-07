@@ -6,6 +6,10 @@
 CREATE OR REPLACE FUNCTION ts_compress_table(in_table REGCLASS, out_table REGCLASS, compression_info _timescaledb_catalog.hypertable_compression[])
     RETURNS VOID
     AS :TSL_MODULE_PATHNAME LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION ts_decompress_table(in_table REGCLASS, out_table REGCLASS)
+    RETURNS VOID
+    AS :TSL_MODULE_PATHNAME LANGUAGE C STRICT VOLATILE;
 \ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

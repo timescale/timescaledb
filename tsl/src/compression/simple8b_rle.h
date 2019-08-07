@@ -134,22 +134,26 @@ typedef struct Simple8bRleDecompressResult
 } Simple8bRleDecompressResult;
 
 static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
-static inline Simple8bRleSerialized *simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
+static inline Simple8bRleSerialized *
+simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
 static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
 static inline bool simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor);
 
-static inline void simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator *iter,
-															Simple8bRleSerialized *compressed);
-static inline void simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
-															Simple8bRleSerialized *compressed);
+static inline void
+simple8brle_decompression_iterator_init_forward(Simple8bRleDecompressionIterator *iter,
+												Simple8bRleSerialized *compressed);
+static inline void
+simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator *iter,
+												Simple8bRleSerialized *compressed);
 static inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter);
 static inline Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIterator *iter);
 
-static inline void simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data);
+static inline void simple8brle_serialized_send(StringInfo buffer,
+											   const Simple8bRleSerialized *data);
 static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
-												  const Simple8bRleSerialized *data);
+														 const Simple8bRleSerialized *data);
 static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(const char **data);
 static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);

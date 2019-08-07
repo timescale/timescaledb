@@ -9,6 +9,7 @@
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
 #include <funcapi.h>
@@ -119,11 +120,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 {
 	int n_keys;
 	const ColumnCompressionInfo **keys;
-	int16 *in_column_offsets = compress_chunk_populate_keys(in_table,
-															column_compression_info,
-															num_compression_infos,
-															&n_keys,
-															&keys);
 
 	/*We want to prevent other compressors from compressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our compression.
@@ -138,6 +134,12 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	 */
 	Relation out_rel = relation_open(out_table, ExclusiveLock);
 	// TODO error if out_rel is non-empty
+	// TODO typecheck the output types
+	int16 *in_column_offsets = compress_chunk_populate_keys(in_table,
+															column_compression_info,
+															num_compression_infos,
+															&n_keys,
+															&keys);
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
@@ -651,6 +653,318 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 		return false;
 
 	return DatumGetBool(data_is_eq);
+}
+
+/**********************
+ ** decompress_chunk **
+ **********************/
+
+typedef struct PerCompressedColumn
+{
+	Oid decompressed_type;
+
+	/* the compressor to use for compressed columns, always NULL for segmenters
+	 * only use if is_compressed
+	 */
+	DecompressionIterator *iterator;
+
+	/* segment info; only used if !is_compressed */
+	Datum val;
+
+	/* is this a compressed column or a segment-by column */
+	bool is_compressed;
+
+	/* the value stored in the compressed table was NULL */
+	bool is_null;
+
+	/* the index in the decompressed table of the data -1,
+	 * if the data is metadata not found in the decompressed table
+	 */
+	int16 decompressed_column_offset;
+} PerCompressedColumn;
+
+typedef struct RowDecompressor
+{
+	PerCompressedColumn *per_compressed_cols;
+	int16 num_compressed_columns;
+
+	TupleDesc out_desc;
+	Relation out_rel;
+
+	CommandId mycid;
+	BulkInsertState bistate;
+
+	/* cache memory used to store the decompressed datums/is_null for form_tuple */
+	Datum *decompressed_datums;
+	bool *decompressed_is_nulls;
+} RowDecompressor;
+
+static PerCompressedColumn *create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc,
+														 Oid compressed_data_type_oid);
+static void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
+													  int16 num_cols, Datum *compressed_datums,
+													  bool *compressed_is_nulls);
+static void row_decompressor_decompress_row(RowDecompressor *row_decompressor);
+static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
+										Datum *decompressed_datums, bool *decompressed_is_nulls);
+
+void
+decompress_chunk(Oid in_table, Oid out_table)
+{
+	/* these locks are taken in the order uncompressed table then compressed table
+	 * for consistency with compress_chunk
+	 */
+	/* we are _just_ INSERTing into the out_table so in principle we could take
+	 * a RowExclusive lock, and let other operations read and write this table
+	 * as we work. However, we currently compress each table as a oneshot, so
+	 * we're taking the stricter lock to prevent accidents.
+	 */
+	Relation out_rel = relation_open(out_table, ExclusiveLock);
+	/*We want to prevent other decompressors from decompressing this table,
+	 * and we want to prevent INSERTs or UPDATEs which could mess up our decompression.
+	 * We may as well allow readers to keep reading the compressed data while
+	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
+	 */
+	Relation in_rel = relation_open(in_table, ExclusiveLock);
+	// TODO error if out_rel is non-empty
+
+	TupleDesc in_desc = RelationGetDescr(in_rel);
+	TupleDesc out_desc = RelationGetDescr(out_rel);
+
+	Oid internal_schema_oid = LookupExplicitNamespace(INTERNAL_SCHEMA_NAME, false);
+	Oid compressed_data_type_oid = GetSysCacheOid2(TYPENAMENSP,
+												   PointerGetDatum("compressed_data"),
+												   ObjectIdGetDatum(internal_schema_oid));
+
+	Assert(in_desc->natts >= out_desc->natts);
+	Assert(OidIsValid(compressed_data_type_oid));
+
+	{
+		RowDecompressor decompressor = {
+			.per_compressed_cols =
+				create_per_compressed_column(in_desc, out_desc, compressed_data_type_oid),
+			.num_compressed_columns = in_desc->natts,
+
+			.out_desc = out_desc,
+			.out_rel = out_rel,
+
+			.mycid = GetCurrentCommandId(true),
+			.bistate = GetBulkInsertState(),
+
+			/* cache memory used to store the decompressed datums/is_null for form_tuple */
+			.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
+			.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
+		};
+		Datum *compressed_datums = palloc(sizeof(*compressed_datums) * in_desc->natts);
+		bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * in_desc->natts);
+
+		HeapTuple compressed_tuple;
+		HeapScanDesc heapScan;
+
+		heapScan = heap_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+		for (compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
+			 compressed_tuple != NULL;
+			 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
+		{
+			if (!HeapTupleIsValid(compressed_tuple))
+				continue;
+
+			heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
+			populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
+													  in_desc->natts,
+													  compressed_datums,
+													  compressed_is_nulls);
+
+			row_decompressor_decompress_row(&decompressor);
+		}
+
+		heap_endscan(heapScan);
+		FreeBulkInsertState(decompressor.bistate);
+	}
+
+	RelationClose(out_rel);
+	RelationClose(in_rel);
+}
+
+static PerCompressedColumn *
+create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid compressed_data_type_oid)
+{
+	PerCompressedColumn *per_compressed_cols =
+		palloc(sizeof(*per_compressed_cols) * in_desc->natts);
+
+	Assert(in_desc->natts >= out_desc->natts);
+	Assert(OidIsValid(compressed_data_type_oid));
+
+	for (int16 col = 0; col < in_desc->natts; col++)
+	{
+		Oid decompressed_type;
+		bool is_compressed;
+		int16 decompressed_column_offset;
+		PerCompressedColumn *per_compressed_col = &per_compressed_cols[col];
+		Form_pg_attribute compressed_attr = TupleDescAttr(in_desc, col);
+
+		/* find the mapping from compressed column to uncompressed column, setting
+		 * the index of columns that don't have an uncompressed version
+		 * (such as metadata) to -1
+		 */
+		Name col_name = &compressed_attr->attname;
+		AttrNumber decompressed_colnum = attno_find_by_attname(out_desc, col_name);
+		if (!AttributeNumberIsValid(decompressed_colnum))
+		{
+			*per_compressed_col = (PerCompressedColumn){
+				.decompressed_column_offset = -1,
+				.is_null = true,
+			};
+			continue;
+		}
+
+		decompressed_column_offset = AttrNumberGetAttrOffset(decompressed_colnum);
+
+		decompressed_type = TupleDescAttr(out_desc, decompressed_column_offset)->atttypid;
+
+		/* determine if the data is compressed or not */
+		is_compressed = compressed_attr->atttypid == compressed_data_type_oid;
+		if (!is_compressed && compressed_attr->atttypid != decompressed_type)
+			elog(ERROR,
+				 "compressed table type '%s' does not match decompressed table type '%s' for "
+				 "segment-by column \"%s\"",
+				 format_type_be(compressed_attr->atttypid),
+				 format_type_be(decompressed_type),
+				 NameStr(*col_name));
+
+		*per_compressed_col = (PerCompressedColumn){
+			.decompressed_column_offset = decompressed_column_offset,
+			.is_null = true,
+			.is_compressed = is_compressed,
+			.decompressed_type = decompressed_type,
+		};
+	}
+
+	return per_compressed_cols;
+}
+
+static void
+populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols, int16 num_cols,
+										  Datum *compressed_datums, bool *compressed_is_nulls)
+{
+	for (int16 col = 0; col < num_cols; col++)
+	{
+		PerCompressedColumn *per_col = &per_compressed_cols[col];
+		if (per_col->decompressed_column_offset < 0)
+			continue;
+
+		per_col->is_null = compressed_is_nulls[col];
+		if (per_col->is_null)
+		{
+			per_col->is_null = true;
+			per_col->iterator = NULL;
+			per_col->val = 0;
+			continue;
+		}
+
+		if (per_col->is_compressed)
+		{
+			char *data = (char *) PG_DETOAST_DATUM(compressed_datums[col]);
+			CompressedDataHeader *header = (CompressedDataHeader *) data;
+
+			per_col->iterator =
+				definitions[header->compression_algorithm]
+					.iterator_init_forward(PointerGetDatum(data), per_col->decompressed_type);
+		}
+		else
+			per_col->val = compressed_datums[col];
+	}
+}
+
+static void
+row_decompressor_decompress_row(RowDecompressor *row_decompressor)
+{
+	/* each compressed row decompresses to at least one row,
+	 * even if all the data is NULL
+	 */
+	bool wrote_data = false;
+	bool is_done = false;
+	do
+	{
+		/* we're done if all the decompressors return NULL */
+		is_done = true;
+		for (int16 col = 0; col < row_decompressor->num_compressed_columns; col++)
+		{
+			bool col_is_done =
+				per_compressed_col_get_data(&row_decompressor->per_compressed_cols[col],
+											row_decompressor->decompressed_datums,
+											row_decompressor->decompressed_is_nulls);
+			is_done &= col_is_done;
+		}
+
+		/* if we're not done we have data to write. even if we're done, each
+		 * compressed should decompress to at least one row, so we should write that
+		 */
+		if (!is_done || !wrote_data)
+		{
+			HeapTuple decompressed_tuple = heap_form_tuple(row_decompressor->out_desc,
+														   row_decompressor->decompressed_datums,
+														   row_decompressor->decompressed_is_nulls);
+			heap_insert(row_decompressor->out_rel,
+						decompressed_tuple,
+						row_decompressor->mycid,
+						0 /*=options*/,
+						row_decompressor->bistate);
+
+			wrote_data = true;
+		}
+	} while (!is_done);
+}
+
+/* populate the relevent index in an array from a per_compressed_col.
+ * returns if decompression is done for this column
+ */
+bool
+per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *decompressed_datums,
+							bool *decompressed_is_nulls)
+{
+	DecompressResult decompressed;
+	int16 decompressed_column_offset = per_compressed_col->decompressed_column_offset;
+
+	/* skip metadata columns */
+	if (decompressed_column_offset < 0)
+		return true;
+
+	/* segment-bys */
+	if (!per_compressed_col->is_compressed)
+	{
+		decompressed_datums[decompressed_column_offset] = per_compressed_col->val;
+		decompressed_is_nulls[decompressed_column_offset] = per_compressed_col->is_null;
+		return true;
+	}
+
+	/* compressed NULL */
+	if (per_compressed_col->is_null)
+	{
+		decompressed_is_nulls[decompressed_column_offset] = true;
+		return true;
+	}
+
+	/* other compressed data */
+	if (per_compressed_col->iterator == NULL)
+		elog(ERROR, "tried to decompress more data than was compressed in column");
+
+	decompressed = per_compressed_col->iterator->try_next(per_compressed_col->iterator);
+	if (decompressed.is_done)
+	{
+		// TODO we want a way to free the decompression iterator's data
+		per_compressed_col->iterator = NULL;
+		decompressed_is_nulls[decompressed_column_offset] = true;
+		return true;
+	}
+
+	decompressed_is_nulls[decompressed_column_offset] = decompressed.is_null;
+	if (decompressed.is_null)
+		decompressed_datums[decompressed_column_offset] = 0;
+	else
+		decompressed_datums[decompressed_column_offset] = decompressed.val;
+
+	return false;
 }
 
 /********************/

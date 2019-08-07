@@ -124,5 +124,6 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 
 extern void compress_chunk(Oid in_table, Oid out_table,
 						   const ColumnCompressionInfo **column_compression_info, int num_columns);
+extern void decompress_chunk(Oid in_table, Oid out_table);
 
 #endif
