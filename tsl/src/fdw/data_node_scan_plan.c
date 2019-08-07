@@ -582,7 +582,7 @@ data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_
 }
 
 static CustomPathMethods data_node_scan_path_methods = {
-	.CustomName = "DataNodeScanPath",
+	.CustomName = DATA_NODE_SCAN_PATH_NAME,
 	.PlanCustomPath = data_node_scan_plan_create,
 };
 

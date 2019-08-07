@@ -29,7 +29,7 @@
 /* Default CPU cost to process 1 row (above and beyond cpu_tuple_cost). */
 #define DEFAULT_FDW_TUPLE_COST 0.01
 
-#define DEFAULT_FDW_FETCH_SIZE 100
+#define DEFAULT_FDW_FETCH_SIZE 10000
 
 /*
  * Parse options from foreign server and apply them to fpinfo.

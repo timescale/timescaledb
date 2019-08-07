@@ -10,6 +10,7 @@ set(SOURCES
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND SOURCES
+       async_append.c
        chunk.c
        deparse.c
        data_node.c

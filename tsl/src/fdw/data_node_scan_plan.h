@@ -10,6 +10,8 @@
 #include <nodes/plannodes.h>
 #include <optimizer/cost.h>
 
+#define DATA_NODE_SCAN_PATH_NAME "DataNodeScanPath"
+
 extern void data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
 extern void data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage,
 											  RelOptInfo *input_rel, RelOptInfo *output_rel,

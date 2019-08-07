@@ -22,6 +22,7 @@
 #include "fdw/data_node_scan_plan.h"
 #endif
 #include "guc.h"
+#include "async_append.h"
 
 #include <math.h>
 
@@ -45,11 +46,15 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 
 	if (UPPERREL_GROUP_AGG == stage)
 		plan_add_gapfill(root, output_rel);
-	if (UPPERREL_WINDOW == stage)
+	else if (UPPERREL_WINDOW == stage)
 	{
 		if (IsA(linitial(input_rel->pathlist), CustomPath))
 			gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 	}
+#if PG11_GE
+	else if (UPPERREL_FINAL == stage && root->parse->resultRelation == 0)
+		async_append_add_paths(root, output_rel);
+#endif
 }
 
 void

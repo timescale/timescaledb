@@ -21,6 +21,8 @@
 #include "scan_plan.h"
 #include "scan_exec.h"
 #include "data_node_scan_exec.h"
+#include "async_append.h"
+#include "remote/cursor.h"
 
 /*
  * The execution stage of a DataNodeScan.
@@ -33,7 +35,7 @@
 
 typedef struct DataNodeScanState
 {
-	CustomScanState css;
+	AsyncScanState async_state;
 	TsFdwScanState fsstate;
 	ExprState *recheck_quals;
 	bool systemcol;
@@ -68,7 +70,6 @@ data_node_scan_next(CustomScanState *node)
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 	slot = fdw_scan_iterate(&node->ss, &sss->fsstate);
 	MemoryContextSwitchTo(oldcontext);
-
 	/*
 	 * If any system columns are requested, we have to force the tuple into
 	 * physical-tuple form to avoid "cannot extract system attribute from
@@ -149,14 +150,29 @@ static CustomExecMethods data_node_scan_state_methods = {
 	.ExplainCustomScan = data_node_scan_explain,
 };
 
+static void
+send_create_cursor_req(AsyncScanState *ass)
+{
+	DataNodeScanState *dnss = (DataNodeScanState *) ass;
+	create_cursor(&dnss->async_state.css.ss, &dnss->fsstate, false);
+}
+
+static void
+complete_create_cursor(AsyncScanState *ass)
+{
+	DataNodeScanState *dnss = (DataNodeScanState *) ass;
+	remote_cursor_wait_until_open(dnss->fsstate.cursor);
+}
+
 Node *
 data_node_scan_state_create(CustomScan *cscan)
 {
-	DataNodeScanState *sss =
+	DataNodeScanState *dnss =
 		(DataNodeScanState *) newNode(sizeof(DataNodeScanState), T_CustomScanState);
 
-	sss->css.methods = &data_node_scan_state_methods;
-	sss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
-
-	return (Node *) sss;
+	dnss->async_state.css.methods = &data_node_scan_state_methods;
+	dnss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
+	dnss->async_state.init = send_create_cursor_req;
+	dnss->async_state.fetch_tuples = complete_create_cursor;
+	return (Node *) dnss;
 }

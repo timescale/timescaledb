@@ -16,10 +16,10 @@
 #include <remote/async.h>
 #include <remote/stmt_params.h>
 #include <remote/utils.h>
-#include <remote/cursor.h>
 
 #include "scan_exec.h"
 #include "utils.h"
+#include "remote/cursor.h"
 
 /*
  * Indexes of FDW-private information stored in fdw_private lists.
@@ -88,9 +88,11 @@ fill_query_params_array(ExprContext *econtext, FmgrInfo *param_flinfo, List *par
 
 /*
  * Create cursor for node's query with current parameter values.
+ * Operation can be blocking or non-blocking, depending on the bool arg.
+ * In non blocking case we just dispatch async request to create cursor
  */
-static void
-create_cursor(ScanState *ss, TsFdwScanState *fsstate)
+void
+create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block)
 {
 	ExprContext *econtext = ss->ps.ps_ExprContext;
 	int num_params = fsstate->num_params;
@@ -124,11 +126,13 @@ create_cursor(ScanState *ss, TsFdwScanState *fsstate)
 	}
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
+
 	fsstate->cursor = remote_cursor_create_for_scan(fsstate->conn,
 													ss,
 													fsstate->retrieved_attrs,
 													fsstate->query,
-													params);
+													params,
+													block);
 	MemoryContextSwitchTo(oldcontext);
 
 	remote_cursor_set_fetch_size(fsstate->cursor, fsstate->fetch_size);
@@ -252,7 +256,7 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 	HeapTuple tuple;
 
 	if (NULL == fsstate->cursor)
-		create_cursor(ss, fsstate);
+		create_cursor(ss, fsstate, true);
 
 	tuple = remote_cursor_get_next_tuple(fsstate->cursor);
 
@@ -274,7 +278,6 @@ fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 	/* If we haven't created the cursor yet, nothing to do. */
 	if (NULL == fsstate->cursor)
 		return;
-
 	/*
 	 * If any internal parameters affecting this node have changed, we'd
 	 * better destroy and recreate the cursor.  Otherwise, rewinding it should
