@@ -44,4 +44,6 @@ extern void fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate);
 extern void fdw_scan_end(TsFdwScanState *fsstate);
 extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es);
 
+extern void create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block);
+
 #endif /* TIMESCALEDB_TSL_FDW_SCAN_EXEC_H */

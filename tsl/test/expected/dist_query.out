@@ -133,31 +133,33 @@ FROM :TABLE_NAME
 WHERE time BETWEEN '2019-01-01' AND '2019-01-03'
 GROUP BY 1,2
 ORDER BY 1,2;
-                                                                                                                                             QUERY PLAN                                                                                                                                             
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                QUERY PLAN                                                                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, avg(hyper_repart.temp)
    Group Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
    ->  Sort
          Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, hyper_repart.temp
          Sort Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
-         ->  Append
-               ->  Custom Scan (DataNodeScan) on public.hyper_repart
-                     Output: time_bucket('@ 2 days'::interval, hyper_repart."time"), hyper_repart.device, hyper_repart.temp
-                     Data node: data_node_1
-                     Chunks: _hyper_2_17_dist_chunk, _hyper_2_16_dist_chunk, _hyper_2_22_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
-               ->  Custom Scan (DataNodeScan) on public.hyper_repart hyper_repart_1
-                     Output: time_bucket('@ 2 days'::interval, hyper_repart_1."time"), hyper_repart_1.device, hyper_repart_1.temp
-                     Data node: data_node_2
-                     Chunks: _hyper_2_18_dist_chunk, _hyper_2_19_dist_chunk, _hyper_2_23_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6, 7, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
-               ->  Custom Scan (DataNodeScan) on public.hyper_repart hyper_repart_2
-                     Output: time_bucket('@ 2 days'::interval, hyper_repart_2."time"), hyper_repart_2.device, hyper_repart_2.temp
-                     Data node: data_node_3
-                     Chunks: _hyper_2_21_dist_chunk, _hyper_2_20_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
-(22 rows)
+         ->  Custom Scan (AsyncAppend)
+               Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, hyper_repart.temp
+               ->  Append
+                     ->  Custom Scan (DataNodeScan) on public.hyper_repart hyper_repart_1
+                           Output: time_bucket('@ 2 days'::interval, hyper_repart_1."time"), hyper_repart_1.device, hyper_repart_1.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_2_17_dist_chunk, _hyper_2_16_dist_chunk, _hyper_2_22_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+                     ->  Custom Scan (DataNodeScan) on public.hyper_repart hyper_repart_2
+                           Output: time_bucket('@ 2 days'::interval, hyper_repart_2."time"), hyper_repart_2.device, hyper_repart_2.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_2_18_dist_chunk, _hyper_2_19_dist_chunk, _hyper_2_23_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6, 7, 8]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+                     ->  Custom Scan (DataNodeScan) on public.hyper_repart hyper_repart_3
+                           Output: time_bucket('@ 2 days'::interval, hyper_repart_3."time"), hyper_repart_3.device, hyper_repart_3.temp
+                           Data node: data_node_3
+                           Chunks: _hyper_2_21_dist_chunk, _hyper_2_20_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7, 6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-03 00:00:00-08'::timestamp with time zone))
+(24 rows)
 
 -- Query doesn't cover repartitioning boundary, so safe to push down
 -- bucketing
@@ -167,29 +169,31 @@ FROM :TABLE_NAME
 WHERE time BETWEEN '2019-01-01' AND '2019-01-01 15:00'
 GROUP BY 1,2
 ORDER BY 1,2;
-                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
-   ->  Custom Scan (DataNodeScan)
-         Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, (avg(hyper_repart.temp))
-         Relations: Aggregate on (public.hyper_repart)
-         Data node: data_node_1
-         Chunks: _hyper_2_16_dist_chunk
-         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-   ->  Custom Scan (DataNodeScan)
-         Output: (time_bucket('@ 2 days'::interval, hyper_repart_1."time")), hyper_repart_1.device, (avg(hyper_repart_1.temp))
-         Relations: Aggregate on (public.hyper_repart)
-         Data node: data_node_2
-         Chunks: _hyper_2_18_dist_chunk
-         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-   ->  Custom Scan (DataNodeScan)
-         Output: (time_bucket('@ 2 days'::interval, hyper_repart_2."time")), hyper_repart_2.device, (avg(hyper_repart_2.temp))
-         Relations: Aggregate on (public.hyper_repart)
-         Data node: data_node_3
-         Chunks: _hyper_2_21_dist_chunk
-         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-(20 rows)
+                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: (time_bucket('@ 2 days'::interval, "time")), device, (avg(temp))
+   ->  Merge Append
+         Sort Key: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device
+         ->  Custom Scan (DataNodeScan)
+               Output: (time_bucket('@ 2 days'::interval, hyper_repart."time")), hyper_repart.device, (avg(hyper_repart.temp))
+               Relations: Aggregate on (public.hyper_repart)
+               Data node: data_node_1
+               Chunks: _hyper_2_16_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+         ->  Custom Scan (DataNodeScan)
+               Output: (time_bucket('@ 2 days'::interval, hyper_repart_1."time")), hyper_repart_1.device, (avg(hyper_repart_1.temp))
+               Relations: Aggregate on (public.hyper_repart)
+               Data node: data_node_2
+               Chunks: _hyper_2_18_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[6]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+         ->  Custom Scan (DataNodeScan)
+               Output: (time_bucket('@ 2 days'::interval, hyper_repart_2."time")), hyper_repart_2.device, (avg(hyper_repart_2.temp))
+               Relations: Aggregate on (public.hyper_repart)
+               Data node: data_node_3
+               Chunks: _hyper_2_21_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper_repart WHERE _timescaledb_internal.chunks_in(hyper_repart, ARRAY[7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+(22 rows)
 
 -- Run the queries for each setting. Each setting's result is
 -- generated into its own file

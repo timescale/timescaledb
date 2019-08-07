@@ -9,6 +9,9 @@
 #include <postgres.h>
 #include <nodes/plannodes.h>
 
+#include "fdw/scan_exec.h"
+#include "remote/async.h"
+
 extern Node *data_node_scan_state_create(CustomScan *cscan);
 
 #endif /* TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_EXEC_H */

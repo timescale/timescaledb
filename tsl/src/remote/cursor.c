@@ -32,6 +32,7 @@ typedef struct Cursor
 				   * for, e.g., JOINs */
 	TupleDesc tupdesc;
 	TupleFactory *tf;
+	MemoryContext req_mctx;   /* Stores async request and response */
 	MemoryContext batch_mctx; /* Stores batches of fetched tuples */
 	MemoryContext tuple_mctx;
 	const char *stmt;
@@ -45,33 +46,81 @@ typedef struct Cursor
 	int fetch_ct_2; /* Min(# of fetches done, 2) */
 	bool isopen;
 	bool eof;
+
+	bool async;				  /* indicating that a cursor should support async data fetching */
+	AsyncRequest *create_req; /* a request to create cursor */
+	AsyncRequest *data_req;   /* a request to fetch data from cursor */
 } Cursor;
 
+static void remote_cursor_fetch_data_start(Cursor *cursor);
+
 static void
-cursor_open(Cursor *cursor, StmtParams *params)
+cursor_create_req(Cursor *cursor, StmtParams *params)
 {
-	AsyncRequest *req;
+	AsyncRequest *volatile req;
 	StringInfoData buf;
+	MemoryContext oldcontext;
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "DECLARE c%u CURSOR FOR\n%s", cursor->id, cursor->stmt);
 
-	if (NULL == params)
-		req = async_request_send(cursor->conn, buf.data);
-	else
-		req = async_request_send_with_params(cursor->conn, buf.data, params, FORMAT_TEXT);
+	PG_TRY();
+	{
+		oldcontext = MemoryContextSwitchTo(cursor->req_mctx);
+		if (NULL == params)
+			req = async_request_send(cursor->conn, buf.data);
+		else
+			req = async_request_send_with_params(cursor->conn, buf.data, params, FORMAT_TEXT);
 
-	Assert(NULL != req);
-	async_request_wait_ok_command(req);
-	pfree(req);
-	pfree(buf.data);
+		Assert(NULL != req);
+
+		cursor->create_req = req;
+		pfree(buf.data);
+	}
+	PG_CATCH();
+	{
+		if (NULL != req)
+			pfree(req);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+	MemoryContextSwitchTo(oldcontext);
+}
+
+/*
+ * Complete ongoing cursor create request if needed and return cursor.
+ * If cursor is in async mode then we will dispatch a request to fetch data.
+ */
+Cursor *
+remote_cursor_wait_until_open(Cursor *cursor)
+{
+	if (cursor->isopen)
+	{
+		Assert(cursor->create_req == NULL);
+		return cursor;
+	}
+
+	if (cursor->create_req == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_CURSOR_STATE),
+				 errmsg("cursor create request not sent out")));
+
+	async_request_wait_ok_command(cursor->create_req);
 	cursor->isopen = true;
+	pfree(cursor->create_req);
+	cursor->create_req = NULL;
+	/* let's dispatch data fetch request immediately for async cursor */
+	if (cursor->async)
+		remote_cursor_fetch_data_start(cursor);
+
+	return cursor;
 }
 
 static Cursor *
 remote_cursor_init_with_params(Cursor *cursor, TSConnection *conn, Relation rel, TupleDesc tupdesc,
 							   ScanState *ss, List *retrieved_attrs, const char *stmt,
-							   StmtParams *params)
+							   StmtParams *params, bool block)
 {
 	MemSet(cursor, 0, sizeof(Cursor));
 
@@ -91,12 +140,16 @@ remote_cursor_init_with_params(Cursor *cursor, TSConnection *conn, Relation rel,
 	cursor->batch_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "cursor tuple data", ALLOCSET_DEFAULT_SIZES);
 	cursor->tuple_mctx = cursor->batch_mctx;
+	cursor->req_mctx =
+		AllocSetContextCreate(CurrentMemoryContext, "async req/resp", ALLOCSET_DEFAULT_SIZES);
+	cursor->create_req = NULL;
+	cursor->data_req = NULL;
+	cursor->async = !block;
 
+	cursor_create_req(cursor, params);
 	remote_cursor_set_fetch_size(cursor, DEFAULT_FETCH_SIZE);
 
-	cursor_open(cursor, params);
-
-	return cursor;
+	return cursor->async ? cursor : remote_cursor_wait_until_open(cursor);
 }
 
 Cursor *
@@ -111,12 +164,13 @@ remote_cursor_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_a
 										  NULL,
 										  retrieved_attrs,
 										  stmt,
-										  params);
+										  params,
+										  false);
 }
 
 Cursor *
 remote_cursor_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-							  const char *stmt, StmtParams *params)
+							  const char *stmt, StmtParams *params, bool block)
 {
 	Scan *scan = (Scan *) ss->ps.plan;
 	TupleDesc tupdesc;
@@ -146,7 +200,8 @@ remote_cursor_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved
 										  ss,
 										  retrieved_attrs,
 										  stmt,
-										  params);
+										  params,
+										  block);
 }
 
 bool
@@ -173,31 +228,37 @@ remote_cursor_set_tuple_memcontext(Cursor *cursor, MemoryContext mctx)
 	cursor->tuple_mctx = mctx;
 }
 
-int
-remote_cursor_fetch_data(Cursor *cursor)
+static inline void
+verify_cursor_open(Cursor *cursor)
+{
+	if (!cursor->isopen)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_CURSOR_STATE), errmsg("cursor is not open")));
+}
+
+/*
+ * Send async req to fetch data from cursor.
+ */
+static void
+remote_cursor_fetch_data_start(Cursor *cursor)
 {
 	AsyncRequest *volatile req = NULL;
-	AsyncResponseResult *volatile rsp = NULL;
 	MemoryContext oldcontext;
-	int numrows = 0;
 
-	if (!cursor->isopen)
-		ereport(ERROR, (errcode(ERRCODE_INVALID_CURSOR_STATE), errmsg("cursor is closed")));
+	if (cursor->data_req != NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_CURSOR_STATE),
+				 errmsg("there is ongoing data fetch request")));
 
-	/*
-	 * We'll store the tuples in the batch_mctx.  First, flush the previous
-	 * batch.
-	 */
-	cursor->tuples = NULL;
-	MemoryContextReset(cursor->batch_mctx);
-	oldcontext = MemoryContextSwitchTo(cursor->batch_mctx);
-
-	/* PGresult must be released before leaving this function. */
 	PG_TRY();
 	{
 		TSConnection *conn = cursor->conn;
-		PGresult *res;
-		int i;
+
+		/* there should be no ongoing request */
+		Assert(cursor->data_req == NULL);
+
+		/* We use a separate mem context because batch mem context is getting reset once we fetch
+		 * new batch and here we need our async request to survive */
+		oldcontext = MemoryContextSwitchTo(cursor->req_mctx);
 
 		if (tuplefactory_is_binary(cursor->tf))
 			req = async_request_send_binary(conn, cursor->fetch_stmt);
@@ -205,10 +266,58 @@ remote_cursor_fetch_data(Cursor *cursor)
 			req = async_request_send(conn, cursor->fetch_stmt);
 
 		Assert(NULL != req);
-		rsp = async_request_wait_any_result(req);
-		Assert(NULL != rsp);
+		cursor->data_req = req;
+	}
+	PG_CATCH();
+	{
+		if (NULL != req)
+			pfree(req);
 
-		res = async_response_result_get_pg_result(rsp);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	MemoryContextSwitchTo(oldcontext);
+}
+
+/*
+ * Retrieve data from ongoing async fetch request
+ */
+static int
+remote_cursor_fetch_data_complete(Cursor *cursor)
+{
+	AsyncResponseResult *volatile response = NULL;
+	MemoryContext oldcontext;
+	int numrows = 0;
+
+	Assert(cursor != NULL);
+	Assert(cursor->data_req != NULL);
+
+	verify_cursor_open(cursor);
+
+	if (cursor->next_tuple < cursor->num_tuples)
+		elog(ERROR, "shouldn't fetch new data before consuming exising");
+
+	/*
+	 * We'll store the tuples in the batch_mctx.  First, flush the previous
+	 * batch.
+	 */
+	cursor->tuples = NULL;
+	MemoryContextReset(cursor->batch_mctx);
+
+	PG_TRY();
+	{
+		PGresult *res;
+		int i;
+
+		oldcontext = MemoryContextSwitchTo(cursor->req_mctx);
+
+		response = async_request_wait_any_result(cursor->data_req);
+		Assert(NULL != response);
+
+		res = async_response_result_get_pg_result(response);
+
+		MemoryContextSwitchTo(cursor->batch_mctx);
 
 		/* On error, report the original query, not the FETCH. */
 		if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -236,18 +345,22 @@ remote_cursor_fetch_data(Cursor *cursor)
 		/* Must be EOF if we didn't get as many tuples as we asked for. */
 		cursor->eof = (numrows < cursor->fetch_size);
 
-		pfree(req);
-		async_response_result_close(rsp);
-		req = NULL;
-		rsp = NULL;
+		pfree(cursor->data_req);
+		cursor->data_req = NULL;
+
+		async_response_result_close(response);
+		response = NULL;
 	}
 	PG_CATCH();
 	{
-		if (NULL != req)
-			pfree(req);
+		if (NULL != cursor->data_req)
+		{
+			pfree(cursor->data_req);
+			cursor->data_req = NULL;
+		}
 
-		if (NULL != rsp)
-			async_response_result_close(rsp);
+		if (NULL != response)
+			async_response_result_close(response);
 
 		PG_RE_THROW();
 	}
@@ -255,7 +368,23 @@ remote_cursor_fetch_data(Cursor *cursor)
 
 	MemoryContextSwitchTo(oldcontext);
 
+	/* for async cursor we try requesting next batch */
+	if (cursor->async && !cursor->eof)
+		remote_cursor_fetch_data_start(cursor);
+
 	return numrows;
+}
+
+int
+remote_cursor_fetch_data(Cursor *cursor)
+{
+	if (!cursor->isopen)
+		remote_cursor_wait_until_open(cursor);
+
+	if (cursor->data_req == NULL)
+		remote_cursor_fetch_data_start(cursor);
+
+	return remote_cursor_fetch_data_complete(cursor);
 }
 
 HeapTuple
@@ -315,6 +444,9 @@ remote_cursor_exec_cmd(Cursor *cursor, const char *sql)
 void
 remote_cursor_rewind(Cursor *cursor)
 {
+	/* We need to make sure that cursor is opened */
+	remote_cursor_wait_until_open(cursor);
+
 	if (cursor->fetch_ct_2 > 1)
 	{
 		char sql[64];
@@ -335,6 +467,9 @@ void
 remote_cursor_close(Cursor *cursor)
 {
 	char sql[64];
+
+	if (cursor->create_req != NULL)
+		async_request_wait_ok_command(cursor->create_req);
 
 	snprintf(sql, sizeof(sql), "CLOSE c%u", cursor->id);
 	cursor->isopen = false;
