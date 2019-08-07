@@ -9,8 +9,6 @@ CREATE OR REPLACE FUNCTION ts_compress_table(in_table REGCLASS, out_table REGCLA
 \ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SELECT * FROM pg_type WHERE typname='hypertable_compression';
-
 -- column name, algorithm, idx, asc, nulls_first
 CREATE FUNCTION ord(TEXT, INT, INT, BOOL = true, BOOL = false)
     RETURNS _timescaledb_catalog.hypertable_compression
