@@ -447,7 +447,7 @@ ts_inheritance_parent_relid(Oid relid)
 	return parent;
 }
 
-bool
+TSDLLEXPORT bool
 ts_type_is_int8_binary_compatible(Oid sourcetype)
 {
 	HeapTuple tuple;

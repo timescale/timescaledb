@@ -18,6 +18,7 @@
 #include <lib/stringinfo.h>
 
 #include <base64_compat.h>
+#include <utils.h>
 
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
@@ -77,6 +78,16 @@ typedef struct ExtendedCompressor
 	Compressor base;
 	DeltaDeltaCompressor *internal;
 } ExtendedCompressor;
+
+static void
+deltadelta_compressor_append_bool(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = delta_delta_compressor_alloc();
+
+	delta_delta_compressor_append_value(extended->internal, DatumGetBool(val)? 1: 0);
+}
 
 static void
 deltadelta_compressor_append_int16(Compressor *compressor, Datum val)
@@ -160,6 +171,12 @@ deltadelta_compressor_finish_and_reset(Compressor *compressor)
 	return compressed;
 }
 
+const Compressor deltadelta_bool_compressor = {
+	.append_val = deltadelta_compressor_append_bool,
+	.append_null = deltadelta_compressor_append_null_value,
+	.finish = deltadelta_compressor_finish_and_reset,
+};
+
 const Compressor deltadelta_uint16_compressor = {
 	.append_val = deltadelta_compressor_append_int16,
 	.append_null = deltadelta_compressor_append_null_value,
@@ -200,6 +217,9 @@ delta_delta_compressor_for_type(Oid element_type)
 	ExtendedCompressor *compressor = palloc(sizeof(*compressor));
 	switch (element_type)
 	{
+		case BOOLOID:
+			*compressor = (ExtendedCompressor){ .base = deltadelta_bool_compressor };
+			return &compressor->base;
 		case INT2OID:
 			*compressor = (ExtendedCompressor){ .base = deltadelta_uint16_compressor };
 			return &compressor->base;
@@ -221,6 +241,11 @@ delta_delta_compressor_for_type(Oid element_type)
 			return &compressor->base;
 #endif
 		default:
+			if (ts_type_is_int8_binary_compatible(element_type))
+			{
+				*compressor = (ExtendedCompressor){ .base = deltadelta_uint64_compressor };
+				return &compressor->base;
+			}
 			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
 	}
 }
@@ -476,6 +501,10 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 
 	switch (element_type)
 	{
+		case BOOLOID:
+			return (DecompressResult){
+				.val = BoolGetDatum(res_internal.val),
+			};
 		case INT8OID:
 			return (DecompressResult){
 				.val = Int64GetDatum(res_internal.val),
@@ -499,7 +528,11 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 			};
 #endif
 		default:
-			elog(ERROR, "invalid type requested from deltadelta decompression");
+			if (ts_type_is_int8_binary_compatible(element_type))
+				return (DecompressResult){
+					.val = Int16GetDatum(res_internal.val),
+				};
+			elog(ERROR, "invalid type requested from deltadelta decompression %d", element_type);
 	}
 }
 
