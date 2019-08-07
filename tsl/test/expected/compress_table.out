@@ -5,6 +5,9 @@
 CREATE OR REPLACE FUNCTION ts_compress_table(in_table REGCLASS, out_table REGCLASS, compression_info _timescaledb_catalog.hypertable_compression[])
     RETURNS VOID
     AS :TSL_MODULE_PATHNAME LANGUAGE C STRICT VOLATILE;
+CREATE OR REPLACE FUNCTION ts_decompress_table(in_table REGCLASS, out_table REGCLASS)
+    RETURNS VOID
+    AS :TSL_MODULE_PATHNAME LANGUAGE C STRICT VOLATILE;
 \ir include/compression_utils.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -90,6 +93,20 @@ INSERT INTO uncompressed
 ------+--------+------+--------+-------+-------+---+--------+---+---+----------+---
 (0 rows)
 
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | data | floats | nulls | texts | time | device | data | floats | nulls | texts 
+------+--------+------+--------+-------+-------+------+--------+------+--------+-------+-------
+(0 rows)
+
 TRUNCATE compressed;
 -- test gorilla on ints
 SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('data', 3), com('floats', 3), com('nulls', 1), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
@@ -110,6 +127,20 @@ SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('data', 3), com('floats', 
 
  time | device | data | floats | nulls | texts | t | device | d | f | ?column? | e 
 ------+--------+------+--------+-------+-------+---+--------+---+---+----------+---
+(0 rows)
+
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | data | floats | nulls | texts | time | device | data | floats | nulls | texts 
+------+--------+------+--------+-------+-------+------+--------+------+--------+-------+-------
 (0 rows)
 
 TRUNCATE compressed;
@@ -134,6 +165,20 @@ SELECT ARRAY[ord('time', 2, 0), seg('device', 0), com('data', 2), com('floats', 
 ------+--------+------+--------+-------+-------+---+--------+---+---+----------+---
 (0 rows)
 
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | data | floats | nulls | texts | time | device | data | floats | nulls | texts 
+------+--------+------+--------+-------+-------+------+--------+------+--------+-------+-------
+(0 rows)
+
 TRUNCATE compressed;
 -- test Array on everything
 SELECT ARRAY[ord('time', 1, 0), seg('device', 0), com('data', 1), com('floats', 1), com('nulls', 1), com('texts', 1)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
@@ -156,6 +201,20 @@ SELECT ARRAY[ord('time', 1, 0), seg('device', 0), com('data', 1), com('floats', 
 ------+--------+------+--------+-------+-------+---+--------+---+---+----------+---
 (0 rows)
 
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | data | floats | nulls | texts | time | device | data | floats | nulls | texts 
+------+--------+------+--------+-------+-------+------+--------+------+--------+-------+-------
+(0 rows)
+
 TRUNCATE compressed;
 --test reordering compression info
 SELECT ARRAY[com('floats', 3), com('data', 4), seg('device', 0), ord('time', 4, 0), com('nulls', 1), com('texts', 2)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
@@ -176,6 +235,20 @@ SELECT ARRAY[com('floats', 3), com('data', 4), seg('device', 0), ord('time', 4, 
 
  time | device | data | floats | nulls | texts | t | device | d | f | ?column? | e 
 ------+--------+------+--------+-------+-------+---+--------+---+---+----------+---
+(0 rows)
+
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | data | floats | nulls | texts | time | device | data | floats | nulls | texts 
+------+--------+------+--------+-------+-------+------+--------+------+--------+-------+-------
 (0 rows)
 
 TRUNCATE compressed;
@@ -205,6 +278,20 @@ SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('floats', 3), com('texts',
 ------+--------+--------+-------+---+--------+---+---
 (0 rows)
 
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | floats | texts | time | device | floats | texts 
+------+--------+--------+-------+------+--------+--------+-------
+(0 rows)
+
 TRUNCATE compressed;
 -- test adding a column
 ALTER TABLE uncompressed ADD COLUMN dat2 INT DEFAULT 1;
@@ -232,6 +319,20 @@ SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('floats', 3), com('texts',
 ------+--------+--------+-------+------+-----+---+--------+---+---+----+---
 (0 rows)
 
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | floats | texts | dat2 | ord | time | device | floats | texts | dat2 | ord 
+------+--------+--------+-------+------+-----+------+--------+--------+-------+------+-----
+(0 rows)
+
 TRUNCATE compressed;
 -- test skipping columns
 CREATE TABLE missing_columns AS SELECT time, device, dat2 FROM uncompressed;
@@ -255,6 +356,20 @@ SELECT ARRAY[ord('time', 4, 0), seg('device', 0), com('dat2', 4)]::_timescaledb_
 
  time | device | dat2 | t | device | d2 
 ------+--------+------+---+--------+----
+(0 rows)
+
+ ts_decompress_table 
+---------------------
+ 
+(1 row)
+
+                                 ?column?                                  | count 
+---------------------------------------------------------------------------+-------
+ Number of rows different between original and decompress_table (expect 0) |     0
+(1 row)
+
+ time | device | dat2 | time | device | dat2 
+------+--------+------+------+--------+------
 (0 rows)
 
 TRUNCATE compressed;
