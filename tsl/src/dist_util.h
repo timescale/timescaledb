@@ -30,6 +30,6 @@ bool dist_util_is_frontend_session(void);
 
 Datum dist_util_remote_hypertable_info(PG_FUNCTION_ARGS);
 
-bool validate_data_node_settings(void);
+void validate_data_node_settings(void);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */

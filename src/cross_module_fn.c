@@ -230,7 +230,8 @@ ts_dist_remote_hypertable_info(PG_FUNCTION_ARGS)
 Datum
 ts_dist_validate_as_data_node(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(ts_cm_functions->validate_as_data_node(fcinfo));
+	ts_cm_functions->validate_as_data_node();
+	PG_RETURN_VOID();
 }
 
 /*
@@ -648,7 +649,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.is_frontend_session = error_no_default_fn_bool_void_community,
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
 	.remote_hypertable_info = error_no_default_fn_pg_community,
-	.validate_as_data_node = error_no_default_fn_bool_void_community,
+	.validate_as_data_node = error_no_default_fn_community,
 	.drop_chunks_on_data_nodes = empty_drop_chunks_on_data_nodes,
 };
 

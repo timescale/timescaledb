@@ -17,6 +17,8 @@
 #include "funcapi.h"
 #include <access/twophase.h>
 #include <miscadmin.h>
+#include "compat.h"
+#include <utils/builtins.h>
 
 /*
  * When added to a distributed database, this key in the metadata table will be set to match the
@@ -208,8 +210,29 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-bool
+void
 validate_data_node_settings(void)
 {
-	return MaxConnections > 0 && max_prepared_xacts >= MaxConnections;
+#if !PG_VERSION_SUPPORTS_MULTINODE
+	/* This should really be enforced by the access node since we might
+	 * deprecate PostgreSQL versions that previously were supported for
+	 * multinode setups. This is just extra safety. */
+	ereport(ERROR,
+			(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+			 errmsg("unsupported PostgreSQL version %s", PG_VERSION)));
+#endif
+
+	if (max_prepared_xacts == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("prepared transactions need to be enabled"),
+				 errhint("max_prepared_transactions must be set >= max_connections (changes will "
+						 "require restart)")));
+
+	if (max_prepared_xacts < MaxConnections)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("insufficient number of prepared transactions"),
+				 errhint("max_prepared_transactions must be set >= max_connections (changes will "
+						 "require restart)")));
 }
