@@ -351,6 +351,10 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 
 	/* NOTE: the lock order matters, see tsl/src/materialization.c. Perform all locking upfront */
 
+	/* delete the job before taking locks as it kills long-running jobs which we would otherwise
+	 * wait on */
+	ts_bgw_job_delete_by_id(agg->data.job_id);
+
 	if (drop_user_view)
 	{
 		user_view = (ObjectAddress){
@@ -429,8 +433,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		HeapTuple tuple = ti->tuple;
 		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
-		/* delete the job */
-		ts_bgw_job_delete_by_id(form->job_id);
+
 		ts_catalog_delete(ti->scanrel, ti->tuple);
 
 		/* delete all related rows */
