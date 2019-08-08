@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #1327 Fix chunk exclusion with ordered append
+* #1390 Fix deletes of background workers while a job is running
 * #1392 Fix cagg_agg_validate expression handling
 * #1408 Fix ChunkAppend space partitioning support for ordered append
 * #1420 Fix OUTER JOIN qual propagation
@@ -19,6 +20,7 @@ accidentally triggering the load of a previous DB version.**
 * @shahidhk for reporting an issue with OUTER JOINs
 * @cossbow and @xxGL1TCHxx for reporting reporting issues with ChunkAppend and space partitioning
 * @est for reporting an issue with CASE expressions in continuous aggregates
+* @devlucasc for reporting the issue with deleting a background worker while a job is running
 
 ## 1.4.1 (2019-08-01)
 
