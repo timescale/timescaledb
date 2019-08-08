@@ -77,6 +77,25 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 -- Adding a frontend as a backend to a nondistributed node
 SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
+
+-- Mocking a data node validation failure
+SET ROLE :ROLE_SUPERUSER;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_as_data_node()
+    RETURNS VOID LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RAISE 'data node validation test failure';
+END
+$BODY$;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM add_data_node('invalid_data_node', database => 'backend_2', if_not_exists => true);
+
+-- Restore original validation function
+\c backend_2
+CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_as_data_node() RETURNS void
+AS :MODULE_PATHNAME, 'ts_dist_validate_as_data_node' LANGUAGE C VOLATILE STRICT;
 \set ON_ERROR_STOP 1
 
 -- Add a second backend to TEST_DB

@@ -139,7 +139,7 @@ typedef struct CrossModuleFunctions
 	bool (*is_frontend_session)(void);
 	bool (*remove_from_distributed_db)(void);
 	PGFunction remote_hypertable_info;
-	bool (*validate_as_data_node)();
+	void (*validate_as_data_node)(void);
 	void (*drop_chunks_on_data_nodes)(Name table_name, Name schema_name, Datum older_than_datum,
 									  Datum newer_than_datum, Oid older_than_type,
 									  Oid newer_than_type, bool cascade,
