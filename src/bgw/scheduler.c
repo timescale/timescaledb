@@ -166,7 +166,18 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 
 	if (sjob->may_need_mark_end)
 	{
-		BgwJobStat *job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
+		BgwJobStat *job_stat;
+
+		if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+		{
+			elog(WARNING,
+				 "scheduler detected that job %d was deleted after job quit",
+				 sjob->job.fd.id);
+			sjob->may_need_mark_end = false;
+			return;
+		}
+
+		job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
 		Assert(job_stat != NULL);
 
@@ -231,6 +242,16 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			StartTransactionCommand();
 
+			if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+			{
+				elog(WARNING,
+					 "scheduler detected that job %d was deleted when starting job",
+					 sjob->job.fd.id);
+				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				CommitTransactionCommand();
+				return;
+			}
+
 			/*
 			 * start the job before you can encounter any errors so that they
 			 * are always registered
@@ -287,7 +308,12 @@ static void
 on_failure_to_start_job(ScheduledBgwJob *sjob)
 {
 	StartTransactionCommand();
-	mark_job_as_ended(sjob, JOB_FAILURE);
+	if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+		elog(WARNING,
+			 "scheduler detected that job %d was deleted while failing to start",
+			 sjob->job.fd.id);
+	else
+		mark_job_as_ended(sjob, JOB_FAILURE);
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 	CommitTransactionCommand();
 }

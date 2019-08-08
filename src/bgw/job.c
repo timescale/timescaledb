@@ -13,6 +13,9 @@
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/timestamp.h>
+#include <storage/proc.h>
+#include <storage/procarray.h>
+#include <storage/sinvaladt.h>
 
 #include "job.h"
 #include "scanner.h"
@@ -25,6 +28,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/reorder.h"
+#include "scan_iterator.h"
 
 #include <cross_module_fn.h>
 
@@ -41,6 +45,12 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 static unknown_job_type_hook_type unknown_job_type_hook = NULL;
 static unknown_job_type_owner_hook_type unknown_job_type_owner_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+
+typedef enum JobLockLifetime
+{
+	SESSION_LOCK = 0,
+	TXN_LOCK,
+} JobLockLifetime;
 
 BackgroundWorkerHandle *
 ts_bgw_start_worker(const char *function, const char *name, const char *extra)
@@ -193,77 +203,157 @@ ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 }
 
 static void
-bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func tuple_found,
-				 tuple_filter_func tuple_filter, void *data, MemoryContext mctx, LOCKMODE lockmode,
-				 bool fail_if_not_found)
+init_scan_by_job_id(ScanIterator *iterator, int32 job_id)
 {
-	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, BGW_JOB),
-		.index = catalog_get_index(catalog, BGW_JOB, indexid),
-		.nkeys = nkeys,
-		.scankey = scankey,
-		.tuple_found = tuple_found,
-		.filter = tuple_filter,
-		.data = data,
-		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
-		.result_mctx = mctx,
-	};
-
-	ts_scanner_scan_one(&scanctx, fail_if_not_found, "bgw job");
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_bgw_job_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(job_id));
 }
 
-static inline void
-bgw_job_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_filter_func tuple_filter,
-					void *data, MemoryContext mctx, LOCKMODE lockmode, bool fail_if_not_found)
-{
-	ScanKeyData scankey[1];
+/* Lock a job tuple using an advisory lock. Advisory job locks are
+ *  used to lock the job row while a job is running to prevent a job from being
+ *  modified while in the middle of a run. This lock should be taken before
+ *  bgw_job table lock to avoid deadlocks.
+ *
+ * We use an advisory lock instead of a tuple lock because we want the lock on the job id
+ * and not on the tid of the row (in case it is vacuumed or updated in some way). We don't
+ * want the job modified while it is running for safety reasons. Finally, we use this lock
+ * to be able to send a signal to the PID of the running job. This is used by delete because,
+ * a job deletion sends a SIGINT to the running job to cancel it.
+ *
+ * We aquire a SHARE lock on the job during scheduling and when the job is running so that it
+ * cannot be deleted during those times and an EXCLUSIVE lock when deleting.
+ *
+ * returns whether or not the lock was obtained (false return only possible if block==false)
+ */
 
-	ScanKeyInit(&scankey[0],
-				Anum_bgw_job_stat_pkey_idx_job_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(bgw_job_id));
-	bgw_job_scan_one(BGW_JOB_STAT_PKEY_IDX,
-					 scankey,
-					 1,
-					 tuple_found,
-					 tuple_filter,
-					 data,
-					 mctx,
-					 lockmode,
-					 fail_if_not_found);
+static bool
+lock_job(int32 job_id, LOCKMODE mode, JobLockLifetime lock_type, LOCKTAG *tag, bool block)
+{
+	/* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */
+	TS_SET_LOCKTAG_ADVISORY(*tag, MyDatabaseId, job_id, 0);
+
+	return LockAcquire(tag, mode, lock_type == SESSION_LOCK, !block) != LOCKACQUIRE_NOT_AVAIL;
 }
 
-static ScanTupleResult
-bgw_job_tuple_found(TupleInfo *ti, void *const data)
+static BgwJob *
+ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_lock_mode,
+						  JobLockLifetime lock_type, bool block)
 {
-	BgwJob **job_pp = data;
+	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
+	 * be released after the scan */
+	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, ShareLock, mctx);
+	int num_found = 0;
+	BgwJob *job = NULL;
+	LOCKTAG tag;
 
-	*job_pp = bgw_job_from_tuple(ti->tuple, sizeof(BgwJob), ti->mctx);
+	/* take advisory lock before relation lock */
+	if (!lock_job(bgw_job_id, tuple_lock_mode, lock_type, &tag, block))
+	{
+		/* return NULL if lock could not be acquired */
+		Assert(!block);
+		return NULL;
+	}
 
-	/*
-	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
-	 * condition.
-	 */
-	return SCAN_CONTINUE;
+	init_scan_by_job_id(&iterator, bgw_job_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		HeapTuple heap = ts_scan_iterator_tuple(&iterator);
+		job = bgw_job_from_tuple(heap, sizeof(BgwJob), mctx);
+
+		Assert(num_found == 0);
+		num_found++;
+	}
+
+	return job;
+}
+
+/* Take a lock on the job for the duration of the txn. This prevents
+ *  the job from being deleted.
+ *
+ *  Returns whether or not the job still exists.
+ */
+bool
+ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx)
+{
+	/* note the mode here is equivalent to FOR SHARE row locks */
+	BgwJob *job = ts_bgw_job_find_with_lock(bgw_job_id, mctx, RowShareLock, TXN_LOCK, true);
+	if (job != NULL)
+	{
+		pfree(job);
+		return true;
+	}
+	return false;
 }
 
 BgwJob *
 ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 {
-	BgwJob *job_stat = NULL;
+	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
+	int num_found = 0;
+	BgwJob *job = NULL;
 
-	bgw_job_scan_job_id(bgw_job_id,
-						bgw_job_tuple_found,
-						NULL,
-						&job_stat,
-						mctx,
-						AccessShareLock,
-						fail_if_not_found);
+	init_scan_by_job_id(&iterator, bgw_job_id);
 
-	return job_stat;
+	ts_scanner_foreach(&iterator)
+	{
+		Assert(num_found == 0);
+		job = bgw_job_from_tuple(ts_scan_iterator_tuple(&iterator), sizeof(BgwJob), mctx);
+		num_found++;
+	}
+
+	if (num_found == 0 && fail_if_not_found)
+		elog(ERROR, "job %d not found", bgw_job_id);
+
+	return job;
+	;
+}
+
+static void
+get_job_lock_for_delete(int32 job_id)
+{
+	LOCKTAG tag;
+	bool got_lock;
+
+	/* Try getting an exclusive lock on the tuple in a non-blocking manner. Note this is the
+	 * equivalent of a row-based FOR UPDATE lock */
+	got_lock = lock_job(job_id,
+						AccessExclusiveLock,
+						/* session_lock */ false,
+						&tag,
+						/* block */ false);
+	if (!got_lock)
+	{
+		/* If I couldn't get a lock, try killing the background worker that's running the job.
+		 * This is probably not bulletproof but best-effort is good enough here. */
+		VirtualTransactionId *vxid = GetLockConflicts(&tag, AccessExclusiveLock);
+		PGPROC *proc;
+
+		if (VirtualTransactionIdIsValid(*vxid))
+		{
+			proc = BackendIdGetProc(vxid->backendId);
+			if (proc != NULL && proc->isBackgroundWorker)
+			{
+				elog(NOTICE,
+					 "cancelling the background worker for job %d (pid %d)",
+					 job_id,
+					 proc->pid);
+				DirectFunctionCall1(pg_cancel_backend, Int32GetDatum(proc->pid));
+			}
+		}
+
+		/* We have to grab this lock before proceeding so grab it in a blocking manner now */
+		got_lock = lock_job(job_id,
+							AccessExclusiveLock,
+							/* session lock */ false,
+							&tag,
+							/* block */ true);
+	}
+	Assert(got_lock);
 }
 
 static ScanTupleResult
@@ -290,11 +380,15 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 }
 
 static bool
-bgw_job_delete_scan(ScanKeyData *scankey)
+bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 {
 	Catalog *catalog = ts_catalog_get();
+	ScannerCtx scanctx;
 
-	ScannerCtx	scanctx = {
+	/* get job lock before relation lock */
+	get_job_lock_for_delete(job_id);
+
+	scanctx = (ScannerCtx) {
 		.table = catalog_get_table_id(catalog, BGW_JOB),
 		.index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
 		.nkeys = 1,
@@ -305,11 +399,6 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
-		.tuplock = {
-			.waitpolicy = LockWaitBlock,
-			.lockmode = LockTupleExclusive,
-			.enabled = false,
-		},
 	};
 
 	return ts_scanner_scan(&scanctx);
@@ -326,7 +415,7 @@ ts_bgw_job_delete_by_id(int32 job_id)
 				F_INT4EQ,
 				Int32GetDatum(job_id));
 
-	return bgw_job_delete_scan(scankey);
+	return bgw_job_delete_scan(scankey, job_id);
 }
 
 void
@@ -462,11 +551,17 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	ts_license_enable_module_loading();
 
 	StartTransactionCommand();
-	job = ts_bgw_job_find(job_id, TopMemoryContext, true);
+	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
+	 * when the job process exits */
+	job = ts_bgw_job_find_with_lock(job_id,
+									TopMemoryContext,
+									RowShareLock,
+									SESSION_LOCK,
+									/* block */ true);
 	CommitTransactionCommand();
 
 	if (job == NULL)
-		elog(ERROR, "job %d not found", job_id);
+		elog(ERROR, "job %d not found when running the background worker", job_id);
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 
@@ -500,9 +595,17 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
-		 * job is launched
+		 * job is launched. Try to get a lock on the job again. Because the error
+		 * removed the session lock. Don't block and only record if the lock was actually
+		 * obtained.
 		 */
-		ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
+		job = ts_bgw_job_find_with_lock(job_id,
+										TopMemoryContext,
+										RowShareLock,
+										TXN_LOCK,
+										/* block */ false);
+		if (job != NULL)
+			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
 		CommitTransactionCommand();
 
 		/*
