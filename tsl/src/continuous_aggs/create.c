@@ -674,6 +674,9 @@ get_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options,
 static bool
 cagg_agg_validate(Node *node, void *context)
 {
+	if (node == NULL)
+		return false;
+
 	if (IsA(node, Aggref))
 	{
 		Aggref *agg = (Aggref *) node;
@@ -774,8 +777,8 @@ cagg_validate_query(Query *query)
 						"function and a GROUP BY clause with time_bucket")));
 	}
 	/*validate aggregates allowed */
-	expression_tree_walker((Node *) query->targetList, cagg_agg_validate, NULL);
-	expression_tree_walker((Node *) query->havingQual, cagg_agg_validate, NULL);
+	cagg_agg_validate((Node *) query->targetList, NULL);
+	cagg_agg_validate((Node *) query->havingQual, NULL);
 
 	fromList = query->jointree->fromlist;
 	if (list_length(fromList) != 1 || !IsA(linitial(fromList), RangeTblRef))
