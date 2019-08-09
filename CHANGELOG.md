@@ -6,6 +6,12 @@ accidentally triggering the load of a previous DB version.**
 
 ## 1.5.0 (unreleased)
 
+**For this release only**, you will need to restart the database before running
+`ALTER EXTENSION`
+
+**Features**
+* #1433 Make ChunkAppend parallel aware
+
 **Bugfixes**
 * #1444 Prevent LIMIT pushdown in JOINs
 

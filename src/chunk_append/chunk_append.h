@@ -22,7 +22,8 @@ typedef struct ChunkAppendPath
 } ChunkAppendPath;
 
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-										 Path *subpath, bool ordered, List *nested_oids);
+										 Path *subpath, bool parallel_aware, bool ordered,
+										 List *nested_oids);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  List *join_conditions, int *order_attno,

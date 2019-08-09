@@ -3,7 +3,9 @@ set(SOURCES
   bgw_message_queue.c
   bgw_counter.c
   bgw_launcher.c
-  bgw_interface.c)
+  bgw_interface.c
+  lwlocks.c
+)
 
 set(TEST_SOURCES
   ${PROJECT_SOURCE_DIR}/test/src/symbol_conflict.c

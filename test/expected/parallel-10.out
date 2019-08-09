@@ -60,7 +60,6 @@ SELECT last(i, j) FROM "test";
  999999
 (1 row)
 
--- we dont run this with analyze because the sort memory usage is not stable
 EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 GROUP BY sec
@@ -82,6 +81,38 @@ LIMIT 5;
                                        ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        ->  Parallel Seq Scan on _hyper_1_2_chunk
 (13 rows)
+
+-- test single copy parallel plan with parallel chunk append
+:PREFIX SELECT time_bucket('1 second', ts) sec, last(i, j)
+FROM "test"
+WHERE length(version()) > 0
+GROUP BY sec
+ORDER BY sec
+LIMIT 5;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Sort (actual rows=5 loops=1)
+         Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
+         Sort Method: top-N heapsort 
+         ->  Finalize HashAggregate (actual rows=1000 loops=1)
+               Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
+               ->  Gather (actual rows=1000 loops=1)
+                     Workers Planned: 2
+                     Workers Launched: 2
+                     ->  Partial HashAggregate (actual rows=333 loops=3)
+                           Group Key: time_bucket('@ 1 sec'::interval, test.ts)
+                           ->  Result (actual rows=333333 loops=3)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=333333 loops=3)
+                                       Chunks excluded during startup: 0
+                                       ->  Result (actual rows=500000 loops=1)
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                                       ->  Result (actual rows=500000 loops=1)
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+(21 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
@@ -170,7 +201,7 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
  {10,19998,19998,19998,19998,19998,900000}
 (1 row)
 
--- test constraint aware append
+-- test parallel ChunkAppend
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -190,26 +221,26 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
                      ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
 (14 rows)
 
--- test constraint aware append with parallel aggregation
-SET max_parallel_workers_per_gather = 1;
-EXPLAIN (costs off) SELECT count(*) FROM "test" WHERE length(version()) > 0;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Finalize Aggregate
-   ->  Gather
-         Workers Planned: 1
-         ->  Partial Aggregate
-               ->  Result
+-- test ChunkAppend with parallel aggregation
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=333333 loops=3)
                      One-Time Filter: (length(version()) > 0)
-                     ->  Custom Scan (ChunkAppend) on test
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=333333 loops=3)
                            Chunks excluded during startup: 0
-                           ->  Result
+                           ->  Result (actual rows=500000 loops=1)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_1_1_chunk
-                           ->  Result
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                           ->  Result (actual rows=500000 loops=1)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_1_2_chunk
-(14 rows)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+(15 rows)
 
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
   count  
@@ -217,7 +248,61 @@ SELECT count(*) FROM "test" WHERE length(version()) > 0;
  1000000
 (1 row)
 
-SET max_parallel_workers_per_gather = 4;
+-- test ChunkAppend with # workers < # childs
+SET max_parallel_workers_per_gather TO 1;
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=2 loops=1)
+         Workers Planned: 1
+         Workers Launched: 1
+         ->  Partial Aggregate (actual rows=1 loops=2)
+               ->  Result (actual rows=500000 loops=2)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=500000 loops=2)
+                           Chunks excluded during startup: 0
+                           ->  Result (actual rows=500000 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                           ->  Result (actual rows=500000 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+(15 rows)
+
+SELECT count(*) FROM "test" WHERE length(version()) > 0;
+  count  
+---------
+ 1000000
+(1 row)
+
+-- test ChunkAppend with # workers > # childs
+SET max_parallel_workers_per_gather TO 2;
+:PREFIX SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=166667 loops=3)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=166667 loops=3)
+                           Chunks excluded during startup: 0
+                           ->  Result (actual rows=500000 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+                                       Filter: (i >= 500000)
+(13 rows)
+
+SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
+ count  
+--------
+ 500000
+(1 row)
+
+RESET max_parallel_workers_per_gather;
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and
 -- transaction_timestamp() are marked parallel safe

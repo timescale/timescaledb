@@ -40,6 +40,7 @@ bool ts_guc_restoring = false;
 bool ts_guc_constraint_aware_append = true;
 bool ts_guc_enable_ordered_append = true;
 bool ts_guc_enable_chunk_append = true;
+bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 int ts_guc_max_open_chunks_per_insert = 10;
@@ -126,6 +127,17 @@ _guc_init(void)
 							 "Enable chunk append node",
 							 "Enable using chunk append node",
 							 &ts_guc_enable_chunk_append,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_parallel_chunk_append",
+							 "Enable parallel chunk append node",
+							 "Enable using parallel aware chunk append node",
+							 &ts_guc_enable_parallel_chunk_append,
 							 true,
 							 PGC_USERSET,
 							 0,

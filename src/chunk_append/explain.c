@@ -24,6 +24,13 @@ static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, E
 static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
 								   bool nullsFirst);
 
+/*
+ * Output additional information for EXPLAIN of a custom-scan plan node.
+ * This callback is optional. Common data stored in the ScanState,
+ * such as the target list and scan relation, will be shown even without
+ * this callback, but the callback allows the display of additional,
+ * private state.
+ */
 void
 chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
