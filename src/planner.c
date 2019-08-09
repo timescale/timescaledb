@@ -390,6 +390,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 															   rel,
 															   ht,
 															   *pathptr,
+															   false,
 															   ordered,
 															   nested_oids);
 					else if (should_optimize_append(*pathptr))
@@ -409,7 +410,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				case T_AppendPath:
 				case T_MergeAppendPath:
 					if (should_chunk_append(root, rel, *pathptr, false, 0))
-						*pathptr = ts_chunk_append_path_create(root, rel, ht, *pathptr, false, NIL);
+						*pathptr =
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
 					else if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;

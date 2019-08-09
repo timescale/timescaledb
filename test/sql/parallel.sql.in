@@ -30,9 +30,16 @@ SELECT first(i, j) FROM "test";
 EXPLAIN (costs off) SELECT last(i, j) FROM "test";
 SELECT last(i, j) FROM "test";
 
--- we dont run this with analyze because the sort memory usage is not stable
 EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
+GROUP BY sec
+ORDER BY sec
+LIMIT 5;
+
+-- test single copy parallel plan with parallel chunk append
+:PREFIX SELECT time_bucket('1 second', ts) sec, last(i, j)
+FROM "test"
+WHERE length(version()) > 0
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
@@ -56,14 +63,24 @@ SELECT histogram(i, 0, 100000, 5) FROM "test";
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 SELECT histogram(i, 10, 100000, 5) FROM "test";
 
--- test constraint aware append
+-- test parallel ChunkAppend
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
 
--- test constraint aware append with parallel aggregation
-SET max_parallel_workers_per_gather = 1;
-EXPLAIN (costs off) SELECT count(*) FROM "test" WHERE length(version()) > 0;
+-- test ChunkAppend with parallel aggregation
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
-SET max_parallel_workers_per_gather = 4;
+
+-- test ChunkAppend with # workers < # childs
+SET max_parallel_workers_per_gather TO 1;
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+SELECT count(*) FROM "test" WHERE length(version()) > 0;
+
+-- test ChunkAppend with # workers > # childs
+SET max_parallel_workers_per_gather TO 2;
+:PREFIX SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
+SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
+
+RESET max_parallel_workers_per_gather;
 
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and

@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <fmgr.h>
 #include <miscadmin.h>
 #include <executor/executor.h>
 #include <executor/nodeSubplan.h>
@@ -27,17 +28,24 @@
 #include "chunk_append/exec.h"
 #include "chunk_append/explain.h"
 #include "chunk_append/planner.h"
+#include "loader/lwlocks.h"
 #include "compat.h"
 
 #define INVALID_SUBPLAN_INDEX -1
 #define NO_MATCHING_SUBPLANS -2
 
-static void choose_next_subplan(ChunkAppendState *state);
-
 static TupleTableSlot *chunk_append_exec(CustomScanState *node);
 static void chunk_append_begin(CustomScanState *node, EState *estate, int eflags);
 static void chunk_append_end(CustomScanState *node);
 static void chunk_append_rescan(CustomScanState *node);
+static Size chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt);
+static void chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt,
+										void *coordinate);
+#if !PG96
+static void chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt,
+										  void *coordinate);
+#endif
+static void chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordinate);
 
 static CustomExecMethods chunk_append_state_methods = {
 	.BeginCustomScan = chunk_append_begin,
@@ -45,7 +53,17 @@ static CustomExecMethods chunk_append_state_methods = {
 	.EndCustomScan = chunk_append_end,
 	.ReScanCustomScan = chunk_append_rescan,
 	.ExplainCustomScan = chunk_append_explain,
+	.EstimateDSMCustomScan = chunk_append_estimate_dsm,
+	.InitializeDSMCustomScan = chunk_append_initialize_dsm,
+#if !PG96
+	.ReInitializeDSMCustomScan = chunk_append_reinitialize_dsm,
+#endif
+	.InitializeWorkerCustomScan = chunk_append_initialize_worker,
 };
+
+static void choose_next_subplan_non_parallel(ChunkAppendState *state);
+static void choose_next_subplan_for_leader(ChunkAppendState *state);
+static void choose_next_subplan_for_worker(ChunkAppendState *state);
 
 static List *constify_restrictinfos(PlannerInfo *root, List *restrictinfos);
 static bool can_exclude_chunk(List *constraints, List *restrictinfos);
@@ -54,6 +72,7 @@ static Node *constify_param_mutator(Node *node, void *context);
 static List *constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrictinfos);
 
 static void initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes);
+static LWLock *chunk_append_get_lock_pointer(void);
 
 Node *
 chunk_append_state_create(CustomScan *cscan)
@@ -76,6 +95,7 @@ chunk_append_state_create(CustomScan *cscan)
 	state->filtered_ri_clauses = state->initial_ri_clauses;
 
 	state->current = INVALID_SUBPLAN_INDEX;
+	state->choose_next_subplan = choose_next_subplan_non_parallel;
 
 	return (Node *) state;
 }
@@ -146,6 +166,11 @@ do_startup_exclusion(ChunkAppendState *state)
 	state->filtered_constraints = filtered_constraints;
 }
 
+/*
+ * Complete initialization of the supplied CustomScanState.
+ * Standard fields have been initialized by ExecInitCustomScan,
+ * but any private fields should be initialized here.
+ */
 static void
 chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 {
@@ -219,6 +244,12 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 	lc_clauses = list_head(state->filtered_ri_clauses);
 	lc_constraints = list_head(state->filtered_constraints);
 
+	if (state->num_subplans == 0)
+	{
+		state->runtime_initialized = true;
+		return;
+	}
+
 	state->runtime_number_loops++;
 	/*
 	 * mark subplans as active/inactive in valid_subplans
@@ -257,6 +288,13 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 	state->runtime_initialized = true;
 }
 
+/*
+ * Fetch the next scan tuple.
+ *
+ * If any tuples remain, it should fill ps_ResultTupleSlot with the next
+ * tuple in the current scan direction, and then return the tuple slot.
+ * If not, NULL or an empty slot should be returned.
+ */
 static TupleTableSlot *
 chunk_append_exec(CustomScanState *node)
 {
@@ -269,7 +307,7 @@ chunk_append_exec(CustomScanState *node)
 #endif
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
-		choose_next_subplan(state);
+		state->choose_next_subplan(state);
 
 #if PG96
 	if (node->ss.ps.ps_TupFromTlist)
@@ -326,25 +364,17 @@ chunk_append_exec(CustomScanState *node)
 #endif
 		}
 
-		/*
-		 * Go on to the "next" subplan in the appropriate direction. If no
-		 * more subplans, return the empty slot set up for us by
-		 * chunk_append_begin.
-		 */
-		choose_next_subplan(state);
+		state->choose_next_subplan(state);
 
-		/* Else loop back and try to get a tuple from the new subplan */
+		/* loop back and try to get a tuple from the new subplan */
 	}
 }
 
-static void
-choose_next_subplan(ChunkAppendState *state)
+static int
+get_next_subplan(ChunkAppendState *state, int last_plan)
 {
-	if (state->num_subplans == 0)
-	{
-		state->current = NO_MATCHING_SUBPLANS;
-		return;
-	}
+	if (last_plan == NO_MATCHING_SUBPLANS)
+		return NO_MATCHING_SUBPLANS;
 
 	if (state->runtime_exclusion)
 	{
@@ -355,17 +385,48 @@ choose_next_subplan(ChunkAppendState *state)
 		 * bms_next_member will return -2 (NO_MATCHING_SUBPLANS) if there are
 		 * no more members
 		 */
-		state->current = bms_next_member(state->valid_subplans, state->current);
+		return bms_next_member(state->valid_subplans, last_plan);
 	}
 	else
 	{
-		state->current++;
+		int next_plan = last_plan + 1;
 
-		if (state->current >= state->num_subplans)
-			state->current = NO_MATCHING_SUBPLANS;
+		if (next_plan >= state->num_subplans)
+			return NO_MATCHING_SUBPLANS;
+
+		return next_plan;
 	}
 }
 
+static void
+choose_next_subplan_non_parallel(ChunkAppendState *state)
+{
+	state->current = get_next_subplan(state, state->current);
+}
+
+static void
+choose_next_subplan_for_leader(ChunkAppendState *state)
+{
+	state->current = NO_MATCHING_SUBPLANS;
+}
+
+static void
+choose_next_subplan_for_worker(ChunkAppendState *state)
+{
+	LWLockAcquire(state->lock, LW_EXCLUSIVE);
+
+	state->current = get_next_subplan(state, state->pstate->last_plan);
+	state->pstate->last_plan = state->current;
+
+	LWLockRelease(state->lock);
+}
+
+/*
+ * Clean up any private data associated with the CustomScanState.
+ *
+ * This method is required, but it does not need to do anything if there
+ * is no associated data or it will be cleaned up automatically.
+ */
 static void
 chunk_append_end(CustomScanState *node)
 {
@@ -378,6 +439,9 @@ chunk_append_end(CustomScanState *node)
 	}
 }
 
+/*
+ * Rewind the current scan to the beginning and prepare to rescan the relation.
+ */
 static void
 chunk_append_rescan(CustomScanState *node)
 {
@@ -402,6 +466,98 @@ chunk_append_rescan(CustomScanState *node)
 		state->valid_subplans = NULL;
 		state->runtime_initialized = false;
 	}
+}
+
+/*
+ * Estimate the amount of dynamic shared memory that will be required
+ * for parallel operation.
+ * This may be higher than the amount that will actually be used,
+ * but it must not be lower. The return value is in bytes.
+ * This callback is optional, and need only be supplied if this
+ * custom scan provider supports parallel execution.
+ */
+static Size
+chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
+{
+	return sizeof(ParallelChunkAppendState);
+}
+
+/*
+ * Initialize the dynamic shared memory that will be required for
+ * parallel operation.
+ * coordinate points to a shared memory area of size equal to the return
+ * value of EstimateDSMCustomScan.
+ * This callback is optional, and need only be supplied if this custom scan
+ * provider supports parallel execution.
+ */
+static void
+chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
+{
+	ChunkAppendState *state = (ChunkAppendState *) node;
+	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
+
+	memset(pstate, 0, node->pscan_len);
+
+	state->lock = chunk_append_get_lock_pointer();
+	pstate->last_plan = INVALID_SUBPLAN_INDEX;
+
+	state->choose_next_subplan = choose_next_subplan_for_leader;
+	state->current = INVALID_SUBPLAN_INDEX;
+	state->pstate = pstate;
+}
+
+/*
+ * Re-initialize the dynamic shared memory required for parallel operation
+ * when the custom-scan plan node is about to be re-scanned.
+ * This callback is optional, and need only be supplied if this custom scan
+ * provider supports parallel execution.
+ * Recommended practice is that this callback reset only shared state,
+ * while the ReScanCustomScan callback resets only local state.
+ * Currently, this callback will be called before ReScanCustomScan,
+ * but it's best not to rely on that ordering.
+ */
+#if !PG96
+static void
+chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
+{
+	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
+
+	pstate->last_plan = INVALID_SUBPLAN_INDEX;
+}
+#endif
+
+/*
+ * Initialize a parallel worker's local state based on the shared state
+ * set up by the leader during InitializeDSMCustomScan.
+ *
+ * This callback is optional, and need only be supplied if this custom scan
+ * provider supports parallel execution.
+ */
+static void
+chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordinate)
+{
+	ChunkAppendState *state = (ChunkAppendState *) node;
+	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
+
+	state->lock = chunk_append_get_lock_pointer();
+	state->choose_next_subplan = choose_next_subplan_for_worker;
+	state->current = INVALID_SUBPLAN_INDEX;
+	state->pstate = pstate;
+}
+
+/*
+ * get a pointer to the LWLock used for coordinating
+ * parallel workers
+ */
+static LWLock *
+chunk_append_get_lock_pointer()
+{
+	LWLock **lock = (LWLock **) find_rendezvous_variable(RENDEZVOUS_CHUNK_APPEND_LWLOCK);
+
+	if (*lock == NULL)
+		elog(ERROR, "LWLock for coordinating parallel workers not initialized");
+
+	return *lock;
 }
 
 /*

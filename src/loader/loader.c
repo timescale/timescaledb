@@ -21,16 +21,17 @@
 #include <commands/defrem.h>
 #include <access/parallel.h>
 
-#include "../extension_utils.c"
-#include "../export.h"
-#include "../compat.h"
-#include "../extension_constants.h"
+#include "extension_utils.c"
+#include "export.h"
+#include "compat.h"
+#include "extension_constants.h"
 
-#include "loader.h"
-#include "bgw_counter.h"
-#include "bgw_launcher.h"
-#include "bgw_message_queue.h"
-#include "bgw_interface.h"
+#include "loader/loader.h"
+#include "loader/bgw_counter.h"
+#include "loader/bgw_interface.h"
+#include "loader/bgw_launcher.h"
+#include "loader/bgw_message_queue.h"
+#include "loader/lwlocks.h"
 
 /*
  * Loading process:
@@ -470,6 +471,7 @@ timescale_shmem_startup_hook(void)
 		prev_shmem_startup_hook();
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
+	ts_lwlocks_shmem_startup();
 }
 
 static void
@@ -493,6 +495,7 @@ _PG_init(void)
 
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
+	ts_lwlocks_shmem_alloc();
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();

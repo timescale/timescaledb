@@ -38,7 +38,7 @@ has_joins(FromExpr *jointree)
 
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
-							bool ordered, List *nested_oids)
+							bool parallel_aware, bool ordered, List *nested_oids)
 {
 	ChunkAppendPath *path;
 	ListCell *lc;
@@ -53,7 +53,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	path->cpath.path.pathtarget = rel->reltarget;
 	path->cpath.path.param_info = subpath->param_info;
 
-	path->cpath.path.parallel_aware = false;
+	path->cpath.path.parallel_aware = ts_guc_enable_parallel_chunk_append ? parallel_aware : false;
 	path->cpath.path.parallel_safe = subpath->parallel_safe;
 	path->cpath.path.parallel_workers = subpath->parallel_workers;
 

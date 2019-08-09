@@ -11,6 +11,11 @@
 #include <nodes/extensible.h>
 #include <nodes/relation.h>
 
+typedef struct ParallelChunkAppendState
+{
+	int last_plan;
+} ParallelChunkAppendState;
+
 typedef struct ChunkAppendState
 {
 	CustomScanState csstate;
@@ -48,6 +53,10 @@ typedef struct ChunkAppendState
 	/* number of loops and exclusions for EXPLAIN */
 	int runtime_number_loops;
 	int runtime_number_exclusions;
+
+	LWLock *lock;
+	ParallelChunkAppendState *pstate;
+	void (*choose_next_subplan)(struct ChunkAppendState *);
 
 } ChunkAppendState;
 
