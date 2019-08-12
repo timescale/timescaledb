@@ -40,6 +40,21 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
  
 (1 row)
 
+\x
+select * from timescaledb_information.compressed_chunk_size;
+-[ RECORD 1 ]------------+---------------------------------------
+hypertable_name          | foo
+chunk_name               | _timescaledb_internal._hyper_1_2_chunk
+uncompressed_heap_bytes  | 8192 bytes
+uncompressed_index_bytes | 16 kB
+uncompressed_toast_bytes | 0 bytes
+uncompressed_total_bytes | 24 kB
+compressed_heap_bytes    | 8192 bytes
+compressed_index_bytes   | 0 bytes
+compressed_toast_bytes   | 8192 bytes
+compressed_total_bytes   | 16 kB
+
+\x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
  compress_chunk 
 ----------------
@@ -83,3 +98,78 @@ where ch1.compressed_chunk_id = ch2.id;
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 ERROR:  chunk is already compressed
+-- TEST3 check if compress data from views is accurate
+CREATE TABLE conditions (
+      time        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::interval);
+    create_hypertable    
+-------------------------
+ (3,public,conditions,t)
+(1 row)
+
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name) 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+ compress_chunk 
+----------------
+ 
+ 
+(2 rows)
+
+\x
+select * from timescaledb_information.compressed_chunk_size
+where hypertable_name::text like 'conditions'
+order by hypertable_name, chunk_name;
+-[ RECORD 1 ]------------+---------------------------------------
+hypertable_name          | conditions
+chunk_name               | _timescaledb_internal._hyper_3_7_chunk
+uncompressed_heap_bytes  | 8192 bytes
+uncompressed_index_bytes | 16 kB
+uncompressed_toast_bytes | 8192 bytes
+uncompressed_total_bytes | 32 kB
+compressed_heap_bytes    | 8192 bytes
+compressed_index_bytes   | 0 bytes
+compressed_toast_bytes   | 8192 bytes
+compressed_total_bytes   | 16 kB
+-[ RECORD 2 ]------------+---------------------------------------
+hypertable_name          | conditions
+chunk_name               | _timescaledb_internal._hyper_3_8_chunk
+uncompressed_heap_bytes  | 8192 bytes
+uncompressed_index_bytes | 16 kB
+uncompressed_toast_bytes | 8192 bytes
+uncompressed_total_bytes | 32 kB
+compressed_heap_bytes    | 8192 bytes
+compressed_index_bytes   | 0 bytes
+compressed_toast_bytes   | 8192 bytes
+compressed_total_bytes   | 16 kB
+
+select * from timescaledb_information.compressed_hypertable_size
+order by hypertable_name;
+-[ RECORD 1 ]------------+-----------
+hypertable_name          | foo
+uncompressed_heap_bytes  | 16 kB
+uncompressed_index_bytes | 32 kB
+uncompressed_toast_bytes | 0 bytes
+uncompressed_total_bytes | 48 kB
+compressed_heap_bytes    | 16 kB
+compressed_index_bytes   | 0 bytes
+compressed_toast_bytes   | 16 kB
+compressed_total_bytes   | 32 kB
+-[ RECORD 2 ]------------+-----------
+hypertable_name          | conditions
+uncompressed_heap_bytes  | 16 kB
+uncompressed_index_bytes | 32 kB
+uncompressed_toast_bytes | 16 kB
+uncompressed_total_bytes | 64 kB
+compressed_heap_bytes    | 16 kB
+compressed_index_bytes   | 0 bytes
+compressed_toast_bytes   | 16 kB
+compressed_total_bytes   | 32 kB
+
+\x

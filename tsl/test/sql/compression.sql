@@ -21,6 +21,9 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
+\x
+select * from timescaledb_information.compressed_chunk_size;
+\x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
 \x
 select * from _timescaledb_catalog.compression_chunk_size
@@ -35,3 +38,25 @@ where ch1.compressed_chunk_id = ch2.id;
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
+-- TEST3 check if compress data from views is accurate
+CREATE TABLE conditions (
+      time        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::interval);
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
+
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name) 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+
+\x
+select * from timescaledb_information.compressed_chunk_size
+where hypertable_name::text like 'conditions'
+order by hypertable_name, chunk_name;
+select * from timescaledb_information.compressed_hypertable_size
+order by hypertable_name;
+\x
