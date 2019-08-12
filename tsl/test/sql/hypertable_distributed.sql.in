@@ -364,7 +364,8 @@ SELECT * FROM disttable;
 $$);
 
 -- The hypertable view also shows no chunks and no data
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable
+ORDER BY table_schema, table_name;
 
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),

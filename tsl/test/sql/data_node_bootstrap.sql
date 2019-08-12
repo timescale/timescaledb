@@ -58,6 +58,9 @@ WHERE e.extnamespace = n.oid;
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
 SELECT * FROM show_data_nodes();
+\set ON_ERROR_STOP 0
+SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
+\set ON_ERROR_STOP 1
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --

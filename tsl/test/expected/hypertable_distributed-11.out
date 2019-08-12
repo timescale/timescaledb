@@ -1083,7 +1083,8 @@ time|device|temp|Color
 (1 row)
 
 -- The hypertable view also shows no chunks and no data
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable
+ORDER BY table_schema, table_name;
  table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
 --------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------+-------------
  public       | disttable       | default_cluster_user |              2 |          0 |            |            |            |            | t

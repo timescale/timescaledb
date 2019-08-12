@@ -45,6 +45,8 @@
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
+#define ERRCODE_DUPLICATE_DATABASE_STR "42P04"
+
 /*
  * Verify that server is TimescaleDB server and perform optional ACL check
  */
@@ -252,7 +254,7 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 
 static bool
 data_node_bootstrap_database(const char *node_name, const char *host, int32 port,
-							 const char *dbname, const char *username, bool if_not_exists,
+							 const char *dbname, const char *username,
 							 const char *bootstrap_database, const char *bootstrap_user)
 {
 	/* Required database privileges. Need to be a comma-separated list of
@@ -290,7 +292,7 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 		if (PQresultStatus(res) != PGRES_COMMAND_OK)
 		{
 			const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-			if (strcmp(sqlstate, "42P04" /* DUPLICATE DATABASE */) == 0)
+			if (sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_DATABASE_STR) == 0)
 			{
 				/* Since we are not trying to create anything in the database
 				 * later in the procedure, we need to check that it has the
@@ -304,24 +306,29 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 				 * like that, so we need to check that we have sufficient
 				 * privileges for creating chunks in the database.
 				 */
+				const char *request = psprintf("SELECT has_database_privilege(%s, %s, %s)",
+											   quote_literal_cstr(username),
+											   quote_literal_cstr(dbname),
+											   quote_literal_cstr(DATABASE_PRIVILEGES));
 
-				char *request = psprintf("SELECT has_database_privilege(%s, %s, %s)",
-										 quote_literal_cstr(username),
-										 quote_literal_cstr(dbname),
-										 quote_literal_cstr(DATABASE_PRIVILEGES));
-
-				PGresult *res = remote_connection_query_ok_result(conn, request);
+				remote_connection_result_close(res);
+				res = remote_connection_query_ok_result(conn, request);
 				Assert(PQntuples(res) > 0);
 				if (strcmp(PQgetvalue(res, 0, 0), "t") != 0)
 				{
+					remote_connection_result_close(res);
 					ereport(ERROR,
 							(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-							 errmsg("Insufficient privileges for user \"%s\" on remote node "
+							 errmsg("insufficient privileges for user \"%s\" on remote node "
 									"database \"%s\"",
 									username,
 									dbname),
+							 errdetail("Using database=\"%s\", user=\"%s\", privileges=\"%s\".",
+									   dbname,
+									   username,
+									   DATABASE_PRIVILEGES),
 							 errhint("Use \"GRANT %s ON DATABASE %s TO %s\" on remote node to "
-									 "grant correct privileges",
+									 "grant correct privileges.",
 									 quote_literal_cstr(DATABASE_PRIVILEGES),
 									 quote_identifier(dbname),
 									 quote_identifier(username))));
@@ -335,7 +342,9 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 					 * In this case, we will log a notice and proceed since it is
 					 * not an error if the database already existed on the remote
 					 * node. */
-					elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
+					elog(NOTICE,
+						 "database \"%s\" already exists on data node, not creating it",
+						 dbname);
 				}
 			}
 			else
@@ -449,7 +458,6 @@ data_node_bootstrap(const char *node_name, const char *host, int32 port, const c
 										   port,
 										   dbname,
 										   username,
-										   if_not_exists,
 										   bootstrap_database,
 										   bootstrap_user);
 
