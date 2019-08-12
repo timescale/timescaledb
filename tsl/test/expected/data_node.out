@@ -41,7 +41,7 @@ SELECT * FROM add_data_node('data_node_2', database => 'data_node_2',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             if_not_exists => true);
 NOTICE:  data node "data_node_2" already exists, skipping
-NOTICE:  database "data_node_2" already exists on data node, skipping
+NOTICE:  database "data_node_2" already exists on data node, not creating it
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | f            | f                | f
@@ -572,7 +572,7 @@ AND column_name = 'device';
 SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             if_not_exists => true);
-NOTICE:  database "data_node_3" already exists on data node, skipping
+NOTICE:  database "data_node_3" already exists on data node, not creating it
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | f                | f

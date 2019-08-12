@@ -23,21 +23,21 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
 AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
-NOTICE:  database "db_remote_txn_resolve" already exists on data node, skipping
+NOTICE:  database "db_remote_txn_resolve" already exists on data node, not creating it
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
-NOTICE:  database "db_remote_txn_resolve" already exists on data node, skipping
+NOTICE:  database "db_remote_txn_resolve" already exists on data node, not creating it
  bool 
 ------
  t
 (1 row)
 
 SELECT true FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
-NOTICE:  database "db_remote_txn_resolve" already exists on data node, skipping
+NOTICE:  database "db_remote_txn_resolve" already exists on data node, not creating it
  bool 
 ------
  t
