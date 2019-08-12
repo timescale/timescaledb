@@ -138,5 +138,37 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold as ct
     ON ( cagg.mat_hypertable_id = ct.materialization_id);
 
+CREATE OR REPLACE VIEW  timescaledb_information.compressed_chunk_size
+AS
+  SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
+  format('%1$I.%2$I', srcch.schema_name, srcch.table_name)::regclass as chunk_name,
+  pg_size_pretty(map.uncompressed_heap_size) as uncompressed_heap_bytes,
+  pg_size_pretty(map.uncompressed_index_size) as uncompressed_index_bytes,
+  pg_size_pretty(map.uncompressed_toast_size) as uncompressed_toast_bytes,
+  pg_size_pretty(map.uncompressed_heap_size + map.uncompressed_toast_size + map.uncompressed_index_size) as uncompressed_total_bytes,
+  pg_size_pretty(map.compressed_heap_size) as compressed_heap_bytes,
+  pg_size_pretty(map.compressed_index_size) as compressed_index_bytes,
+  pg_size_pretty(map.compressed_toast_size) as compressed_toast_bytes,
+  pg_size_pretty(map.compressed_heap_size + map.compressed_toast_size + map.compressed_index_size) as compressed_total_bytes
+ FROM _timescaledb_catalog.chunk srcch, _timescaledb_catalog.compression_chunk_size map,
+      _timescaledb_catalog.hypertable srcht
+ where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id;
+
+CREATE OR REPLACE VIEW  timescaledb_information.compressed_hypertable_size
+AS
+  SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
+  pg_size_pretty(sum(map.uncompressed_heap_size)) as uncompressed_heap_bytes,
+  pg_size_pretty(sum(map.uncompressed_index_size)) as uncompressed_index_bytes,
+  pg_size_pretty(sum(map.uncompressed_toast_size)) as uncompressed_toast_bytes,
+  pg_size_pretty(sum(map.uncompressed_heap_size) + sum(map.uncompressed_toast_size) + sum(map.uncompressed_index_size)) as uncompressed_total_bytes,
+  pg_size_pretty(sum(map.compressed_heap_size)) as compressed_heap_bytes,
+  pg_size_pretty(sum(map.compressed_index_size)) as compressed_index_bytes,
+  pg_size_pretty(sum(map.compressed_toast_size)) as compressed_toast_bytes,
+  pg_size_pretty(sum(map.compressed_heap_size) + sum(map.compressed_toast_size) + sum(map.compressed_index_size)) as compressed_total_bytes
+ FROM _timescaledb_catalog.chunk srcch, _timescaledb_catalog.compression_chunk_size map,
+      _timescaledb_catalog.hypertable srcht
+ where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
+ group by srcht.id;
+
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
