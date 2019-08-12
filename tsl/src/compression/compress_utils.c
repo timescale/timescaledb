@@ -11,6 +11,8 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/elog.h>
+#include <utils/fmgrprotos.h>
+#include <utils/builtins.h>
 
 #include "chunk.h"
 #include "errors.h"
@@ -27,6 +29,76 @@ typedef struct CompressChunkCxt
 	Chunk *srcht_chunk;		 /* chunk from srcht */
 	Hypertable *compress_ht; /*compressed table for srcht */
 } CompressChunkCxt;
+
+typedef struct
+{
+	int64 heap_size;
+	int64 toast_size;
+	int64 index_size;
+} ChunkSize;
+
+static ChunkSize
+compute_chunk_size(Oid chunk_relid)
+{
+	int64 tot_size;
+	int i = 0;
+	ChunkSize ret;
+	Datum relid = ObjectIdGetDatum(chunk_relid);
+	char *filtyp[] = { "main", "init", "fsm", "vm" };
+	/* for heap get size from fsm, vm, init and main as this is included in
+	 * pg_table_size calculation
+	 */
+	ret.heap_size = 0;
+	for (i = 0; i < 4; i++)
+	{
+		ret.heap_size += DatumGetInt64(
+			DirectFunctionCall2(pg_relation_size, relid, CStringGetTextDatum(filtyp[i])));
+	}
+	ret.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, relid));
+	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
+	ret.toast_size = tot_size - ret.heap_size;
+	return ret;
+}
+
+static void
+compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
+									  int32 compress_chunk_id, ChunkSize *compress_size)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+	TupleDesc desc;
+	CatalogSecurityContext sec_ctx;
+
+	Datum values[Natts_compression_chunk_size];
+	bool nulls[Natts_compression_chunk_size] = { false };
+
+	rel = heap_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
+	desc = RelationGetDescr(rel);
+
+	memset(values, 0, sizeof(values));
+
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_chunk_id)] =
+		Int32GetDatum(src_chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_chunk_id)] =
+		Int32GetDatum(compress_chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)] =
+		Int64GetDatum(src_size->heap_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)] =
+		Int64GetDatum(src_size->toast_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_index_size)] =
+		Int64GetDatum(src_size->index_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)] =
+		Int64GetDatum(compress_size->heap_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)] =
+		Int64GetDatum(compress_size->toast_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)] =
+		Int64GetDatum(compress_size->index_size);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_close(rel, RowExclusiveLock);
+}
 
 static void
 compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
@@ -74,6 +146,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	List *htcols_list = NIL;
 	const ColumnCompressionInfo **colinfo_array;
 	int i = 0, htcols_listlen;
+	ChunkSize before_size, after_size;
 
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
@@ -95,10 +168,16 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
 		colinfo_array[i++] = fd;
 	}
+	before_size = compute_chunk_size(cxt.srcht_chunk->table_id);
 	compress_chunk(cxt.srcht_chunk->table_id,
 				   compress_ht_chunk->table_id,
 				   colinfo_array,
 				   htcols_listlen);
+	after_size = compute_chunk_size(compress_ht_chunk->table_id);
+	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
+										  &before_size,
+										  compress_ht_chunk->fd.id,
+										  &after_size);
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id, false);
 	ts_cache_release(hcache);
 }

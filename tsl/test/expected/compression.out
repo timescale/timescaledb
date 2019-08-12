@@ -33,6 +33,7 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
              1 | d       |                        4 |                        |                    2 | t           | f
 (4 rows)
 
+-- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
  compress_chunk 
 ----------------
@@ -45,6 +46,29 @@ select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
  
 (1 row)
 
+\x
+select * from _timescaledb_catalog.compression_chunk_size
+order by chunk_id;
+-[ RECORD 1 ]-----------+------
+chunk_id                | 1
+compressed_chunk_id     | 6
+uncompressed_heap_size  | 8192
+uncompressed_toast_size | 0
+uncompressed_index_size | 16384
+compressed_heap_size    | 8192
+compressed_toast_size   | 8192
+compressed_index_size   | 0
+-[ RECORD 2 ]-----------+------
+chunk_id                | 2
+compressed_chunk_id     | 5
+uncompressed_heap_size  | 8192
+uncompressed_toast_size | 0
+uncompressed_index_size | 16384
+compressed_heap_size    | 8192
+compressed_toast_size   | 8192
+compressed_index_size   | 0
+
+\x
 select  ch1.id, ch1.schema_name, ch1.table_name ,  ch2.table_name as compress_table
 from
 _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
