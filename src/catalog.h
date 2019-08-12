@@ -53,6 +53,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	HYPERTABLE_COMPRESSION,
+	COMPRESSION_CHUNK_SIZE,
 	BGW_COMPRESS_CHUNKS_POLICY,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -1086,6 +1087,50 @@ typedef enum Anum_hypertable_compression_pkey
 } Anum_hypertable_compression_pkey;
 
 #define Natts_hypertable_compression_pkey (_Anum_hypertable_compression_pkey_max - 1)
+
+#define COMPRESSION_CHUNK_SIZE_TABLE_NAME "compression_chunk_size"
+typedef enum Anum_compression_chunk_size
+{
+	Anum_compression_chunk_size_chunk_id = 1,
+	Anum_compression_chunk_size_compressed_chunk_id,
+	Anum_compression_chunk_size_uncompressed_heap_size,
+	Anum_compression_chunk_size_uncompressed_toast_size,
+	Anum_compression_chunk_size_uncompressed_index_size,
+	Anum_compression_chunk_size_compressed_heap_size,
+	Anum_compression_chunk_size_compressed_toast_size,
+	Anum_compression_chunk_size_compressed_index_size,
+	_Anum_compression_chunk_size_max,
+} Anum_compression_chunk_size;
+
+#define Natts_compression_chunk_size (_Anum_compression_chunk_size_max - 1)
+
+typedef struct FormData_compression_chunk_size
+{
+	int32 chunk_id;
+	int32 compressed_chunk_id;
+	int64 uncompressed_heap_size;
+	int64 uncompressed_toast_size;
+	int64 uncompressed_index_size;
+	int64 compressed_heap_size;
+	int64 compressed_toast_size;
+	int64 compressed_index_size;
+} FormData_compression_chunk_size;
+
+typedef FormData_compression_chunk_size *Form_compression_chunk_size;
+
+enum
+{
+	COMPRESSION_CHUNK_SIZE_PKEY = 0,
+	_MAX_COMPRESSION_CHUNK_SIZE_INDEX,
+};
+typedef enum Anum_compression_chunk_size_pkey
+{
+	Anum_compression_chunk_size_pkey_chunk_id = 1,
+	Anum_compression_chunk_size_pkey_compressed_chunk_id,
+	_Anum_compression_chunk_size_pkey_max,
+} Anum_compression_chunk_size_pkey;
+
+#define Natts_compression_chunk_size_pkey (_Anum_compression_chunk_size_pkey_max - 1)
 
 #define BGW_COMPRESS_CHUNKS_POLICY_TABLE_NAME "bgw_compress_chunks_policy"
 typedef enum Anum_bgw_compress_chunks_policy

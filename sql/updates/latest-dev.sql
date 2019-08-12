@@ -142,6 +142,20 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
 
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
+
+    chunk_id            INTEGER REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+    compressed_chunk_id   INTEGER REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+    uncompressed_heap_size BIGINT NOT NULL,
+    uncompressed_toast_size BIGINT NOT NULL,
+    uncompressed_index_size BIGINT NOT NULL,
+    compressed_heap_size BIGINT NOT NULL,
+    compressed_toast_size BIGINT NOT NULL,
+    compressed_index_size BIGINT NOT NULL,
+    PRIMARY KEY( chunk_id, compressed_chunk_id)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
+
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_compress_chunks_policy(
 	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
 	older_than BIGINT NOT NULL,
@@ -154,6 +168,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_compress_chu
 
 GRANT SELECT ON _timescaledb_catalog.compression_algorithm TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.hypertable_compression TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.compression_chunk_size TO PUBLIC;
 GRANT SELECT ON _timescaledb_config.bgw_compress_chunks_policy TO PUBLIC;
 
 CREATE TYPE _timescaledb_internal.compressed_data;
