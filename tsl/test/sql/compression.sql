@@ -50,8 +50,32 @@ alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
 
-select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name) 
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+LIMIT 1 \gset
+
+SELECT count(*) from :CHUNK_NAME;
+
+select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
+
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' limit 1;
+
+--test that only one chunk was affected
+--note tables with 0 rows will not show up in here.
+select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
+
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+
+select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
+
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+
+SELECT count(*) from :CHUNK_NAME;
+SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 
 \x
 select * from timescaledb_information.compressed_chunk_size

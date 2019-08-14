@@ -8,13 +8,17 @@
 
 #include <access/heapam.h>
 #include <access/htup_details.h>
+#include <access/multixact.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
+#include <catalog/index.h>
+#include <catalog/heap.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
+#include <storage/predicate.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
@@ -116,6 +120,46 @@ static void row_compressor_finish(RowCompressor *row_compressor);
  ** compress_chunk **
  ********************/
 
+/* Truncate the relation WITHOUT applying triggers. This is the
+ * main difference with ExecuteTruncate. Triggers aren't applied
+ * because the data remains, just in compressed form. Also don't
+ * restart sequences. Use the transactional branch through ExecuteTruncate.
+ */
+static void
+truncate_relation(Oid table_oid)
+{
+	List *fks = heap_truncate_find_FKs(list_make1_oid(table_oid));
+	/* Take an access exclusive lock now. Note that this may very well
+	 *  be a lock upgrade. */
+	Relation rel = relation_open(table_oid, AccessExclusiveLock);
+	MultiXactId minmulti;
+	Oid toast_relid;
+
+	/* Chunks should never have fks into them, but double check */
+	if (fks != NIL)
+		elog(ERROR, "found a FK into a chunk while truncating");
+
+	CheckTableForSerializableConflictIn(rel);
+
+	minmulti = GetOldestMultiXactId();
+
+	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence, RecentXmin, minmulti);
+
+	toast_relid = rel->rd_rel->reltoastrelid;
+
+	heap_close(rel, NoLock);
+
+	if (OidIsValid(toast_relid))
+	{
+		rel = relation_open(toast_relid, AccessExclusiveLock);
+		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence, RecentXmin, minmulti);
+		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
+		heap_close(rel, NoLock);
+	}
+
+	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);
+}
+
 void
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
 			   int num_compression_infos)
@@ -166,6 +210,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	row_compressor_finish(&row_compressor);
 
 	tuplesort_end(sorted_rel);
+
+	truncate_relation(in_table);
 
 	RelationClose(out_rel);
 	RelationClose(in_rel);
@@ -785,6 +831,8 @@ decompress_chunk(Oid in_table, Oid out_table)
 		heap_endscan(heapScan);
 		FreeBulkInsertState(decompressor.bistate);
 	}
+
+	truncate_relation(in_table);
 
 	RelationClose(out_rel);
 	RelationClose(in_rel);

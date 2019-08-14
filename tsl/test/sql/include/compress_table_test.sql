@@ -5,7 +5,11 @@
 \set ECHO errors
 
 TRUNCATE TABLE compressed;
+CREATE TABLE tmp AS SELECT * FROM :"DATA_IN";
 SELECT ts_compress_table(:'DATA_IN'::REGCLASS, 'compressed'::REGCLASS, :'COMPRESSION_INFO'::_timescaledb_catalog.hypertable_compression[]);
+--compression truncates the DATA_IN table, restore the data
+INSERT INTO :"DATA_IN" SELECT * FROM tmp;
+DROP TABLE tmp;
 
 --test that decompression gives same result in forward direction
 WITH original AS (
