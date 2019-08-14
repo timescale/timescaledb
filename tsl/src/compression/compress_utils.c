@@ -11,7 +11,6 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/elog.h>
-#include <utils/fmgrprotos.h>
 #include <utils/builtins.h>
 
 #include "chunk.h"
@@ -22,6 +21,11 @@
 #include "create.h"
 #include "compress_utils.h"
 #include "compression.h"
+#include "compat.h"
+
+#if !PG96
+#include <utils/fmgrprotos.h>
+#endif
 
 typedef struct CompressChunkCxt
 {

@@ -389,13 +389,17 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	bool first_iteration = true;
 	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
+#if !PG96
 											false /*=copy*/,
+#endif
 											slot,
 											NULL /*=abbrev*/);
 		 got_tuple;
 		 got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
+#if !PG96
 											false /*=copy*/,
+#endif
 											slot,
 											NULL /*=abbrev*/))
 	{

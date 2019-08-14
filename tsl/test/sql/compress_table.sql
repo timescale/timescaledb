@@ -67,7 +67,7 @@ CREATE TABLE compressed(
 SELECT ARRAY[ord('time', :deltadelta, 0), seg('device', 0), com('data', :deltadelta), com('floats', :gorilla), com('nulls', :array), com('texts', :dictionary)]::_timescaledb_catalog.hypertable_compression[] AS "COMPRESSION_INFO" \gset
 
 -- TODO NULL decompression doesn't quite work
-\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(data::_timescaledb_internal.compressed_data, NULL::INT) d, _timescaledb_internal.decompress_forward(floats::_timescaledb_internal.compressed_data, NULL::FLOAT(26)) f, NULL, _timescaledb_internal.decompress_forward(texts::_timescaledb_internal.compressed_data, NULL::TEXT) e
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(time::_timescaledb_internal.compressed_data, NULL::INT) t, device, _timescaledb_internal.decompress_forward(data::_timescaledb_internal.compressed_data, NULL::INT) d, _timescaledb_internal.decompress_forward(floats::_timescaledb_internal.compressed_data, NULL::FLOAT(26)) f,  (NULL::text) n, _timescaledb_internal.decompress_forward(texts::_timescaledb_internal.compressed_data, NULL::TEXT) e
 
 INSERT INTO uncompressed
     SELECT generate_series( 1, 5), d, d % 3, d / 3.0, NULL, d
