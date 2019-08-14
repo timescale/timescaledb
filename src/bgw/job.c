@@ -388,7 +388,7 @@ bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 	/* get job lock before relation lock */
 	get_job_lock_for_delete(job_id);
 
-	scanctx = (ScannerCtx) {
+	scanctx = (ScannerCtx){
 		.table = catalog_get_table_id(catalog, BGW_JOB),
 		.index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
 		.nkeys = 1,
@@ -404,6 +404,14 @@ bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 	return ts_scanner_scan(&scanctx);
 }
 
+/*
+ * This function will try to delete the job identified by `job_id`. If the job is currently running,
+ * this function will send a `SIGINT` to the job, and wait for the job to terminate before deleting
+ * the job. In the event that it cannot  send the signal (for instance, if the job is not in a
+ * transaction, we have no way to send the signal), it will still wait for the job to terminate and
+ * release the job lock, or will ERROR due to a lock or deadlock timeout. In this case,  the user
+ * has to  manually determine the `pid` of the BGW and send an `SIGINT` or a `SIGKILL`.
+ */
 bool
 ts_bgw_job_delete_by_id(int32 job_id)
 {

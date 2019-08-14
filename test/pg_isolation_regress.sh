@@ -69,9 +69,10 @@ else
     # passing in only those tests from the directory which are found in TESTS
     FILTER=${TESTS}
     TESTS=
-    for t in ${SPECS_DIR}/*.spec; do
+    for t in ${SPECS_DIR}/*.spec*; do
         t=${t##${SPECS_DIR}/}
         t=${t%.spec}
+        t=${t%.spec.in}
 
         if contains "${FILTER}" "${t}" && ! contains "${SKIPS}" "${t}"; then
             TESTS="${TESTS} $t"

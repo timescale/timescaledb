@@ -314,8 +314,8 @@ if (UNIX)
   add_subdirectory(scripts)
 endif (UNIX)
 
-add_subdirectory(test)
 add_subdirectory(sql)
+add_subdirectory(test)
 add_subdirectory(src)
 
 option(APACHE_ONLY "only compile apache code" off)
