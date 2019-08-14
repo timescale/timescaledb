@@ -111,6 +111,8 @@ params_open_wrapper()
 			StartTransactionCommand();
 #endif
 		seg = dsm_attach(handle);
+		if (seg == NULL)
+			elog(ERROR, "got NULL segment in params_open_wrapper");
 #if PG96
 		dsm_pin_mapping(seg);
 		if (!started)
