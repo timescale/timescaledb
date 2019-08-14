@@ -10,6 +10,7 @@
 #include <storage/ipc.h>
 #include <storage/latch.h>
 #include <storage/lwlock.h>
+#include <storage/lmgr.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
 #include <utils/guc.h>
@@ -44,6 +45,8 @@ typedef enum TestJobType
 	TEST_JOB_TYPE_JOB_2_ERROR,
 	TEST_JOB_TYPE_JOB_3_LONG,
 	TEST_JOB_TYPE_JOB_4,
+	TEST_JOB_TYPE_JOB_5_LOCK,
+	TEST_JOB_TYPE_JOB_6_LOCK_NOTXN,
 	_MAX_TEST_JOB_TYPE
 } TestJobType;
 
@@ -52,6 +55,8 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_2_ERROR] = "bgw_test_job_2_error",
 	[TEST_JOB_TYPE_JOB_3_LONG] = "bgw_test_job_3_long",
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
+	[TEST_JOB_TYPE_JOB_5_LOCK] = "bgw_test_job_5_lock",
+	[TEST_JOB_TYPE_JOB_6_LOCK_NOTXN] = "bgw_test_job_6_lock_notxn"
 };
 
 static char *
@@ -62,6 +67,11 @@ serialize_test_parameters(int32 ttl)
 	JsonbParseState *parseState = NULL;
 	Jsonb *jb;
 	StringInfo jtext = makeStringInfo();
+	JsonbValue user_oid;
+
+	user_oid.type = jbvNumeric;
+	user_oid.val.numeric =
+		DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum((int32) GetUserId())));
 
 	ttl_value.type = jbvNumeric;
 	ttl_value.val.numeric = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(ttl)));
@@ -69,6 +79,7 @@ serialize_test_parameters(int32 ttl)
 	result = pushJsonbValue(&parseState, WJB_BEGIN_ARRAY, NULL);
 
 	result = pushJsonbValue(&parseState, WJB_ELEM, &ttl_value);
+	result = pushJsonbValue(&parseState, WJB_ELEM, &user_oid);
 
 	result = pushJsonbValue(&parseState, WJB_END_ARRAY, NULL);
 
@@ -80,22 +91,28 @@ serialize_test_parameters(int32 ttl)
 }
 
 static void
-deserialize_test_parameters(char *params, int32 *ttl)
+deserialize_test_parameters(char *params, int32 *ttl, Oid *user_oid)
 {
 	Jsonb *jb = (Jsonb *) DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(params)));
 	JsonbValue *ttl_v = getIthJsonbValueFromContainer(&jb->root, 0);
+	JsonbValue *user_v = getIthJsonbValueFromContainer(&jb->root, 1);
 	Numeric ttl_numeric;
+	Numeric user_numeric;
 
 	Assert(ttl_v->type == jbvNumeric);
+	Assert(user_v->type == jbvNumeric);
 
 	ttl_numeric = ttl_v->val.numeric;
+	user_numeric = user_v->val.numeric;
 	*ttl = DatumGetInt32(DirectFunctionCall1(numeric_int4, NumericGetDatum(ttl_numeric)));
+	*user_oid =
+		(Oid) DatumGetInt32(DirectFunctionCall1(numeric_int4, NumericGetDatum(user_numeric)));
 }
 
 static Oid
 test_job_owner(BgwJob *job)
 {
-	return InvalidOid;
+	return GetUserId();
 }
 
 extern Datum
@@ -103,6 +120,7 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	int32 ttl;
+	Oid user_oid;
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
@@ -110,11 +128,12 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	BackgroundWorkerUnblockSignals();
 	ts_bgw_scheduler_setup_callbacks();
 
-	deserialize_test_parameters(MyBgworkerEntry->bgw_extra, &ttl);
+	deserialize_test_parameters(MyBgworkerEntry->bgw_extra, &ttl, &user_oid);
 
+	elog(WARNING, "scheduler user id %d", user_oid);
 	elog(WARNING, "running a test in the background: db=%d ttl=%d", db_oid, ttl);
 
-	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, InvalidOid);
+	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, user_oid);
 
 	StartTransactionCommand();
 	ts_params_get();
@@ -254,6 +273,40 @@ test_job_4(void)
 	return true;
 }
 
+static bool
+test_job_5_lock()
+{
+	BackgroundWorkerBlockSignals();
+	/* Use the default sig handlers */
+	BackgroundWorkerUnblockSignals();
+
+	elog(WARNING, "Before lock job 5");
+
+	/* have to have a txn, otherwise can't kill the process */
+	StartTransactionCommand();
+	DirectFunctionCall1(pg_advisory_lock_int8, Int64GetDatum(1));
+	CommitTransactionCommand();
+
+	elog(WARNING, "After lock job 5");
+	return true;
+}
+
+static bool
+test_job_6_lock_notxn()
+{
+	BackgroundWorkerBlockSignals();
+	/* Use the default sig handlers */
+	BackgroundWorkerUnblockSignals();
+
+	elog(WARNING, "Before lock job 6");
+
+	/* no txn */
+	DirectFunctionCall1(pg_advisory_lock_int8, Int64GetDatum(1));
+
+	elog(WARNING, "After lock job 5");
+	return true;
+}
+
 static TestJobType
 get_test_job_type_from_name(Name job_type_name)
 {
@@ -299,8 +352,15 @@ test_job_dispatcher(BgwJob *job)
 
 			return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
 		}
+		case TEST_JOB_TYPE_JOB_5_LOCK:
+			return test_job_5_lock();
+		case TEST_JOB_TYPE_JOB_6_LOCK_NOTXN:
+			return test_job_6_lock_notxn();
 		case _MAX_TEST_JOB_TYPE:
-			elog(ERROR, "unrecognized test job type: %s", NameStr(job->fd.job_type));
+			elog(ERROR,
+				 "unrecognized test job type: %s %d",
+				 NameStr(job->fd.job_type),
+				 get_test_job_type_from_name(&job->fd.job_type));
 	}
 	return false;
 }
