@@ -163,7 +163,12 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 
 	cc->numcols = 0;
 	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * tupdesc->natts);
-	cc->coldeflist = NIL;
+	cc->coldeflist = list_make1(
+		/* count of the number of uncompressed rows */
+		makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+					  INT4OID,
+					  -1 /* typemod */,
+					  0 /*collation*/));
 	colno = 0;
 	for (attno = 0; attno < tupdesc->natts; attno++)
 	{
@@ -172,6 +177,13 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		ColumnDef *coldef;
 		if (attr->attisdropped)
 			continue;
+		if (strncmp(NameStr(attr->attname),
+					COMPRESSION_COLUMN_METADATA_PREFIX,
+					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+			elog(ERROR,
+				 "cannot compress tables with reserved column prefix '%s'",
+				 COMPRESSION_COLUMN_METADATA_PREFIX);
+
 		namestrcpy(&cc->col_meta[colno].attname, NameStr(attr->attname));
 		if (segorder_colindex[attno] > 0)
 		{

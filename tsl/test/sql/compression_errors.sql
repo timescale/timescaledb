@@ -17,6 +17,11 @@ ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 select * from _timescaledb_catalog.hypertable_compression order by attname;
 
 -- Negative test cases ---
+
+create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
+ALTER TABLE reserved_column_prefix set (timescaledb.compress);
+
 --basic test with count
 create table foo (a integer, b integer, c integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);

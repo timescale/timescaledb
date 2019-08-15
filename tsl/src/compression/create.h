@@ -12,6 +12,9 @@
 #include "hypertable.h"
 #include "chunk.h"
 
+#define COMPRESSION_COLUMN_METADATA_PREFIX "_ts_meta_"
+#define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"
+
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
 Chunk *create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk);
