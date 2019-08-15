@@ -57,6 +57,18 @@ compressor_for_algorithm_and_type(CompressionAlgorithms algorithm, Oid type)
 	return definitions[algorithm].compressor_for_type(type);
 }
 
+DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithms algorithm,
+															 bool reverse))(Datum, Oid)
+{
+	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+		elog(ERROR, "invalid compression algorithm %d", algorithm);
+
+	if (reverse)
+		return definitions[algorithm].iterator_init_reverse;
+	else
+		return definitions[algorithm].iterator_init_forward;
+}
+
 typedef struct SegmentInfo
 {
 	Datum val;

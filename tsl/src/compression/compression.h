@@ -126,4 +126,7 @@ extern void compress_chunk(Oid in_table, Oid out_table,
 						   const ColumnCompressionInfo **column_compression_info, int num_columns);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
+extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
+	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
+
 #endif
