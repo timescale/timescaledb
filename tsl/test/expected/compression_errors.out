@@ -11,6 +11,15 @@ NOTICE:  adding not-null constraint to column "a"
  foo2
 (1 row)
 
+create table non_compressed (a integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('non_compressed', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+   table_name   
+----------------
+ non_compressed
+(1 row)
+
+insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ERROR:  cannot use the same column c in compress_orderby and compress_segmentby
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
@@ -67,3 +76,25 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c des
 ERROR:  unexpected token descend in compress_orderby list 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
 ERROR:  column c asc in compress_segmentby list does not exist
+--should succeed
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+ERROR:  chunk "_hyper_4_2_chunk" is not a compressed
+--should succeed
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+ERROR:  chunk is already compressed
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' limit 1;
+ERROR:  chunks can be compressed only if compression property is set on the hypertable
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' limit 1;
+ERROR:  missing compressed hypertable

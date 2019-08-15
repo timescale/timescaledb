@@ -111,6 +111,7 @@ extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, Mem
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
 													  bool isnull);
+extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, bool cascade, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
 												 Datum newer_than_datum, Oid older_than_type,
 												 Oid newer_than_type, bool cascade,

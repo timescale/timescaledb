@@ -25,6 +25,7 @@ TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
 TS_FUNCTION_INFO_V1(ts_continuous_agg_invalidation_trigger);
 TS_FUNCTION_INFO_V1(ts_compress_chunk);
+TS_FUNCTION_INFO_V1(ts_decompress_chunk);
 TS_FUNCTION_INFO_V1(ts_compressed_data_decompress_forward);
 TS_FUNCTION_INFO_V1(ts_compressed_data_decompress_reverse);
 
@@ -199,6 +200,12 @@ Datum
 ts_compress_chunk(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->compress_chunk(fcinfo));
+}
+
+Datum
+ts_decompress_chunk(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->decompress_chunk(fcinfo));
 }
 
 /*
@@ -386,6 +393,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.process_compress_table = process_compress_table_default,
 	.compress_chunk = error_no_default_fn_pg_enterprise,
+	.decompress_chunk = error_no_default_fn_pg_enterprise,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

@@ -55,6 +55,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 LIMIT 1 \gset
 
 SELECT count(*) from :CHUNK_NAME;
+SELECT count(*) as "ORIGINAL_CHUNK_COUNT" from :CHUNK_NAME \gset
 
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
 
@@ -84,3 +85,20 @@ order by hypertable_name, chunk_name;
 select * from timescaledb_information.compressed_hypertable_size
 order by hypertable_name;
 \x
+
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+
+SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
+--check that the compressed chunk is dropped
+\set ON_ERROR_STOP 0
+SELECT count(*) from :COMPRESSED_CHUNK_NAME;
+\set ON_ERROR_STOP 1
+
+--size information is gone too
+select count(*) from timescaledb_information.compressed_chunk_size
+where hypertable_name::text like 'conditions';
+
+--make sure  compressed_chunk_id  is reset to NULL
+select ch1.compressed_chunk_id IS NULL
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'

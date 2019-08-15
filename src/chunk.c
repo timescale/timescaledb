@@ -1998,6 +1998,27 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_DONE(funcctx);
 }
 
+void
+ts_chunk_drop(Chunk *chunk, bool cascade, int32 log_level)
+{
+	ObjectAddress objaddr = {
+		.classId = RelationRelationId,
+		.objectId = chunk->table_id,
+	};
+
+	if (log_level >= 0)
+		elog(log_level,
+			 "dropping chunk %s.%s",
+			 chunk->fd.schema_name.data,
+			 chunk->fd.table_name.data);
+
+	/* Remove the chunk from the hypertable table */
+	ts_chunk_delete_by_relid(chunk->table_id);
+
+	/* Drop the table */
+	performDeletion(&objaddr, cascade, 0);
+}
+
 List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,
@@ -2040,34 +2061,20 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 
 	for (; i < num_chunks; i++)
 	{
-		size_t len;
-		char *chunk_name;
+    size_t len;
+    char *chunk_name;
 
-		ObjectAddress objaddr = {
-			.classId = RelationRelationId,
-			.objectId = chunks[i]->table_id,
-		};
+    /* store chunk name for output */
+    schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
+    table_name = quote_identifier(chunks[i]->fd.table_name.data);
 
-		elog(log_level,
-			 "dropping chunk %s.%s",
-			 chunks[i]->fd.schema_name.data,
-			 chunks[i]->fd.table_name.data);
+    len = strlen(schema_name) + strlen(table_name) + 2;
+    chunk_name = palloc(len);
 
-		/* Store chunk name for output */
-		schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
-		table_name = quote_identifier(chunks[i]->fd.table_name.data);
+    snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
+    dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		len = strlen(schema_name) + strlen(table_name) + 2;
-		chunk_name = palloc(len);
-
-		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
-		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
-
-		/* Remove the chunk from the hypertable table */
-		ts_chunk_delete_by_relid(chunks[i]->table_id);
-
-		/* Drop the table */
-		performDeletion(&objaddr, cascade, 0);
+		ts_chunk_drop(chunks[i], cascade, log_level);
 	}
 
 	if (cascades_to_materializations)

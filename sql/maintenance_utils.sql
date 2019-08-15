@@ -20,5 +20,9 @@ CREATE OR REPLACE FUNCTION move_chunk(
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_chunk' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION compress_chunk(
-    chunk REGCLASS
+    uncompressed_chunk REGCLASS
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION decompress_chunk(
+    uncompressed_chunk REGCLASS
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C VOLATILE;

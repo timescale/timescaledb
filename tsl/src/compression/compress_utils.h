@@ -7,5 +7,6 @@
 #define TIMESCALEDB_TSL_COMPRESSION_UTILS_H
 
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
+extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
 
 #endif // TIMESCALEDB_TSL_COMPRESSION_UTILS_H
