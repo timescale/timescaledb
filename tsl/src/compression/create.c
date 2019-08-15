@@ -341,6 +341,47 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	return compress_chunk;
 }
 
+/* Add  the hypertable time column to the end of the orderby list if
+ * it's not already in the orderby or segmentby. */
+static List *
+add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, Hypertable *ht)
+{
+	ListCell *lc;
+	Dimension *time_dim;
+	char *time_col_name;
+	bool found = false;
+
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	time_col_name = get_attname_compat(ht->main_table_relid, time_dim->column_attno, false);
+
+	foreach (lc, orderby_cols)
+	{
+		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
+		if (namestrcmp(&col->colname, time_col_name) == 0)
+			found = true;
+	}
+	foreach (lc, segmentby_cols)
+	{
+		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
+		if (namestrcmp(&col->colname, time_col_name) == 0)
+			found = true;
+	}
+
+	if (!found)
+	{
+		/* Add time DESC NULLS FIRST to order by list */
+		CompressedParsedCol *col = palloc(sizeof(*col));
+		*col = (CompressedParsedCol){
+			.index = list_length(orderby_cols),
+			.asc = false,
+			.nullsfirst = true,
+		};
+		namestrcpy(&col->colname, time_col_name);
+		orderby_cols = lappend(orderby_cols, col);
+	}
+	return orderby_cols;
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -357,6 +398,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
 	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+
 	/* we need an AccessShare lock on the hypertable so that there are
 	 * no DDL changes while we create the compressed hypertable
 	 */
