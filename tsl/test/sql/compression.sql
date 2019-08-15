@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timescaledb.enable_transparent_decompression to OFF;
 
 --TEST1 ---
 --basic test with count

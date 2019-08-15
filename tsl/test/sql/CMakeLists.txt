@@ -6,8 +6,8 @@ set(TEST_FILES
     edition.sql
     gapfill.sql
     move.sql
-    reorder.sql
     partialize_finalize.sql
+    reorder.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -27,10 +27,11 @@ set(TEST_FILES_DEBUG
 
 set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
-  plan_gapfill.sql.in
   continuous_aggs_ddl.sql.in
   continuous_aggs_permissions.sql.in
-  )
+  plan_gapfill.sql.in
+  transparent_decompression.sql.in
+)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
