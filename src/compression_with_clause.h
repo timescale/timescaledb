@@ -29,7 +29,9 @@ typedef struct
 } CompressedParsedCol;
 
 WithClauseResult *ts_compress_hypertable_set_clause_parse(const List *defelems);
-extern TSDLLEXPORT List *ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options);
-extern TSDLLEXPORT List *ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options);
+extern TSDLLEXPORT List *ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options,
+																 Hypertable *hypertable);
+extern TSDLLEXPORT List *ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options,
+															   Hypertable *hypertable);
 
 #endif
