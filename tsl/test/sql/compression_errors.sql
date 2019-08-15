@@ -20,6 +20,7 @@ ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 --TODO: allow changing the options if not chunks compressed
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 
+--note that the time column "a" should be added to the end of the orderby list
 select * from _timescaledb_catalog.hypertable_compression order by attname;
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DeSc NullS lAsT');
@@ -70,7 +71,9 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c L
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
 
 --should succeed
-ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
+--note that the time column "a" should not be added to the end of the order by list again (should appear first)
+select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
