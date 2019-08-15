@@ -22,6 +22,8 @@
 #include "compress_utils.h"
 #include "compression.h"
 #include "compat.h"
+#include "scanner.h"
+#include "scan_iterator.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -62,6 +64,34 @@ compute_chunk_size(Oid chunk_relid)
 	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
 	ret.toast_size = tot_size - ret.heap_size;
 	return ret;
+}
+
+static void
+init_scan_by_uncompressed_chunk_id(ScanIterator *iterator, int32 uncompressed_chunk_id)
+{
+	iterator->ctx.index =
+		catalog_get_index(ts_catalog_get(), COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_compression_chunk_size_pkey_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(uncompressed_chunk_id));
+}
+
+static int
+compression_chunk_size_delete(int32 uncompressed_chunk_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
+
+	init_scan_by_uncompressed_chunk_id(&iterator, uncompressed_chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete(ti->scanrel, ti->tuple);
+	}
+	return count;
 }
 
 static void
@@ -186,6 +216,60 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	ts_cache_release(hcache);
 }
 
+static void
+decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid)
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *uncompressed_hypertable =
+		ts_hypertable_cache_get_entry(hcache, uncompressed_hypertable_relid);
+	Hypertable *compressed_hypertable;
+	Chunk *uncompressed_chunk;
+	Chunk *compressed_chunk;
+
+	if (uncompressed_hypertable == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("table \"%s\" is not a hypertable",
+						get_rel_name(uncompressed_hypertable_relid))));
+
+	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+
+	compressed_hypertable =
+		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
+	if (compressed_hypertable == NULL)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+
+	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, 0, true);
+	if (uncompressed_chunk == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("table \"%s\" is not a chunk", get_rel_name(uncompressed_chunk_relid))));
+
+	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
+		elog(ERROR, "hypertable and chunk do not match");
+
+	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s\" is not a compressed",
+						get_rel_name(uncompressed_chunk_relid))));
+	;
+
+	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, 0, true);
+
+	/* acquire locks on src and compress hypertable and src chunk */
+	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
+	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
+	LockRelationOid(uncompressed_chunk->table_id, AccessShareLock); /*upgrade when needed */
+
+	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
+	compression_chunk_size_delete(uncompressed_chunk->fd.id);
+	ts_chunk_set_compressed_chunk(uncompressed_chunk, 0, true);
+	ts_chunk_drop(compressed_chunk, false, -1);
+
+	ts_cache_release(hcache);
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
@@ -196,5 +280,16 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR, (errcode(ERRCODE_DUPLICATE_OBJECT), errmsg("chunk is already compressed")));
 	}
 	compress_chunk_impl(srcchunk->hypertable_relid, chunk_id);
+	PG_RETURN_VOID();
+}
+
+Datum
+tsl_decompress_chunk(PG_FUNCTION_ARGS)
+{
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
+	if (NULL == uncompressed_chunk)
+		elog(ERROR, "unkown chunk id %d", uncompressed_chunk_id);
+	decompress_chunk_impl(uncompressed_chunk->hypertable_relid, uncompressed_chunk_id);
 	PG_RETURN_VOID();
 }

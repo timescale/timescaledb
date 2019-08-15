@@ -8,6 +8,10 @@
 create table foo2 (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('foo2', 'a', chunk_time_interval=> 10);
 
+create table non_compressed (a integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('non_compressed', 'a', chunk_time_interval=> 10);
+insert into non_compressed values( 3 , 16 , 20, 4);
+
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
 select * from _timescaledb_catalog.hypertable_compression order by attname;
@@ -39,3 +43,21 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c des
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
 
+--should succeed
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');
+
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+
+--should succeed
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
+
+select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' limit 1;
+
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' limit 1;

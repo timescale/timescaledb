@@ -123,6 +123,7 @@ SELECT count(*) from :CHUNK_NAME;
     21
 (1 row)
 
+SELECT count(*) as "ORIGINAL_CHUNK_COUNT" from :CHUNK_NAME \gset
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
                 tableoid                | count 
 ----------------------------------------+-------
@@ -223,3 +224,39 @@ compressed_toast_bytes   | 16 kB
 compressed_total_bytes   | 32 kB
 
 \x
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+ decompress_chunk 
+------------------
+ 
+ 
+(2 rows)
+
+SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
+ count | ?column? 
+-------+----------
+    21 | t
+(1 row)
+
+--check that the compressed chunk is dropped
+\set ON_ERROR_STOP 0
+SELECT count(*) from :COMPRESSED_CHUNK_NAME;
+ERROR:  relation "_timescaledb_internal.compress_hyper_4_9_chunk" does not exist at character 22
+\set ON_ERROR_STOP 1
+--size information is gone too
+select count(*) from timescaledb_information.compressed_chunk_size
+where hypertable_name::text like 'conditions';
+ count 
+-------
+     0
+(1 row)
+
+--make sure  compressed_chunk_id  is reset to NULL
+select ch1.compressed_chunk_id IS NULL
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+ ?column? 
+----------
+ t
+ t
+(2 rows)
+

@@ -23,6 +23,7 @@ ORDER BY proname;
  chunk_relation_size_pretty
  compress_chunk
  create_hypertable
+ decompress_chunk
  detach_tablespace
  detach_tablespaces
  drop_chunks

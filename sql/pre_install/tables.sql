@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     constraint hypertable_dim_compress_check check ( num_dimensions > 0  or compressed = true ),
-   constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null )) 
+   constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null ))
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
@@ -293,7 +293,7 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
 /* the source of this data is the enum from the source code that lists
- *  the algorithms. This table is NOT dumped. 
+ *  the algorithms. This table is NOT dumped.
 */
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
 	id SMALLINT PRIMARY KEY,
@@ -305,15 +305,15 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
 	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-	attname NAME NOT NULL, 
+	attname NAME NOT NULL,
 	compression_algorithm_id SMALLINT REFERENCES _timescaledb_catalog.compression_algorithm(id),
 	segmentby_column_index SMALLINT ,
 	orderby_column_index SMALLINT,
 	orderby_asc BOOLEAN,
 	orderby_nullsfirst BOOLEAN,
 	PRIMARY KEY (hypertable_id, attname),
-    UNIQUE (hypertable_id, segmentby_column_index), 
-    UNIQUE (hypertable_id, orderby_column_index) 
+    UNIQUE (hypertable_id, segmentby_column_index),
+    UNIQUE (hypertable_id, orderby_column_index)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
     compressed_heap_size BIGINT NOT NULL,
     compressed_toast_size BIGINT NOT NULL,
     compressed_index_size BIGINT NOT NULL,
-    PRIMARY KEY( chunk_id, compressed_chunk_id)
+    PRIMARY KEY(chunk_id, compressed_chunk_id)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 

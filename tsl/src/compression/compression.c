@@ -248,6 +248,9 @@ compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns
 			*n_keys_out += 1;
 	}
 
+	if (*n_keys_out == 0)
+		elog(ERROR, "compression should be configured with an orderby or segment by");
+
 	*keys_out = palloc(sizeof(**keys_out) * *n_keys_out);
 
 	for (i = 0; i < n_columns; i++)
@@ -843,8 +846,6 @@ decompress_chunk(Oid in_table, Oid out_table)
 		heap_endscan(heapScan);
 		FreeBulkInsertState(decompressor.bistate);
 	}
-
-	truncate_relation(in_table);
 
 	RelationClose(out_rel);
 	RelationClose(in_rel);

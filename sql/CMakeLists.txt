@@ -5,7 +5,6 @@ set(PRE_INSTALL_SOURCE_FILES
   pre_install/schemas.sql # Must be first
   pre_install/types.sql # Must be before tables.sql
   pre_install/tables.sql
-  pre_install/types.sql
   pre_install/insert_data.sql
   pre_install/bgw_scheduler_startup.sql
 )
