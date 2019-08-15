@@ -30,6 +30,7 @@
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
+#include "decompress_chunk/planner.h"
 #include "process_utility.h"
 #include "hypertable.h"
 #include "compression/create.h"
@@ -121,6 +122,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+	_decompress_chunk_init();
 
 	PG_RETURN_BOOL(true);
 }
