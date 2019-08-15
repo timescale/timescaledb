@@ -34,12 +34,14 @@ typedef enum ConnOptionType
  * malloc. Most users should use `remote_dist_txn_get_connection` or
  * `remote_connection_cache_get_connection` instead. Must be closed with `remote_connection_close`
  */
-TSConnection *remote_connection_open_with_options(const char *node_name, List *connection_options,
-												  bool set_dist_id);
-TSConnection *remote_connection_open_by_id(TSConnectionId id);
-TSConnection *remote_connection_open(Oid server_id, Oid user_id);
-bool remote_connection_ping(const char *node_name);
-void remote_connection_close(TSConnection *conn);
+extern TSConnection *remote_connection_open_with_options(const char *node_name,
+														 List *connection_options,
+														 bool set_dist_id);
+extern TSConnection *remote_connection_open_by_id(TSConnectionId id);
+extern TSConnection *remote_connection_open(Oid server_id, Oid user_id);
+extern bool remote_connection_set_autoclose(TSConnection *conn, bool autoclose);
+extern bool remote_connection_ping(const char *node_name);
+extern void remote_connection_close(TSConnection *conn);
 
 extern void remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn,
 										   bool clear, const char *sql);
@@ -48,7 +50,7 @@ extern ConnOptionType remote_connection_option_type(const char *keyword);
 extern bool remote_connection_valid_user_option(const char *keyword);
 extern bool remote_connection_valid_node_option(const char *keyword);
 extern unsigned int remote_connection_get_cursor_number(void);
-void remote_connection_reset_cursor_number(void);
+extern void remote_connection_reset_cursor_number(void);
 extern unsigned int remote_connection_get_prep_stmt_number(void);
 extern void remote_connection_configure(TSConnection *conn);
 
@@ -106,5 +108,21 @@ extern void remote_connection_configure_if_changed(TSConnection *conn);
 									   0)))
 
 #define remote_connection_result_close(res) PQclear(res);
+
+typedef struct RemoteConnectionStats
+{
+	unsigned int connections_created;
+	unsigned int connections_closed;
+	unsigned int results_created;
+	unsigned int results_cleared;
+} RemoteConnectionStats;
+
+#if TS_DEBUG
+extern void remote_connection_stats_reset(void);
+extern RemoteConnectionStats *remote_connection_stats_get(void);
+#endif
+
+extern void _remote_connection_init(void);
+extern void _remote_connection_fini(void);
 
 #endif /* TIMESCALEDB_TSL_REMOTE_CONNECTION_H */

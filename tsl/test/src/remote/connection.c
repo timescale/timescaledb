@@ -12,11 +12,14 @@
 #include <foreign/fdwapi.h>
 #include <miscadmin.h>
 #include <access/reloptions.h>
+#include <access/htup_details.h>
 #include <catalog/pg_foreign_server.h>
 #include <commands/dbcommands.h>
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
 #include <utils/guc.h>
+#include <fmgr.h>
+#include <funcapi.h>
 
 #include "export.h"
 #include "test_utils.h"
@@ -40,8 +43,6 @@ get_connection()
 							   -1)),
 		false);
 }
-
-TS_FUNCTION_INFO_V1(tsl_test_remote_connection);
 
 static void
 test_options()
@@ -154,6 +155,116 @@ test_params()
 	remote_connection_close(conn);
 }
 
+static void
+test_result_leaks()
+{
+	TSConnection *conn, *subconn;
+	PGresult *res;
+	RemoteConnectionStats *stats, savedstats;
+
+	stats = remote_connection_stats_get();
+
+	remote_connection_stats_reset();
+
+	conn = get_connection();
+	res = remote_connection_query_ok_result(conn, "SELECT 1");
+	remote_connection_close(conn);
+	TestAssertTrue(stats->connections_closed == 1);
+	TestAssertTrue(stats->connections_closed == stats->connections_created);
+	TestAssertTrue(stats->results_cleared == stats->results_created);
+
+	/* Reset stats */
+	remote_connection_stats_reset();
+	conn = get_connection();
+
+	BeginInternalSubTransaction("conn leak test");
+
+	subconn = get_connection();
+	remote_connection_query_ok_result(conn, "SELECT 1");
+
+	BeginInternalSubTransaction("conn leak test 2");
+
+	res = remote_connection_query_ok_result(subconn, "SELECT 1");
+
+	/* Explicitly close one result */
+	remote_connection_result_close(res);
+
+	/* get_connection() creates and clears results so use saved stats as a
+	 * reference */
+	savedstats = *stats;
+	remote_connection_query_ok_result(subconn, "SELECT 1");
+	remote_connection_query_ok_result(conn, "SELECT 1");
+
+	RollbackAndReleaseCurrentSubTransaction();
+
+	/* Should have cleared two results on rollback (one on each connection) */
+	TestAssertTrue(stats->results_cleared == (savedstats.results_cleared + 2));
+	remote_connection_query_ok_result(subconn, "SELECT 1");
+
+	savedstats = *stats;
+	ReleaseCurrentSubTransaction();
+
+	/* Should have cleared three results and one connection */
+	TestAssertTrue(stats->results_cleared == (savedstats.results_cleared + 3));
+	TestAssertTrue(stats->connections_closed == (savedstats.connections_closed + 1));
+
+	remote_connection_stats_reset();
+}
+
+TS_FUNCTION_INFO_V1(tsl_test_bad_remote_query);
+
+/* Send a bad query that throws an exception without cleaning up connection or
+ * results. Together with get_connection_stats(), this should show that
+ * connections and results are automatically cleaned up. */
+Datum
+tsl_test_bad_remote_query(PG_FUNCTION_ARGS)
+{
+	TSConnection *conn;
+
+	conn = get_connection();
+	TestEnsureError(remote_connection_query_ok_result(conn, "BADY QUERY SHOULD THROW ERROR"));
+
+	PG_RETURN_VOID();
+}
+
+enum Anum_connection_stats
+{
+	Anum_connection_stats_connections_created = 1,
+	Anum_connection_stats_connections_closed,
+	Anum_connection_stats_results_created,
+	Anum_connection_stats_results_cleared,
+	Anum_connection_stats_max,
+};
+
+TS_FUNCTION_INFO_V1(tsl_test_get_connection_stats);
+
+Datum
+tsl_test_get_connection_stats(PG_FUNCTION_ARGS)
+{
+	TupleDesc tupdesc;
+	RemoteConnectionStats *stats = remote_connection_stats_get();
+	Datum values[Anum_connection_stats_max];
+	bool nulls[Anum_connection_stats_max] = { false };
+	HeapTuple tuple;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	values[Anum_connection_stats_connections_created - 1] = stats->connections_created;
+	values[Anum_connection_stats_connections_closed - 1] = stats->connections_closed;
+	values[Anum_connection_stats_results_created - 1] = stats->results_created;
+	values[Anum_connection_stats_results_cleared - 1] = stats->results_cleared;
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+TS_FUNCTION_INFO_V1(tsl_test_remote_connection);
+
 Datum
 tsl_test_remote_connection(PG_FUNCTION_ARGS)
 {
@@ -162,6 +273,7 @@ tsl_test_remote_connection(PG_FUNCTION_ARGS)
 	test_simple_queries();
 	test_prepared_stmts();
 	test_params();
+	test_result_leaks();
 
 	PG_RETURN_VOID();
 }

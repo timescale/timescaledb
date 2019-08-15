@@ -92,6 +92,11 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * remote_connection_close at cleanup is critical.
 	 */
 	entry->conn = remote_connection_open_by_id(*id);
+
+	/* Since this connection is managed by the cache, it should not auto-close
+	 * at the end of the transaction */
+	remote_connection_set_autoclose(entry->conn, false);
+
 	return entry;
 }
 

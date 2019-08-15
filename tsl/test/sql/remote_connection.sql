@@ -9,14 +9,24 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE FUNCTION _timescaledb_internal.test_remote_connection()
+CREATE FUNCTION test.remote_connection_tests()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_connection'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION _timescaledb_internal.test_remote_async()
+CREATE FUNCTION test.remote_async_tests()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_async'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION test.send_remote_query_that_generates_exception()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_test_bad_remote_query'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION test.get_connection_stats()
+RETURNS TABLE(connections_created bigint, connections_closed bigint, results_created bigint, results_cleared bigint)
+AS :TSL_MODULE_PATHNAME, 'tsl_test_get_connection_stats'
 LANGUAGE C STRICT;
 
 -- ===================================================================
@@ -51,7 +61,13 @@ INSERT INTO "S 1"."T 1"
 -- run tests
 -- ===================================================================
 
-SELECT _timescaledb_internal.test_remote_connection();
-SELECT _timescaledb_internal.test_remote_async();
+SELECT * FROM test.get_connection_stats();
+\set ON_ERROR_STOP 0
+SELECT test.send_remote_query_that_generates_exception();
+\set ON_ERROR_STOP 1
+SELECT * FROM test.get_connection_stats();
+
+SELECT test.remote_connection_tests();
+SELECT test.remote_async_tests();
 
 SELECT 'End Of Test';

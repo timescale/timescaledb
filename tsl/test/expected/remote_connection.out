@@ -5,13 +5,21 @@
 -- create fake fdw to create data node
 -- ===================================================================
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE FUNCTION _timescaledb_internal.test_remote_connection()
+CREATE FUNCTION test.remote_connection_tests()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_connection'
 LANGUAGE C STRICT;
-CREATE FUNCTION _timescaledb_internal.test_remote_async()
+CREATE FUNCTION test.remote_async_tests()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_async'
+LANGUAGE C STRICT;
+CREATE FUNCTION test.send_remote_query_that_generates_exception()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_test_bad_remote_query'
+LANGUAGE C STRICT;
+CREATE FUNCTION test.get_connection_stats()
+RETURNS TABLE(connections_created bigint, connections_closed bigint, results_created bigint, results_cleared bigint)
+AS :TSL_MODULE_PATHNAME, 'tsl_test_get_connection_stats'
 LANGUAGE C STRICT;
 -- ===================================================================
 -- create tables
@@ -40,17 +48,37 @@ INSERT INTO "S 1"."T 1"
 -- ===================================================================
 -- run tests
 -- ===================================================================
-SELECT _timescaledb_internal.test_remote_connection();
- test_remote_connection 
-------------------------
+SELECT * FROM test.get_connection_stats();
+ connections_created | connections_closed | results_created | results_cleared 
+---------------------+--------------------+-----------------+-----------------
+                   0 |                  0 |               0 |               0
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT test.send_remote_query_that_generates_exception();
+ send_remote_query_that_generates_exception 
+--------------------------------------------
  
 (1 row)
 
-SELECT _timescaledb_internal.test_remote_async();
+\set ON_ERROR_STOP 1
+SELECT * FROM test.get_connection_stats();
+ connections_created | connections_closed | results_created | results_cleared 
+---------------------+--------------------+-----------------+-----------------
+                   1 |                  1 |               6 |               6
+(1 row)
+
+SELECT test.remote_connection_tests();
+ remote_connection_tests 
+-------------------------
+ 
+(1 row)
+
+SELECT test.remote_async_tests();
 WARNING:  Expect warning about communication error:
 WARNING:  [testdb]: SSL connection has been closed unexpectedly
- test_remote_async 
--------------------
+ remote_async_tests 
+--------------------
  
 (1 row)
 

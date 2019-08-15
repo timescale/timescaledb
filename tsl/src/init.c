@@ -55,6 +55,7 @@
 #include "remote/dist_copy.h"
 #include "process_utility.h"
 #include "dist_util.h"
+#include "remote/connection.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -66,6 +67,7 @@ PG_MODULE_MAGIC;
 #endif
 
 extern void PGDLLEXPORT _PG_init(void);
+extern void PGDLLEXPORT _PG_fini(void);
 
 static void module_shutdown(void);
 static bool enterprise_enabled_internal(void);
@@ -359,4 +361,16 @@ _PG_init(void)
 	 * relative to the other libraries.
 	 */
 	ts_license_enable_module_loading();
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+	_remote_connection_init();
+#endif
+}
+
+PGDLLEXPORT void
+_PG_fini(void)
+{
+#if PG_VERSION_SUPPORTS_MULTINODE
+	_remote_connection_fini();
+#endif
 }

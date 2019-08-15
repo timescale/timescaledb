@@ -28,9 +28,10 @@
 #include <utils/guc.h>
 #include <postmaster/postmaster.h>
 #include <libpq/libpq.h>
-
+#include <libpq-events.h>
 #include <nodes/makefuncs.h>
 #include <commands/defrem.h>
+
 #include <export.h>
 #include <telemetry/telemetry_metadata.h>
 #include <extension_constants.h>
@@ -44,14 +45,227 @@
 /* for assigning cursor numbers and prepared statement numbers */
 static unsigned int cursor_number = 0;
 static unsigned int prep_stmt_number = 0;
+static RemoteConnectionStats connstats = { 0 };
+
+static int eventproc(PGEventId eventid, void *eventinfo, void *data);
+
+/*
+ * A simple circular list implementation for tracking libpq connection and
+ * result objects. We can't use pg_list here since it is bound to PostgreSQL's
+ * memory management system, while libpq is not.
+ */
+typedef struct ListNode
+{
+	struct ListNode *next;
+	struct ListNode *prev;
+} ListNode;
+
+#define IS_DETACHED_ENTRY(entry) ((entry)->next == NULL && (entry)->prev == NULL)
+
+/*
+ * Detach a list node.
+ *
+ * Detaches a list node from the list, unless it is the anchor/head (which is
+ * a no-op).
+ */
+static inline void
+list_detach(ListNode *entry)
+{
+	ListNode *prev = entry->prev;
+	ListNode *next = entry->next;
+
+	next->prev = prev;
+	prev->next = next;
+	/* Clear entry fields */
+	entry->prev = NULL;
+	entry->next = NULL;
+}
+
+/*
+ * Insert a list node entry after the prev node.
+ */
+static inline void
+list_insert_after(ListNode *entry, ListNode *prev)
+{
+	ListNode *next = prev->next;
+
+	next->prev = entry;
+	entry->next = next;
+	entry->prev = prev;
+	prev->next = entry;
+}
+
+/*
+ * List entry that holds a PGresult object.
+ */
+typedef struct ResultEntry
+{
+	struct ListNode ln;		  /* Must be first entry */
+	SubTransactionId subtxid; /* The subtransaction ID that created this result, if any. */
+	PGresult *result;
+} ResultEntry;
 
 typedef struct TSConnection
 {
-	PGconn *pg_conn;	/* PostgreSQL connection */
-	bool processing;	/* TRUE if there is ongoin Async request processing */
-	NameData node_name; /* Associated data node name */
-	char *tz_name;		/* Timezone name last sent over connection */
+	ListNode ln;			  /* Must be first entry */
+	PGconn *pg_conn;		  /* PostgreSQL connection */
+	bool processing;		  /* TRUE if there is ongoing async request processing */
+	NameData node_name;		  /* Associated data node name */
+	char *tz_name;			  /* Timezone name last sent over connection */
+	bool autoclose;			  /* Set if this connection should automatically
+							   * close at the end of the (sub-)transaction */
+	SubTransactionId subtxid; /* The subtransaction ID that created this connection, if any. */
+	ListNode results;		  /* Head of PGresult list */
 } TSConnection;
+
+/*
+ * List of all connections we create. Used to auto-free connections and/or
+ * PGresults at transaction end.
+ */
+static ListNode connections = { &connections, &connections };
+
+/*
+ * The following event handlers make sure all PGresult are freed with
+ * PQClear() when its parent connection is closed.
+ *
+ * It is still recommended to explicitly call PGclear() or
+ * remote_connection_result_close(), however, especially when PGresults are
+ * created in a tight loop (e.g., when scanning many tuples on a remote
+ * table).
+ */
+#define EVENTPROC_FAILURE 0
+#define EVENTPROC_SUCCESS 1
+
+/*
+ * Invoked on PQfinish(conn). Frees all PGresult objects created on the
+ * connection, apart from those already freed with PQclear().
+ */
+static int
+handle_conn_destroy(PGEventConnDestroy *event)
+{
+	TSConnection *conn = PQinstanceData(event->conn, eventproc);
+	unsigned int results_count = 0;
+	ListNode *curr;
+
+	Assert(NULL != conn);
+
+	curr = conn->results.next;
+
+	while (curr != &conn->results)
+	{
+		ResultEntry *entry = (ResultEntry *) curr;
+		PGresult *result = entry->result;
+
+		curr = curr->next;
+		PQclear(result);
+		/* No need to free curr here since PQclear will invoke
+		 * handle_result_destroy() which will free it */
+		results_count++;
+	}
+
+	conn->pg_conn = NULL;
+	list_detach(&conn->ln);
+
+	if (results_count > 0)
+		elog(DEBUG3, "cleared %u result objects on connection %p", results_count, conn);
+
+	connstats.connections_closed++;
+
+	return EVENTPROC_SUCCESS;
+}
+
+/*
+ * Invoked on PQgetResult(conn). Adds the PGresult to the list in the parent
+ * TSConnection.
+ */
+static int
+handle_result_create(PGEventResultCreate *event)
+{
+	TSConnection *conn = PQinstanceData(event->conn, eventproc);
+	ResultEntry *entry;
+
+	Assert(NULL != conn);
+
+	/* We malloc this (instead of palloc) since bound PGresult, which also
+	 * lives outside PostgreSQL's memory management. */
+	entry = malloc(sizeof(ResultEntry));
+
+	if (NULL == entry)
+		return EVENTPROC_FAILURE;
+
+	MemSet(entry, 0, sizeof(ResultEntry));
+	entry->ln.next = entry->ln.prev = NULL;
+	entry->result = event->result;
+	entry->subtxid = GetCurrentSubTransactionId();
+
+	/* Add entry as new head and set instance data */
+	list_insert_after(&entry->ln, &conn->results);
+	PQresultSetInstanceData(event->result, eventproc, entry);
+
+	elog(DEBUG3,
+		 "created result %p on connection %p subtxid %u",
+		 event->result,
+		 conn,
+		 entry->subtxid);
+
+	connstats.results_created++;
+
+	return EVENTPROC_SUCCESS;
+}
+
+/*
+ * Invoked on PQclear(result). Removes the PGresult from the list in the
+ * parent TSConnection.
+ */
+static int
+handle_result_destroy(PGEventResultDestroy *event)
+{
+	ResultEntry *entry = PQresultInstanceData(event->result, eventproc);
+
+	Assert(NULL != entry);
+
+	/* Detach entry */
+	list_detach(&entry->ln);
+
+	elog(DEBUG3, "destroyed result %p for subtxnid %u", entry->result, entry->subtxid);
+
+	free(entry);
+
+	connstats.results_cleared++;
+
+	return EVENTPROC_SUCCESS;
+}
+
+/*
+ * Main event handler invoked when events happen on a PGconn.
+ *
+ * According to the libpq API, the function should return a non-zero value if
+ * it succeeds and zero if it fails. We use EVENTPROC_SUCCESS and
+ * EVENTPROC_FAILURE in place of these two options.
+ */
+static int
+eventproc(PGEventId eventid, void *eventinfo, void *data)
+{
+	int res = EVENTPROC_SUCCESS;
+
+	switch (eventid)
+	{
+		case PGEVT_CONNDESTROY:
+			res = handle_conn_destroy((PGEventConnDestroy *) eventinfo);
+			break;
+		case PGEVT_RESULTCREATE:
+			res = handle_result_create((PGEventResultCreate *) eventinfo);
+			break;
+		case PGEVT_RESULTDESTROY:
+			res = handle_result_destroy((PGEventResultDestroy *) eventinfo);
+			break;
+		default:
+			/* Not of interest, so return success */
+			break;
+	}
+
+	return res;
+}
 
 static PQconninfoOption *
 get_libpq_options()
@@ -191,6 +405,7 @@ remote_connection_configure_if_changed(TSConnection *conn)
 		(local_tz_name && pg_strcasecmp(conn->tz_name, local_tz_name) != 0))
 	{
 		char *set_timezone_cmd = psprintf("SET TIMEZONE = '%s'", local_tz_name);
+
 		PQexec(remote_connection_get_pg_conn(conn), set_timezone_cmd);
 		pfree(set_timezone_cmd);
 		free(conn->tz_name);
@@ -232,13 +447,61 @@ static TSConnection *
 remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name)
 {
 	TSConnection *conn = malloc(sizeof(TSConnection));
+	int ret;
 
+	if (NULL == conn)
+		return NULL;
+
+	MemSet(conn, 0, sizeof(TSConnection));
+
+	/* Must register the event procedure before attaching any instance data */
+	ret = PQregisterEventProc(pg_conn, eventproc, "remote connection", conn);
+
+	if (ret == 0)
+	{
+		free(conn);
+		return NULL;
+	}
+
+	ret = PQsetInstanceData(pg_conn, eventproc, conn);
+	Assert(ret != 0);
+
+	conn->ln.next = conn->ln.prev = NULL;
 	conn->pg_conn = pg_conn;
 	conn->processing = processing;
 	namestrcpy(&conn->node_name, node_name);
 	conn->tz_name = NULL;
+	conn->autoclose = true;
+	conn->subtxid = GetCurrentSubTransactionId();
+	/* Initialize results head */
+	conn->results.next = &conn->results;
+	conn->results.prev = &conn->results;
+	list_insert_after(&conn->ln, &connections);
+
+	elog(DEBUG3, "created connection %p", conn);
+
+	connstats.connections_created++;
 
 	return conn;
+}
+
+/*
+ * Set the auto-close behavior.
+ *
+ * If set, the connection will be closed at the end of the (sub-)transaction
+ * it was created on.
+ *
+ * The default value is on (true).
+ *
+ * Returns the previous setting.
+ */
+bool
+remote_connection_set_autoclose(TSConnection *conn, bool autoclose)
+{
+	bool old = conn->autoclose;
+
+	conn->autoclose = autoclose;
+	return old;
 }
 
 PGconn *
@@ -338,6 +601,7 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 {
 	PGconn *pg_conn = NULL;
 	const char *user_name = NULL;
+	TSConnection *ts_conn;
 	const char **keywords;
 	const char **values;
 	int option_count;
@@ -383,7 +647,12 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 	if (NULL == pg_conn)
 		return NULL;
 
-	return remote_connection_create(pg_conn, false, node_name);
+	ts_conn = remote_connection_create(pg_conn, false, node_name);
+
+	if (NULL == ts_conn)
+		PQfinish(pg_conn);
+
+	return ts_conn;
 }
 
 #undef REMOTE_CONNECTION_SSL_OPTIONS
@@ -516,8 +785,17 @@ remote_connection_close(TSConnection *conn)
 {
 	Assert(conn != NULL);
 	PQfinish(conn->pg_conn);
+
+	/* Assert that PQfinish detached this connection from the global list of
+	 * connections */
+	Assert(IS_DETACHED_ENTRY(&conn->ln));
+
+	/* Free the connection object's other memory */
+	if (NULL != conn->tz_name)
+		free(conn->tz_name);
+
+	conn->tz_name = NULL;
 	conn->pg_conn = NULL;
-	free(conn->tz_name);
 	free(conn);
 }
 
@@ -743,4 +1021,136 @@ remote_connection_cancel_query(TSConnection *conn)
 	}
 
 	return remote_connection_drain(conn->pg_conn, endtime);
+}
+
+/*
+ * Cleanup connections and results at the end of a (sub-)transaction.
+ *
+ * This function is called at the end of transactions and sub-transactions to
+ * auto-cleanup connections and result objects.
+ */
+static void
+remote_connections_cleanup(SubTransactionId subtxid, bool isabort)
+{
+	ListNode *curr = connections.next;
+	unsigned int num_connections = 0;
+	unsigned int num_results = 0;
+
+	while (curr != &connections)
+	{
+		TSConnection *conn = (TSConnection *) curr;
+
+		/* Move to next connection since closing the current one might
+		 * otherwise make the curr pointer invalid. */
+		curr = curr->next;
+
+		if (conn->autoclose && (subtxid == InvalidSubTransactionId || subtxid == conn->subtxid))
+		{
+			/* Closes the connection and frees all its PGresult objects */
+			remote_connection_close(conn);
+			num_connections++;
+		}
+		else
+		{
+			/* We're not closing the connection, but we should clean up any
+			 * lingering results */
+			ListNode *curr_result = conn->results.next;
+
+			while (curr_result != &conn->results)
+			{
+				ResultEntry *entry = (ResultEntry *) curr_result;
+
+				curr_result = curr_result->next;
+
+				if (subtxid == InvalidSubTransactionId || subtxid == entry->subtxid)
+				{
+					PQclear(entry->result);
+					num_results++;
+				}
+			}
+		}
+	}
+
+	if (subtxid == InvalidSubTransactionId)
+		elog(DEBUG3,
+			 "cleaned up %u connections and %u results at %s of transaction",
+			 num_connections,
+			 num_results,
+			 isabort ? "abort" : "commit");
+	else
+		elog(DEBUG3,
+			 "cleaned up %u connections and %u results at %s of sub-transaction %u",
+			 num_connections,
+			 num_results,
+			 isabort ? "abort" : "commit",
+			 subtxid);
+}
+
+static void
+remote_connection_xact_end(XactEvent event, void *unused_arg)
+{
+	switch (event)
+	{
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			remote_connections_cleanup(InvalidSubTransactionId, true);
+			break;
+		case XACT_EVENT_COMMIT:
+		case XACT_EVENT_PARALLEL_COMMIT:
+			remote_connections_cleanup(InvalidSubTransactionId, false);
+			break;
+		default:
+			break;
+	}
+}
+
+static void
+remote_connection_subxact_end(SubXactEvent event, SubTransactionId subtxid,
+							  SubTransactionId parent_subtxid, void *unused_arg)
+{
+	switch (event)
+	{
+		case SUBXACT_EVENT_ABORT_SUB:
+			remote_connections_cleanup(subtxid, true);
+			break;
+		case SUBXACT_EVENT_COMMIT_SUB:
+			remote_connections_cleanup(subtxid, false);
+			break;
+		default:
+			break;
+	}
+}
+
+#if TS_DEBUG
+/*
+ * Reset the current connection stats.
+ */
+void
+remote_connection_stats_reset(void)
+{
+	MemSet(&connstats, 0, sizeof(RemoteConnectionStats));
+}
+
+/*
+ * Get the current connection stats.
+ */
+RemoteConnectionStats *
+remote_connection_stats_get(void)
+{
+	return &connstats;
+}
+#endif
+
+void
+_remote_connection_init(void)
+{
+	RegisterXactCallback(remote_connection_xact_end, NULL);
+	RegisterSubXactCallback(remote_connection_subxact_end, NULL);
+}
+
+void
+_remote_connection_fini(void)
+{
+	UnregisterXactCallback(remote_connection_xact_end, NULL);
+	UnregisterSubXactCallback(remote_connection_subxact_end, NULL);
 }
