@@ -8,13 +8,21 @@
 create table foo2 (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('foo2', 'a', chunk_time_interval=> 10);
 
+create table foo3 (a integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('foo3', 'a', chunk_time_interval=> 10);
+
 create table non_compressed (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('non_compressed', 'a', chunk_time_interval=> 10);
 insert into non_compressed values( 3 , 16 , 20, 4);
 
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
+--TODO: allow changing the options if not chunks compressed
+ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
+
 select * from _timescaledb_catalog.hypertable_compression order by attname;
+
+ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DeSc NullS lAsT');
 
 -- Negative test cases ---
 
@@ -23,7 +31,7 @@ select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_ti
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 
 --basic test with count
-create table foo (a integer, b integer, c integer);
+create table foo (a integer, b integer, c integer, t text);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 
 insert into foo values( 3 , 16 , 20);
@@ -46,7 +54,20 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c nul
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls first asc');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc hurry');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c; SELECT 1');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = '1,2');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c + 1');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'random()');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c LIMIT 1');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c USING <');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 't COLLATE "en_US"');
+
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c nulls last');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + 1');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'random()');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c LIMIT 1');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');

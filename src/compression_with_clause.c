@@ -15,6 +15,7 @@
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <parser/parser.h>
 
 #include "compat.h"
 
@@ -43,142 +44,216 @@ ts_compress_hypertable_set_clause_parse(const List *defelems)
 								 compress_hypertable_with_clause_def,
 								 TS_ARRAY_LEN(compress_hypertable_with_clause_def));
 }
-/* strip double quotes from tokens that are names of columns */
-static char *
-strip_name_token(char *token)
+
+static inline void
+throw_segment_by_error(char *segment_by)
 {
-	int len;
-	if (token == NULL)
-		return NULL;
-	len = strlen(token);
-	if (token[0] == '"' && (len > 1) && (token[len - 1] == '"'))
-	{
-		char *newtok = palloc0(sizeof(char) * (len - 1));
-		strncpy(newtok, &token[1], len - 2);
-		return newtok;
-	}
-	return token;
+	ereport(ERROR,
+			(errcode(ERRCODE_SYNTAX_ERROR),
+			 errmsg("unable to parse the compress_segmentby option '%s'", segment_by),
+			 errhint("The compress_segmentby option should be a comma separated list of column "
+					 "names.")));
+}
+
+static bool
+select_stmt_as_expected(SelectStmt *stmt)
+{
+	/* The only parts of the select stmt that are allowed to be set are the order by or group by.
+	 * Check that no other fields are set */
+	if (stmt->distinctClause != NIL || stmt->intoClause != NULL || stmt->targetList != NIL ||
+		stmt->whereClause != NULL || stmt->havingClause != NULL || stmt->windowClause != NIL ||
+		stmt->valuesLists != NULL || stmt->limitOffset != NULL || stmt->limitCount != NULL ||
+		stmt->lockingClause != NIL || stmt->withClause != NULL || stmt->op != 0 ||
+		stmt->all != false || stmt->larg != NULL || stmt->rarg != NULL)
+		return false;
+	return true;
 }
 
 static List *
-parse_segment_collist(char *inpstr, const char *delim)
+parse_segment_collist(char *inpstr, Hypertable *hypertable)
 {
-	List *collist = NIL;
-	char *saveptr = NULL;
-	char *token = strtok_r(inpstr, delim, &saveptr);
+	StringInfoData buf;
+	List *parsed;
+	ListCell *lc;
+	SelectStmt *select;
 	short index = 0;
-	while (token)
+	List *collist = NIL;
+#if !PG96
+	RawStmt *raw;
+#endif
+
+	initStringInfo(&buf);
+
+	/* parse the segment by list exactly how you would a group by */
+	appendStringInfo(&buf,
+					 "SELECT FROM %s.%s GROUP BY %s",
+					 quote_identifier(hypertable->fd.schema_name.data),
+					 quote_identifier(hypertable->fd.table_name.data),
+					 inpstr);
+
+	PG_TRY();
 	{
-		char *namtoken = NULL;
-		CompressedParsedCol *col = (CompressedParsedCol *) palloc(sizeof(CompressedParsedCol));
-		col->index = index;
-		namtoken = strip_name_token(token);
-		namestrcpy(&col->colname, namtoken);
-		index++;
-		// elog(INFO, "colname is %s %d", col->colname, col->index);
-		collist = lappend(collist, (void *) col);
-		token = strtok_r(NULL, delim, &saveptr);
+		parsed = raw_parser(buf.data);
 	}
+	PG_CATCH();
+	{
+		throw_segment_by_error(inpstr);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	if (list_length(parsed) != 1)
+		throw_segment_by_error(inpstr);
+#if PG96
+	if (!IsA(linitial(parsed), SelectStmt))
+		throw_segment_by_error(inpstr);
+	select = linitial(parsed);
+#else
+	if (!IsA(linitial(parsed), RawStmt))
+		throw_segment_by_error(inpstr);
+	raw = linitial(parsed);
+
+	if (!IsA(raw->stmt, SelectStmt))
+		throw_segment_by_error(inpstr);
+	select = (SelectStmt *) raw->stmt;
+#endif
+
+	if (!select_stmt_as_expected(select))
+		throw_segment_by_error(inpstr);
+
+	if (select->sortClause != NIL)
+		throw_segment_by_error(inpstr);
+
+	foreach (lc, select->groupClause)
+	{
+		ColumnRef *cf;
+		CompressedParsedCol *col = (CompressedParsedCol *) palloc(sizeof(*col));
+
+		if (!IsA(lfirst(lc), ColumnRef))
+			throw_segment_by_error(inpstr);
+		cf = lfirst(lc);
+		if (list_length(cf->fields) != 1)
+			throw_segment_by_error(inpstr);
+
+		if (!IsA(linitial(cf->fields), String))
+			throw_segment_by_error(inpstr);
+
+		col->index = index;
+		index++;
+		namestrcpy(&col->colname, strVal(linitial(cf->fields)));
+		collist = lappend(collist, (void *) col);
+	}
+
 	return collist;
 }
 
-#define CHKTOKEN(token, str)                                                                       \
-	(token && (strncmp(token, str, strlen(str)) == 0) && (strlen(str) == strlen(token)))
-#define PRINT_UNEXPECTED_TOKEN_MSG(token2)                                                         \
-	ereport(ERROR,                                                                                 \
-			(errcode(ERRCODE_SYNTAX_ERROR),                                                        \
-			 errmsg("unexpected token %s in compress_orderby list ", token2)))
-
-static CompressedParsedCol *
-parse_orderelement(char *elttoken, const char *spcdelim, short index)
+static inline void
+throw_order_by_error(char *order_by)
 {
-	bool getnext = false;
-	bool neednullstok = false;
-	CompressedParsedCol *col = (CompressedParsedCol *) palloc(sizeof(CompressedParsedCol));
-	char *saveptr2 = NULL;
-	char *namtoken;
-	char *token2 = strtok_r(elttoken, spcdelim, &saveptr2);
-	col->index = index;
-	namtoken = strip_name_token(token2);
-	namestrcpy(&col->colname, namtoken);
-	/* default for sort is asc and nulls first */
-	col->asc = true;
-	col->nullsfirst = true;
-
-	token2 = strtok_r(NULL, spcdelim, &saveptr2);
-	if (CHKTOKEN(token2, "asc"))
-	{
-		col->asc = true;
-		getnext = true;
-	}
-	else if (CHKTOKEN(token2, "desc"))
-	{
-		col->asc = false;
-		/* if we have desceneding then nulls last is default unless user specifies otherwise */
-		col->nullsfirst = false;
-		getnext = true;
-	}
-	if (getnext)
-	{
-		token2 = strtok_r(NULL, spcdelim, &saveptr2);
-	}
-	if (CHKTOKEN(token2, "nulls"))
-	{
-		token2 = strtok_r(NULL, spcdelim, &saveptr2);
-		neednullstok = true;
-	}
-	else if (token2) // we have a token but not nay of the expected ones
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("unexpected token %s in compress_orderby list ", token2)));
-	}
-	if (CHKTOKEN(token2, "first"))
-	{
-		col->nullsfirst = true;
-	}
-	else if (CHKTOKEN(token2, "last"))
-	{
-		col->nullsfirst = false;
-	}
-	else if (neednullstok)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("expect first/last after nulls  in compress_orderby list ")));
-	}
-	else if (token2) // we have a token but not nay of the expected ones
-	{
-		PRINT_UNEXPECTED_TOKEN_MSG(token2);
-	}
-	// any more tokens left?
-	token2 = strtok_r(NULL, spcdelim, &saveptr2);
-	if (token2)
-	{
-		PRINT_UNEXPECTED_TOKEN_MSG(token2);
-	}
-
-	return col;
+	ereport(ERROR,
+			(errcode(ERRCODE_SYNTAX_ERROR),
+			 errmsg("unable to parse the compress_orderby option '%s'", order_by),
+			 errhint("The compress_orderby option should be a comma separated list of column "
+					 "names with sort options. It is the same format as an ORDER BY clause.")));
 }
 
-/* compress_orderby = `<elt>,<elt>:...'
-   <elt> = <col_name> [asc|desc] [nulls (first|last)]
- */
+/* compress_orderby is parsed same as order by in select queries */
 static List *
-parse_order_collist(char *inpstr, const char *delim)
+parse_order_collist(char *inpstr, Hypertable *hypertable)
 {
-	List *collist = NIL;
-	char *saveptr = NULL;
-	char *elttoken = strtok_r(inpstr, delim, &saveptr);
+	StringInfoData buf;
+	List *parsed;
+	ListCell *lc;
+	SelectStmt *select;
 	short index = 0;
-	char spcdelim = ' ';
-	while (elttoken)
+	List *collist = NIL;
+#if !PG96
+	RawStmt *raw;
+#endif
+
+	initStringInfo(&buf);
+
+	/* parse the segment by list exactly how you would a order by by */
+	appendStringInfo(&buf,
+					 "SELECT FROM %s.%s ORDER BY %s",
+					 quote_identifier(hypertable->fd.schema_name.data),
+					 quote_identifier(hypertable->fd.table_name.data),
+					 inpstr);
+
+	PG_TRY();
 	{
-		CompressedParsedCol *col = parse_orderelement(elttoken, &spcdelim, index);
-		collist = lappend(collist, (void *) col);
-		elttoken = strtok_r(NULL, delim, &saveptr);
-		index++;
+		parsed = raw_parser(buf.data);
 	}
+	PG_CATCH();
+	{
+		throw_order_by_error(inpstr);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	if (list_length(parsed) != 1)
+		throw_order_by_error(inpstr);
+#if PG96
+	if (!IsA(linitial(parsed), SelectStmt))
+		throw_order_by_error(inpstr);
+	select = linitial(parsed);
+#else
+	if (!IsA(linitial(parsed), RawStmt))
+		throw_order_by_error(inpstr);
+	raw = linitial(parsed);
+	if (!IsA(raw->stmt, SelectStmt))
+		throw_order_by_error(inpstr);
+	select = (SelectStmt *) raw->stmt;
+#endif
+
+	if (!select_stmt_as_expected(select))
+		throw_order_by_error(inpstr);
+
+	if (select->groupClause != NIL)
+		throw_order_by_error(inpstr);
+
+	foreach (lc, select->sortClause)
+	{
+		SortBy *sort_by;
+		ColumnRef *cf;
+		CompressedParsedCol *col = (CompressedParsedCol *) palloc(sizeof(*col));
+
+		if (!IsA(lfirst(lc), SortBy))
+			throw_order_by_error(inpstr);
+		sort_by = lfirst(lc);
+
+		if (!IsA(sort_by->node, ColumnRef))
+			throw_order_by_error(inpstr);
+		cf = (ColumnRef *) sort_by->node;
+
+		if (list_length(cf->fields) != 1)
+			throw_order_by_error(inpstr);
+
+		if (!IsA(linitial(cf->fields), String))
+			throw_order_by_error(inpstr);
+
+		col->index = index;
+		index++;
+		namestrcpy(&col->colname, strVal(linitial(cf->fields)));
+
+		if (sort_by->sortby_dir != SORTBY_ASC && sort_by->sortby_dir != SORTBY_DESC &&
+			sort_by->sortby_dir != SORTBY_DEFAULT)
+			throw_order_by_error(inpstr);
+		col->asc = sort_by->sortby_dir == SORTBY_ASC || sort_by->sortby_dir == SORTBY_DEFAULT;
+
+		if (sort_by->sortby_nulls == SORTBY_NULLS_DEFAULT)
+		{
+			/* default null ordering is LAST for ASC, FIRST for DESC */
+			col->nullsfirst = !col->asc;
+		}
+		else
+		{
+			col->nullsfirst = sort_by->sortby_nulls == SORTBY_NULLS_FIRST;
+		}
+
+		collist = lappend(collist, (void *) col);
+	}
+
 	return collist;
 }
 
@@ -186,12 +261,12 @@ parse_order_collist(char *inpstr, const char *delim)
  * compress_segmentby = `col1,col2,col3`
  */
 List *
-ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options)
+ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
 	if (parsed_options[CompressSegmentBy].is_default == false)
 	{
 		Datum textarg = parsed_options[CompressSegmentBy].parsed;
-		return parse_segment_collist(TextDatumGetCString(textarg), ",");
+		return parse_segment_collist(TextDatumGetCString(textarg), hypertable);
 	}
 	else
 		return NIL;
@@ -201,12 +276,12 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options)
  * E.g. timescaledb.compress_orderby = 'col1 asc nulls first,col2 desc,col3'
  */
 List *
-ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options)
+ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
 	if (parsed_options[CompressOrderBy].is_default == false)
 	{
 		Datum textarg = parsed_options[CompressOrderBy].parsed;
-		return parse_order_collist(TextDatumGetCString(textarg), ",");
+		return parse_order_collist(TextDatumGetCString(textarg), hypertable);
 	}
 	else
 		return NIL;

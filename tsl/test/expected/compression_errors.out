@@ -11,6 +11,14 @@ NOTICE:  adding not-null constraint to column "a"
  foo2
 (1 row)
 
+create table foo3 (a integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('foo3', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ foo3
+(1 row)
+
 create table non_compressed (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('non_compressed', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -23,15 +31,19 @@ insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ERROR:  cannot use the same column c in compress_orderby and compress_segmentby
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
+--TODO: allow changing the options if not chunks compressed
+ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
+ERROR:  duplicate key value violates unique constraint "hypertable_compression_pkey"
 select * from _timescaledb_catalog.hypertable_compression order by attname;
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
              1 | a        |                        4 |                        |                      |             | 
              1 | bacB toD |                        0 |                      1 |                      |             | 
              1 | c        |                        0 |                      2 |                      |             | 
-             1 | d        |                        4 |                        |                    1 | t           | t
+             1 | d        |                        4 |                        |                    1 | t           | f
 (4 rows)
 
+ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DeSc NullS lAsT');
 -- Negative test cases ---
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
@@ -44,7 +56,7 @@ NOTICE:  adding not-null constraint to column "a"
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 ERROR:  cannot compress tables with reserved column prefix '_ts_meta_'
 --basic test with count
-create table foo (a integer, b integer, c integer);
+create table foo (a integer, b integer, c integer, t text);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
  table_name 
@@ -71,26 +83,50 @@ ERROR:  column d in compress_segmentby list does not exist
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'd');
 ERROR:  column d in compress_orderby list does not exist
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls');
-ERROR:  expect first/last after nulls  in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c desc nulls'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls thirsty');
-ERROR:  expect first/last after nulls  in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c desc nulls thirsty'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c climb nulls first');
-ERROR:  unexpected token climb in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c climb nulls first'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c nulls first asC');
-ERROR:  unexpected token asC in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c nulls first asC'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls first asc');
-ERROR:  unexpected token asc in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c desc nulls first asc'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc hurry');
-ERROR:  unexpected token hurry in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c desc hurry'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
-ERROR:  unexpected token descend in compress_orderby list 
+ERROR:  unable to parse the compress_orderby option 'c descend'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c; SELECT 1');
+ERROR:  unable to parse the compress_orderby option 'c; SELECT 1'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = '1,2');
+ERROR:  unable to parse the compress_orderby option '1,2'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c + 1');
+ERROR:  unable to parse the compress_orderby option 'c + 1'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'random()');
+ERROR:  unable to parse the compress_orderby option 'random()'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c LIMIT 1');
+ERROR:  unable to parse the compress_orderby option 'c LIMIT 1'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c USING <');
+ERROR:  unable to parse the compress_orderby option 'c USING <'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 't COLLATE "en_US"');
+ERROR:  unable to parse the compress_orderby option 't COLLATE "en_US"'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
-ERROR:  column c asc in compress_segmentby list does not exist
+ERROR:  unable to parse the compress_segmentby option 'c asc'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c nulls last');
+ERROR:  unable to parse the compress_segmentby option 'c nulls last'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + 1');
+ERROR:  unable to parse the compress_segmentby option 'c + 1'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'random()');
+ERROR:  unable to parse the compress_segmentby option 'random()'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c LIMIT 1');
+ERROR:  unable to parse the compress_segmentby option 'c LIMIT 1'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
+ERROR:  unable to parse the compress_segmentby option 'c + b'
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
-ERROR:  chunk "_hyper_5_2_chunk" is not a compressed
+ERROR:  chunk "_hyper_8_2_chunk" is not a compressed
 --should succeed
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;

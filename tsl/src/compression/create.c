@@ -355,8 +355,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	struct CompressColInfo compress_cols;
 
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
-	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options);
-	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options);
+	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
+	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	/* we need an AccessShare lock on the hypertable so that there are
 	 * no DDL changes while we create the compressed hypertable
 	 */
