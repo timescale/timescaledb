@@ -173,6 +173,12 @@ SELECT count(*) from :COMPRESSED_CHUNK_NAME;
      1
 (1 row)
 
+SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
+ sum 
+-----
+  21
+(1 row)
+
 \x
 select * from timescaledb_information.compressed_chunk_size
 where hypertable_name::text like 'conditions'

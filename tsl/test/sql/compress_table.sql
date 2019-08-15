@@ -48,6 +48,7 @@ CREATE TABLE uncompressed(
     texts  TEXT);
 
 CREATE TABLE compressed(
+    _ts_meta_count int,
     time   _timescaledb_internal.compressed_data,
     device INT,
     data   _timescaledb_internal.compressed_data,
@@ -171,6 +172,7 @@ CREATE TABLE uncompressed(
     time FLOAT);
 
 CREATE TABLE compressed(
+    _ts_meta_count int,
     b _timescaledb_internal.compressed_data,
     device _timescaledb_internal.compressed_data,
     time _timescaledb_internal.compressed_data);

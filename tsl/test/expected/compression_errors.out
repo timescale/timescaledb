@@ -33,6 +33,16 @@ select * from _timescaledb_catalog.hypertable_compression order by attname;
 (4 rows)
 
 -- Negative test cases ---
+create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
+select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+       table_name       
+------------------------
+ reserved_column_prefix
+(1 row)
+
+ALTER TABLE reserved_column_prefix set (timescaledb.compress);
+ERROR:  cannot compress tables with reserved column prefix '_ts_meta_'
 --basic test with count
 create table foo (a integer, b integer, c integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
@@ -80,7 +90,7 @@ ERROR:  column c asc in compress_segmentby list does not exist
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a');
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;
-ERROR:  chunk "_hyper_4_2_chunk" is not a compressed
+ERROR:  chunk "_hyper_5_2_chunk" is not a compressed
 --should succeed
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' limit 1;

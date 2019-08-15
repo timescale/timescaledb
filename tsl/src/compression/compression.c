@@ -36,6 +36,7 @@
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
+#include "create.h"
 
 #define MAX_ROWS_PER_COMPRESSION 1000
 #define COMPRESSIONCOL_IS_SEGMENT_BY(col) (col->segmentby_column_index > 0)
@@ -106,6 +107,7 @@ typedef struct RowCompressor
 	 * data to the corresponding one in the compressed
 	 */
 	int16 *uncompressed_col_to_compressed_col;
+	int16 count_metadata_column_offset;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
@@ -393,10 +395,22 @@ static void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_compressed_columns)
+					int16 num_columns_in_compressed_table)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
+	Name count_metadata_name = DatumGetName(
+		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
+	AttrNumber count_metadata_column_num = attno_find_by_attname(out_desc, count_metadata_name);
+	int16 count_metadata_column_offset;
+
+	if (count_metadata_column_num == InvalidAttrNumber)
+		elog(ERROR,
+			 "missing metadata column '%s' in compressed table",
+			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num);
+
 	*row_compressor = (RowCompressor){
 		.compressed_table = compressed_table,
 		.bistate = GetBulkInsertState(),
@@ -405,12 +419,13 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.uncompressed_col_to_compressed_col =
 			palloc0(sizeof(*row_compressor->uncompressed_col_to_compressed_col) *
 					uncompressed_tuple_desc->natts),
-		.compressed_values = palloc(sizeof(Datum) * num_compressed_columns),
-		.compressed_is_null = palloc(sizeof(bool) * num_compressed_columns),
+		.count_metadata_column_offset = count_metadata_column_offset,
+		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
+		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
 		.rows_compressed_into_current_value = 0,
 	};
 
-	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_compressed_columns);
+	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
 
 	for (col = 0; col < num_compression_infos; col++)
 	{
@@ -423,7 +438,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			attno_find_by_attname(out_desc, (Name) &compression_info->attname);
 		row_compressor->uncompressed_col_to_compressed_col[in_column_offset] =
 			AttrNumberGetAttrOffset(compressed_colnum);
-		Assert(AttrNumberGetAttrOffset(compressed_colnum) < num_compressed_columns);
+		Assert(AttrNumberGetAttrOffset(compressed_colnum) < num_columns_in_compressed_table);
 		if (!COMPRESSIONCOL_IS_SEGMENT_BY(compression_info))
 		{
 			*column = (PerColumn){
@@ -593,7 +608,6 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid)
 		{
 			void *compressed_data;
 			Assert(column->segment_info == NULL);
-			Assert(compressed_col < row_compressor->n_input_columns);
 
 			compressed_data = compressor->finish(compressor);
 
@@ -609,6 +623,10 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid)
 			row_compressor->compressed_is_null[compressed_col] = column->segment_info->is_null;
 		}
 	}
+
+	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
+		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
+	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
 
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
@@ -630,7 +648,6 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid)
 
 		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
 		Assert(compressed_col >= 0);
-		Assert(compressed_col < row_compressor->n_input_columns);
 		if (row_compressor->compressed_is_null[compressed_col])
 			continue;
 

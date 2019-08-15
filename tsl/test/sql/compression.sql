@@ -77,6 +77,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
+SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
 
 \x
 select * from timescaledb_information.compressed_chunk_size
