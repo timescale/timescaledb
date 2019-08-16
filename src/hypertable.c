@@ -593,7 +593,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 }
 
 void
-ts_hypertable_drop(Hypertable *hypertable)
+ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 {
 	ObjectAddress hypertable_addr = (ObjectAddress){
 		.classId = RelationRelationId,
@@ -601,7 +601,7 @@ ts_hypertable_drop(Hypertable *hypertable)
 	};
 
 	/* Drop the postgres table */
-	performDeletion(&hypertable_addr, DROP_CASCADE, 0);
+	performDeletion(&hypertable_addr, behavior, 0);
 	/* Clean up catalog */
 	ts_hypertable_delete_by_name(hypertable->fd.schema_name.data, hypertable->fd.table_name.data);
 }

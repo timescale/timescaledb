@@ -92,7 +92,7 @@ extern int ts_hypertable_delete_by_name(const char *schema_name, const char *tab
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt,
 															  const char *query);
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name);
-extern void ts_hypertable_drop(Hypertable *hypertable);
+extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);

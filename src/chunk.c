@@ -54,6 +54,7 @@
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
+#include "scan_iterator.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -1747,6 +1748,41 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
+}
+
+static void
+init_scan_by_hypertable_id(ScanIterator *iterator, int32 hypertable_id)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_HYPERTABLE_ID_INDEX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_hypertable_id_idx_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+}
+
+bool
+ts_chunk_exists_with_compression(int32 hypertable_id)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	bool found = false;
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
+					 Anum_chunk_compressed_chunk_id,
+					 ts_scan_iterator_tuple_info(&iterator)->desc,
+					 &isnull);
+		if (!isnull)
+		{
+			found = true;
+			break;
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+	return found;
 }
 
 static ChunkResult

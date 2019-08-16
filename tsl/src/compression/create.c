@@ -394,17 +394,56 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 {
 	int32 compress_htid;
 	struct CompressColInfo compress_cols;
-
+	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
 	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
 
+	bool compression_already_enabled = ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID;
+	bool compressed_chunks_exist =
+		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
 	/* we need an AccessShare lock on the hypertable so that there are
 	 * no DDL changes while we create the compressed hypertable
 	 */
-	LockRelationOid(ht->main_table_relid, AccessShareLock);
+
+	if (!compress_enable)
+	{
+		if (compression_already_enabled)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("disabling compression is not yet supported")));
+		/* compression is not enabled, so just return */
+		return false;
+	}
+
+	if (compressed_chunks_exist)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot change compression options if compressed chunks exist")));
+
+	/* Require both order by and segment by when altering because otherwise it's not clear what
+	 * the default value means: does it mean leave as-is or is it an empty list. */
+	if (compression_already_enabled && (with_clause_options[CompressOrderBy].is_default ||
+										with_clause_options[CompressSegmentBy].is_default))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("need to specify both compress_orderby and compress_groupby if altering "
+						"compression")));
+
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
+
+	LockRelationOid(ht->main_table_relid, AccessShareLock);
+	if (compression_already_enabled)
+	{
+		Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		if (compressed == NULL)
+			elog(ERROR, "compression enabled but no compressed hypertable found");
+		/* need to drop the old compressed hypertable in case the segment by columns changed (and
+		 * thus the column types of compressed hypertable need to change) */
+		ts_hypertable_drop(compressed, DROP_RESTRICT);
+		hypertable_compression_delete_by_hypertable_id(ht->fd.id);
+	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);
 	/* block concurrent DDL that creates same compressed hypertable*/

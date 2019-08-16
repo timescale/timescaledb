@@ -2680,7 +2680,6 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	List *pg_options = NIL, *compress_options = NIL;
 	WithClauseResult *parse_results = NULL;
 	List *inpdef = NIL;
-	bool is_compress = false;
 	/* is this a compress table stmt */
 	Assert(IsA(cmd->def, List));
 	inpdef = (List *) cmd->def;
@@ -2688,10 +2687,13 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (compress_options)
 	{
 		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
-		is_compress = DatumGetBool(parse_results[CompressEnabled].parsed);
+		if (parse_results[CompressEnabled].is_default)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("must set the 'compress' boolean option when setting compression "
+							"options")));
 	}
-
-	if (!is_compress)
+	else
 		return false;
 
 	if (pg_options != NIL)

@@ -404,6 +404,11 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 	AttrNumber count_metadata_column_num = attno_find_by_attname(out_desc, count_metadata_name);
 	int16 count_metadata_column_offset;
 
+	Oid internal_schema_oid = LookupExplicitNamespace(INTERNAL_SCHEMA_NAME, false);
+	Oid compressed_data_type_oid = GetSysCacheOid2(TYPENAMENSP,
+												   PointerGetDatum("compressed_data"),
+												   ObjectIdGetDatum(internal_schema_oid));
+
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
 			 "missing metadata column '%s' in compressed table",
@@ -436,11 +441,17 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		Form_pg_attribute column_attr = TupleDescAttr(uncompressed_tuple_desc, in_column_offset);
 		AttrNumber compressed_colnum =
 			attno_find_by_attname(out_desc, (Name) &compression_info->attname);
+		Form_pg_attribute compressed_column_attr =
+			TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
 		row_compressor->uncompressed_col_to_compressed_col[in_column_offset] =
 			AttrNumberGetAttrOffset(compressed_colnum);
 		Assert(AttrNumberGetAttrOffset(compressed_colnum) < num_columns_in_compressed_table);
 		if (!COMPRESSIONCOL_IS_SEGMENT_BY(compression_info))
 		{
+			if (compressed_column_attr->atttypid != compressed_data_type_oid)
+				elog(ERROR,
+					 "expected column '%s' to be a compressed data type",
+					 compression_info->attname.data);
 			*column = (PerColumn){
 				.compressor = compressor_for_algorithm_and_type(compression_info->algo_id,
 																column_attr->atttypid),
@@ -448,6 +459,10 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		}
 		else
 		{
+			if (column_attr->atttypid != compressed_column_attr->atttypid)
+				elog(ERROR,
+					 "expected segment by column '%s' to be same type as uncompressed column",
+					 compression_info->attname.data);
 			*column = (PerColumn){
 				.segment_info = segment_info_new(column_attr),
 			};

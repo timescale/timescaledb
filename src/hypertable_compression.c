@@ -108,3 +108,26 @@ get_hypertablecompression_info(int32 htid)
 	}
 	return fdlist;
 }
+
+bool
+hypertable_compression_delete_by_hypertable_id(int32 htid)
+{
+	int count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), HYPERTABLE_COMPRESSION, HYPERTABLE_COMPRESSION_PKEY);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(htid));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete(ti->scanrel, ti->tuple);
+		count++;
+	}
+	return count > 0;
+}

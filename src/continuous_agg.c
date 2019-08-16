@@ -454,7 +454,7 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		ts_hypertable_drop_trigger(raw_hypertable, CAGGINVAL_TRIGGER_NAME);
 
 	/* delete the materialization table */
-	ts_hypertable_drop(mat_hypertable);
+	ts_hypertable_drop(mat_hypertable, DROP_CASCADE);
 
 	if (OidIsValid(partial_view.objectId))
 		performDeletion(&partial_view, DROP_RESTRICT, 0);
