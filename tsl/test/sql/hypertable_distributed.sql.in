@@ -13,7 +13,7 @@
 \o
 \set ECHO all
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -64,7 +64,7 @@ AND h.table_name = 'disttable';
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
@@ -431,28 +431,28 @@ ORDER BY table_schema, table_name;
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 CREATE SCHEMA "single'schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "single'schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
+GRANT ALL ON SCHEMA "single'schema" TO :ROLE_1;
 \c data_node_2
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
 \c data_node_3
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
+SET ROLE :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 CREATE SCHEMA "single'schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-GRANT ALL ON SCHEMA "single'schema" TO :ROLE_DEFAULT_CLUSTER_USER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
+GRANT ALL ON SCHEMA "single'schema" TO :ROLE_1;
+SET ROLE :ROLE_1;
 CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
 SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',

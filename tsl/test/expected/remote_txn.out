@@ -201,9 +201,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
 ROLLBACK;
 WARNING:  kill event: pre-abort
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  failure aborting remote transaction during local abort
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
  count 
@@ -303,9 +301,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: pre-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+ERROR:  [loopback]: SSL connection has been closed unexpectedly
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10002;
  count 
 -------
@@ -335,9 +331,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: waiting-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
-ERROR:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+ERROR:  [loopback]: SSL connection has been closed unexpectedly
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
  count 
 -------
@@ -383,9 +377,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: post-prepare-transaction
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  error while performing second phase of 2-pc
 --unresolved state shown here
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10004;
@@ -454,9 +446,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: pre-commit-prepared
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  error while performing second phase of 2-pc
 --unresolved state shown here
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10006;
@@ -513,9 +503,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-0
 COMMIT;
 WARNING:  kill event: waiting-commit-prepared
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  error while performing second phase of 2-pc
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
@@ -663,9 +651,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 COMMIT;
 WARNING:  kill event: pre-abort
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  failure aborting remote transaction during local abort
 ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
@@ -783,9 +769,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
     ROLLBACK TO SAVEPOINT save_1;
 WARNING:  kill event: subxact-abort
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
+WARNING:  [loopback]: SSL connection has been closed unexpectedly
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  connection to data node "loopback" was lost
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);

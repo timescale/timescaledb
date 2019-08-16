@@ -20,7 +20,7 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
@@ -50,9 +50,9 @@ SET client_min_messages TO NOTICE;
 \set ECHO all
 
 -- This SCHEMA will not be created on data nodes
-CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_1;
+CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
+SET ROLE :ROLE_1;
 
 CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_check CHECK (color > 0), temp float);
 CREATE UNIQUE INDEX disttable_pk ON disttable(time);
@@ -178,13 +178,13 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tab
 
 -- CREATE and DROP SCHEMA CASCADE
 \c data_node_1
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
+CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 \c data_node_2
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
+CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 \c data_node_3
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_DEFAULT_CLUSTER_USER;
+CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 CREATE TABLE some_schema.some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('some_schema.some_dist_table', 'time', replication_factor => 3);
@@ -397,7 +397,7 @@ CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
     WHEN TAG IN ('drop table')
     EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Test DROP inside event trigger on local table (should not crash)
 CREATE TABLE non_htable (id int PRIMARY KEY);
@@ -405,7 +405,7 @@ DROP TABLE non_htable;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP EVENT TRIGGER test_event_trigger_sqldrop;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Test DDL blocking from non-frontend session
 --
@@ -443,7 +443,7 @@ DROP INDEX disttable_device_idx;
 SELECT * FROM test.show_indexes('disttable');
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Should fail because of the inconsistency
 \set ON_ERROR_STOP 0

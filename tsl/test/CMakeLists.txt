@@ -1,5 +1,7 @@
 include("${PRIMARY_TEST_DIR}/test-defs.cmake")
 
+add_subdirectory(ssl)
+
 set(_local_install_checks)
 set(_install_checks)
 

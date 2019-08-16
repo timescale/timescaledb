@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 SELECT * FROM add_data_node('data_node1',
                             database => 'data_node1',
@@ -27,7 +27,7 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 SELECT _timescaledb_internal.invoke_distributed_commands();
 
@@ -41,7 +41,7 @@ SELECT * FROM disttable1;
 \dt
 SELECT * FROM disttable1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Verify failed insert command gets fully rolled back
 \set ON_ERROR_STOP 0
@@ -87,7 +87,7 @@ AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 SELECT is_frontend_session();
 
 -- Ensure peer dist id is already set and can be set only once

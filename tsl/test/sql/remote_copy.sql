@@ -11,7 +11,7 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
@@ -136,7 +136,7 @@ select * from show_chunks('"+ri(k33_'')"');
 SELECT * FROM "+ri(k33_')";
 select * from show_chunks('"+ri(k33_'')"');
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 DROP TABLE "+ri(k33_')" CASCADE;
 SELECT * FROM delete_data_node('data_node_1', cascade => true);

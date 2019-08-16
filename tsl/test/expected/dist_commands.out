@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 SELECT * FROM add_data_node('data_node1',
                             database => 'data_node1',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
@@ -28,12 +28,12 @@ SELECT * FROM add_data_node('data_node3',
 (1 row)
 
 \des+
-                                                                       List of foreign servers
-    Name    |        Owner         | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                      | Description 
-------------+----------------------+----------------------+-------------------+------+---------+-------------------------------------------------------+-------------
- data_node1 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node1') | 
- data_node2 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node2') | 
- data_node3 | default_cluster_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node3') | 
+                                                                  List of foreign servers
+    Name    |    Owner    | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                      | Description 
+------------+-------------+----------------------+-------------------+------+---------+-------------------------------------------------------+-------------
+ data_node1 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node1') | 
+ data_node2 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node2') | 
+ data_node3 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node3') | 
 (3 rows)
 
 RESET ROLE;
@@ -45,7 +45,7 @@ CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
 AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_distributed_commands();
 INFO:  data_node1 result: PGRES_COMMAND_OK
 INFO:  data_node2 result: PGRES_COMMAND_OK
@@ -61,11 +61,11 @@ INFO:  data_node2 result: PGRES_COMMAND_OK
 
 \c data_node1
 \dt
-                 List of relations
- Schema |    Name    | Type  |        Owner         
---------+------------+-------+----------------------
- public | disttable1 | table | default_cluster_user
- public | disttable2 | table | default_cluster_user
+             List of relations
+ Schema |    Name    | Type  |    Owner    
+--------+------------+-------+-------------
+ public | disttable1 | table | test_role_1
+ public | disttable2 | table | test_role_1
 (2 rows)
 
 SELECT * FROM disttable1;
@@ -76,11 +76,11 @@ SELECT * FROM disttable1;
 
 \c data_node2
 \dt
-                 List of relations
- Schema |    Name    | Type  |        Owner         
---------+------------+-------+----------------------
- public | disttable1 | table | default_cluster_user
- public | disttable2 | table | default_cluster_user
+             List of relations
+ Schema |    Name    | Type  |    Owner    
+--------+------------+-------+-------------
+ public | disttable1 | table | test_role_1
+ public | disttable2 | table | test_role_1
 (2 rows)
 
 SELECT * FROM disttable1;
@@ -91,10 +91,10 @@ SELECT * FROM disttable1;
 
 \c data_node3
 \dt
-                 List of relations
- Schema |    Name    | Type  |        Owner         
---------+------------+-------+----------------------
- public | disttable1 | table | default_cluster_user
+             List of relations
+ Schema |    Name    | Type  |    Owner    
+--------+------------+-------+-------------
+ public | disttable1 | table | test_role_1
 (1 row)
 
 SELECT * FROM disttable1;
@@ -103,7 +103,7 @@ SELECT * FROM disttable1;
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 -- Verify failed insert command gets fully rolled back
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
@@ -162,7 +162,7 @@ SELECT is_frontend_session();
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 SELECT is_frontend_session();
  is_frontend_session 
 ---------------------

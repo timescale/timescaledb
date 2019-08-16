@@ -123,7 +123,7 @@ SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'boot
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 -- Test with non-superuser
 --
 -- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER

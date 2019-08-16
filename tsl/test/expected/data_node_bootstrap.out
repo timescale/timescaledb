@@ -19,7 +19,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
-ERROR:  authentication required on target host
+ERROR:  [bootstrap_test]: permission denied to create database
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
  data_node_name | host | port | dbname 
@@ -213,7 +213,7 @@ NOTICE:  database "bootstrap_test" already exists on data node, not creating it
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 -- Test with non-superuser
 --
 -- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER

@@ -3,12 +3,14 @@
 # "local" is for Unix domain socket connections only
 local   all             all                                                         trust
 # IPv4 local connections:
-host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER@    127.0.0.1/32            password
-host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER_2@  127.0.0.1/32            password
-host    all             @TEST_ROLE_CLUSTER_SUPERUSER@       127.0.0.1/32            password
-host    all             all                                 127.0.0.1/32            trust
+hostssl  all             @TEST_ROLE_CLUSTER_SUPERUSER@  127.0.0.1/32           cert clientcert=1
+hostssl  all             @TEST_ROLE_1@                  127.0.0.1/32           cert clientcert=1
+hostssl  all             @TEST_ROLE_2@                  127.0.0.1/32           cert clientcert=1
+host     all             @TEST_ROLE_3@                  127.0.0.1/32           password
+host     all             all                            127.0.0.1/32           trust
 # IPv6 local connections:
-host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER@    ::1/128                 password
-host    all             @TEST_ROLE_DEFAULT_CLUSTER_USER_2@  ::1/128                 password
-host    all             @TEST_ROLE_CLUSTER_SUPERUSER@       ::1/128                 password
-host    all             all                                 ::1/128                 trust
+hostssl  all             @TEST_ROLE_CLUSTER_SUPERUSER@  ::1/128                cert clientcert=1
+hostssl  all             @TEST_ROLE_1@                  ::1/128                cert clientcert=1
+hostssl  all             @TEST_ROLE_2@                  ::1/128                cert clientcert=1
+host     all             @TEST_ROLE_3@                  ::1/128                password
+host     all             all                            ::1/128                trust

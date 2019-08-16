@@ -5,7 +5,7 @@
 -- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 \ir include/remote_exec.sql
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;

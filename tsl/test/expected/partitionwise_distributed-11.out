@@ -15,23 +15,24 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
--- Need explicit password for non-super users to connect
-GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 SET client_min_messages TO NOTICE;
+GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_3;
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_3;
+SET ROLE :ROLE_3;
 SELECT inet_server_port() AS "port" \gset
+-- Need explicit password for non-super users to connect
 CREATE SERVER IF NOT EXISTS server_pg1 FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
 CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
 OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg1
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_DEFAULT_CLUSTER_USER server server_pg2
-OPTIONS (user :'ROLE_DEFAULT_CLUSTER_USER', password :'ROLE_DEFAULT_CLUSTER_USER_PASS');
+CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg1
+OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
+CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
+OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1',
                             database => 'data_node_1',
