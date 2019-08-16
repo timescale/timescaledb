@@ -16,7 +16,7 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 -- Add data nodes using TimescaleDB data_node management API. NOTE that the
 -- extension won't be created since it is installed in the template1
@@ -79,7 +79,7 @@ DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_4;
 SET client_min_messages TO INFO;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 SELECT * FROM add_data_node('data_node_1', database => 'data_node_1',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
@@ -132,7 +132,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Now create tables as cluster user
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
@@ -248,7 +248,7 @@ SELECT * FROM _timescaledb_internal.ping_data_node('data_node_1');
 RESET ROLE;
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER pg_server_1 FOREIGN DATA WRAPPER postgres_fdw;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 \set ON_ERROR_STOP 0
 -- Throw ERROR for non-existing data node
@@ -482,7 +482,7 @@ SET ROLE :ROLE_CLUSTER_SUPERUSER;
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
 
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 CREATE TABLE disttable_4(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
 
@@ -515,8 +515,8 @@ SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
 SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
 
 -- Test case for missing pgpass user password
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER_2;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER_2;
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_2;
+SET ROLE :ROLE_2;
 SELECT * FROM add_data_node('data_node_6', database => 'data_node_6',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 -- Must return false

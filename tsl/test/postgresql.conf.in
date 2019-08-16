@@ -18,4 +18,9 @@ log_line_prefix='%u [%p] %d '
 # is needed to make our tests work for multiple PostgreSQL versions.
 extra_float_digits=0
 max_prepared_transactions=100 #set same as max_connections
-hba_file='@TEST_OUTPUT_DIR@/pg_hba.conf'
+hba_file='@TEST_PG_HBA_FILE@'
+ssl=on
+ssl_ca_file='@TEST_OUTPUT_DIR@/ts_root.crt'
+ssl_cert_file='@TEST_OUTPUT_DIR@/ts_data_node.crt'
+ssl_key_file='@TEST_OUTPUT_DIR@/ts_data_node.key'
+timescaledb.ssl_dir='@TEST_OUTPUT_DIR@'

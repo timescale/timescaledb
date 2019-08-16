@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 
 \set TEST_BASE_NAME dist_query
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",

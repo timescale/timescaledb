@@ -58,6 +58,7 @@ TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
+TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -258,6 +259,18 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomStringVariable("timescaledb.ssl_dir",
+							   "TimescaleDB user certificate directory",
+							   "Determines a path which is used to search user certificates and "
+							   "private keys",
+							   &ts_guc_ssl_dir,
+							   NULL,
+							   PGC_SIGHUP,
+							   GUC_SUPERUSER_ONLY,
+							   NULL,
+							   NULL,
+							   NULL);
 
 	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
 							"Maximum open chunks per insert",

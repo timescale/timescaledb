@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_1;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;

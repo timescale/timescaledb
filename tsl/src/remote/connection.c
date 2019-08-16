@@ -25,6 +25,9 @@
 #include <utils/syscache.h>
 #include <utils/uuid.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
+#include <postmaster/postmaster.h>
+#include <libpq/libpq.h>
 
 #include <nodes/makefuncs.h>
 #include <commands/defrem.h>
@@ -124,23 +127,36 @@ remote_connection_valid_node_option(const char *keyword)
 }
 
 static int
-extract_connection_options(List *defelems, const char **keywords, const char **values)
+extract_connection_options(List *defelems, const char **keywords, const char **values,
+						   const char **user)
 {
 	ListCell *lc;
-	int i = 0;
+	int option_pos = 0;
 
+	Assert(keywords != NULL);
+	Assert(values != NULL);
+	Assert(user != NULL);
+
+	*user = NULL;
 	foreach (lc, defelems)
 	{
 		DefElem *d = (DefElem *) lfirst(lc);
 
 		if (is_libpq_option(d->defname, NULL))
 		{
-			keywords[i] = d->defname;
-			values[i] = defGetString(d);
-			i++;
+			keywords[option_pos] = d->defname;
+			values[option_pos] = defGetString(d);
+			if (strcmp(d->defname, "user") == 0)
+			{
+				Assert(*user == NULL);
+				*user = values[option_pos];
+			}
+			option_pos++;
 		}
 	}
-	return i;
+
+	Assert(*user != NULL);
+	return option_pos;
 }
 
 /*
@@ -265,38 +281,98 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 	remote_connection_result_close(res);
 }
 
+/* fallback_application_name, client_encoding, end marker */
+#define REMOTE_CONNECTION_SESSION_OPTIONS_N 3
+
+/* sslmode, sslrootcert, sslcert, sslkey */
+#define REMOTE_CONNECTION_SSL_OPTIONS_N 4
+
+static void
+set_ssl_options(const char *user_name, const char **keywords, const char **values,
+				int *option_start)
+{
+	int option_pos = *option_start;
+	const char *ssl_enabled;
+	const char *ssl_ca_file;
+
+	ssl_enabled = GetConfigOption("ssl", true, false);
+
+	if (!ssl_enabled || strcmp(ssl_enabled, "on") != 0)
+		return;
+
+	/* If SSL is enabled on AN then we assume it is also should be used for DN
+	 * connections as well, otherwise we need to introduce some other way to
+	 * control it */
+	keywords[option_pos] = "sslmode";
+	values[option_pos] = "require";
+	option_pos++;
+
+	ssl_ca_file = GetConfigOption("ssl_ca_file", true, false);
+
+	/* Use ssl_ca_file as the root certificate when verifying the
+	 * data node we connect to */
+	if (ssl_ca_file)
+	{
+		keywords[option_pos] = "sslrootcert";
+		values[option_pos] = ssl_ca_file;
+		option_pos++;
+	}
+
+	/* Search for the user certificate in timescaledb.ssl_dir
+	 * or use a data dir */
+	keywords[option_pos] = "sslcert";
+	values[option_pos] =
+		psprintf("%s/%s.crt", ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, user_name);
+	option_pos++;
+
+	keywords[option_pos] = "sslkey";
+	values[option_pos] =
+		psprintf("%s/%s.key", ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, user_name);
+	option_pos++;
+
+	*option_start = option_pos;
+}
+
 static TSConnection *
 remote_connection_open_internal(const char *node_name, List *connection_options)
 {
 	PGconn *pg_conn = NULL;
+	const char *user_name = NULL;
 	const char **keywords;
 	const char **values;
-	int n;
+	int option_count;
+	int option_pos;
 
 	/*
 	 * Construct connection params from generic options of ForeignServer
 	 * and user. (Some of them might not be libpq options, in
 	 * which case we'll just waste a few array slots.)  Add 3 extra slots
 	 * for fallback_application_name, client_encoding, end marker.
+	 * Add additional 4 slots for ssl options.
 	 */
-	n = list_length(connection_options) + 3;
-	keywords = (const char **) palloc(n * sizeof(char *));
-	values = (const char **) palloc(n * sizeof(char *));
+	option_count = list_length(connection_options) + REMOTE_CONNECTION_SESSION_OPTIONS_N +
+				   REMOTE_CONNECTION_SSL_OPTIONS_N;
+	keywords = (const char **) palloc(option_count * sizeof(char *));
+	values = (const char **) palloc(option_count * sizeof(char *));
 
-	n = 0;
-	n += extract_connection_options(connection_options, keywords + n, values + n);
+	option_pos = extract_connection_options(connection_options, keywords, values, &user_name);
 
 	/* Use the extension name as fallback_application_name. */
-	keywords[n] = "fallback_application_name";
-	values[n] = EXTENSION_NAME;
-	n++;
+	keywords[option_pos] = "fallback_application_name";
+	values[option_pos] = EXTENSION_NAME;
+	option_pos++;
 
 	/* Set client_encoding so that libpq can convert encoding properly. */
-	keywords[n] = "client_encoding";
-	values[n] = GetDatabaseEncodingName();
-	n++;
+	keywords[option_pos] = "client_encoding";
+	values[option_pos] = GetDatabaseEncodingName();
+	option_pos++;
 
-	keywords[n] = values[n] = NULL;
+	/* Set client specific SSL connection options */
+	set_ssl_options(user_name, keywords, values, &option_pos);
+
+	/* Set end marker */
+	keywords[option_pos] = values[option_pos] = NULL;
+	Assert(option_pos <= option_count);
 
 	pg_conn = PQconnectdbParams(keywords, values, false);
 
@@ -309,6 +385,9 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 
 	return remote_connection_create(pg_conn, false, node_name);
 }
+
+#undef REMOTE_CONNECTION_SSL_OPTIONS
+#undef REMOTE_CONNECTION_ADDITIONAL_OPTIONS
 
 /*
  * Opens a connection.
@@ -345,19 +424,6 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
 					 errmsg("could not connect to \"%s\"", node_name),
 					 errdetail_internal("%s", pchomp(PQerrorMessage(conn->pg_conn)))));
-
-		/*
-		 * Check that non-superuser has used password to establish connection;
-		 * otherwise, he's piggybacking on the postgres server's user
-		 * identity. See also dblink_security_check() in contrib/dblink.
-		 */
-		if (!superuser() && !PQconnectionUsedPassword(conn->pg_conn))
-			ereport(ERROR,
-					(errcode(ERRCODE_S_R_E_PROHIBITED_SQL_STATEMENT_ATTEMPTED),
-					 errmsg("authentication required on target host"),
-					 errdetail("Non-superuser cannot connect if the target host does "
-							   "not request a password."),
-					 errhint("Target host's authentication method must be changed.")));
 
 		/* Prepare new session for use */
 		remote_connection_configure(conn);
