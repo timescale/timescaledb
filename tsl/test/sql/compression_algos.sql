@@ -15,26 +15,7 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 SELECT ts_test_compression();
 
---------------------------
--- cheap rand generator --
---------------------------
-create table rand_minstd_state(i bigint);
-
-create function rand_minstd_advance(bigint) returns bigint
-language sql immutable as
-$$
-	select (16807 * $1) % 2147483647
-$$;
-
-create function gen_rand_minstd() returns bigint
-language sql as
-$$
-	update rand_minstd_state set i = rand_minstd_advance(i) returning i
-$$;
-
--- seed the random num generator
-insert into rand_minstd_state values (321);
-
+\ir include/rand_generator.sql
 
 ------------------------
 -- BIGINT Compression --
