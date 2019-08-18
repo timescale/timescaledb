@@ -82,6 +82,9 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	RawStmt *raw;
 #endif
 
+	if(strlen(inpstr) == 0)
+		return NIL;
+
 	initStringInfo(&buf);
 
 	/* parse the segment by list exactly how you would a group by */
@@ -170,6 +173,9 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 #if !PG96
 	RawStmt *raw;
 #endif
+
+	if(strlen(inpstr) == 0)
+		return NIL;
 
 	initStringInfo(&buf);
 

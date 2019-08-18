@@ -227,6 +227,10 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	truncate_relation(in_table);
 
+	/* recreate all indexes on out rel, we already have an exvclusive lock on it
+	 * so the strong locks taken by reindex_relation shouldn't matter. */
+	reindex_relation(out_table, 0, 0);
+
 	RelationClose(out_rel);
 	RelationClose(in_rel);
 }
@@ -878,6 +882,10 @@ decompress_chunk(Oid in_table, Oid out_table)
 		heap_endscan(heapScan);
 		FreeBulkInsertState(decompressor.bistate);
 	}
+
+	/* recreate all indexes on out rel, we already have an exvclusive lock on it
+	 * so the strong locks taken by reindex_relation shouldn't matter. */
+	reindex_relation(out_table, 0, 0);
 
 	RelationClose(out_rel);
 	RelationClose(in_rel);

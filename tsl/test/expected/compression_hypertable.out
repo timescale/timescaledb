@@ -1,0 +1,59 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/rand_generator.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license
+--------------------------
+-- cheap rand generator --
+--------------------------
+create table rand_minstd_state(i bigint);
+create function rand_minstd_advance(bigint) returns bigint
+language sql immutable as
+$$
+	select (16807 * $1) % 2147483647
+$$;
+create function gen_rand_minstd() returns bigint
+language sql as
+$$
+	update rand_minstd_state set i = rand_minstd_advance(i) returning i
+$$;
+-- seed the random num generator
+insert into rand_minstd_state values (321);
+CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
+NOTICE:  adding not-null constraint to column "Time"
+ table_name 
+------------
+ test1
+(1 row)
+
+INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = '"Time" DESC');
+SELECT
+  $$
+  SELECT * FROM test1 ORDER BY "Time"
+  $$ AS "QUERY" \gset
+SELECT 'test1' AS "HYPERTABLE_NAME" \gset
+\ir include/compression_test_hypertable.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result" does not exist, skipping
+ count 
+-------
+    27
+(1 row)
+
+ count 
+-------
+    27
+(1 row)
+
+                               ?column?                                | count 
+-----------------------------------------------------------------------+-------
+ Number of rows different between original and uncompressed (expect 0) |     0
+(1 row)
+
