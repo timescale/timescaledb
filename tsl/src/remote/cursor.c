@@ -212,7 +212,7 @@ remote_cursor_fetch_data(Cursor *cursor)
 
 		/* On error, report the original query, not the FETCH. */
 		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-			remote_connection_report_error(ERROR, res, conn, false, cursor->stmt);
+			remote_result_elog(res, ERROR);
 
 		/* Convert the data into HeapTuples */
 		numrows = PQntuples(res);

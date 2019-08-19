@@ -266,6 +266,7 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 	TSConnection *conn;
 	List *node_options;
 	bool created = false;
+	PGresult *res;
 
 	Assert(NULL != node_name);
 	Assert(NULL != dbname);
@@ -278,98 +279,77 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 
 	conn = remote_connection_open_with_options(node_name, node_options, false);
 
-	PG_TRY();
+	/* Create the database with the user as owner. This command might fail
+	 * if the database already exists, but we catch the error and continue
+	 * with the bootstrapping if it does. */
+	res = remote_connection_execf(conn,
+								  "CREATE DATABASE %s OWNER %s",
+								  quote_identifier(dbname),
+								  quote_identifier(username));
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 	{
-		char *request;
-		PGresult *res;
+		const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
+		bool database_exists = (sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_DATABASE_STR) == 0);
 
-		/* Create the database with the user as owner. This command might fail
-		 * if the database already exists, but we catch the error and continue
-		 * with the bootstrapping if it does. */
-		request = psprintf("CREATE DATABASE %s OWNER %s",
-						   quote_identifier(dbname),
-						   quote_identifier(username));
-		res = remote_connection_query_any_result(conn, request);
+		if (!database_exists)
+			remote_result_elog(res, ERROR);
 
-		if (PQresultStatus(res) != PGRES_COMMAND_OK)
+		remote_result_close(res);
+
+		/* Since we are not trying to create anything in the database later in
+		 * the procedure, we need to check that it has the proper privileges
+		 * before proceeding.
+		 *
+		 * If the procedure created a table in the database as part of the
+		 * data node add function (e.g., with bookkeeping information), this
+		 * would allow us to piggyback on that instead since it would cause a
+		 * failure later in the execution of add_data_node, but now we do not
+		 * have anything like that, so we need to check that we have
+		 * sufficient privileges for creating chunks in the database.
+		 */
+		res = remote_connection_queryf_ok(conn,
+										  "SELECT has_database_privilege(%s, %s, %s)",
+										  quote_literal_cstr(username),
+										  quote_literal_cstr(dbname),
+										  quote_literal_cstr(DATABASE_PRIVILEGES));
+
+		Assert(PQntuples(res) > 0);
+
+		if (strcmp(PQgetvalue(res, 0, 0), "t") != 0)
 		{
-			const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-			if (sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_DATABASE_STR) == 0)
-			{
-				/* Since we are not trying to create anything in the database
-				 * later in the procedure, we need to check that it has the
-				 * proper privileges before proceeding.
-				 *
-				 * If the procedure created a table in the database as part of
-				 * the data node add function (e.g., with bookkeeping
-				 * information), this would allow us to piggyback on that
-				 * instead since it would cause a failure later in the
-				 * execution of add_data_node, but now we do not have anything
-				 * like that, so we need to check that we have sufficient
-				 * privileges for creating chunks in the database.
-				 */
-				const char *request = psprintf("SELECT has_database_privilege(%s, %s, %s)",
-											   quote_literal_cstr(username),
-											   quote_literal_cstr(dbname),
-											   quote_literal_cstr(DATABASE_PRIVILEGES));
-
-				remote_connection_result_close(res);
-				res = remote_connection_query_ok_result(conn, request);
-				Assert(PQntuples(res) > 0);
-				if (strcmp(PQgetvalue(res, 0, 0), "t") != 0)
-				{
-					remote_connection_result_close(res);
-					ereport(ERROR,
-							(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-							 errmsg("insufficient privileges for user \"%s\" on remote node "
-									"database \"%s\"",
-									username,
-									dbname),
-							 errdetail("Using database=\"%s\", user=\"%s\", privileges=\"%s\".",
-									   dbname,
-									   username,
-									   DATABASE_PRIVILEGES),
-							 errhint("Use \"GRANT %s ON DATABASE %s TO %s\" on remote node to "
-									 "grant correct privileges.",
-									 quote_literal_cstr(DATABASE_PRIVILEGES),
-									 quote_identifier(dbname),
-									 quote_identifier(username))));
-				}
-				else
-				{
-					/* If the database already existed on the remote node, we
-					 * got a duplicate database error above and the database
-					 * was not created.
-					 *
-					 * In this case, we will log a notice and proceed since it is
-					 * not an error if the database already existed on the remote
-					 * node. */
-					elog(NOTICE,
-						 "database \"%s\" already exists on data node, not creating it",
-						 dbname);
-				}
-			}
-			else
-			{
-				/* If we get any other error, we print the normal error and
-				 * fail the command. */
-				remote_connection_report_error(ERROR, res, conn, true, NULL);
-			}
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("insufficient privileges for user \"%s\" on remote node "
+							"database \"%s\"",
+							username,
+							dbname),
+					 errdetail("Using database=\"%s\", user=\"%s\", privileges=\"%s\".",
+							   dbname,
+							   username,
+							   DATABASE_PRIVILEGES),
+					 errhint("Use \"GRANT %s ON DATABASE %s TO %s\" on remote node to "
+							 "grant correct privileges.",
+							 quote_literal_cstr(DATABASE_PRIVILEGES),
+							 quote_identifier(dbname),
+							 quote_identifier(username))));
 		}
 		else
 		{
-			created = true;
+			/* If the database already existed on the remote node, we
+			 * got a duplicate database error above and the database
+			 * was not created.
+			 *
+			 * In this case, we will log a notice and proceed since it is
+			 * not an error if the database already existed on the remote
+			 * node. */
+			elog(NOTICE, "database \"%s\" already exists on data node, not creating it", dbname);
 		}
-
-		remote_connection_result_close(res);
 	}
-	PG_CATCH();
-	{
-		remote_connection_close(conn);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
+	else
+		created = true;
 
+	/* Closing the connection will also clean up results */
 	remote_connection_close(conn);
 
 	return created;
@@ -383,66 +363,49 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 	TSConnection *conn;
 	List *node_options;
 	bool created = false;
+	PGresult *res;
+	const char *schema_name = ts_extension_schema_name();
+	const char *schema_name_quoted = quote_identifier(schema_name);
+	Oid schema_oid = get_namespace_oid(schema_name, true);
+	bool extension_exists = false;
 
 	node_options = create_data_node_options(host, port, dbname, bootstrap_user);
 	conn = remote_connection_open_with_options(node_name, node_options, false);
 
-	PG_TRY();
+	res = remote_connection_execf(conn,
+								  "SELECT 1 FROM pg_extension WHERE extname = %s",
+								  quote_literal_cstr(EXTENSION_NAME));
+
+	if (PQntuples(res) > 0)
+		extension_exists = true;
+
+	remote_result_close(res);
+
+	if (!extension_exists)
 	{
-		PGresult *res;
-		char *request;
-		const char *schema_name = ts_extension_schema_name();
-		const char *schema_name_quoted = quote_identifier(schema_name);
-		Oid schema_oid = get_namespace_oid(schema_name, true);
-		bool extension_exists = false;
+		if (schema_oid != PG_PUBLIC_NAMESPACE)
+			remote_connection_cmdf_ok(conn,
+									  "CREATE SCHEMA %s%s AUTHORIZATION %s",
+									  if_not_exists ? "IF NOT EXISTS " : "",
+									  schema_name_quoted,
+									  quote_identifier(username));
 
-		request = psprintf("SELECT 1 FROM pg_extension WHERE extname = %s",
-						   quote_literal_cstr(EXTENSION_NAME));
-		res = remote_connection_query_any_result(conn, request);
-
-		if (PQntuples(res) > 0)
-			extension_exists = true;
-
-		remote_connection_result_close(res);
-
-		if (!extension_exists)
-		{
-			if (schema_oid != PG_PUBLIC_NAMESPACE)
-			{
-				request = psprintf("CREATE SCHEMA %s%s AUTHORIZATION %s",
-								   if_not_exists ? "IF NOT EXISTS " : "",
-								   schema_name_quoted,
-								   quote_identifier(username));
-				res = remote_connection_query_ok_result(conn, request);
-				remote_connection_result_close(res);
-			}
-			request = psprintf("CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
-							   if_not_exists ? "IF NOT EXISTS" : "",
-							   schema_name_quoted);
-			res = remote_connection_query_ok_result(conn, request);
-			remote_connection_result_close(res);
-
-			created = true;
-		}
-
-		request = "SELECT _timescaledb_internal.validate_as_data_node()";
-		res = remote_connection_query_any_result(conn, request);
-
-		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-					 (errmsg("could not add data node %s", node_name),
-					  errdetail("%s", PQresultErrorMessage(res)))));
-
-		remote_connection_result_close(res);
+		remote_connection_cmdf_ok(conn,
+								  "CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
+								  if_not_exists ? "IF NOT EXISTS" : "",
+								  schema_name_quoted);
+		created = true;
 	}
-	PG_CATCH();
-	{
-		remote_connection_close(conn);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
 
+	res = remote_connection_exec(conn, "SELECT _timescaledb_internal.validate_as_data_node()");
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 (errmsg("could not add data node %s", node_name),
+				  errdetail("%s", PQresultErrorMessage(res)))));
+
+	remote_result_close(res);
 	remote_connection_close(conn);
 
 	return created;
@@ -488,30 +451,17 @@ static void
 add_distributed_id_to_data_node(const char *node_name, const char *host, int32 port,
 								const char *dbname, bool if_not_exists, const char *user)
 {
+	Datum id_string = DirectFunctionCall1(uuid_out, dist_util_get_id());
 	TSConnection *conn;
 	List *node_options;
+	PGresult *res;
 
 	node_options = create_data_node_options(host, port, dbname, user);
 	conn = remote_connection_open_with_options(node_name, node_options, false);
-
-	PG_TRY();
-	{
-		PGresult *res;
-		char *request;
-		Datum id_string = DirectFunctionCall1(uuid_out, dist_util_get_id());
-
-		request = psprintf("SELECT * FROM _timescaledb_internal.set_dist_id('%s')",
-						   DatumGetCString(id_string));
-		res = remote_connection_query_ok_result(conn, request);
-		remote_connection_result_close(res);
-	}
-	PG_CATCH();
-	{
-		remote_connection_close(conn);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
+	res = remote_connection_queryf_ok(conn,
+									  "SELECT * FROM _timescaledb_internal.set_dist_id('%s')",
+									  DatumGetCString(id_string));
+	remote_result_close(res);
 	remote_connection_close(conn);
 }
 
@@ -519,22 +469,10 @@ static void
 remove_distributed_id_from_backend(ForeignServer *fs)
 {
 	TSConnection *conn = remote_connection_open(fs->serverid, GetUserId());
-
-	PG_TRY();
-	{
-		PGresult *res =
-			remote_connection_query_ok_result(conn,
-											  "SELECT * FROM "
-											  "_timescaledb_internal.remove_from_dist_db();");
-		remote_connection_result_close(res);
-	}
-	PG_CATCH();
-	{
-		remote_connection_close(conn);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
+	PGresult *res = remote_connection_query_ok(conn,
+											   "SELECT * FROM "
+											   "_timescaledb_internal.remove_from_dist_db();");
+	remote_result_close(res);
 	remote_connection_close(conn);
 }
 

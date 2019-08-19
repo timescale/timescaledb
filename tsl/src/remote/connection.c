@@ -38,9 +38,35 @@
 #include "compat.h"
 #include "connection.h"
 #include "guc.h"
-#include "async.h"
 #include "utils.h"
 #include "dist_util.h"
+
+/*
+ * Connection library for TimescaleDB.
+ *
+ * This library file contains convenience functionality around the libpq
+ * API. The major additional functionality offered includes:
+ *
+ * - libpq object lifecycles are tied to transactions (connections and
+ *   results). This ensures that there are no memory leaks caused by libpq
+ *   objects after a transaction completes.
+ * - connection configuration suitable for TimescaleDB.
+ *
+ * NOTE that it is strongly adviced that connection-related functions do not
+ * throw exceptions with, e.g., elog(ERROR). While exceptions can be caught
+ * with PG_TRY-CATCH for cleanup, it is not possible to safely continue the
+ * transaction that threw the exception as if no error occurred (see the
+ * following post if unconvinced:
+ * https://www.postgresql.org/message-id/27190.1508727890%40sss.pgh.pa.us).
+ *
+ * In some cases, we need to be able to continue a transaction even if a
+ * connection fails. One example is the removal of a data node, which must be
+ * able to proceed even if the node is no longer available to respond to a
+ * connection. Another example is performing a liveness check for node status.
+ *
+ * Therefore, it is best that defer throwing exceptions to high-level
+ * functions that know when it is appropriate.
+ */
 
 /* for assigning cursor numbers and prepared statement numbers */
 static unsigned int cursor_number = 0;
@@ -101,6 +127,7 @@ list_insert_after(ListNode *entry, ListNode *prev)
 typedef struct ResultEntry
 {
 	struct ListNode ln;		  /* Must be first entry */
+	TSConnection *conn;		  /* The connection the result was created on */
 	SubTransactionId subtxid; /* The subtransaction ID that created this result, if any. */
 	PGresult *result;
 } ResultEntry;
@@ -109,6 +136,7 @@ typedef struct TSConnection
 {
 	ListNode ln;			  /* Must be first entry */
 	PGconn *pg_conn;		  /* PostgreSQL connection */
+	bool closing_guard;		  /* Guard against calling PQfinish() directly on PGconn */
 	bool processing;		  /* TRUE if there is ongoing async request processing */
 	NameData node_name;		  /* Associated data node name */
 	char *tz_name;			  /* Timezone name last sent over connection */
@@ -136,6 +164,14 @@ static ListNode connections = { &connections, &connections };
 #define EVENTPROC_FAILURE 0
 #define EVENTPROC_SUCCESS 1
 
+static void
+remote_connection_free(TSConnection *conn)
+{
+	if (NULL != conn->tz_name)
+		free(conn->tz_name);
+	free(conn);
+}
+
 /*
  * Invoked on PQfinish(conn). Frees all PGresult objects created on the
  * connection, apart from those already freed with PQclear().
@@ -148,6 +184,7 @@ handle_conn_destroy(PGEventConnDestroy *event)
 	ListNode *curr;
 
 	Assert(NULL != conn);
+	Assert(conn->closing_guard);
 
 	curr = conn->results.next;
 
@@ -170,6 +207,13 @@ handle_conn_destroy(PGEventConnDestroy *event)
 		elog(DEBUG3, "cleared %u result objects on connection %p", results_count, conn);
 
 	connstats.connections_closed++;
+
+	if (!conn->closing_guard)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("invalid closing of connection")));
+		remote_connection_free(conn);
+	}
 
 	return EVENTPROC_SUCCESS;
 }
@@ -195,6 +239,7 @@ handle_result_create(PGEventResultCreate *event)
 
 	MemSet(entry, 0, sizeof(ResultEntry));
 	entry->ln.next = entry->ln.prev = NULL;
+	entry->conn = conn;
 	entry->result = event->result;
 	entry->subtxid = GetCurrentSubTransactionId();
 
@@ -384,11 +429,15 @@ extract_connection_options(List *defelems, const char **keywords, const char **v
  * `remote_connection_exec_ok_command` since this function is called
  * indirectly whenever a remote command is executed, which would lead to
  * infinite recursion. Stick to `PQ*` functions.
+ *
+ * Returns true if the current configuration is OK (no change) or was
+ * successfully applied, otherwise false.
  */
-void
+bool
 remote_connection_configure_if_changed(TSConnection *conn)
 {
 	const char *local_tz_name = pg_get_timezone_name(session_timezone);
+	bool success = true;
 
 	/*
 	 * We need to enforce the same timezone setting across nodes. Otherwise,
@@ -405,13 +454,36 @@ remote_connection_configure_if_changed(TSConnection *conn)
 		(local_tz_name && pg_strcasecmp(conn->tz_name, local_tz_name) != 0))
 	{
 		char *set_timezone_cmd = psprintf("SET TIMEZONE = '%s'", local_tz_name);
+		PGresult *result = PQexec(conn->pg_conn, set_timezone_cmd);
 
-		PQexec(remote_connection_get_pg_conn(conn), set_timezone_cmd);
+		success = PQresultStatus(result) == PGRES_COMMAND_OK;
+		PQclear(result);
 		pfree(set_timezone_cmd);
 		free(conn->tz_name);
 		conn->tz_name = strdup(local_tz_name);
 	}
+
+	return success;
 }
+
+/*
+ * Default options/commands to set on every new connection.
+ *
+ * Timezone is indirectly set with the first command executed.
+ */
+static const char *default_connection_options[] = {
+	/* Force the search path to contain only pg_catalog (see deparse.c) */
+	"SET search_path = pg_catalog",
+	/*
+	 * Set values needed to ensure unambiguous data output from remote.  (This
+	 * logic should match what pg_dump does.  See also set_transmission_modes
+	 * in fdw.c.)
+	 */
+	"SET datestyle = ISO",
+	"SET intervalstyle = postgres",
+	"SET extra_float_digits = 3",
+	NULL,
+};
 
 /*
  * Issue SET commands to make sure remote session is configured properly.
@@ -424,23 +496,28 @@ remote_connection_configure_if_changed(TSConnection *conn)
  * you admit the possibility of a malicious view definition, there are any
  * number of ways to break things.
  */
-void
+bool
 remote_connection_configure(TSConnection *conn)
 {
-	/* Timezone is indirectly set with the first command executed. See
-	 * async.c */
+	const char *cmd;
+	StringInfoData sql;
+	PGresult *result;
+	bool success = true;
+	int i = 0;
 
-	/* Force the search path to contain only pg_catalog (see deparse.c) */
-	remote_connection_exec_ok_command(conn, "SET search_path = pg_catalog");
+	initStringInfo(&sql);
 
-	/*
-	 * Set values needed to ensure unambiguous data output from remote.  (This
-	 * logic should match what pg_dump does.  See also set_transmission_modes
-	 * in fdw.c.)
-	 */
-	remote_connection_exec_ok_command(conn, "SET datestyle = ISO");
-	remote_connection_exec_ok_command(conn, "SET intervalstyle = postgres");
-	remote_connection_exec_ok_command(conn, "SET extra_float_digits = 3");
+	while ((cmd = default_connection_options[i]) != NULL)
+	{
+		appendStringInfo(&sql, "%s;", cmd);
+		i++;
+	}
+
+	result = PQexec(conn->pg_conn, sql.data);
+	success = PQresultStatus(result) == PGRES_COMMAND_OK;
+	PQclear(result);
+
+	return success;
 }
 
 static TSConnection *
@@ -468,6 +545,7 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name
 
 	conn->ln.next = conn->ln.prev = NULL;
 	conn->pg_conn = pg_conn;
+	conn->closing_guard = false;
 	conn->processing = processing;
 	namestrcpy(&conn->node_name, node_name);
 	conn->tz_name = NULL;
@@ -525,23 +603,217 @@ remote_connection_set_processing(TSConnection *conn, bool processing)
 	conn->processing = processing;
 }
 
+static void
+remote_elog(int elevel, int errorcode, const char *node_name, const char *primary,
+			const char *detail, const char *hint, const char *context, const char *sql)
+{
+	ereport(elevel,
+			(errcode(errorcode),
+			 primary ? errmsg_internal("[%s]: %s", node_name, primary) :
+					   errmsg("could not obtain message string for remote error"),
+			 detail ? errdetail_internal("%s", detail) : 0,
+			 hint ? errhint("%s", hint) : 0,
+			 context ? errcontext("%s", context) : 0,
+			 sql ? errcontext("Remote SQL command: %s", sql) : 0));
+}
+
+void
+remote_connection_elog(TSConnection *conn, int elevel)
+{
+	const char *msg = pchomp(PQerrorMessage(conn->pg_conn));
+
+	remote_elog(elevel,
+				ERRCODE_CONNECTION_FAILURE,
+				NameStr(conn->node_name),
+				msg,
+				NULL,
+				NULL,
+				NULL,
+				NULL);
+}
+
+/*
+ * Report an error we got from the remote host.
+ *
+ * elevel: error level to use (typically ERROR, but might be less)
+ * res: PGresult containing the error
+ *
+ * Note: callers that choose not to throw ERROR for a remote error are
+ * responsible for making sure that the associated ConnCacheEntry gets
+ * marked with have_error = true.
+ */
+void
+remote_result_elog(PGresult *res, int elevel)
+{
+	ResultEntry *entry = PQresultInstanceData(res, eventproc);
+	const char *sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
+	const char *primary = PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY);
+	const char *detail = PQresultErrorField(res, PG_DIAG_MESSAGE_DETAIL);
+	const char *hint = PQresultErrorField(res, PG_DIAG_MESSAGE_HINT);
+	const char *context = PQresultErrorField(res, PG_DIAG_CONTEXT);
+	const char *stmt = PQresultErrorField(res, PG_DIAG_STATEMENT_POSITION);
+	TSConnection *conn;
+	int code;
+
+	if (NULL == entry)
+		elog(ERROR, "unexpected result object in error handler");
+
+	conn = entry->conn;
+	Assert(NULL != conn);
+
+	if (sqlstate && strlen(sqlstate) == 5)
+		code = MAKE_SQLSTATE(sqlstate[0], sqlstate[1], sqlstate[2], sqlstate[3], sqlstate[4]);
+	else
+		code = ERRCODE_CONNECTION_FAILURE;
+
+	/*
+	 * If we don't get a message from the PGresult, try the PGconn.  This
+	 * is needed because for connection-level failures, PQexec may just
+	 * return NULL, not a PGresult at all.
+	 */
+	if (primary == NULL)
+		primary = pchomp(PQerrorMessage(conn->pg_conn));
+
+	remote_elog(elevel, code, NameStr(conn->node_name), primary, detail, hint, context, stmt);
+}
+
+/*
+ * Execute a remote command.
+ *
+ * Like PQexec, which this functions uses internally, the PGresult returned
+ * describes only the last command executed in a multi-command string.
+ */
+PGresult *
+remote_connection_exec(TSConnection *conn, const char *cmd)
+{
+	if (!remote_connection_configure_if_changed(conn))
+	{
+		PGresult *res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+		PQfireResultCreateEvents(conn->pg_conn, res);
+		return res;
+	}
+
+	return PQexec(conn->pg_conn, cmd);
+}
+
+/*
+ * Must be a macro since va_start() must be called in the function that takes
+ * a variable number of arguments.
+ */
+#define stringinfo_va(fmt, sql)                                                                    \
+	do                                                                                             \
+	{                                                                                              \
+		initStringInfo((sql));                                                                     \
+		for (;;)                                                                                   \
+		{                                                                                          \
+			va_list args;                                                                          \
+			int needed;                                                                            \
+			va_start(args, fmt);                                                                   \
+			needed = appendStringInfoVA((sql), fmt, args);                                         \
+			va_end(args);                                                                          \
+			if (needed == 0)                                                                       \
+				break;                                                                             \
+			/* Increase the buffer size and try again. */                                          \
+			enlargeStringInfo((sql), needed);                                                      \
+		}                                                                                          \
+	} while (0);
+
+/*
+ * Execute a remote command.
+ *
+ * Like remote_connection_exec but takes a variable number of arguments.
+ */
+PGresult *
+remote_connection_execf(TSConnection *conn, const char *fmt, ...)
+{
+	PGresult *res;
+	StringInfoData sql;
+
+	stringinfo_va(fmt, &sql);
+	res = remote_connection_exec(conn, sql.data);
+	pfree(sql.data);
+
+	return res;
+}
+
+PGresult *
+remote_connection_queryf_ok(TSConnection *conn, const char *fmt, ...)
+{
+	StringInfoData sql;
+	PGresult *res;
+
+	stringinfo_va(fmt, &sql);
+	res = remote_result_query_ok(remote_connection_exec(conn, sql.data));
+	pfree(sql.data);
+	return res;
+}
+
+PGresult *
+remote_connection_query_ok(TSConnection *conn, const char *query)
+{
+	return remote_result_query_ok(remote_connection_exec(conn, query));
+}
+
+void
+remote_connection_cmd_ok(TSConnection *conn, const char *cmd)
+{
+	remote_result_cmd_ok(remote_connection_exec(conn, cmd));
+}
+
+void
+remote_connection_cmdf_ok(TSConnection *conn, const char *fmt, ...)
+{
+	StringInfoData sql;
+
+	stringinfo_va(fmt, &sql);
+	remote_result_cmd_ok(remote_connection_exec(conn, sql.data));
+	pfree(sql.data);
+}
+
+static PGresult *
+remote_result_ok(PGresult *res, ExecStatusType expected)
+{
+	if (PQresultStatus(res) != expected)
+		remote_result_elog(res, ERROR);
+
+	return res;
+}
+
+void
+remote_result_cmd_ok(PGresult *res)
+{
+	PQclear(remote_result_ok(res, PGRES_COMMAND_OK));
+}
+
+PGresult *
+remote_result_query_ok(PGresult *res)
+{
+	return remote_result_ok(res, PGRES_TUPLES_OK);
+}
+
 /*
  * Configure remote connection using current instance UUID.
  *
  * This allows remote side to reason about whether this connection has been
  * originated by access node.
+ *
+ * Returns true on success and false on error, in which case the optional
+ * errmsg parameter can be used to retrieve an error message.
  */
-static void
+static bool
 remote_connection_set_peer_dist_id(TSConnection *conn)
 {
-	PGresult *res;
-	char *request;
 	Datum id_string = DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_uuid());
+	PGresult *res;
+	bool success = true;
 
-	request = psprintf("SELECT * FROM _timescaledb_internal.set_peer_dist_id('%s')",
-					   DatumGetCString(id_string));
-	res = remote_connection_query_ok_result(conn, request);
-	remote_connection_result_close(res);
+	res = remote_connection_execf(conn,
+								  "SELECT * FROM _timescaledb_internal.set_peer_dist_id('%s')",
+								  DatumGetCString(id_string));
+	success = PQresultStatus(res) == PGRES_TUPLES_OK;
+	PQclear(res);
+
+	return success;
 }
 
 /* fallback_application_name, client_encoding, end marker */
@@ -672,20 +944,18 @@ TSConnection *
 remote_connection_open_with_options(const char *node_name, List *connection_options,
 									bool set_dist_id)
 {
-	TSConnection *volatile conn = NULL;
+	TSConnection *conn = remote_connection_open_internal(node_name, connection_options);
+
+	if (NULL == conn)
+		ereport(ERROR,
+				(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+				 errmsg("could not connect to \"%s\"", node_name)));
 
 	/*
 	 * Use PG_TRY block to ensure closing connection on error.
 	 */
 	PG_TRY();
 	{
-		conn = remote_connection_open_internal(node_name, connection_options);
-
-		if (NULL == conn)
-			ereport(ERROR,
-					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
-					 errmsg("could not connect to \"%s\"", node_name)));
-
 		Assert(NULL != conn->pg_conn);
 
 		if (PQstatus(conn->pg_conn) != CONNECTION_OK)
@@ -695,17 +965,23 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 					 errdetail_internal("%s", pchomp(PQerrorMessage(conn->pg_conn)))));
 
 		/* Prepare new session for use */
-		remote_connection_configure(conn);
+		if (!remote_connection_configure(conn))
+			ereport(ERROR,
+					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+					 errmsg("could not configure remote connection to \"%s\"", node_name),
+					 errdetail_internal("%s", PQerrorMessage(conn->pg_conn))));
 
 		/* Inform remote node about instance UUID */
-		if (set_dist_id)
-			remote_connection_set_peer_dist_id(conn);
+		if (set_dist_id && !remote_connection_set_peer_dist_id(conn))
+			ereport(ERROR,
+					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+					 errmsg("could not set distributed ID for \"%s\"", node_name),
+					 errdetail_internal("%s", PQerrorMessage(conn->pg_conn))));
 	}
 	PG_CATCH();
 	{
 		/* Release PGconn data structure if we managed to create one */
-		if (NULL != conn)
-			remote_connection_close(conn);
+		remote_connection_close(conn);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -740,14 +1016,54 @@ remote_connection_open(Oid server_id, Oid user_id)
 	return remote_connection_open_by_id(id);
 }
 
+/*
+ * Open a connection without throwing and error.
+ *
+ * Returns the connection pointer on success. On failure NULL is returned and
+ * the errmsg (if given) is used to return an error message.
+ */
+TSConnection *
+remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
+{
+	ForeignServer *server = GetForeignServer(server_id);
+	Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+	List *connection_options;
+	TSConnection *conn;
+
+	if (server->fdwid != fdwid)
+	{
+		elog(WARNING, "invalid node type for \"%s\"", server->servername);
+		return NULL;
+	}
+
+	connection_options = add_username_to_server_options(server, user_id);
+	conn = remote_connection_open_internal(server->servername, connection_options);
+
+	if (NULL == conn)
+	{
+		if (NULL != errmsg)
+			*errmsg = "internal connection error";
+		return NULL;
+	}
+
+	if (PQstatus(conn->pg_conn) != CONNECTION_OK || !remote_connection_set_peer_dist_id(conn))
+	{
+		if (NULL != errmsg)
+			*errmsg = pchomp(PQerrorMessage(conn->pg_conn));
+		remote_connection_close(conn);
+		return NULL;
+	}
+
+	return conn;
+}
+
 #define PING_QUERY "SELECT 1"
 
 bool
 remote_connection_ping(const char *node_name)
 {
-	ForeignServer *server = GetForeignServerByName(node_name, false);
-	List *connection_options = add_username_to_server_options(server, GetUserId());
-	TSConnection *conn = remote_connection_open_internal(node_name, connection_options);
+	Oid server_id = get_foreign_server_oid(node_name, false);
+	TSConnection *conn = remote_connection_open_nothrow(server_id, GetUserId(), NULL);
 	bool success = false;
 
 	if (NULL == conn)
@@ -755,24 +1071,13 @@ remote_connection_ping(const char *node_name)
 
 	if (PQstatus(conn->pg_conn) == CONNECTION_OK)
 	{
-		AsyncRequest *req;
-		AsyncResponseResult *rsp;
-		PGresult *res;
+		if (1 == PQsendQuery(conn->pg_conn, PING_QUERY))
+		{
+			PGresult *res = PQgetResult(conn->pg_conn);
 
-		req = async_request_send(conn, PING_QUERY);
-
-		Assert(NULL != req);
-		rsp = async_request_wait_any_result(req);
-		Assert(NULL != rsp);
-
-		res = async_response_result_get_pg_result(rsp);
-
-		if (PQresultStatus(res) == PGRES_TUPLES_OK)
-			success = true;
-
-		async_response_result_close(rsp);
-
-		pfree(req);
+			success = (PQresultStatus(res) == PGRES_TUPLES_OK);
+			PQclear(res);
+		}
 	}
 
 	remote_connection_close(conn);
@@ -784,19 +1089,16 @@ void
 remote_connection_close(TSConnection *conn)
 {
 	Assert(conn != NULL);
-	PQfinish(conn->pg_conn);
+
+	conn->closing_guard = true;
+
+	if (NULL != conn->pg_conn)
+		PQfinish(conn->pg_conn);
 
 	/* Assert that PQfinish detached this connection from the global list of
 	 * connections */
 	Assert(IS_DETACHED_ENTRY(&conn->ln));
-
-	/* Free the connection object's other memory */
-	if (NULL != conn->tz_name)
-		free(conn->tz_name);
-
-	conn->tz_name = NULL;
-	conn->pg_conn = NULL;
-	free(conn);
+	remote_connection_free(conn);
 }
 
 /*
@@ -836,71 +1138,6 @@ unsigned int
 remote_connection_get_prep_stmt_number()
 {
 	return ++prep_stmt_number;
-}
-
-/*
- * Report an error we got from the remote host.
- *
- * elevel: error level to use (typically ERROR, but might be less)
- * res: PGresult containing the error
- * conn: connection we did the query on
- * clear: if true, PQclear the result (otherwise caller will handle it)
- * sql: NULL, or text of remote command we tried to execute
- *
- * Note: callers that choose not to throw ERROR for a remote error are
- * responsible for making sure that the associated ConnCacheEntry gets
- * marked with have_error = true.
- */
-void
-remote_connection_report_error(int elevel, PGresult *res, TSConnection *conn, bool clear,
-							   const char *sql)
-{
-	/* If requested, PGresult must be released before leaving this function. */
-	PG_TRY();
-	{
-		char *diag_sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-		char *message_primary = PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY);
-		char *message_detail = PQresultErrorField(res, PG_DIAG_MESSAGE_DETAIL);
-		char *message_hint = PQresultErrorField(res, PG_DIAG_MESSAGE_HINT);
-		char *message_context = PQresultErrorField(res, PG_DIAG_CONTEXT);
-		int sqlstate;
-
-		if (diag_sqlstate)
-			sqlstate = MAKE_SQLSTATE(diag_sqlstate[0],
-									 diag_sqlstate[1],
-									 diag_sqlstate[2],
-									 diag_sqlstate[3],
-									 diag_sqlstate[4]);
-		else
-			sqlstate = ERRCODE_CONNECTION_FAILURE;
-
-		/*
-		 * If we don't get a message from the PGresult, try the PGconn.  This
-		 * is needed because for connection-level failures, PQexec may just
-		 * return NULL, not a PGresult at all.
-		 */
-		if (message_primary == NULL)
-			message_primary = pchomp(PQerrorMessage(remote_connection_get_pg_conn(conn)));
-
-		ereport(elevel,
-				(errcode(sqlstate),
-				 message_primary ?
-					 errmsg_internal("[%s]: %s", NameStr(conn->node_name), message_primary) :
-					 errmsg("could not obtain message string for remote error"),
-				 message_detail ? errdetail_internal("%s", message_detail) : 0,
-				 message_hint ? errhint("%s", message_hint) : 0,
-				 message_context ? errcontext("%s", message_context) : 0,
-				 sql ? errcontext("Remote SQL command: %s", sql) : 0));
-	}
-	PG_CATCH();
-	{
-		if (clear)
-			PQclear(res);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-	if (clear)
-		PQclear(res);
 }
 
 /*
@@ -1021,6 +1258,12 @@ remote_connection_cancel_query(TSConnection *conn)
 	}
 
 	return remote_connection_drain(conn->pg_conn, endtime);
+}
+
+void
+remote_result_close(PGresult *res)
+{
+	PQclear(res);
 }
 
 /*

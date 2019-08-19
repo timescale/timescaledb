@@ -22,7 +22,7 @@ prepared_txn(TSConnectionId *id, const char *sql)
 	memcpy(tx, id, sizeof(*id));
 	remote_txn_init(tx, get_connection());
 	remote_txn_begin(tx, 1);
-	remote_connection_query_ok_result(remote_txn_get_connection(tx), sql);
+	remote_connection_cmd_ok(remote_txn_get_connection(tx), sql);
 	remote_txn_write_persistent_record(tx);
 	async_request_wait_ok_command(remote_txn_async_send_prepare_transaction(tx));
 	return tx;
@@ -71,10 +71,10 @@ tsl_test_remote_txn_resolve_create_records(PG_FUNCTION_ARGS)
 static void
 send_heal()
 {
-	remote_connection_query_ok_result(get_connection(),
-									  "SELECT "
-									  "_timescaledb_internal.remote_txn_heal_data_node((SELECT "
-									  "OID FROM pg_foreign_server WHERE srvname = 'loopback'))");
+	remote_connection_query_ok(get_connection(),
+							   "SELECT "
+							   "_timescaledb_internal.remote_txn_heal_data_node((SELECT "
+							   "OID FROM pg_foreign_server WHERE srvname = 'loopback'))");
 }
 
 static void
@@ -84,9 +84,9 @@ create_commited_txn_with_concurrent_heal(TSConnectionId *id)
 	memcpy(tx, id, sizeof(*id));
 	remote_txn_init(tx, get_connection());
 	remote_txn_begin(tx, 1);
-	remote_connection_query_ok_result(remote_txn_get_connection(tx),
-									  "INSERT INTO public.table_modified_by_txns VALUES "
-									  "('committed with concurrent heal');");
+	remote_connection_cmd_ok(remote_txn_get_connection(tx),
+							 "INSERT INTO public.table_modified_by_txns VALUES "
+							 "('committed with concurrent heal');");
 	send_heal();
 	remote_txn_write_persistent_record(tx);
 	send_heal();

@@ -178,7 +178,7 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 			 * null is fine to pass down as the res, the connection error message
 			 * will get through
 			 */
-			remote_connection_report_error(elevel, NULL, req->conn, false, req->sql);
+			remote_connection_elog(req->conn, elevel);
 			return NULL;
 		}
 	}
@@ -197,7 +197,7 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 			 * null is fine to pass down as the res, the connection error message
 			 * will get through
 			 */
-			remote_connection_report_error(elevel, NULL, req->conn, false, req->sql);
+			remote_connection_elog(req->conn, elevel);
 			return NULL;
 		}
 	}
@@ -352,47 +352,22 @@ async_response_result_get_request(AsyncResponseResult *res)
 {
 	return res->request;
 }
+
 void
 async_response_report_error(AsyncResponse *res, int elevel)
 {
-	PG_TRY();
+	switch (res->type)
 	{
-		switch (res->type)
-		{
-			case RESPONSE_RESULT:
-			{
-				AsyncResponseResult *response_result = (AsyncResponseResult *) res;
-
-				remote_connection_report_error(elevel,
-											   response_result->result,
-											   response_result->request->conn,
-											   false,
-											   response_result->request->sql);
-			}
+		case RESPONSE_RESULT:
+			remote_result_elog(((AsyncResponseResult *) res)->result, elevel);
 			break;
-			case RESPONSE_COMMUNICATION_ERROR:
-			{
-				AsyncResponseCommunicationError *response_ce =
-					(AsyncResponseCommunicationError *) res;
-
-				remote_connection_report_error(elevel,
-											   NULL,
-											   response_ce->request->conn,
-											   false,
-											   response_ce->request->sql);
-			}
+		case RESPONSE_COMMUNICATION_ERROR:
+			remote_connection_elog(((AsyncResponseCommunicationError *) res)->request->conn,
+								   elevel);
 			break;
-			case RESPONSE_TIMEOUT:
-				elog(elevel, "async operation timed out");
-		}
+		case RESPONSE_TIMEOUT:
+			elog(elevel, "async operation timed out");
 	}
-	PG_CATCH();
-	{
-		async_response_close(res);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-	async_response_close(res);
 }
 
 /*
@@ -599,7 +574,7 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 			if (0 == PQconsumeInput(remote_connection_get_pg_conn(wait_req->conn)))
 			{
 				/* This is often an error but not always */
-				remote_connection_report_error(elevel, NULL, wait_req->conn, false, wait_req->sql);
+				remote_connection_elog(wait_req->conn, elevel);
 
 				/* remove connection from set */
 				set->requests = list_delete_ptr(set->requests, wait_req);

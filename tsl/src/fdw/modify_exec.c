@@ -487,10 +487,9 @@ fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmstate, EState *estate, Tup
 	while ((rsp = async_request_set_wait_any_result(reqset)))
 	{
 		PGresult *res = async_response_result_get_pg_result(rsp);
-		TsFdwDataNodeState *fdw_data_node = async_response_result_get_user_data(rsp);
 
 		if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
-			remote_connection_report_error(ERROR, res, fdw_data_node->conn, false, fmstate->query);
+			remote_result_elog(res, ERROR);
 
 		/*
 		 * If we update multiple replica chunks, we should only return the

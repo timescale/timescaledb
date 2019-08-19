@@ -56,11 +56,7 @@ SELECT * FROM test.get_connection_stats();
 
 \set ON_ERROR_STOP 0
 SELECT test.send_remote_query_that_generates_exception();
- send_remote_query_that_generates_exception 
---------------------------------------------
- 
-(1 row)
-
+ERROR:  bad query error thrown from test
 \set ON_ERROR_STOP 1
 SELECT * FROM test.get_connection_stats();
  connections_created | connections_closed | results_created | results_cleared 
