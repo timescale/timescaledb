@@ -80,10 +80,6 @@ typedef struct RemoteTxn
 void
 remote_txn_begin(RemoteTxn *entry, int curlevel)
 {
-	StringInfoData sql;
-
-	initStringInfo(&sql);
-
 	/* Start main transaction if we haven't yet */
 	if (entry->xact_depth == 0)
 	{
@@ -95,7 +91,7 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 			sql = "START TRANSACTION ISOLATION LEVEL SERIALIZABLE";
 		else
 			sql = "START TRANSACTION ISOLATION LEVEL REPEATABLE READ";
-		remote_connection_exec_ok_command(entry->conn, sql);
+		remote_connection_cmd_ok(entry->conn, sql);
 		entry->xact_depth = 1;
 	}
 
@@ -106,10 +102,7 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	 */
 	while (entry->xact_depth < curlevel)
 	{
-		resetStringInfo(&sql);
-
-		appendStringInfo(&sql, "SAVEPOINT s%d", entry->xact_depth + 1);
-		remote_connection_exec_ok_command(entry->conn, sql.data);
+		remote_connection_cmdf_ok(entry->conn, "SAVEPOINT s%d", entry->xact_depth + 1);
 		entry->xact_depth++;
 	}
 }
@@ -282,8 +275,7 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 	if (PQTRANS_IDLE != PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)))
 		return;
 
-	res = remote_connection_query_any_result(entry->conn,
-											 "SELECT count(*) FROM pg_prepared_statements");
+	res = remote_connection_exec(entry->conn, "SELECT count(*) FROM pg_prepared_statements");
 
 	Assert(1 == PQntuples(res));
 	Assert(1 == PQnfields(res));
@@ -292,7 +284,7 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 	if (strcmp("0", count_string) != 0)
 		elog(WARNING, "connection leaked prepared statement");
 
-	remote_connection_result_close(res);
+	remote_result_close(res);
 }
 #endif
 
@@ -523,15 +515,8 @@ remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel)
 void
 remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel)
 {
-	StringInfoData sql;
-
-	initStringInfo(&sql);
-
 	Assert(entry->xact_depth == curlevel);
-
-	appendStringInfo(&sql, "RELEASE SAVEPOINT s%d", curlevel);
-	remote_connection_exec_ok_command(entry->conn, sql.data);
-
+	remote_connection_cmdf_ok(entry->conn, "RELEASE SAVEPOINT s%d", curlevel);
 	Assert(entry->xact_depth > 0);
 	entry->xact_depth--;
 }

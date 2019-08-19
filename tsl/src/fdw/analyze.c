@@ -237,10 +237,11 @@ fdw_analyze_table(Relation relation, Oid serverid, BlockNumber *totalpages)
 		res = async_response_result_get_pg_result(rsp);
 
 		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-			remote_connection_report_error(ERROR, res, conn, false, sql.data);
+			remote_result_elog(res, ERROR);
 
 		if (PQntuples(res) != 1 || PQnfields(res) != 1)
 			elog(ERROR, "unexpected result from analyze table query");
+
 		*totalpages = strtoul(PQgetvalue(res, 0, 0), NULL, 10);
 
 		async_response_result_close(rsp);

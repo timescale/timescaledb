@@ -189,7 +189,8 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 		split_query_and_execute(conn, node_name, sql);
 
 		/* Restore original connection settings */
-		remote_connection_configure(conn);
+		if (!remote_connection_configure(conn))
+			elog(ERROR, "Could not restore connection settings");
 	}
 
 	list_free(data_node_list);

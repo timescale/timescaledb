@@ -24,6 +24,71 @@
 
 TS_FUNCTION_INFO_V1(tsl_test_remote_async);
 
+#define query_with_params_ok_result(conn, sql_statement, n_values, values)                         \
+	async_response_result_get_pg_result(async_request_wait_ok_result(                              \
+		async_request_send_with_params(conn,                                                       \
+									   sql_statement,                                              \
+									   stmt_params_create_from_values(values, n_values),           \
+									   0)))
+
+#define query_prepared_ok_result(prepared_stmt, values)                                            \
+	async_response_result_get_pg_result(                                                           \
+		async_request_wait_ok_result(async_request_send_prepared_stmt(prepared_stmt, values)))
+
+#define prepare(conn, sql_statement, nvars)                                                        \
+	async_request_wait_prepared_statement(async_request_send_prepare(conn, sql_statement, nvars))
+
+static void
+test_prepared_stmts()
+{
+	TSConnection *conn = get_connection();
+	const char **params = (const char **) palloc(sizeof(char *) * 5);
+	AsyncResponseResult *rsp;
+	PreparedStmt *prep;
+	PGresult *res;
+
+	rsp = async_request_wait_ok_result(async_request_send_prepare(conn, "SELECT 3", 0));
+	prep = async_response_result_generate_prepared_stmt(rsp);
+	res = query_prepared_ok_result(prep, NULL);
+	TestAssertTrue(PQresultStatus(res) == PGRES_TUPLES_OK);
+	TestAssertTrue(strcmp(PQgetvalue(res, 0, 0), "3") == 0);
+	remote_result_close(res);
+	prepared_stmt_close(prep);
+
+	rsp = async_request_wait_ok_result(async_request_send_prepare(conn, "SELECT $1, $3, $2", 3));
+	prep = async_response_result_generate_prepared_stmt(rsp);
+	params[0] = "2";
+	params[1] = "4";
+	params[2] = "8";
+	res = query_prepared_ok_result(prep, params);
+	TestAssertTrue(PQresultStatus(res) == PGRES_TUPLES_OK);
+	TestAssertTrue(strcmp(PQgetvalue(res, 0, 0), "2") == 0);
+	TestAssertTrue(strcmp(PQgetvalue(res, 0, 1), "8") == 0);
+	TestAssertTrue(strcmp(PQgetvalue(res, 0, 2), "4") == 0);
+	remote_result_close(res);
+	prepared_stmt_close(prep);
+
+	/* malformed sql (missing commas) */
+	TestEnsureError(prep = prepare(conn, "SELECT $1 $3 $2", 3));
+	remote_connection_close(conn);
+}
+
+static void
+test_params()
+{
+	TSConnection *conn = get_connection();
+	const char **params = (const char **) palloc(sizeof(char *) * 5);
+	PGresult *res;
+
+	params[0] = "2";
+	res = query_with_params_ok_result(conn, "SELECT $1", 1, params);
+	TestAssertTrue(PQresultStatus(res) == PGRES_TUPLES_OK);
+	TestAssertTrue(strcmp(PQgetvalue(res, 0, 0), "2") == 0);
+	remote_result_close(res);
+	TestEnsureError(res = query_with_params_ok_result(conn, "SELECT 1 2 3", 1, params));
+	remote_connection_close(conn);
+}
+
 static void
 test_basic_request()
 {
@@ -143,15 +208,16 @@ test_node_death()
 
 	/* killed node causes an error response, then a communication error */
 	rnk = remote_node_killer_init(conn);
-	remote_node_killer_kill(rnk);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
+	remote_node_killer_kill(rnk);
 	response = async_request_set_wait_any_response_deadline(set, ERROR, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
 	result = (AsyncResponseResult *) response;
 	pg_res = async_response_result_get_pg_result(result);
 	TestAssertTrue(PQresultStatus(pg_res) != PGRES_TUPLES_OK);
 	async_response_close(response);
+
 	/* This will throw if elevel == ERROR so set to DEBUG1 */
 	response = async_request_set_wait_any_response_deadline(set, DEBUG1, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_COMMUNICATION_ERROR);
@@ -168,9 +234,10 @@ test_node_death()
 	/* test error throwing in async_request_set_wait_any_result */
 	conn = get_connection();
 	rnk = remote_node_killer_init(conn);
-	remote_node_killer_kill(rnk);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
+	remote_node_killer_kill(rnk);
+
 	/* first we get error result */
 	TestAssertTrue(NULL != async_request_set_wait_any_result(set));
 	TestEnsureError(async_request_set_wait_any_result(set));
@@ -178,17 +245,18 @@ test_node_death()
 	/* do cancel query before first response */
 	conn = get_connection();
 	rnk = remote_node_killer_init(conn);
-	remote_node_killer_kill(rnk);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
+	remote_node_killer_kill(rnk);
 	TestAssertTrue(false == remote_connection_cancel_query(conn));
 
 	/* do cancel query after seeing error */
 	conn = get_connection();
 	rnk = remote_node_killer_init(conn);
-	remote_node_killer_kill(rnk);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
+	remote_node_killer_kill(rnk);
+
 	/* first we get error result */
 	TestEnsureError(async_request_set_wait_ok_result(set));
 	TestAssertTrue(false == remote_connection_cancel_query(conn));
@@ -261,6 +329,8 @@ test_multiple_reqests()
 Datum
 tsl_test_remote_async(PG_FUNCTION_ARGS)
 {
+	test_prepared_stmts();
+	test_params();
 	test_basic_request();
 	test_parameter_order();
 	test_request_set();

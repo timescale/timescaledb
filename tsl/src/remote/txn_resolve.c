@@ -65,7 +65,7 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 	 */
 	PreventInTransactionBlock(true, "remote_txn_heal_data_node");
 
-	res = remote_connection_query_ok_result(conn, GET_PREPARED_XACT_SQL);
+	res = remote_connection_query_ok(conn, GET_PREPARED_XACT_SQL);
 
 	Assert(1 == PQnfields(res));
 	for (row = 0; row < PQntuples(res); row++)
@@ -86,12 +86,11 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 		switch (resolution)
 		{
 			case REMOTE_TXN_RESOLUTION_COMMT:
-				remote_connection_exec_ok_command(conn, remote_txn_id_commit_prepared_sql(tpc_gid));
+				remote_connection_cmd_ok(conn, remote_txn_id_commit_prepared_sql(tpc_gid));
 				resolved++;
 				break;
 			case REMOTE_TXN_RESOLUTION_ABORT:
-				remote_connection_exec_ok_command(conn,
-												  remote_txn_id_rollback_prepared_sql(tpc_gid));
+				remote_connection_cmd_ok(conn, remote_txn_id_rollback_prepared_sql(tpc_gid));
 				resolved++;
 				break;
 			case REMOTE_TXN_RESOLUTION_UNKNOWN:
@@ -103,7 +102,7 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 	if (non_ts_txns > 0)
 		elog(NOTICE, "skipping %d non-TimescaleDB prepared transaction", non_ts_txns);
 
-	remote_connection_result_close(res);
+	remote_result_close(res);
 
 	/*
 	 * Perform cleanup of all records if there are no unknown txns.
