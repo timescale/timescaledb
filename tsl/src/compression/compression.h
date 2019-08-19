@@ -68,6 +68,18 @@ typedef struct DecompressionIterator
 	DecompressResult (*try_next)(struct DecompressionIterator *);
 } DecompressionIterator;
 
+/*
+ * TOAST_STORAGE_EXTENDED for out of line storage.
+ * TOAST_STORAGE_EXTERNAL for out of line storage + native PG toast compression
+ * used when you want to enable postgres native toast
+ * compression on the output of the compression algorithm.
+ */
+typedef enum
+{
+	TOAST_STORAGE_EXTERNAL,
+	TOAST_STORAGE_EXTENDED
+} CompressionStorage;
+
 typedef struct CompressionAlgorithmDefinition
 {
 	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
@@ -76,6 +88,7 @@ typedef struct CompressionAlgorithmDefinition
 	Datum (*compressed_data_recv)(StringInfo);
 
 	Compressor *(*compressor_for_type)(Oid element_type);
+	CompressionStorage compressed_data_storage;
 } CompressionAlgorithmDefinition;
 
 typedef enum CompressionAlgorithms
@@ -122,6 +135,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
+extern CompressionStorage compression_get_toast_storage(CompressionAlgorithms algo);
 extern void compress_chunk(Oid in_table, Oid out_table,
 						   const ColumnCompressionInfo **column_compression_info, int num_columns);
 extern void decompress_chunk(Oid in_table, Oid out_table);

@@ -74,6 +74,7 @@ extern Datum tsl_array_compressor_finish(PG_FUNCTION_ARGS);
 		.compressed_data_send = array_compressed_send,                                             \
 		.compressed_data_recv = array_compressed_recv,                                             \
 		.compressor_for_type = array_compressor_for_type,                                          \
+		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
 	}
 
 #endif

@@ -1,5 +1,3 @@
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_transparent_decompression to OFF;
@@ -43,13 +41,26 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 CREATE TABLE conditions (
       time        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
       temperature DOUBLE PRECISION  NULL,
       humidity    DOUBLE PRECISION  NULL
     );
 select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::interval);
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
 insert into conditions
-select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+
+select hypertable_id, attname, compression_algorithm_id , al.name 
+from _timescaledb_catalog.hypertable_compression hc,
+     _timescaledb_catalog.hypertable ht,
+      _timescaledb_catalog.compression_algorithm al 
+where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id;
+
+select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty 
+where cl.oid = at.attrelid and  at.attnum > 0
+and cl.relname = '_compressed_hypertable_4' 
+and atttypid = ty.oid 
+order by at.attnum;
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'

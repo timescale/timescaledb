@@ -1225,3 +1225,11 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 
 	PG_RETURN_CSTRING(encoded);
 }
+
+extern CompressionStorage
+compression_get_toast_storage(CompressionAlgorithms algorithm)
+{
+	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
+		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	return definitions[algorithm].compressed_data_storage;
+}
