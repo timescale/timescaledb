@@ -190,6 +190,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, AccessShareLock); /*upgrade when needed */
 
+	/* aquire locks on catalog tables to keep till end of txn */
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
+					AccessShareLock);
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+
 	// get compression properties for hypertable
 	htcols_list = get_hypertablecompression_info(cxt.srcht->fd.id);
 	htcols_listlen = list_length(htcols_list);
@@ -262,9 +267,14 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
 	LockRelationOid(uncompressed_chunk->table_id, AccessShareLock); /*upgrade when needed */
 
+	/* aquire locks on catalog tables to keep till end of txn */
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
+					AccessShareLock);
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 	compression_chunk_size_delete(uncompressed_chunk->fd.id);
-	ts_chunk_set_compressed_chunk(uncompressed_chunk, 0, true);
+	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
 	ts_chunk_drop(compressed_chunk, false, -1);
 
 	ts_cache_release(hcache);

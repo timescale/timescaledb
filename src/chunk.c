@@ -1930,7 +1930,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id, bool isnu
 							   &compress_id,
 							   0,
 							   ForwardScanDirection,
-							   AccessShareLock,
+							   RowExclusiveLock,
 							   CurrentMemoryContext) > 0;
 }
 

@@ -82,7 +82,7 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	RawStmt *raw;
 #endif
 
-	if(strlen(inpstr) == 0)
+	if (strlen(inpstr) == 0)
 		return NIL;
 
 	initStringInfo(&buf);
@@ -174,7 +174,7 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	RawStmt *raw;
 #endif
 
-	if(strlen(inpstr) == 0)
+	if (strlen(inpstr) == 0)
 		return NIL;
 
 	initStringInfo(&buf);

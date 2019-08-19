@@ -395,17 +395,24 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	int32 compress_htid;
 	struct CompressColInfo compress_cols;
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
-	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
-	List *segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
-	List *orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
-	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+	Oid ownerid;
+	List *segmentby_cols;
+	List *orderby_cols;
+	bool compression_already_enabled;
+	bool compressed_chunks_exist;
 
-	bool compression_already_enabled = ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID;
-	bool compressed_chunks_exist =
+	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
+	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
+
+	/* reload info after lock */
+	ht = ts_hypertable_get_by_id(ht->fd.id);
+	ownerid = ts_rel_get_owner(ht->main_table_relid);
+	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
+	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+	compression_already_enabled = ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID;
+	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
-	/* we need an AccessShare lock on the hypertable so that there are
-	 * no DDL changes while we create the compressed hypertable
-	 */
 
 	if (!compress_enable)
 	{
@@ -420,7 +427,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	if (compressed_chunks_exist)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot change compression options if compressed chunks exist")));
+				 errmsg("cannot change compression options as compressed chunks already exist for "
+						"this table")));
 
 	/* Require both order by and segment by when altering because otherwise it's not clear what
 	 * the default value means: does it mean leave as-is or is it an empty list. */
@@ -433,7 +441,11 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 
-	LockRelationOid(ht->main_table_relid, AccessShareLock);
+	/* take explicit locks on catalog tables and keep them till end of txn */
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
+					RowExclusiveLock);
+
 	if (compression_already_enabled)
 	{
 		Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
@@ -446,8 +458,6 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);
-	/* block concurrent DDL that creates same compressed hypertable*/
-	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	ts_hypertable_set_compressed_id(ht, compress_htid);
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 	/* do not release any locks, will get released by xact end */
