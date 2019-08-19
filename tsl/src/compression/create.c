@@ -163,12 +163,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 
 	cc->numcols = 0;
 	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * tupdesc->natts);
-	cc->coldeflist = list_make1(
-		/* count of the number of uncompressed rows */
-		makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-					  INT4OID,
-					  -1 /* typemod */,
-					  0 /*collation*/));
+	cc->coldeflist = NIL;
 	colno = 0;
 	for (attno = 0; attno < tupdesc->natts; attno++)
 	{
@@ -215,7 +210,49 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		colno++;
 	}
 	cc->numcols = colno;
+	/* additional metadata columns.
+	 * these are not listed in hypertable_compression catalog table
+	 * and so only has a ColDef entry */
+	cc->coldeflist = lappend(cc->coldeflist,
+							 (
+								 /* count of the number of uncompressed rows */
+								 makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+											   INT4OID,
+											   -1 /* typemod */,
+											   0 /*collation*/)));
 	relation_close(rel, AccessShareLock);
+}
+
+/* modify storage attributes for toast table columns attached to the
+ * compression table
+ */
+static void
+modify_compressed_toast_table_storage(CompressColInfo *cc, Oid compress_relid)
+{
+	int colno;
+	List *cmds = NIL;
+	for (colno = 0; colno < cc->numcols; colno++)
+	{
+		// get storage type for columns which have compression on
+		if (cc->col_meta[colno].algo_id != 0)
+		{
+			CompressionStorage stor = compression_get_toast_storage(cc->col_meta[colno].algo_id);
+			if (stor != TOAST_STORAGE_EXTERNAL)
+			/* external is default storage for toast columns */
+			{
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+				cmd->subtype = AT_SetStorage;
+				cmd->name = pstrdup(NameStr(cc->col_meta[colno].attname));
+				Assert(stor == TOAST_STORAGE_EXTENDED);
+				cmd->def = (Node *) makeString("extended");
+				cmds = lappend(cmds, cmd);
+			}
+		}
+	}
+	if (cmds != NIL)
+	{
+		AlterTableInternal(compress_relid, cmds, false);
+	}
 }
 
 /* prevent concurrent transactions from inserting into
@@ -290,6 +327,7 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(compress_relid, toast_options);
 	ts_catalog_restore_user(&sec_ctx);
+	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
 	return compress_hypertable_id;
 }

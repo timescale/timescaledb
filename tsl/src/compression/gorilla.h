@@ -102,6 +102,7 @@ extern Datum tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS);
 		.compressed_data_send = gorilla_compressed_send,                                           \
 		.compressed_data_recv = gorilla_compressed_recv,                                           \
 		.compressor_for_type = gorilla_compressor_for_type,                                        \
+		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 	}
 
 #endif

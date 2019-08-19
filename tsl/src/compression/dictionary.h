@@ -55,7 +55,8 @@ extern Datum tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS);
 		.iterator_init_reverse = tsl_dictionary_decompression_iterator_from_datum_reverse,         \
 		.compressed_data_send = dictionary_compressed_send,                                        \
 		.compressed_data_recv = dictionary_compressed_recv,                                        \
-		.compressor_for_type = dictionary_compressor_for_type                                      \
+		.compressor_for_type = dictionary_compressor_for_type,                                     \
+		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
 	}
 
 #endif

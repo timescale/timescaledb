@@ -58,6 +58,7 @@ extern Datum tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS);
 		.compressed_data_send = deltadelta_compressed_send,                                        \
 		.compressed_data_recv = deltadelta_compressed_recv,                                        \
 		.compressor_for_type = delta_delta_compressor_for_type,                                    \
+		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 	}
 
 #endif
