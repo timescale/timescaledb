@@ -20,6 +20,7 @@ typedef struct DecompressChunkPath
 	RelOptInfo *compressed_rel;
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
+	RangeTblEntry *ht_rte;
 	List *varattno_map;
 	int hypertable_id;
 	List *compression_info;
