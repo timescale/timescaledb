@@ -24,6 +24,7 @@
 #include "compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
+#include "license.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -289,6 +290,10 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	{
 		ereport(ERROR, (errcode(ERRCODE_DUPLICATE_OBJECT), errmsg("chunk is already compressed")));
 	}
+
+	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
+
 	compress_chunk_impl(srcchunk->hypertable_relid, chunk_id);
 	PG_RETURN_VOID();
 }
@@ -300,6 +305,10 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unkown chunk id %d", uncompressed_chunk_id);
+
+	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
+
 	decompress_chunk_impl(uncompressed_chunk->hypertable_relid, uncompressed_chunk_id);
 	PG_RETURN_VOID();
 }

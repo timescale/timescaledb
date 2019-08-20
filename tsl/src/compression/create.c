@@ -29,6 +29,7 @@
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_compression.h"
+#include "license.h"
 
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
@@ -438,6 +439,9 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	List *orderby_cols;
 	bool compression_already_enabled;
 	bool compressed_chunks_exist;
+
+	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
 
 	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
 	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
