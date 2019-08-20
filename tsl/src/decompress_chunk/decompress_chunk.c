@@ -65,6 +65,7 @@ ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	Index chunk_index = rel->relid;
 	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, true);
 	Oid compressed_relid = compressed_chunk->table_id;
+	AppendRelInfo *appinfo;
 
 	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
 
@@ -72,6 +73,14 @@ ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	path->chunk_rte = planner_rt_fetch(chunk_index, root);
 	path->hypertable_id = ht->fd.id;
 	path->compression_info = get_hypertablecompression_info(ht->fd.id);
+
+#if PG96 || PG10
+	appinfo = find_childrel_appendrelinfo(root, rel);
+#else
+	appinfo = root->append_rel_array[rel->relid];
+#endif
+
+	path->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
 
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.path.parent = rel;
@@ -210,23 +219,22 @@ get_column_compressioninfo(List *hypertable_compression_info, char *column_name)
 		if (namestrcmp(&fd->attname, column_name) == 0)
 			return fd;
 	}
-
 	elog(ERROR, "No compression information for column \"%s\" found.", column_name);
 
 	pg_unreachable();
 }
 
 /*
- * find matching column attno for compressed chunk
+ * find matching column attno for compressed chunk based on hypertable attno
  *
  * since we dont want aliasing to interfere we lookup directly in catalog
  * instead of using RangeTblEntry
  */
 AttrNumber
-get_compressed_attno(DecompressChunkPath *dcpath, AttrNumber chunk_attno)
+get_compressed_attno(DecompressChunkPath *dcpath, AttrNumber ht_attno)
 {
 	AttrNumber compressed_attno;
-	char *chunk_col = get_attname_compat(dcpath->chunk_rte->relid, chunk_attno, false);
+	char *chunk_col = get_attname_compat(dcpath->ht_rte->relid, ht_attno, false);
 	compressed_attno = get_attnum(dcpath->compressed_rte->relid, chunk_col);
 
 	if (compressed_attno == InvalidAttrNumber)

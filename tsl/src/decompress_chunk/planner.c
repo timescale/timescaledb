@@ -69,24 +69,28 @@ lookup_compressed_data_oid()
 }
 
 static TargetEntry *
-make_compressed_scan_targetentry(DecompressChunkPath *path, Relation r, AttrNumber chunk_attno,
-								 int tle_index)
+make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno, int tle_index)
 {
 	Var *scan_var;
-	if (chunk_attno > 0)
+	if (ht_attno > 0)
 	{
-		TupleDesc desc = RelationGetDescr(r);
-		Form_pg_attribute attribute = TupleDescAttr(desc, AttrNumberGetAttrOffset(chunk_attno));
+		char *ht_attname = get_attname_compat(path->ht_rte->relid, ht_attno, false);
 		FormData_hypertable_compression *ht_info =
-			get_column_compressioninfo(path->compression_info, NameStr(attribute->attname));
-		AttrNumber scan_varattno = get_compressed_attno(path, chunk_attno);
+			get_column_compressioninfo(path->compression_info, ht_attname);
+		AttrNumber scan_varattno = get_compressed_attno(path, ht_attno);
+		AttrNumber chunk_attno = get_attnum(path->chunk_rte->relid, ht_attname);
 
 		if (ht_info->algo_id == 0)
-			scan_var =
-				makeVar(path->compressed_rel->relid, scan_varattno, attribute->atttypid, -1, 0, 0);
+			scan_var = makeVar(path->compressed_rel->relid,
+							   scan_varattno,
+							   get_atttype(path->ht_rte->relid, ht_attno),
+							   -1,
+							   0,
+							   0);
 		else
 			scan_var =
 				makeVar(path->compressed_rel->relid, scan_varattno, COMPRESSEDDATAOID, -1, 0, 0);
+		path->varattno_map = lappend_int(path->varattno_map, chunk_attno);
 	}
 	else
 	{
@@ -95,27 +99,32 @@ make_compressed_scan_targetentry(DecompressChunkPath *path, Relation r, AttrNumb
 			elog(ERROR, "lookup failed for column \"%s\"", META_COUNT_COLUMN_NAME);
 
 		scan_var = makeVar(path->compressed_rel->relid, count_attno, INT4OID, -1, 0, 0);
+		path->varattno_map = lappend_int(path->varattno_map, 0);
 	}
 	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
 }
 
 /*
  * build targetlist for scan on compressed chunk
+ *
+ * Since we do not adjust selectedCols in RangeTblEntry for chunks
+ * we use selectedCols from the hypertable RangeTblEntry to
+ * build the target list for the compressed chunk and adjust
+ * attno accordingly
  */
 static List *
-build_scan_tlist(DecompressChunkPath *dcpath)
+build_scan_tlist(DecompressChunkPath *path)
 {
 	List *scan_tlist = NIL;
-	List *varattno_map = NIL;
-	Bitmapset *attrs_used = dcpath->chunk_rte->selectedCols;
+	Bitmapset *attrs_used = path->ht_rte->selectedCols;
 	TargetEntry *tle;
 	int bit;
-	Relation r = heap_open(dcpath->chunk_rte->relid, NoLock);
+
+	path->varattno_map = NIL;
 
 	/* add count column */
-	tle = make_compressed_scan_targetentry(dcpath, r, 0, list_length(scan_tlist) + 1);
+	tle = make_compressed_scan_targetentry(path, 0, list_length(scan_tlist) + 1);
 	scan_tlist = lappend(scan_tlist, tle);
-	varattno_map = lappend_int(varattno_map, 0);
 
 	bit = bms_next_member(attrs_used, -1);
 	if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
@@ -125,24 +134,20 @@ build_scan_tlist(DecompressChunkPath *dcpath)
 	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs_used))
 	{
 		ListCell *lc;
-		AttrNumber chunk_attno = 0;
+		AttrNumber ht_attno = 0;
 
-		foreach (lc, dcpath->chunk_rte->eref->colnames)
+		foreach (lc, path->ht_rte->eref->colnames)
 		{
 			Value *chunk_col = (Value *) lfirst(lc);
-			chunk_attno++;
+			ht_attno++;
 
 			/*
 			 * dropped columns have empty string
 			 */
 			if (IsA(lfirst(lc), String) && strlen(chunk_col->val.str) > 0)
 			{
-				tle = make_compressed_scan_targetentry(dcpath,
-													   r,
-													   chunk_attno,
-													   list_length(scan_tlist) + 1);
+				tle = make_compressed_scan_targetentry(path, ht_attno, list_length(scan_tlist) + 1);
 				scan_tlist = lappend(scan_tlist, tle);
-				varattno_map = lappend_int(varattno_map, chunk_attno);
 			}
 		}
 	}
@@ -157,23 +162,12 @@ build_scan_tlist(DecompressChunkPath *dcpath)
 		for (bit = bms_next_member(attrs_used, -1); bit > 0; bit = bms_next_member(attrs_used, bit))
 		{
 			/* bits are offset by FirstLowInvalidHeapAttributeNumber */
-			AttrNumber uc_attno = bit + FirstLowInvalidHeapAttributeNumber;
+			AttrNumber ht_attno = bit + FirstLowInvalidHeapAttributeNumber;
 
-			tle =
-				make_compressed_scan_targetentry(dcpath, r, uc_attno, list_length(scan_tlist) + 1);
+			tle = make_compressed_scan_targetentry(path, ht_attno, list_length(scan_tlist) + 1);
 			scan_tlist = lappend(scan_tlist, tle);
-			varattno_map = lappend_int(varattno_map, uc_attno);
 		}
 	}
-
-	dcpath->varattno_map = varattno_map;
-
-	/*
-	 * Drop the rel refcount, but keep the access lock till end of transaction
-	 * so that the table can't be deleted or have its schema modified
-	 * underneath us.
-	 */
-	heap_close(r, NoLock);
 
 	return scan_tlist;
 }
