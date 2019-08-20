@@ -15,6 +15,7 @@ insert into foo values( 10 , 10 , 20, 120);
 insert into foo values( 20 , 11 , 20, 13);
 insert into foo values( 30 , 12 , 20, 14);
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
+WARNING:  Timescale License expired
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 

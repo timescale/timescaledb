@@ -31,6 +31,7 @@ insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ERROR:  must set the 'compress' boolean option when setting compression options
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
+WARNING:  Timescale License expired
 ERROR:  cannot use the same column c in compress_orderby and compress_segmentby
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');

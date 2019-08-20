@@ -24,6 +24,7 @@ ANALYZE metrics;
 \set ECHO none
 -- compress some chunks on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='time asc nulls last', timescaledb.compress_segmentby='device_id');
+WARNING:  Timescale License expired
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
  compress_chunk 
 ----------------
