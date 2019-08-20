@@ -11,16 +11,17 @@ set(TEST_FILES
 )
 
 set(TEST_FILES_DEBUG
-    compress_table.sql
-    compression_algos.sql
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
+    compress_table.sql
+    compression.sql
+    compression_algos.sql
+    compression_errors.sql
+    compression_hypertable.sql
     continuous_aggs.sql
     continuous_aggs_bgw.sql
     continuous_aggs_materialize.sql
     continuous_aggs_multi.sql
-    compression.sql
-    compression_errors.sql
     ddl_hook.sql
     tsl_tables.sql
 )
