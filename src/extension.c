@@ -68,7 +68,11 @@ ts_extension_check_version(const char *so_version)
 
 	if (strcmp(sql_version, so_version) != 0)
 	{
-		ereport(ERROR,
+		/*
+		 * Throw a FATAL error here so that clients will be forced to reconnect
+		 * when they have the wrong extension version loaded.
+		 */
+		ereport(FATAL,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("extension \"%s\" version mismatch: shared library version %s; SQL version "
 						"%s",

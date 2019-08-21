@@ -132,17 +132,11 @@ SELECT 1;
 
 --mismatched version errors
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
-\set ON_ERROR_STOP 0
---mock-4 has mismatched versions, so the .so load should throw an error
-CREATE EXTENSION timescaledb VERSION 'mock-4';
-\set ON_ERROR_STOP 1
+--mock-4 has mismatched versions, so the .so load should be fatal
+SELECT format($$\! utils/test_fatal_command.sh %1$s "CREATE EXTENSION timescaledb VERSION 'mock-4'"$$, :'TEST_DBNAME_2') as command_to_run \gset
+:command_to_run
 --mock-4 not installed.
 \dx
-
-\set ON_ERROR_STOP 0
---should not allow since the errored-out mock-4 above already poisoned the well.
-CREATE EXTENSION timescaledb VERSION 'mock-5';
-\set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --broken version and drop
@@ -180,13 +174,12 @@ SELECT mock_function();
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-6';
-\set ON_ERROR_STOP 0
 --The mock-5->mock_6 upgrade is intentionally broken.
 --The mock_function was never changed to point to mock-6 in the update script.
 --Thus mock_function is defined incorrectly to point to the mock-5.so
---This should be an error.
-SELECT mock_function();
-\set ON_ERROR_STOP 1
+--This will now be a FATAL error.
+SELECT format($$\! utils/test_fatal_command.sh %1$s "SELECT mock_function()"$$, :'TEST_DBNAME_2') as command_to_run \gset
+:command_to_run
 \dx
 
 --TEST: create extension when old .so already loaded
