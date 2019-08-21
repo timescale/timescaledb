@@ -43,18 +43,90 @@ SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result" does not exist, skipping
- count 
--------
-    27
+ count_compressed 
+------------------
+               27
 (1 row)
 
- count 
--------
-    27
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+                                     ?column?                                      | count 
+-----------------------------------------------------------------------------------+-------
+ Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
-                               ?column?                                | count 
------------------------------------------------------------------------+-------
- Number of rows different between original and uncompressed (expect 0) |     0
+psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
+ count_decompressed 
+--------------------
+                 27
+(1 row)
+
+                                                   ?column?                                                   | count 
+--------------------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
+(1 row)
+
+--add test for altered hypertable
+CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 day');
+NOTICE:  adding not-null constraint to column "Time"
+ table_name 
+------------
+ test2
+(1 row)
+
+--create some chunks with the old column numbers
+INSERT INTO test2 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+ALTER TABLE test2 DROP COLUMN b;
+--add default a value
+ALTER TABLE test2 ADD COLUMN c INT DEFAULT -15;
+--add default NULL
+ALTER TABLE test2 ADD COLUMN d INT;
+--write to both old chunks and new chunks with different column #s
+INSERT INTO test2 SELECT t, gen_rand_minstd(), gen_rand_minstd()::text, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-06 1:00', '1 hour') t;
+ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, "Time" DESC');
+SELECT
+  $$
+  SELECT * FROM test2 ORDER BY c, "Time"
+  $$ AS "QUERY" \gset
+SELECT 'test2' AS "HYPERTABLE_NAME" \gset
+\ir include/compression_test_hypertable.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count_compressed 
+------------------
+                5
+(1 row)
+
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+                                     ?column?                                      | count 
+-----------------------------------------------------------------------------------+-------
+ Number of rows different between original and query on compressed data (expect 0) |     0
+(1 row)
+
+psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
+ count_decompressed 
+--------------------
+                  5
+(1 row)
+
+                                                   ?column?                                                   | count 
+--------------------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
 (1 row)
 
