@@ -30,7 +30,6 @@
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
 					   Oid *collations, bool *nullsFirst);
-static AppendRelInfo *get_appendrelinfo(PlannerInfo *root, Index rti);
 static Plan *adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
 							  List *tlist, AttrNumber *sortColIdx);
 
@@ -49,7 +48,7 @@ static Plan *
 adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
 				 AttrNumber *sortColIdx)
 {
-	AppendRelInfo *appinfo = get_appendrelinfo(root, path->parent->relid);
+	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid);
 	int childSortCols;
 	Oid *sortOperators;
 	Oid *collations;
@@ -108,11 +107,20 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 		{
 			Plan *child_plan = lfirst(lc_plan);
 			Path *child_path = lfirst(lc_path);
-			AppendRelInfo *appinfo = get_appendrelinfo(root, child_path->parent->relid);
 
 			/* push down targetlist to children */
-			child_plan->targetlist =
-				(List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
+			if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
+			{
+				/* if this is an append child we need to adjust targetlist references */
+				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child_path->parent->relid);
+
+				child_plan->targetlist =
+					(List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
+			}
+			else
+			{
+				child_plan->targetlist = tlist;
+			}
 		}
 	}
 	else
@@ -232,7 +240,7 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 			{
 				List *chunk_clauses = NIL;
 				ListCell *lc;
-				AppendRelInfo *appinfo = get_appendrelinfo(root, scan->scanrelid);
+				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid);
 
 				foreach (lc, clauses)
 				{
@@ -287,26 +295,6 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 	node->nullsFirst = nullsFirst;
 
 	return node;
-}
-
-static AppendRelInfo *
-get_appendrelinfo(PlannerInfo *root, Index rti)
-{
-#if PG96 || PG10
-	ListCell *lc;
-	foreach (lc, root->append_rel_list)
-	{
-		AppendRelInfo *appinfo = lfirst(lc);
-		if (appinfo->child_relid == rti)
-			return appinfo;
-	}
-#else
-	if (root->append_rel_array[rti])
-		return root->append_rel_array[rti];
-#endif
-	ereport(ERROR,
-			(errcode(ERRCODE_INTERNAL_ERROR), errmsg("no appendrelinfo found for index %d", rti)));
-	pg_unreachable();
 }
 
 Scan *

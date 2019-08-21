@@ -67,3 +67,8 @@ INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
 
+-- create space partitioned hypertable
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+SELECT create_hypertable('metrics_space','time','device_id',3);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '1h'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+
