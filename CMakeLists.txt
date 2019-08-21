@@ -51,6 +51,30 @@ if (NOT CMAKE_C_COMPILER_ID IN_LIST SUPPORTED_COMPILERS)
    message(FATAL_ERROR "Unsupported compiler ${CMAKE_C_COMPILER_ID}. Supported compilers are: ${SUPPORTED_COMPILERS}")
 endif ()
 
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
+  # These two flags generate too many errors currently, but we
+  # probably want these optimizations enabled.
+
+  # TODO: -fdelete-null-pointer-checks -Wnull-dereference
+
+  # This flag avoid some subtle bugs related to standard conversions,
+  # but currently does not compile because we are using too many
+  # implicit conversions that potentially lose precision.
+
+  # TODO: -Wconversions
+  add_compile_options(-Wempty-body -Wvla)
+  if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "7")
+    add_compile_options(-Wimplicit-fallthrough)
+  endif()
+
+  # Not sure when it was added to Clang, but it is mentioned in the
+  # release notes for Clang 3.3
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "3.3")
+    add_compile_options(-Wimplicit-fallthrough)
+  endif()
+
+endif()
+
 # Check for supported platforms and compiler flags
 if (WIN32)
   if (NOT CMAKE_CONFIGURATION_TYPES)

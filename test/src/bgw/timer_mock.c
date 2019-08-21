@@ -57,7 +57,7 @@ mock_wait(TimestampTz until)
 				WaitForBackgroundWorkerShutdown(bgw_handle);
 				bgw_handle = NULL;
 			}
-			/* Now fall through to set the time */
+			/* FALLTHROUGH */
 		case IMMEDIATELY_SET_UNTIL:
 			ts_params_set_time(until, false);
 			return true;

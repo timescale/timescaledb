@@ -34,6 +34,7 @@ def_elem_from_texts(Datum *texts, int nelems)
 			break;
 		case 3:
 			elem->arg = (Node *) makeString(text_to_cstring(DatumGetTextP(texts[2])));
+			/* FALLTHROUGH */
 		case 2:
 			elem->defname = text_to_cstring(DatumGetTextP(texts[1]));
 			elem->defnamespace = text_to_cstring(DatumGetTextP(texts[0]));
