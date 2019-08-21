@@ -379,11 +379,14 @@ SELECT 1;
 
 --mismatched version errors
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
-\set ON_ERROR_STOP 0
---mock-4 has mismatched versions, so the .so load should throw an error
-CREATE EXTENSION timescaledb VERSION 'mock-4';
-ERROR:  extension "timescaledb" version mismatch: shared library version mock-4-mismatch; SQL version mock-4
-\set ON_ERROR_STOP 1
+--mock-4 has mismatched versions, so the .so load should be fatal
+SELECT format($$\! utils/test_fatal_command.sh %1$s "CREATE EXTENSION timescaledb VERSION 'mock-4'"$$, :'TEST_DBNAME_2') as command_to_run \gset
+:command_to_run
+FATAL:  extension "timescaledb" version mismatch: shared library version mock-4-mismatch; SQL version mock-4
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+connection to server was lost
 --mock-4 not installed.
 \dx
                  List of installed extensions
@@ -392,11 +395,6 @@ ERROR:  extension "timescaledb" version mismatch: shared library version mock-4-
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
 (1 row)
 
-\set ON_ERROR_STOP 0
---should not allow since the errored-out mock-4 above already poisoned the well.
-CREATE EXTENSION timescaledb VERSION 'mock-5';
-ERROR:  extension "timescaledb" has already been loaded with another version
-\set ON_ERROR_STOP 1
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --broken version and drop
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
@@ -462,15 +460,20 @@ WARNING:  mock function call "mock-5"
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-6';
 WARNING:  mock init "mock-6"
-\set ON_ERROR_STOP 0
 --The mock-5->mock_6 upgrade is intentionally broken.
 --The mock_function was never changed to point to mock-6 in the update script.
 --Thus mock_function is defined incorrectly to point to the mock-5.so
---This should be an error.
-SELECT mock_function();
+--This will now be a FATAL error.
+SELECT format($$\! utils/test_fatal_command.sh %1$s "SELECT mock_function()"$$, :'TEST_DBNAME_2') as command_to_run \gset
 WARNING:  mock post_analyze_hook "mock-6"
-ERROR:  extension "timescaledb" version mismatch: shared library version mock-5; SQL version mock-6
-\set ON_ERROR_STOP 1
+:command_to_run
+WARNING:  mock init "mock-6"
+WARNING:  mock post_analyze_hook "mock-6"
+FATAL:  extension "timescaledb" version mismatch: shared library version mock-5; SQL version mock-6
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+connection to server was lost
 \dx
 WARNING:  mock post_analyze_hook "mock-6"
                                       List of installed extensions
