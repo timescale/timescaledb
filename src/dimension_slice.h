@@ -76,7 +76,11 @@ extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dim
 extern TSDLLEXPORT int ts_dimension_slice_oldest_chunk_without_executed_job(
 	int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
 	StrategyNumber end_strategy, int64 end_value);
-
+extern TSDLLEXPORT int32 ts_dimension_slice_get_chunkid_to_compress(int32 dimension_id,
+																	StrategyNumber start_strategy,
+																	int64 start_value,
+																	StrategyNumber end_strategy,
+																	int64 end_value);
 #define dimension_slice_insert(slice) ts_dimension_slice_insert_multi(&(slice), 1)
 
 #define dimension_slice_scan(dimension_id, coordinate)                                             \

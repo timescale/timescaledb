@@ -45,6 +45,7 @@
 #include "hypertable_cache.h"
 #include "trigger.h"
 #include "scanner.h"
+#include "scan_iterator.h"
 #include "catalog.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -2135,4 +2136,28 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	/* lock will be released after the transaction is done */
 	heap_close(rel, NoLock);
 	return true;
+}
+
+/* is this a internal hypertable created for compression */
+TSDLLEXPORT bool
+ts_hypertable_is_compressed_internal(int32 compressed_hypertable_id)
+{
+	bool compressed = false;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(compressed_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		compressed =
+			DatumGetBool(heap_getattr(ti->tuple, Anum_hypertable_compressed, ti->desc, &isnull));
+	}
+	return compressed;
 }

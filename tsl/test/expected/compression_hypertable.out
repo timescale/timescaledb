@@ -38,7 +38,6 @@ NOTICE:  adding not-null constraint to column "Time"
 
 INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = '"Time" DESC');
-WARNING:  Timescale License expired
 SELECT
   $$
   SELECT * FROM test1 ORDER BY "Time"
@@ -68,7 +67,6 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
-psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
  count_decompressed 
 --------------------
                  27
@@ -144,7 +142,6 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
-psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
  count_decompressed 
 --------------------
                   5
@@ -253,7 +250,6 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
-psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
  count_decompressed 
 --------------------
                   1
@@ -327,7 +323,6 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
-psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
  count_decompressed 
 --------------------
                  10

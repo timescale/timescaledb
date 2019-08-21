@@ -44,7 +44,6 @@ ANALYZE metrics_space;
 \set ECHO none
 -- compress first and last chunk on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device_id');
-WARNING:  Timescale License expired
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
  compress_chunk 
 ----------------

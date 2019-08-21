@@ -119,6 +119,7 @@ extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_th
 												 Oid newer_than_type, bool cascade,
 												 bool cascades_to_materializations,
 												 int32 log_level);
+extern TSDLLEXPORT bool ts_chunk_is_compressed(int32 chunk_id);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

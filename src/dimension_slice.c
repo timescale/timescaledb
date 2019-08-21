@@ -778,3 +778,44 @@ ts_dimension_slice_oldest_chunk_without_executed_job(int32 job_id, int32 dimensi
 
 	return info.chunk_id;
 }
+
+static ScanTupleResult
+dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *data)
+{
+	ListCell *lc;
+	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	List *chunk_ids = NIL;
+
+	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
+
+	foreach (lc, chunk_ids)
+	{
+		int32 chunk_id = lfirst_int(lc);
+		if (!ts_chunk_is_compressed(chunk_id))
+		{
+			/* found a chunk that has not yet been compressed */
+			*((int32 *) data) = chunk_id;
+			return SCAN_DONE;
+		}
+	}
+
+	return SCAN_CONTINUE;
+}
+
+int32
+ts_dimension_slice_get_chunkid_to_compress(int32 dimension_id, StrategyNumber start_strategy,
+										   int64 start_value, StrategyNumber end_strategy,
+										   int64 end_value)
+{
+	int32 chunk_id_ret = INVALID_CHUNK_ID;
+	dimension_slice_scan_with_strategies(dimension_id,
+										 start_strategy,
+										 start_value,
+										 end_strategy,
+										 end_value,
+										 &chunk_id_ret,
+										 dimension_slice_check_is_chunk_uncompressed_tuple_found,
+										 -1);
+
+	return chunk_id_ret;
+}

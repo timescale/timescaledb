@@ -8,5 +8,6 @@
 
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
+extern void tsl_compress_chunk_wrapper(Oid chunk_relid);
 
 #endif // TIMESCALEDB_TSL_COMPRESSION_UTILS_H

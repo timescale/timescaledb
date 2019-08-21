@@ -17,5 +17,6 @@ hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Da
 										 bool *nulls);
 
 extern TSDLLEXPORT bool hypertable_compression_delete_by_hypertable_id(int32 htid);
+extern TSDLLEXPORT bool ts_is_compression_hypertable(int32 hypertable_id);
 
 #endif
