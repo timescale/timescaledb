@@ -187,23 +187,48 @@ reset enable_material;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
 
+-- test constraint_exclusion with space partitioning and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz ORDER BY time;
+
+-- test Const OP Var
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::date < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamp < time ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamptz < time ORDER BY time;
+
+-- test 2 constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date AND time < '2000-01-15'::date ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp AND time < '2000-01-15'::timestamp ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND time < '2000-01-15'::timestamptz ORDER BY time;
+
+-- test filtering on space partition
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id = 1 ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (1,2) ORDER BY time;
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_DATE ORDER BY time;
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_TIMESTAMP ORDER BY time;
 
 -- test now()
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > now() ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > now() ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > now() ORDER BY time;
 
 -- query with tablesample and planner exclusion
 :PREFIX
@@ -216,6 +241,12 @@ ORDER BY time DESC;
 SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
 WHERE time > '2000-01-15'::text::date
 ORDER BY time DESC;
+
+-- query with tablesample, space partitioning and planner exclusion
+:PREFIX
+SELECT * FROM metrics_space TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-10'::timestamptz
+ORDER BY time DESC, device_id;
 
 -- test runtime exclusion
 
@@ -252,6 +283,15 @@ ORDER BY time DESC;
 -- test prepared statements
 -- executor startup exclusion with no chunks excluded
 PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+
+-- executor startup exclusion with no chunks excluded and space partitioning
+PREPARE prep AS SELECT time FROM metrics_space WHERE time < now() AND device_id = 1 ORDER BY time;
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;

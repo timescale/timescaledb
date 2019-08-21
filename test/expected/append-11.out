@@ -102,6 +102,15 @@ SELECT create_hypertable('metrics_timestamptz','time');
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
+-- create space partitioned hypertable
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+SELECT create_hypertable('metrics_space','time','device_id',3);
+     create_hypertable      
+----------------------------
+ (6,public,metrics_space,t)
+(1 row)
+
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '1h'::interval) g1(time), generate_series(1,10,1) g2(device_id);
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -891,6 +900,374 @@ reset enable_material;
          Heap Fetches: 96
 (8 rows)
 
+-- test constraint_exclusion with space partitioning and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 66
+(24 rows)
+
+-- test Const OP Var
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::date < time ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > '01-10-2000'::date)
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamp < time ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamptz < time ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 66
+(24 rows)
+
+-- test 2 constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date AND time < '2000-01-15'::date ORDER BY time;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp AND time < '2000-01-15'::timestamp ORDER BY time;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+               Heap Fetches: 66
+(35 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND time < '2000-01-15'::timestamptz ORDER BY time;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=960 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=630 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=252 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 252
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=126 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 126
+   ->  Merge Append (actual rows=330 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=132 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 132
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=66 loops=1)
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 66
+(24 rows)
+
+-- test filtering on space partition
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id = 1 ORDER BY time;
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=96 loops=1)
+   Order: metrics_space."time"
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=63 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         Heap Fetches: 63
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         Heap Fetches: 33
+(8 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (1,2) ORDER BY time;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=192 loops=1)
+   Sort Key: _hyper_6_25_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=192 loops=1)
+         ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=63 loops=1)
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 63
+         ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk (actual rows=63 loops=1)
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 63
+         ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 33
+         ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk (actual rows=33 loops=1)
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               Heap Fetches: 33
+(16 rows)
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
@@ -916,6 +1293,46 @@ reset enable_material;
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
 (3 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_DATE ORDER BY time;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_DATE)
+               Heap Fetches: 0
+(35 rows)
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
@@ -943,6 +1360,46 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > CURRENT_TIMESTAMP)
+               Heap Fetches: 0
+(35 rows)
+
 -- test now()
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
@@ -968,6 +1425,46 @@ reset enable_material;
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
 (3 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > now() ORDER BY time;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > now())
+               Heap Fetches: 0
+(35 rows)
 
 -- query with tablesample and planner exclusion
 :PREFIX
@@ -1015,6 +1512,40 @@ ORDER BY time DESC;
                Filter: ("time" > ('2000-01-15'::cstring)::date)
                Rows Removed by Filter: 3
 (15 rows)
+
+-- query with tablesample, space partitioning and planner exclusion
+:PREFIX
+SELECT * FROM metrics_space TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-10'::timestamptz
+ORDER BY time DESC, device_id;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Sort (actual rows=51 loops=1)
+   Sort Key: _hyper_6_30_chunk."time" DESC, _hyper_6_30_chunk.device_id
+   Sort Method: quicksort 
+   ->  Append (actual rows=51 loops=1)
+         ->  Sample Scan on _hyper_6_30_chunk (actual rows=3 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_29_chunk (actual rows=5 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_28_chunk (actual rows=5 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_27_chunk (actual rows=4 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 10
+         ->  Sample Scan on _hyper_6_26_chunk (actual rows=17 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 20
+         ->  Sample Scan on _hyper_6_25_chunk (actual rows=17 loops=1)
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 20
+(25 rows)
 
 -- test runtime exclusion
 -- test runtime exclusion with LATERAL and 2 hypertables
@@ -1444,6 +1975,94 @@ PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND devi
          Index Cond: ((device_id = 1) AND ("time" < now()))
          Heap Fetches: 129
 (18 rows)
+
+DEALLOCATE prep;
+-- executor startup exclusion with no chunks excluded and space partitioning
+PREPARE prep AS SELECT time FROM metrics_space WHERE time < now() AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=313 loops=1)
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=112 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 112
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=168 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 168
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 33
+(12 rows)
+
+:PREFIX EXECUTE prep;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=313 loops=1)
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=112 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 112
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=168 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 168
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 33
+(12 rows)
+
+:PREFIX EXECUTE prep;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=313 loops=1)
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=112 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 112
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=168 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 168
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 33
+(12 rows)
+
+:PREFIX EXECUTE prep;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=313 loops=1)
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=112 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 112
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=168 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 168
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 33
+(12 rows)
+
+:PREFIX EXECUTE prep;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=313 loops=1)
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=112 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 112
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=168 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 168
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=33 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+         Heap Fetches: 33
+(12 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded
