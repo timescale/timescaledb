@@ -854,7 +854,7 @@ $$);
 NOTICE:  [data_node_1]: 
     INSERT INTO disttable VALUES ('2019-01-02 12:34', 1, 2, 9.3)
 
-ERROR:  [data_node_1]: cannot create chunk on distributed hypertable member
+ERROR:  [data_node_1]: distributed hypertable member cannot create chunk on its own
 \set ON_ERROR_STOP 1
 -- However, INSERTs on a data node that does not create a chunk works.
 SELECT * FROM test.remote_exec('{ data_node_1 }',

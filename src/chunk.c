@@ -1064,9 +1064,6 @@ ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const c
 {
 	Chunk *chunk;
 
-	if (hypertable_is_distributed_member(ht))
-		elog(ERROR, "cannot create chunk on distributed hypertable member");
-
 	/*
 	 * Serialize chunk creation around a lock on the "main table" to avoid
 	 * multiple processes trying to create the same chunk. We use a
@@ -1079,7 +1076,15 @@ ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const c
 	chunk = chunk_find(ht, p, true);
 
 	if (NULL == chunk)
+	{
+		if (hypertable_is_distributed_member(ht))
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("distributed hypertable member cannot create chunk on its own"),
+					 errhint("chunk creation should only happen through an access node")));
+
 		chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
+	}
 
 	ASSERT_IS_VALID_CHUNK(chunk);
 
