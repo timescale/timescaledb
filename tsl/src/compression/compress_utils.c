@@ -281,20 +281,23 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	ts_cache_release(hcache);
 }
 
-Datum
-tsl_compress_chunk(PG_FUNCTION_ARGS)
+void
+tsl_compress_chunk_wrapper(Oid chunk_relid)
 {
-	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_id, 0, true);
+	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
 	if (srcchunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		ereport(ERROR, (errcode(ERRCODE_DUPLICATE_OBJECT), errmsg("chunk is already compressed")));
 	}
 
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
+	compress_chunk_impl(srcchunk->hypertable_relid, chunk_relid);
+}
 
-	compress_chunk_impl(srcchunk->hypertable_relid, chunk_id);
+Datum
+tsl_compress_chunk(PG_FUNCTION_ARGS)
+{
+	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	tsl_compress_chunk_wrapper(chunk_id);
 	PG_RETURN_VOID();
 }
 
@@ -305,9 +308,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unkown chunk id %d", uncompressed_chunk_id);
-
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
 
 	decompress_chunk_impl(uncompressed_chunk->hypertable_relid, uncompressed_chunk_id);
 	PG_RETURN_VOID();

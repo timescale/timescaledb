@@ -15,8 +15,10 @@
 
 TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_add_reorder_policy);
+TS_FUNCTION_INFO_V1(ts_add_compress_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_remove_reorder_policy);
+TS_FUNCTION_INFO_V1(ts_remove_compress_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_alter_job_schedule);
 TS_FUNCTION_INFO_V1(ts_reorder_chunk);
 TS_FUNCTION_INFO_V1(ts_move_chunk);
@@ -56,6 +58,12 @@ ts_add_reorder_policy(PG_FUNCTION_ARGS)
 }
 
 Datum
+ts_add_compress_chunks_policy(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->add_compress_chunks_policy(fcinfo));
+}
+
+Datum
 ts_remove_drop_chunks_policy(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remove_drop_chunks_policy(fcinfo));
@@ -65,6 +73,12 @@ Datum
 ts_remove_reorder_policy(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remove_reorder_policy(fcinfo));
+}
+
+Datum
+ts_remove_compress_chunks_policy(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->remove_compress_chunks_policy(fcinfo);
 }
 
 Datum
@@ -388,8 +402,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_materialize = cagg_materialize_default_fn,
 	.add_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.add_reorder_policy = error_no_default_fn_pg_enterprise,
+	.add_compress_chunks_policy = error_no_default_fn_pg_enterprise,
 	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.remove_reorder_policy = error_no_default_fn_pg_enterprise,
+	.remove_compress_chunks_policy = error_no_default_fn_pg_enterprise,
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_hook = NULL,
 	.gapfill_marker = error_no_default_fn_pg_community,

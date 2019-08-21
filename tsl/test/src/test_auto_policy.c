@@ -11,6 +11,7 @@
 #include <access/htup_details.h>
 
 #include "bgw_policy/job.h"
+#include "bgw/job_stat.h"
 #include "chunk.h"
 #include "reorder.h"
 
@@ -18,6 +19,7 @@
 
 TS_FUNCTION_INFO_V1(ts_test_auto_reorder);
 TS_FUNCTION_INFO_V1(ts_test_auto_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_test_auto_compress_chunks);
 
 static Oid chunk_oid;
 static Oid index_oid;
@@ -66,4 +68,16 @@ ts_test_auto_drop_chunks(PG_FUNCTION_ARGS)
 	execute_drop_chunks_policy(PG_GETARG_INT32(0));
 
 	PG_RETURN_NULL();
+}
+
+/* Call the real compress_chunks policy */
+Datum
+ts_test_auto_compress_chunks(PG_FUNCTION_ARGS)
+{
+	int32 job_id = PG_GETARG_INT32(0);
+	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
+	/*since we didn't come through the scheduler, need to mark job
+	 * as started to create a job_stat record */
+	ts_bgw_job_stat_mark_start(job_id);
+	return execute_compress_chunks_policy(job);
 }

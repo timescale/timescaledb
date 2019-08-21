@@ -88,7 +88,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errmsg("drop chunks policy already exists on hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
-			return -1;
+			PG_RETURN_INT32(-1);
 		}
 		else
 		{
@@ -96,7 +96,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 			elog(WARNING,
 				 "could not add drop_chunks policy due to existing policy on hypertable with "
 				 "different arguments");
-			return -1;
+			PG_RETURN_INT32(-1);
 		}
 	}
 

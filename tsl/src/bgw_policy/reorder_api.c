@@ -120,13 +120,13 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 			elog(WARNING,
 				 "could not add reorder policy due to existing policy on hypertable with different "
 				 "arguments");
-			return -1;
+			PG_RETURN_INT32(-1);
 		}
 		/* If all arguments are the same, do nothing */
 		ereport(NOTICE,
 				(errmsg("reorder policy already exists on hypertable \"%s\", skipping",
 						get_rel_name(ht_oid))));
-		return -1;
+		PG_RETURN_INT32(-1);
 	}
 
 	/* Next, insert a new job into jobs table */

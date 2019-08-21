@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <miscadmin.h>
 #include <access/heapam.h>
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
@@ -13,24 +12,24 @@
 #include <catalog/toasting.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
 
 #include "catalog.h"
-#include "compat.h"
 #include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "trigger.h"
-#include "scan_iterator.h"
-#include "hypertable_cache.h"
+#include "continuous_agg.h"
 #include "compression_with_clause.h"
 #include "compression.h"
+#include "hypertable_cache.h"
 #include "hypertable_compression.h"
 #include "custom_type_cache.h"
 #include "license.h"
+#include "trigger.h"
 
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
@@ -489,9 +488,25 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	List *orderby_cols;
 	bool compression_already_enabled;
 	bool compressed_chunks_exist;
+	ContinuousAggHypertableStatus caggstat;
 
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
+	/*check this is not a special internally created hypertable
+	 * continuous agg table
+	 * compression hypertable
+	 */
+	caggstat = ts_continuous_agg_hypertable_status(ht->fd.id);
+	if (!(caggstat == HypertableIsRawTable || caggstat == HypertableIsNotContinuousAgg))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous aggregate tables do not support compression")));
+	}
+	if (ht->fd.compressed)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot compress internal compression hypertable")));
+	}
 
 	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
 	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
@@ -502,7 +517,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
-	compression_already_enabled = ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID;
+	compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ON(ht);
 	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
 

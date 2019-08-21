@@ -2310,3 +2310,27 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 					 "with AND operator")));
 	pg_unreachable();
 }
+
+/* has chunk ,specifieid by chunk_id, been compressed */
+bool
+ts_chunk_is_compressed(int32 chunk_id)
+{
+	bool compressed = false;
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		heap_getattr(ti->tuple, Anum_chunk_compressed_chunk_id, ti->desc, &isnull);
+		compressed = !isnull; // isnull is false when compress chunk id is set
+	}
+	ts_scan_iterator_close(&iterator);
+	return compressed;
+}

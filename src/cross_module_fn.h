@@ -40,8 +40,10 @@ typedef struct CrossModuleFunctions
 	bool (*continuous_agg_materialize)(int32 materialization_id, bool verbose);
 	Datum (*add_drop_chunks_policy)(PG_FUNCTION_ARGS);
 	Datum (*add_reorder_policy)(PG_FUNCTION_ARGS);
+	Datum (*add_compress_chunks_policy)(PG_FUNCTION_ARGS);
 	Datum (*remove_drop_chunks_policy)(PG_FUNCTION_ARGS);
 	Datum (*remove_reorder_policy)(PG_FUNCTION_ARGS);
+	Datum (*remove_compress_chunks_policy)(PG_FUNCTION_ARGS);
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
 	void (*set_rel_pathlist_hook)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								  Hypertable *);

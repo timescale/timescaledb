@@ -30,12 +30,21 @@ CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NA
 AS '@MODULE_PATHNAME@', 'ts_add_reorder_policy'
 LANGUAGE C VOLATILE STRICT;
 
+CREATE OR REPLACE FUNCTION add_compress_chunks_policy(hypertable REGCLASS, older_than "any", if_not_exists BOOL = false)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_add_compress_chunks_policy'
+LANGUAGE C VOLATILE STRICT;
+
 CREATE OR REPLACE FUNCTION remove_drop_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_reorder_policy'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION remove_compress_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL 
+AS '@MODULE_PATHNAME@', 'ts_remove_compress_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
 -- Returns the updated job schedule values

@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
     max_runtime         INTERVAL    NOT NULL,
     max_retries         INT         NOT NULL,
     retry_period        INTERVAL    NOT NULL,
-    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate'))
+    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks'))
 );
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
 
@@ -332,14 +332,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_compress_chunks_policy(
-	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-	older_than BIGINT NOT NULL,
-	job_id SMALLINT  REFERENCES _timescaledb_config.bgw_job(id),
-	UNIQUE (hypertable_id, job_id)
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_compress_chunks(
+    job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
+    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_compress_chunks_policy', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_compress_chunks', '');
 
 
 -- Set table permissions

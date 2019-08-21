@@ -1,0 +1,186 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+CREATE OR REPLACE FUNCTION test_compress_chunks_policy(job_id INTEGER)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_auto_compress_chunks'
+LANGUAGE C VOLATILE STRICT;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE conditions (
+      time        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::interval);
+    create_hypertable    
+-------------------------
+ (1,public,conditions,t)
+(1 row)
+
+--TEST 1-- 
+--cannot set policy without enabling compression --
+\set ON_ERROR_STOP 0
+select add_compress_chunks_policy('conditions', '60d'::interval);
+ERROR:  can add compress_chunks policy only on hypertables with compression enabled
+\set ON_ERROR_STOP 1
+-- TEST2 --
+--add a policy to compress chunks --
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+select add_compress_chunks_policy('conditions', '60d'::interval);
+ add_compress_chunks_policy 
+----------------------------
+                       1000
+(1 row)
+
+select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks;
+ compressjob_id | hypertable_id |    older_than    
+----------------+---------------+------------------
+           1000 |             1 | (t,"@ 60 days",)
+(1 row)
+
+\gset
+select * from _timescaledb_config.bgw_job where job_type like 'compress%';
+  id  |        application_name        |    job_type     | schedule_interval  | max_runtime | max_retries | retry_period 
+------+--------------------------------+-----------------+--------------------+-------------+-------------+--------------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour
+(1 row)
+
+select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s'); 
+WARNING:  Timescale License expired
+ job_id | schedule_interval | max_runtime | max_retries | retry_period 
+--------+-------------------+-------------+-------------+--------------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour
+(1 row)
+
+select * from _timescaledb_config.bgw_job where job_type like 'compress%';
+  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period 
+------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 1 sec           | @ 0         |          -1 | @ 1 hour
+(1 row)
+
+insert into conditions
+select generate_series(now()::timestamp, now()::timestamp+'1day', '1 min'), 'TOK', 'sony', 55, 75;
+-- TEST3 --
+--only the old chunks will get compressed when policy is executed--
+select test_compress_chunks_policy(:compressjob_id);
+ test_compress_chunks_policy 
+-----------------------------
+ 
+(1 row)
+
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size order by chunk_name;
+ hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
+-----------------+----------------------------------------+--------------------------+------------------------
+ conditions      | _timescaledb_internal._hyper_1_1_chunk | 32 kB                    | 16 kB
+(1 row)
+
+-- TEST 4 --
+--cannot set another policy
+\set ON_ERROR_STOP 0
+select add_compress_chunks_policy('conditions', '60d'::interval, if_not_exists=>true);
+NOTICE:  compress chunks policy already exists on hypertable "conditions", skipping
+ add_compress_chunks_policy 
+----------------------------
+                         -1
+(1 row)
+
+select add_compress_chunks_policy('conditions', '60d'::interval);
+ERROR:  compress chunks policy already exists for hypertable "conditions"
+select add_compress_chunks_policy('conditions', '30d'::interval, if_not_exists=>true);
+WARNING:  could not add compress_chunks policy due to existing policy on hypertable with different arguments
+ add_compress_chunks_policy 
+----------------------------
+                         -1
+(1 row)
+
+\set ON_ERROR_STOP 1
+--TEST 5 --
+-- drop the policy --
+select remove_compress_chunks_policy('conditions');
+ remove_compress_chunks_policy 
+-------------------------------
+ t
+(1 row)
+
+select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks;
+ compressjob_id | hypertable_id | older_than 
+----------------+---------------+------------
+(0 rows)
+
+--TEST 6 --
+-- try to execute the policy after it has been dropped --
+\set ON_ERROR_STOP 0
+select test_compress_chunks_policy(:compressjob_id);
+ERROR:  bgw job not found
+\set ON_ERROR_STOP 1
+--TEST 7 
+--compress chunks policy for integer based partition hypertable
+CREATE TABLE test_table_int(time bigint, val int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (3,public,test_table_int,t)
+(1 row)
+
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+select set_integer_now_func('test_table_int', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+insert into test_table_int select generate_series(1,5), 10;
+alter table test_table_int set (timescaledb.compress);
+select add_compress_chunks_policy('test_table_int', 2::int);
+ add_compress_chunks_policy 
+----------------------------
+                       1001
+(1 row)
+
+select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks
+where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name like 'test_table_int');
+ compressjob_id | hypertable_id | older_than 
+----------------+---------------+------------
+           1001 |             3 | (f,,2)
+(1 row)
+
+\gset
+select test_compress_chunks_policy(:compressjob_id);
+ test_compress_chunks_policy 
+-----------------------------
+ 
+(1 row)
+
+select test_compress_chunks_policy(:compressjob_id);
+ test_compress_chunks_policy 
+-----------------------------
+ 
+(1 row)
+
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size 
+where hypertable_name::text like 'test_table_int'
+order by chunk_name;
+ hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
+-----------------+----------------------------------------+--------------------------+------------------------
+ test_table_int  | _timescaledb_internal._hyper_3_5_chunk | 24 kB                    | 16 kB
+ test_table_int  | _timescaledb_internal._hyper_3_6_chunk | 24 kB                    | 16 kB
+(2 rows)
+

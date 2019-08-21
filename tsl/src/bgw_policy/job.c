@@ -15,10 +15,13 @@
 #include <utils/snapmgr.h>
 
 #include "bgw/timer.h"
+#include "bgw/job.h"
 #include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
+#include "bgw_policy/compress_chunks.h"
 #include "bgw_policy/reorder.h"
+#include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/job.h"
 
@@ -75,6 +78,21 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 																nth_dimension->fd.range_start,
 																InvalidStrategy,
 																-1);
+}
+
+static int32
+get_chunk_to_compress(Hypertable *ht, FormData_ts_interval *older_than)
+{
+	Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	StrategyNumber end_strategy = BTLessStrategyNumber;
+	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
+	int64 end_value = ts_time_value_to_internal(ts_interval_subtract_from_now(older_than, open_dim),
+												partitioning_type);
+	return ts_dimension_slice_get_chunkid_to_compress(open_dim->fd.id,
+													  InvalidStrategy, /*start_strategy*/
+													  -1,			   /*start_value*/
+													  end_strategy,
+													  end_value);
 }
 
 bool
@@ -241,6 +259,77 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 	return true;
 }
 
+bool
+execute_compress_chunks_policy(BgwJob *job)
+{
+	bool started = false;
+	BgwPolicyCompressChunks *args;
+	Oid table_relid;
+	Hypertable *ht;
+	Cache *hcache;
+	int32 chunkid;
+	Chunk *chunk = NULL;
+	int job_id = job->fd.id;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
+
+	/* Get the arguments from the compress_chunks_policy table */
+	args = ts_bgw_policy_compress_chunks_find_by_job(job_id);
+
+	if (args == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("could not run compress_chunks policy #%d because no args in policy table",
+						job_id)));
+
+	table_relid = ts_hypertable_id_to_relid(args->fd.hypertable_id);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+	/* First verify that the hypertable corresponds to a valid table */
+	if (ht == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("could not run compress_chunks policy #%d because \"%s\" is not a "
+						"hypertable",
+						job_id,
+						get_rel_name(table_relid))));
+
+	chunkid = get_chunk_to_compress(ht, &args->fd.older_than);
+	if (chunkid == INVALID_CHUNK_ID)
+	{
+		elog(NOTICE,
+			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
+			 ht->fd.schema_name.data,
+			 ht->fd.table_name.data);
+	}
+	else
+	{
+		chunk = ts_chunk_get_by_id(chunkid, 0, true);
+		tsl_compress_chunk_wrapper(chunk->table_id);
+		elog(LOG,
+			 "completed compressing chunk %s.%s",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+	}
+
+	chunkid = get_chunk_to_compress(ht, &args->fd.older_than);
+	if (chunkid != INVALID_CHUNK_ID)
+		enable_fast_restart(job, "compress_chunks");
+
+	ts_cache_release(hcache);
+	if (started)
+	{
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
+	return true;
+}
+
 static bool
 bgw_policy_job_requires_enterprise_license(BgwJob *job)
 {
@@ -254,6 +343,8 @@ bgw_policy_job_requires_enterprise_license(BgwJob *job)
 			return true;
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return false;
+		case JOB_TYPE_COMPRESS_CHUNKS:
+			return true;
 		default:
 			elog(ERROR,
 				 "scheduler could not determine the license type for job type: \"%s\"",
@@ -277,6 +368,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
+		case JOB_TYPE_COMPRESS_CHUNKS:
+			return execute_compress_chunks_policy(job);
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid job type: \"%s\"",

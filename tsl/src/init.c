@@ -20,6 +20,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
+#include "bgw_policy/compress_chunks_api.h"
 #include "compression/compression.h"
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
@@ -73,8 +74,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_materialize = continuous_agg_materialize,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
 	.add_reorder_policy = reorder_add_policy,
+	.add_compress_chunks_policy = compress_chunks_add_policy,
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,
 	.remove_reorder_policy = reorder_remove_policy,
+	.remove_compress_chunks_policy = compress_chunks_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_hook = tsl_set_rel_pathlist_hook,
 	.gapfill_marker = gapfill_marker,
