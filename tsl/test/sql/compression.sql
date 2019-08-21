@@ -114,4 +114,28 @@ where hypertable_name::text like 'conditions';
 
 --make sure  compressed_chunk_id  is reset to NULL
 select ch1.compressed_chunk_id IS NULL
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+
+-- test plans get invalidated when chunks get compressed
+
+SET timescaledb.enable_transparent_decompression TO ON;
+CREATE TABLE plan_inval(time timestamptz, device_id int);
+SELECT create_hypertable('plan_inval','time');
+ALTER TABLE plan_inval SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
+
+-- create 2 chunks
+INSERT INTO plan_inval SELECT * FROM (VALUES ('2000-01-01'::timestamptz,1), ('2000-01-07'::timestamptz,1)) v(time,device_id);
+SET max_parallel_workers_per_gather to 0;
+PREPARE prep_plan AS SELECT count(*) FROM plan_inval;
+EXECUTE prep_plan;
+EXECUTE prep_plan;
+EXECUTE prep_plan;
+-- get name of first chunk
+SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
+\gset
+
+SELECT compress_chunk(:'CHUNK_NAME');
+
+EXECUTE prep_plan;
+EXPLAIN (COSTS OFF) EXECUTE prep_plan;
+
