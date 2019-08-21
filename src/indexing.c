@@ -66,6 +66,7 @@ index_has_attribute(List *indexelems, const char *attrname)
 					break;
 				}
 			}
+			/* FALLTHROUGH */
 			default:
 				elog(ERROR, "unsupported index list element");
 		}
