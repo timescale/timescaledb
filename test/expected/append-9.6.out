@@ -102,6 +102,15 @@ SELECT create_hypertable('metrics_timestamptz','time');
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
+-- create space partitioned hypertable
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+SELECT create_hypertable('metrics_space','time','device_id',3);
+     create_hypertable      
+----------------------------
+ (6,public,metrics_space,t)
+(1 row)
+
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '1h'::interval) g1(time), generate_series(1,10,1) g2(device_id);
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -799,6 +808,295 @@ reset enable_material;
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
 (6 rows)
 
+-- test constraint_exclusion with space partitioning and DATE/TIMESTAMP/TIMESTAMPTZ constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(18 rows)
+
+-- test Const OP Var
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::date < time ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > '01-10-2000'::date)
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamp < time ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamptz < time ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(18 rows)
+
+-- test 2 constraints
+-- exclusion for constraints with non-matching datatypes not working for space partitioning atm
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date AND time < '2000-01-15'::date ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp AND time < '2000-01-15'::timestamp ORDER BY time;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND time < '2000-01-15'::timestamptz ORDER BY time;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
+(18 rows)
+
+-- test filtering on space partition
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id = 1 ORDER BY time;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(6 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (1,2) ORDER BY time;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_6_25_chunk."time"
+   ->  Append
+         ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk
+               Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(11 rows)
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
@@ -824,6 +1122,37 @@ reset enable_material;
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
 (3 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_DATE ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > ('now'::cstring)::date)
+(26 rows)
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
@@ -851,6 +1180,37 @@ reset enable_material;
    Chunks excluded during startup: 5
 (3 rows)
 
+:PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_TIMESTAMP ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > now())
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > now())
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > now())
+(26 rows)
+
 -- test now()
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
@@ -876,6 +1236,37 @@ reset enable_material;
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
 (3 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > now() ORDER BY time;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   ->  Merge Append
+         Sort Key: _hyper_6_22_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+               Index Cond: ("time" > now())
+   ->  Merge Append
+         Sort Key: _hyper_6_25_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+               Index Cond: ("time" > now())
+   ->  Merge Append
+         Sort Key: _hyper_6_28_chunk."time"
+         ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+               Index Cond: ("time" > now())
+         ->  Index Only Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+               Index Cond: ("time" > now())
+(26 rows)
 
 -- query with tablesample and planner exclusion
 :PREFIX
@@ -919,6 +1310,36 @@ ORDER BY time DESC;
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > ('2000-01-15'::cstring)::date)
 (13 rows)
+
+-- query with tablesample, space partitioning and planner exclusion
+:PREFIX
+SELECT * FROM metrics_space TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
+WHERE time > '2000-01-10'::timestamptz
+ORDER BY time DESC, device_id;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_6_30_chunk."time" DESC, _hyper_6_30_chunk.device_id
+   ->  Append
+         ->  Sample Scan on _hyper_6_30_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_29_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_28_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_27_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_26_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Sample Scan on _hyper_6_25_chunk
+               Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
+               Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(21 rows)
 
 -- test runtime exclusion
 -- test runtime exclusion with LATERAL and 2 hypertables
@@ -1253,6 +1674,79 @@ PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND devi
    ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
          Index Cond: ((device_id = 1) AND ("time" < now()))
 (13 rows)
+
+DEALLOCATE prep;
+-- executor startup exclusion with no chunks excluded and space partitioning
+PREPARE prep AS SELECT time FROM metrics_space WHERE time < now() AND device_id = 1 ORDER BY time;
+:PREFIX EXECUTE prep;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(9 rows)
+
+:PREFIX EXECUTE prep;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Order: metrics_space."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+   ->  Index Only Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+         Index Cond: ((device_id = 1) AND ("time" < now()))
+(9 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded

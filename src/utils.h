@@ -8,10 +8,11 @@
 
 #include <postgres.h>
 #include <fmgr.h>
-#include <nodes/primnodes.h>
-#include <catalog/pg_proc.h>
-#include <utils/datetime.h>
 #include <access/htup_details.h>
+#include <catalog/pg_proc.h>
+#include <nodes/primnodes.h>
+#include <nodes/relation.h>
+#include <utils/datetime.h>
 
 #include "export.h"
 
@@ -76,6 +77,8 @@ extern TSDLLEXPORT AttrNumber attno_find_by_attname(TupleDesc tupdesc, Name attn
 
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 										 size_t copy_size);
+
+extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti);
 
 #define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type)                                         \
 	(to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));

@@ -4,28 +4,28 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <catalog/pg_type.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_inherits.h>
-#include <catalog/indexing.h>
-#include <access/htup.h>
-#include <access/htup_details.h>
-#include <access/heapam.h>
-#include <access/genam.h>
-#include <nodes/makefuncs.h>
-#include <parser/scansup.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/relcache.h>
-#include <utils/fmgroids.h>
-#include <utils/date.h>
-#include <catalog/pg_cast.h>
-#include <parser/parse_coerce.h>
 #include <fmgr.h>
-#include <access/xact.h>
 #include <funcapi.h>
-#include <utils/syscache.h>
+#include <access/genam.h>
+#include <access/heapam.h>
+#include <access/htup_details.h>
+#include <access/htup.h>
+#include <access/xact.h>
+#include <catalog/indexing.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_cast.h>
+#include <catalog/pg_inherits.h>
+#include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <nodes/relation.h>
+#include <parser/parse_coerce.h>
+#include <parser/scansup.h>
 #include <utils/catcache.h>
+#include <utils/date.h>
+#include <utils/fmgroids.h>
+#include <utils/lsyscache.h>
+#include <utils/relcache.h>
+#include <utils/syscache.h>
 
 #include "chunk.h"
 #include "utils.h"
@@ -621,4 +621,32 @@ attno_find_by_attname(TupleDesc tupdesc, Name attname)
 			return attr->attnum;
 	}
 	return InvalidAttrNumber;
+}
+
+AppendRelInfo *
+ts_get_appendrelinfo(PlannerInfo *root, Index rti)
+{
+	ListCell *lc;
+#if PG11_GE
+	/* use append_rel_array if it has been setup */
+	if (root->append_rel_array)
+	{
+		if (root->append_rel_array[rti])
+			return root->append_rel_array[rti];
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("no appendrelinfo found for index %d", rti)));
+	}
+#endif
+
+	foreach (lc, root->append_rel_list)
+	{
+		AppendRelInfo *appinfo = lfirst(lc);
+		if (appinfo->child_relid == rti)
+			return appinfo;
+	}
+	ereport(ERROR,
+			(errcode(ERRCODE_INTERNAL_ERROR), errmsg("no appendrelinfo found for index %d", rti)));
+	pg_unreachable();
 }
