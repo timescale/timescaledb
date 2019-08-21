@@ -2097,18 +2097,18 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 
 	for (; i < num_chunks; i++)
 	{
-    size_t len;
-    char *chunk_name;
+		size_t len;
+		char *chunk_name;
 
-    /* store chunk name for output */
-    schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
-    table_name = quote_identifier(chunks[i]->fd.table_name.data);
+		/* store chunk name for output */
+		schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
+		table_name = quote_identifier(chunks[i]->fd.table_name.data);
 
-    len = strlen(schema_name) + strlen(table_name) + 2;
-    chunk_name = palloc(len);
+		len = strlen(schema_name) + strlen(table_name) + 2;
+		chunk_name = palloc(len);
 
-    snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
-    dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
+		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
+		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
 		ts_chunk_drop(chunks[i], cascade, log_level);
 	}
