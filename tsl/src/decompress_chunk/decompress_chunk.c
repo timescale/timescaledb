@@ -122,7 +122,7 @@ ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *
 #endif
 	root->simple_rel_array[compressed_index] = path->compressed_rel;
 
-	pushdown_quals(root, path);
+	pushdown_quals(path);
 	set_baserel_size_estimates(root, path->compressed_rel);
 	path->cpath.path.rows = path->compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 

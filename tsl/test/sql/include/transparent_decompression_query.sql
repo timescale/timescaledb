@@ -47,7 +47,11 @@ FROM metrics WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- device_id constraint should be pushed down
 :PREFIX SELECT * FROM metrics WHERE device_id = 1 ORDER BY time, device_id LIMIT 10;
 
--- test ANY constraint on segmentby column
+-- test IS NULL / IS NOT NULL
+:PREFIX SELECT * FROM metrics WHERE device_id IS NOT NULL ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM metrics WHERE device_id IS NULL ORDER BY time, device_id LIMIT 10;
+
+-- test IN (Const,Const)
 :PREFIX SELECT * FROM metrics WHERE device_id IN (1,2) ORDER BY time, device_id LIMIT 10;
 
 -- test cast pushdown
@@ -57,7 +61,8 @@ FROM metrics WHERE device_id IN (1,2) ORDER BY time, device_id;
 :PREFIX SELECT * FROM metrics WHERE device_id =  1 + 4/2 ORDER BY time, device_id LIMIT 10;
 
 -- test function calls
-:PREFIX SELECT * FROM metrics WHERE device_id = length(substring(version() from 1 for 3)) ORDER BY time, device_id LIMIT 10;
+-- not yet pushed down
+:PREFIX SELECT * FROM metrics WHERE device_id = length(substring(version(),1,3)) ORDER BY time, device_id LIMIT 10;
 
 --
 -- test constraint exclusion
