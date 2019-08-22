@@ -13,10 +13,15 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMP
 
 SET work_mem TO '50MB';
 
-CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v1 float, v2 float, v3 float);
+CREATE TABLE metrics(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v1 float, v2 float, v3 float);
 SELECT create_hypertable('metrics','time');
 
-INSERT INTO metrics SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-01'::timestamptz,'2000-01-17','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics DROP COLUMN filler_1;
+INSERT INTO metrics(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics DROP COLUMN filler_2;
+INSERT INTO metrics(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics DROP COLUMN filler_3;
+INSERT INTO metrics(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 ANALYZE metrics;
 
 -- run queries on uncompressed hypertable and store result
@@ -52,9 +57,9 @@ SELECT
   END AS "PREFIX"
 \gset
 
--- we limit workers to 1 here for explain because otherwise output
+-- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
-SET max_parallel_workers_per_gather TO 1;
+SET max_parallel_workers_per_gather TO 0;
 
 -- get explain for queries on hypertable with compression
 \ir :TEST_QUERY_NAME

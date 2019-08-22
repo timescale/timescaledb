@@ -8,4 +8,4 @@
 
 #include "decompress_chunk/decompress_chunk.h"
 
-void pushdown_quals(PlannerInfo *root, DecompressChunkPath *path);
+void pushdown_quals(DecompressChunkPath *path);
