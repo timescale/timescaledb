@@ -365,7 +365,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     where job_id=:job_id;
  job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1002 | Sat Jan 01 04:00:00.075 2000 PST | Fri Dec 31 16:00:00.075 1999 PST | f                |          1 |               0 |              1 |             0
+   1002 | Sat Jan 01 03:48:45.075 2000 PST | Fri Dec 31 16:00:00.075 1999 PST | f                |          1 |               0 |              1 |             0
 (1 row)
 
 --
@@ -432,7 +432,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     where job_id=:job_id;
  job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1003 | Sat Jan 01 04:00:00.125 2000 PST | Fri Dec 31 16:00:00.125 1999 PST | f                |          2 |               1 |              1 |             0
+   1003 | Sat Jan 01 03:48:45.125 2000 PST | Fri Dec 31 16:00:00.125 1999 PST | f                |          2 |               1 |              1 |             0
 (1 row)
 
 --view was NOT updated; but the old stuff is still there

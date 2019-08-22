@@ -663,9 +663,9 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
- job_id |           next_start            |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+---------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:15.05 1999 PST | Fri Dec 31 16:00:10.05 1999 PST | f                |          3 |               2 |              1 |             0
+ job_id |             next_start              |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+-------------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:14.971875 1999 PST | Fri Dec 31 16:00:10.05 1999 PST | f                |          3 |               2 |              1 |             0
 (1 row)
 
 SELECT show_chunks('test_drop_chunks_table');
