@@ -4,6 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <utils/builtins.h>
+#include <utils/guc.h>
+#include <catalog/namespace.h>
 
 #include <libpq-fe.h>
 
@@ -11,6 +14,7 @@
 #include "remote/dist_txn.h"
 #include "remote/connection_cache.h"
 #include "data_node.h"
+#include "dist_util.h"
 #include "miscadmin.h"
 
 typedef struct DistPreparedStmt
@@ -234,4 +238,33 @@ ts_dist_cmd_close_prepared_command(PreparedDistCmd *command)
 		prepared_stmt_close(((DistPreparedStmt *) lfirst(lc))->prepared_stmt);
 
 	list_free_deep(command);
+}
+
+Datum
+ts_dist_cmd_exec(PG_FUNCTION_ARGS)
+{
+	const char *query = TextDatumGetCString(PG_GETARG_DATUM(0));
+	ArrayType *data_nodes = PG_ARGISNULL(1) ? NULL : PG_GETARG_ARRAYTYPE_P(1);
+	DistCmdResult *result;
+	List *data_node_list;
+	const char *search_path;
+
+	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function must be run on the access node only")));
+
+	if (data_nodes == NULL)
+		data_node_list = data_node_get_node_name_list();
+	else
+		data_node_list = data_node_array_to_node_name_list(data_nodes);
+
+	search_path = GetConfigOption("search_path", false, false);
+	result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(query, search_path, data_node_list);
+	if (result)
+		ts_dist_cmd_close_response(result);
+
+	list_free(data_node_list);
+
+	PG_RETURN_VOID();
 }

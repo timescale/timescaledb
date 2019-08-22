@@ -56,9 +56,9 @@ dist_util_membership(void)
 	if (isnull)
 		return DIST_MEMBER_NONE;
 	else if (uuid_matches(dist_id, ts_telemetry_metadata_get_uuid()))
-		return DIST_MEMBER_FRONTEND;
+		return DIST_MEMBER_ACCESS_NODE;
 	else
-		return DIST_MEMBER_BACKEND;
+		return DIST_MEMBER_DATA_NODE;
 }
 
 void

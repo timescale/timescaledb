@@ -35,4 +35,6 @@ extern DistCmdResult *ts_dist_cmd_invoke_prepared_command(PreparedDistCmd *comma
 
 extern void ts_dist_cmd_close_prepared_command(PreparedDistCmd *command);
 
+extern Datum ts_dist_cmd_exec(PG_FUNCTION_ARGS);
+
 #endif
