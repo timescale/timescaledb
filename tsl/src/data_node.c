@@ -555,7 +555,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool database_created = false;
 	bool extension_created = false;
 
-	if (set_distid && dist_util_membership() == DIST_MEMBER_BACKEND)
+	if (set_distid && dist_util_membership() == DIST_MEMBER_DATA_NODE)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
 				 (errmsg("unable to assign data nodes from an existing distributed database"))));
@@ -603,7 +603,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 	if (set_distid)
 	{
-		if (dist_util_membership() != DIST_MEMBER_FRONTEND)
+		if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 			dist_util_set_as_frontend();
 
 		add_distributed_id_to_data_node(node_name,

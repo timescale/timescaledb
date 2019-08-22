@@ -11,9 +11,9 @@
 
 typedef enum DistUtilMembershipStatus
 {
-	DIST_MEMBER_NONE,	/* Database doesn't belong to a distributed database */
-	DIST_MEMBER_BACKEND, /* Database is a backend node */
-	DIST_MEMBER_FRONTEND /* Database is a frontend node */
+	DIST_MEMBER_NONE,		/* Database doesn't belong to a distributed database */
+	DIST_MEMBER_DATA_NODE,  /* Database is a backend node */
+	DIST_MEMBER_ACCESS_NODE /* Database is a frontend node */
 } DistUtilMembershipStatus;
 
 DistUtilMembershipStatus dist_util_membership(void);

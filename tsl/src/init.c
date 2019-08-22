@@ -53,6 +53,7 @@
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "remote/dist_copy.h"
+#include "remote/dist_commands.h"
 #include "process_utility.h"
 #include "dist_util.h"
 #include "remote/connection.h"
@@ -256,6 +257,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remove_from_distributed_db = NULL,
 	.remote_hypertable_info = error_not_supported_default_fn,
 	.validate_as_data_node = NULL,
+	.distributed_exec = error_not_supported_default_fn,
 #else
 	.add_data_node = data_node_add,
 	.delete_data_node = data_node_delete,
@@ -287,6 +289,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_hypertable_info = dist_util_remote_hypertable_info,
 	.validate_as_data_node = validate_data_node_settings,
 	.drop_chunks_on_data_nodes = chunk_drop_remote_chunks,
+	.distributed_exec = ts_dist_cmd_exec,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

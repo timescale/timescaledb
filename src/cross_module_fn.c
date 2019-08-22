@@ -63,6 +63,7 @@ TS_FUNCTION_INFO_V1(ts_dist_remove_id);
 TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
 TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
+TS_FUNCTION_INFO_V1(ts_distributed_exec);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -231,6 +232,13 @@ Datum
 ts_dist_validate_as_data_node(PG_FUNCTION_ARGS)
 {
 	ts_cm_functions->validate_as_data_node();
+	PG_RETURN_VOID();
+}
+
+Datum
+ts_distributed_exec(PG_FUNCTION_ARGS)
+{
+	ts_cm_functions->distributed_exec(fcinfo);
 	PG_RETURN_VOID();
 }
 
@@ -630,6 +638,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.data_node_ping = error_no_default_fn_pg_community,
 	.detach_data_node = error_no_default_fn_pg_community,
 	.data_node_set_block_new_chunks = data_node_set_block_new_chunks_default,
+	.distributed_exec = error_no_default_fn_pg_community,
 	.set_chunk_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
