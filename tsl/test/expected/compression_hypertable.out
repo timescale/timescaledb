@@ -130,3 +130,76 @@ psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License exp
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
 (1 row)
 
+--TEST4 create segments with > 1000 rows.
+CREATE TABLE test4 (
+      timec       TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2   char(10)          NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+--we want all the data to go into 1 chunk. so use 1 year chunk interval
+select create_hypertable( 'test4', 'timec', chunk_time_interval=> '1 year'::interval);
+ create_hypertable  
+--------------------
+ (5,public,test4,t)
+(1 row)
+
+alter table test4 set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+insert into test4
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
+insert into test4
+select generate_series('2018-02-01 00:00'::timestamp, '2018-02-14 00:00'::timestamp, '1 min'), 'POR', 'klick', 55, 75;
+select table_name, num_chunks
+from timescaledb_information.hypertable
+where table_name like 'test4';
+ table_name | num_chunks 
+------------+------------
+ test4      |          1
+(1 row)
+
+select location, count(*)
+from test4
+group by location;
+ location | count 
+----------+-------
+ POR      | 18721
+ NYC      |    31
+(2 rows)
+
+SELECT $$ SELECT * FROM test4 ORDER BY timec $$ AS "QUERY" \gset
+SELECT 'test4' AS "HYPERTABLE_NAME" \gset
+\ir include/compression_test_hypertable.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count_compressed 
+------------------
+                1
+(1 row)
+
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+                                     ?column?                                      | count 
+-----------------------------------------------------------------------------------+-------
+ Number of rows different between original and query on compressed data (expect 0) |     0
+(1 row)
+
+psql:include/compression_test_hypertable.sql:41: WARNING:  Timescale License expired
+ count_decompressed 
+--------------------
+                  1
+(1 row)
+
+                                                   ?column?                                                   | count 
+--------------------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
+(1 row)
+
