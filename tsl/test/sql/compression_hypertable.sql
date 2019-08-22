@@ -45,3 +45,32 @@ SELECT
 
 SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
+
+--TEST4 create segments with > 1000 rows.
+CREATE TABLE test4 (
+      timec       TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2   char(10)          NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+--we want all the data to go into 1 chunk. so use 1 year chunk interval
+select create_hypertable( 'test4', 'timec', chunk_time_interval=> '1 year'::interval);
+alter table test4 set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+insert into test4
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
+insert into test4
+select generate_series('2018-02-01 00:00'::timestamp, '2018-02-14 00:00'::timestamp, '1 min'), 'POR', 'klick', 55, 75;
+select table_name, num_chunks
+from timescaledb_information.hypertable
+where table_name like 'test4';
+
+select location, count(*)
+from test4
+group by location;
+
+SELECT $$ SELECT * FROM test4 ORDER BY timec $$ AS "QUERY" \gset
+
+SELECT 'test4' AS "HYPERTABLE_NAME" \gset
+
+\ir include/compression_test_hypertable.sql

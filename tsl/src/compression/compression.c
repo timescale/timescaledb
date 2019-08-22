@@ -388,7 +388,8 @@ static void row_compressor_update_group(RowCompressor *row_compressor, TupleTabl
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
 static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
-static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid);
+static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
+								 bool changed_groups);
 
 static SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
 static void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
@@ -514,7 +515,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 		if (compressed_row_is_full || changed_groups)
 		{
 			if (row_compressor->rows_compressed_into_current_value > 0)
-				row_compressor_flush(row_compressor, mycid);
+				row_compressor_flush(row_compressor, mycid, changed_groups);
 			if (changed_groups)
 				row_compressor_update_group(row_compressor, slot);
 		}
@@ -524,7 +525,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	}
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
-		row_compressor_flush(row_compressor, mycid);
+		row_compressor_flush(row_compressor, mycid, true);
 
 	ExecDropSingleTupleTableSlot(slot);
 }
@@ -605,7 +606,7 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 }
 
 static void
-row_compressor_flush(RowCompressor *row_compressor, CommandId mycid)
+row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
 	int16 col;
 	HeapTuple compressed_tuple;
@@ -668,6 +669,10 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid)
 		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
 		Assert(compressed_col >= 0);
 		if (row_compressor->compressed_is_null[compressed_col])
+			continue;
+
+		/* don't free the segment-bys if we've overflowed the row, we still need them */
+		if (column->segment_info != NULL && !changed_groups)
 			continue;
 
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)

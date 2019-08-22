@@ -50,16 +50,16 @@ alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 
-select hypertable_id, attname, compression_algorithm_id , al.name 
+select hypertable_id, attname, compression_algorithm_id , al.name
 from _timescaledb_catalog.hypertable_compression hc,
      _timescaledb_catalog.hypertable ht,
-      _timescaledb_catalog.compression_algorithm al 
+      _timescaledb_catalog.compression_algorithm al
 where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id;
 
-select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty 
+select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
 where cl.oid = at.attrelid and  at.attnum > 0
-and cl.relname = '_compressed_hypertable_4' 
-and atttypid = ty.oid 
+and cl.relname = '_compressed_hypertable_4'
+and atttypid = ty.oid
 order by at.attnum;
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"

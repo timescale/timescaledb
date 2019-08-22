@@ -52,5 +52,5 @@ ORDER BY proname;
  time_bucket_gapfill
  timescaledb_post_restore
  timescaledb_pre_restore
-(37 rows)
+(38 rows)
 
