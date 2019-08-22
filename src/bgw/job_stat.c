@@ -3,8 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include <c.h>
 #include <postgres.h>
 #include <access/xact.h>
+
+#include <math.h>
 
 #include "job_stat.h"
 #include "scanner.h"
@@ -167,12 +170,25 @@ calculate_next_start_on_success(TimestampTz last_finish, BgwJob *job)
 	return ts;
 }
 
+static float8
+calculate_jitter_percent()
+{
+	/* returns a number in the range [-0.125, 0.125] */
+	/* right now we use the postgres user-space RNG. if we become worried about
+	 * correlated schedulers we can switch to
+	 *     pg_strong_random(&percent, sizeof(percent));
+	 * though we would need to figure out a way to make our tests pass
+	 */
+	uint8 percent = pg_lrand48();
+	return ldexp((double) (16 - (int) (percent % 32)), -7);
+}
+
 /* For failures we have standard exponential backoff based on consecutive failures
  * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF */
 static TimestampTz
 calculate_next_start_on_failure(TimestampTz last_finish, int consecutive_failures, BgwJob *job)
 {
-	/* TODO: add randomness here? Do we need a range or just a percent? */
+	float8 jitter = calculate_jitter_percent();
 	/* consecutive failures includes this failure */
 	float8 multiplier = 1 << (consecutive_failures - 1);
 
@@ -188,6 +204,9 @@ calculate_next_start_on_failure(TimestampTz last_finish, int consecutive_failure
 
 	if (DatumGetInt32(DirectFunctionCall2(interval_cmp, ival, ival_max)) > 0)
 		ival = ival_max;
+
+	/* Add some random jitter to prevent stampeding-herds, interval will be within about +-13% */
+	ival = DirectFunctionCall2(interval_mul, ival, Float8GetDatum(1.0 + jitter));
 
 	return DatumGetTimestampTz(
 		DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(last_finish), ival));
