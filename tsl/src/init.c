@@ -35,6 +35,7 @@
 #include "hypertable.h"
 #include "compression/create.h"
 #include "compression/compress_utils.h"
+#include "compression/segment_meta.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -110,6 +111,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_compress_table = tsl_process_compress_table,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.segment_meta_min_max_send = tsl_segment_meta_min_max_send,
+	.segment_meta_min_max_recv = tsl_segment_meta_min_max_recv,
+	.segment_meta_min_max_get_min = tsl_segment_meta_min_max_get_min,
+	.segment_meta_min_max_get_max = tsl_segment_meta_min_max_get_max,
+	.segment_meta_min_max_has_null = tsl_segment_meta_min_max_has_null,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

@@ -28,6 +28,7 @@
 #include "compression/gorilla.h"
 #include "compression/deltadelta.h"
 #include "compression/utils.h"
+#include "compression/segment_meta.h"
 
 #define VEC_PREFIX compression_info
 #define VEC_ELEMENT_TYPE Form_hypertable_compression
@@ -542,4 +543,54 @@ ts_decompress_table(PG_FUNCTION_ARGS)
 	decompress_chunk(in_table, out_table);
 
 	PG_RETURN_VOID();
+}
+
+TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_append);
+
+Datum
+tsl_segment_meta_min_max_append(PG_FUNCTION_ARGS)
+{
+	SegmentMetaMinMaxBuilder *builder =
+		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	MemoryContext agg_context;
+	MemoryContext old_context;
+
+	if (!AggCheckCallContext(fcinfo, &agg_context))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "tsl_segment_meta_min_max_append called in non-aggregate context");
+	}
+
+	old_context = MemoryContextSwitchTo(agg_context);
+
+	if (builder == NULL)
+	{
+		Oid type_to_compress = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		builder = segment_meta_min_max_builder_create(type_to_compress, fcinfo->fncollation);
+	}
+	if (PG_ARGISNULL(1))
+		segment_meta_min_max_builder_update_null(builder);
+	else
+		segment_meta_min_max_builder_update_val(builder, PG_GETARG_DATUM(1));
+
+	MemoryContextSwitchTo(old_context);
+	PG_RETURN_POINTER(builder);
+}
+
+TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish);
+Datum
+tsl_segment_meta_min_max_finish(PG_FUNCTION_ARGS)
+{
+	SegmentMetaMinMaxBuilder *builder =
+		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	SegmentMetaMinMax *res;
+
+	if (builder == NULL)
+		PG_RETURN_NULL();
+
+	res = segment_meta_min_max_builder_finish(builder);
+	if (res == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_POINTER(res);
 }
