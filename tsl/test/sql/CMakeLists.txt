@@ -18,6 +18,7 @@ set(TEST_FILES_DEBUG
     compression_algos.sql
     compression_errors.sql
     compression_hypertable.sql
+    compression_segment_meta.sql
     continuous_aggs.sql
     continuous_aggs_bgw.sql
     continuous_aggs_materialize.sql

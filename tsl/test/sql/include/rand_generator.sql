@@ -14,7 +14,7 @@ $$
 $$;
 
 create function gen_rand_minstd() returns bigint
-language sql as
+language sql security definer as
 $$
 	update rand_minstd_state set i = rand_minstd_advance(i) returning i
 $$;
