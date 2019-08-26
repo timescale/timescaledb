@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/relation.h>
 #include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
@@ -21,158 +22,94 @@
 #include "decompress_chunk/qual_pushdown.h"
 #include "hypertable_compression.h"
 
-static void pushdown_nulltest(DecompressChunkPath *path, NullTest *op);
-static void pushdown_opexpr(DecompressChunkPath *path, OpExpr *op);
-static void pushdown_scalararrayopexpr(DecompressChunkPath *path, ScalarArrayOpExpr *op);
-static bool can_pushdown_var(DecompressChunkPath *path, Var *chunk_var, Var **compressed_var);
+typedef struct QualPushdownContext
+{
+	RelOptInfo *chunk_rel;
+	RelOptInfo *compressed_rel;
+	RangeTblEntry *chunk_rte;
+	RangeTblEntry *compressed_rte;
+	List *compression_info;
+	bool can_pushdown;
+} QualPushdownContext;
+
+static bool adjust_expression(Node *node, QualPushdownContext *context);
 
 void
-pushdown_quals(DecompressChunkPath *path)
+pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
+			   List *compression_info)
 {
 	ListCell *lc;
+	QualPushdownContext context = {
+		.chunk_rel = chunk_rel,
+		.compressed_rel = compressed_rel,
+		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
+		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
+		.compression_info = compression_info,
+	};
 
-	foreach (lc, path->chunk_rel->baserestrictinfo)
+	foreach (lc, chunk_rel->baserestrictinfo)
 	{
 		RestrictInfo *ri = lfirst(lc);
-
-		switch (nodeTag(ri->clause))
+		Expr *expr = copyObject(ri->clause);
+		context.can_pushdown = true;
+		adjust_expression((Node *) expr, &context);
+		if (context.can_pushdown)
 		{
-			case T_NullTest:
-				pushdown_nulltest(path, castNode(NullTest, ri->clause));
-				break;
-			case T_OpExpr:
-				pushdown_opexpr(path, castNode(OpExpr, ri->clause));
-				break;
-			case T_ScalarArrayOpExpr:
-				pushdown_scalararrayopexpr(path, castNode(ScalarArrayOpExpr, ri->clause));
-				break;
-			default:
-				break;
+			compressed_rel->baserestrictinfo =
+				lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(expr));
 		}
 	}
 }
 
 static bool
-can_pushdown_var(DecompressChunkPath *path, Var *chunk_var, Var **compressed_var)
+adjust_expression(Node *node, QualPushdownContext *context)
 {
-	char *column_name;
-	FormData_hypertable_compression *compressioninfo;
-
-	Assert(chunk_var->varno == path->chunk_rel->relid);
-
-	/* ignore system attibutes or whole row references */
-	if (!IsA(chunk_var, Var) || chunk_var->varattno <= 0)
+	if (node == NULL)
 		return false;
 
-	column_name = get_attname_compat(path->chunk_rte->relid, chunk_var->varattno, false);
-	compressioninfo = get_column_compressioninfo(path->compression_info, column_name);
-
-	/* we can only push down quals for segmentby columns */
-	if (compressioninfo->segmentby_column_index > 0)
+	switch (nodeTag(node))
 	{
-		AttrNumber compressed_attno = get_attnum(path->compressed_rte->relid, column_name);
-		Var *var = copyObject(chunk_var);
-
-		var->varno = path->compressed_rel->relid;
-		var->varattno = compressed_attno;
-
-		*compressed_var = var;
-
-		return true;
-	}
-
-	return false;
-}
-
-static void
-pushdown_nulltest(DecompressChunkPath *path, NullTest *op)
-{
-	Var *compressed_var;
-
-	if (!IsA(op->arg, Var))
-		return;
-
-	if (can_pushdown_var(path, castNode(Var, op->arg), &compressed_var))
-	{
-		NullTest *compressed_op = copyObject(op);
-		RestrictInfo *compressed_ri;
-		compressed_op->arg = (Expr *) compressed_var;
-
-		compressed_ri = make_simple_restrictinfo((Expr *) compressed_op);
-
-		path->compressed_rel->baserestrictinfo =
-			lappend(path->compressed_rel->baserestrictinfo, compressed_ri);
-	}
-}
-
-static void
-pushdown_opexpr(DecompressChunkPath *path, OpExpr *op)
-{
-	bool var_on_left = false;
-	Expr *left, *right;
-
-	if (list_length(op->args) != 2)
-		return;
-
-	left = linitial(op->args);
-	right = lsecond(op->args);
-
-	/* we only support Var OP Const / Const OP Var for now */
-	if ((IsA(left, Var) && IsA(right, Const)) || (IsA(left, Const) && IsA(right, Var)))
-	{
-		Var *var, *compressed_var;
-
-		if (IsA(left, Var))
-			var_on_left = true;
-
-		var = var_on_left ? (Var *) left : (Var *) right;
-
-		/* we can only push down quals for segmentby columns */
-		if (can_pushdown_var(path, var, &compressed_var))
+		case T_OpExpr:
+		case T_ScalarArrayOpExpr:
+		case T_List:
+		case T_Const:
+		case T_NullTest:
+			break;
+		case T_Var:
 		{
-			OpExpr *compressed_op = copyObject(op);
-			RestrictInfo *compressed_ri;
+			Var *var = castNode(Var, node);
+			char *column_name;
+			FormData_hypertable_compression *compressioninfo;
+			AttrNumber compressed_attno;
 
-			if (var_on_left)
-				compressed_op->args = list_make2(compressed_var, copyObject(right));
-			else
-				compressed_op->args = list_make2(copyObject(left), compressed_var);
+			/* ignore system attibutes or whole row references */
+			if (var->varattno <= 0)
+			{
+				context->can_pushdown = false;
+				return true;
+			}
 
-			compressed_ri = make_simple_restrictinfo((Expr *) compressed_op);
+			column_name = get_attname_compat(context->chunk_rte->relid, var->varattno, false);
+			compressioninfo = get_column_compressioninfo(context->compression_info, column_name);
 
-			path->compressed_rel->baserestrictinfo =
-				lappend(path->compressed_rel->baserestrictinfo, compressed_ri);
+			/* we can only push down quals for segmentby columns */
+			if (compressioninfo->segmentby_column_index <= 0)
+			{
+				context->can_pushdown = false;
+				return true;
+			}
+
+			compressed_attno = get_attnum(context->compressed_rte->relid, column_name);
+			var->varno = context->compressed_rel->relid;
+			var->varattno = compressed_attno;
+
+			break;
 		}
+		default:
+			context->can_pushdown = false;
+			return true;
+			break;
 	}
-}
 
-static void
-pushdown_scalararrayopexpr(DecompressChunkPath *path, ScalarArrayOpExpr *op)
-{
-	Expr *left, *right;
-
-	if (list_length(op->args) != 2)
-		return;
-
-	left = linitial(op->args);
-	right = lsecond(op->args);
-
-	if (IsA(left, Var) && IsA(right, Const))
-	{
-		Var *compressed_var;
-
-		/* we can only push down quals for segmentby columns */
-		if (can_pushdown_var(path, castNode(Var, left), &compressed_var))
-		{
-			ScalarArrayOpExpr *compressed_op = copyObject(op);
-			RestrictInfo *compressed_ri;
-
-			compressed_op->args = list_make2(compressed_var, copyObject(right));
-
-			compressed_ri = make_simple_restrictinfo((Expr *) compressed_op);
-
-			path->compressed_rel->baserestrictinfo =
-				lappend(path->compressed_rel->baserestrictinfo, compressed_ri);
-		}
-	}
+	return expression_tree_walker(node, adjust_expression, context);
 }
