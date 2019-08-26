@@ -96,7 +96,7 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
 \set ECHO errors
  compressed size 
 -----------------
-             101
+              93
 (1 row)
 
                                    ?column?                                    | count 
@@ -120,9 +120,42 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
 (1 row)
 
 SELECT c ints_text FROM compressed;
-                                                              ints_text                                                               
---------------------------------------------------------------------------------------------------------------------------------------
- BAEAAAAAAAAAAQAAAAAAAAPoAAAAAAAAAAEAAAPnAAAAAgAAAAAAAADyAAAAAAAAAAIAADxwAAAAAAAAA+sAAAADAAAAAAAAAfEAAAAAAAAEAQAAOqAAAAAAAAAAAAAAAAE=
+                                                        ints_text                                                         
+--------------------------------------------------------------------------------------------------------------------------
+ BAEAAAAAAAAD6AAAAAAAAAABAAAD6AAAAAIAAAAAAAAA8gAAAAAAAAACAAA8gAAAAAAAAAPrAAAAAwAAAAAAAAHxAAAAAAAABAEAADqgAAAAAAAAAAAAAAAB
+(1 row)
+
+DROP TABLE base_ints;
+-- single element
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              45
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
 (1 row)
 
 DROP TABLE base_ints;
@@ -147,7 +180,7 @@ CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
 \set ECHO errors
  compressed size 
 -----------------
-             176
+             184
 (1 row)
 
                                    ?column?                                    | count 
@@ -180,7 +213,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FR
 \set ECHO errors
  compressed size 
 -----------------
-              77
+              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -212,7 +245,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FR
 \set ECHO errors
  compressed size 
 -----------------
-              77
+              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -244,7 +277,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item F
 \set ECHO errors
  compressed size 
 -----------------
-              77
+              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -276,7 +309,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
 \set ECHO errors
  compressed size 
 -----------------
-              77
+              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -321,7 +354,7 @@ SELECT
 \set ECHO errors
  compressed size 
 -----------------
-            1736
+            1728
 (1 row)
 
                                    ?column?                                    | count 

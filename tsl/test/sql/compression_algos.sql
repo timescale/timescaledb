@@ -44,6 +44,11 @@ SELECT c ints_text FROM compressed;
 
 DROP TABLE base_ints;
 
+-- single element
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
 -- really big deltas
 SELECT  9223372036854775807 as big_int_max \gset
 SELECT -9223372036854775808	 as big_int_min \gset

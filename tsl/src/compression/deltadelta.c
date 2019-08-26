@@ -31,7 +31,6 @@ typedef struct DeltaDeltaCompressed
 	CompressedDataHeaderFields;
 	uint8 has_nulls; /* 1 if this has a NULLs bitmap after deltas, 0 otherwise */
 	uint8 padding[2];
-	uint64 first_value;
 	uint64 last_value;
 	uint64 last_delta;
 	Simple8bRleSerialized delta_deltas;
@@ -45,10 +44,10 @@ pg_attribute_unused() assertions(void)
 	StaticAssertStmt(sizeof(DeltaDeltaCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
 							 sizeof(test_val.has_nulls) + sizeof(test_val.padding) +
-							 sizeof(test_val.first_value) + sizeof(test_val.last_value) +
-							 sizeof(test_val.last_delta) + sizeof(test_val.delta_deltas),
+							 sizeof(test_val.last_value) + sizeof(test_val.last_delta) +
+							 sizeof(test_val.delta_deltas),
 					 "DeltaDeltaCompressed wrong size");
-	StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 40, "DeltaDeltaCompressed wrong size");
+	StaticAssertStmt(sizeof(DeltaDeltaCompressed) == 32, "DeltaDeltaCompressed wrong size");
 }
 
 typedef struct DeltaDeltaDecompressionIterator
@@ -58,14 +57,11 @@ typedef struct DeltaDeltaDecompressionIterator
 	uint64 prev_delta;
 	Simple8bRleDecompressionIterator delta_deltas;
 	Simple8bRleDecompressionIterator nulls;
-	bool returned_first;
 	bool has_nulls;
 } DeltaDeltaDecompressionIterator;
 
 typedef struct DeltaDeltaCompressor
 {
-	bool start_is_set;
-	uint64 start;
 	uint64 prev_val;
 	uint64 prev_delta;
 	Simple8bRleCompressor delta_delta;
@@ -295,8 +291,8 @@ delta_delta_compressor_alloc(void)
 }
 
 static DeltaDeltaCompressed *
-delta_delta_from_parts(uint64 first_value, uint64 last_value, uint64 last_delta,
-					   Simple8bRleSerialized *deltas, Simple8bRleSerialized *nulls)
+delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerialized *deltas,
+					   Simple8bRleSerialized *nulls)
 {
 	uint32 nulls_size = 0;
 	Size compressed_size;
@@ -317,7 +313,6 @@ delta_delta_from_parts(uint64 first_value, uint64 last_value, uint64 last_delta,
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
 
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_DELTADELTA;
-	compressed->first_value = first_value;
 	compressed->last_value = last_value;
 	compressed->last_delta = last_delta;
 	compressed->has_nulls = nulls_size != 0 ? 1 : 0;
@@ -346,8 +341,7 @@ delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 	if (deltas == NULL)
 		return NULL;
 
-	compressed = delta_delta_from_parts(compressor->start,
-										compressor->prev_val,
+	compressed = delta_delta_from_parts(compressor->prev_val,
 										compressor->prev_delta,
 										deltas,
 										compressor->has_nulls ? nulls : NULL);
@@ -384,18 +378,6 @@ delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next
 	uint64 delta;
 	uint64 delta_delta;
 	uint64 encoded;
-
-	/* step 0: the first value seen is the start val */
-	if (!compressor->start_is_set)
-	{
-		compressor->start_is_set = true;
-		compressor->start = next_val;
-		compressor->prev_val = next_val;
-		compressor->prev_delta = 0;
-
-		simple8brle_compressor_append(&compressor->nulls, 0);
-		return;
-	}
 
 	/*
 	 * We perform all arithmetic using unsigned values due to C's overflow rules:
@@ -443,8 +425,7 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 			.element_type = element_type,
 			.try_next = delta_delta_decompression_iterator_try_next_forward,
 		},
-		.returned_first = false,
-		.prev_val = compressed->first_value,
+		.prev_val = 0,
 		.prev_delta = 0,
 		.has_nulls = has_nulls,
 	};
@@ -476,7 +457,6 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 			.element_type = element_type,
 			.try_next = delta_delta_decompression_iterator_try_next_reverse,
 		},
-		.returned_first = false,
 		.prev_val = compressed->last_value,
 		.prev_delta = compressed->last_delta,
 		.has_nulls = has_nulls,
@@ -561,16 +541,6 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 		}
 	}
 
-	if (!iter->returned_first)
-	{
-		iter->returned_first = true;
-		return (DecompressResultInternal){
-			.val = iter->prev_val,
-			.is_null = false,
-			.is_done = false,
-		};
-	}
-
 	result = simple8brle_decompression_iterator_try_next_forward(&iter->delta_deltas);
 
 	if (result.is_done)
@@ -627,16 +597,9 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	result = simple8brle_decompression_iterator_try_next_reverse(&iter->delta_deltas);
 
 	if (result.is_done)
-	{
-		if (iter->returned_first)
-			return (DecompressResultInternal){
-				.is_done = true,
-			};
-		iter->returned_first = true;
 		return (DecompressResultInternal){
-			.val = iter->prev_val,
+			.is_done = true,
 		};
-	}
 
 	val = iter->prev_val;
 
@@ -686,7 +649,6 @@ deltadelta_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	const DeltaDeltaCompressed *data = (DeltaDeltaCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
 	pq_sendbyte(buffer, data->has_nulls);
-	pq_sendint64(buffer, data->first_value);
 	pq_sendint64(buffer, data->last_value);
 	pq_sendint64(buffer, data->last_delta);
 	simple8brle_serialized_send(buffer, &data->delta_deltas);
@@ -702,7 +664,6 @@ Datum
 deltadelta_compressed_recv(StringInfo buffer)
 {
 	uint8 has_nulls;
-	uint64 first_value;
 	uint64 last_value;
 	uint64 last_delta;
 	Simple8bRleSerialized *delta_deltas;
@@ -713,14 +674,13 @@ deltadelta_compressed_recv(StringInfo buffer)
 	if (has_nulls != 0 && has_nulls != 1)
 		elog(ERROR, "invalid recv in deltadelta: bad bool");
 
-	first_value = pq_getmsgint64(buffer);
 	last_value = pq_getmsgint64(buffer);
 	last_delta = pq_getmsgint64(buffer);
 	delta_deltas = simple8brle_serialized_recv(buffer);
 	if (has_nulls)
 		nulls = simple8brle_serialized_recv(buffer);
 
-	compressed = delta_delta_from_parts(first_value, last_value, last_delta, delta_deltas, nulls);
+	compressed = delta_delta_from_parts(last_value, last_delta, delta_deltas, nulls);
 
 	PG_RETURN_POINTER(compressed);
 }
