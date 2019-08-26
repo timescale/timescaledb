@@ -27,8 +27,8 @@ typedef struct DecompressChunkPath
 	bool reverse;
 } DecompressChunkPath;
 
-extern Path *ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-											 Chunk *chunk, Path *subpath);
+void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+										Chunk *chunk);
 
 FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
 															char *column_name);

@@ -36,10 +36,6 @@ tsl_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTb
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 
 		if (chunk->fd.compressed_chunk_id > 0)
-		{
-			rel->pathlist = list_make1(
-				ts_decompress_chunk_path_create(root, rel, ht, chunk, linitial(rel->pathlist)));
-			rel->partial_pathlist = NIL;
-		}
+			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
 	}
 }

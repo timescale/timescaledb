@@ -26,6 +26,7 @@
 #include "decompress_chunk/decompress_chunk.h"
 #include "decompress_chunk/planner.h"
 #include "decompress_chunk/qual_pushdown.h"
+#include "utils.h"
 
 #define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
@@ -35,9 +36,65 @@ static CustomPathMethods decompress_chunk_path_methods = {
 	.PlanCustomPath = decompress_chunk_plan_create,
 };
 
-static RangeTblEntry *decompress_chunk_make_rte(PlannerInfo *root, Oid compressed_relid,
-												LOCKMODE lockmode);
-static void create_compressed_scan_paths(PlannerInfo *root, DecompressChunkPath *path);
+static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode);
+static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
+										 int parallel_workers);
+
+static Path *decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *chunk_rel,
+										  RelOptInfo *compressed_rel, Hypertable *ht,
+										  List *compression_info, int parallel_workers);
+
+static Index decompress_chunk_add_plannerinfo(PlannerInfo *root, Chunk *chunk);
+
+void
+ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
+								   Chunk *chunk)
+{
+	Index compressed_index;
+	RelOptInfo *compressed_rel;
+	Path *path;
+	List *compression_info = get_hypertablecompression_info(ht->fd.id);
+	/*
+	 * since we rely on parallel coordination from the scan below
+	 * this node it is probably not beneficial to have more
+	 * than a single worker per chunk
+	 */
+	int parallel_workers = 1;
+
+	Assert(chunk->fd.compressed_chunk_id > 0);
+
+	chunk_rel->pathlist = NIL;
+	chunk_rel->partial_pathlist = NIL;
+
+	/* add RangeTblEntry and RelOptInfo for compressed chunk */
+	compressed_index = decompress_chunk_add_plannerinfo(root, chunk);
+	compressed_rel = root->simple_rel_array[compressed_index];
+
+	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+
+	pushdown_quals(root, chunk_rel, compressed_rel, compression_info);
+	set_baserel_size_estimates(root, compressed_rel);
+	chunk_rel->rows = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	create_compressed_scan_paths(root,
+								 compressed_rel,
+								 compressed_rel->consider_parallel ? parallel_workers : 0);
+
+	/* create non-parallel path */
+	path = decompress_chunk_path_create(root, chunk_rel, compressed_rel, ht, compression_info, 0);
+	add_path(chunk_rel, path);
+
+	/* create parallel path */
+	if (compressed_rel->consider_parallel && list_length(compressed_rel->partial_pathlist) > 0)
+	{
+		path = decompress_chunk_path_create(root,
+											chunk_rel,
+											compressed_rel,
+											ht,
+											compression_info,
+											parallel_workers);
+		add_partial_path(chunk_rel, path);
+	}
+}
 
 /*
  * calculate cost for DecompressChunkPath
@@ -56,48 +113,18 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 	path->total_cost = compressed_path->total_cost + path->rows * DECOMPRESS_CHUNK_CPU_TUPLE_COST;
 }
 
-Path *
-ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Chunk *chunk,
-								Path *subpath)
+/*
+ * create RangeTblEntry and RelOptInfo for the compressed chunk
+ * and add it to PlannerInfo
+ */
+static Index
+decompress_chunk_add_plannerinfo(PlannerInfo *root, Chunk *chunk)
 {
-	DecompressChunkPath *path;
 	Index compressed_index = root->simple_rel_array_size;
-	Index chunk_index = rel->relid;
 	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, true);
 	Oid compressed_relid = compressed_chunk->table_id;
-	AppendRelInfo *appinfo;
+	RangeTblEntry *compressed_rte;
 
-	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
-
-	path->chunk_rel = rel;
-	path->chunk_rte = planner_rt_fetch(chunk_index, root);
-	path->hypertable_id = ht->fd.id;
-	path->compression_info = get_hypertablecompression_info(ht->fd.id);
-
-#if PG96 || PG10
-	appinfo = find_childrel_appendrelinfo(root, rel);
-#else
-	appinfo = root->append_rel_array[rel->relid];
-#endif
-
-	path->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
-
-	path->cpath.path.pathtype = T_CustomScan;
-	path->cpath.path.parent = rel;
-	path->cpath.path.pathtarget = rel->reltarget;
-	path->cpath.path.param_info = subpath->param_info;
-
-	path->cpath.path.parallel_aware = false;
-	path->cpath.path.parallel_safe = subpath->parallel_safe;
-	path->cpath.path.parallel_workers = subpath->parallel_workers;
-
-	path->cpath.flags = CUSTOMPATH_SUPPORT_BACKWARD_SCAN;
-	path->cpath.methods = &decompress_chunk_path_methods;
-
-	/*
-	 * create RangeTblEntry and RelOptInfo for the compressed chunk
-	 * and add it to PlannerInfo
-	 */
 	root->simple_rel_array_size++;
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
@@ -109,25 +136,62 @@ ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	root->append_rel_array[compressed_index] = NULL;
 #endif
 
-	path->compressed_rte = decompress_chunk_make_rte(root, compressed_relid, AccessShareLock);
+	compressed_rte = decompress_chunk_make_rte(compressed_relid, AccessShareLock);
+	root->simple_rte_array[compressed_index] = compressed_rte;
 
-	root->simple_rte_array[compressed_index] = path->compressed_rte;
-	root->parse->rtable = lappend(root->parse->rtable, path->compressed_rte);
+	root->parse->rtable = lappend(root->parse->rtable, compressed_rte);
 
 	root->simple_rel_array[compressed_index] = NULL;
 #if PG96
-	path->compressed_rel = build_simple_rel(root, compressed_index, RELOPT_BASEREL);
+	root->simple_rel_array[compressed_index] =
+		build_simple_rel(root, compressed_index, RELOPT_BASEREL);
 #else
-	path->compressed_rel = build_simple_rel(root, compressed_index, NULL);
+	root->simple_rel_array[compressed_index] = build_simple_rel(root, compressed_index, NULL);
 #endif
-	root->simple_rel_array[compressed_index] = path->compressed_rel;
 
-	pushdown_quals(path);
-	set_baserel_size_estimates(root, path->compressed_rel);
+	return compressed_index;
+}
+
+static Path *
+decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
+							 Hypertable *ht, List *compression_info, int parallel_workers)
+{
+	DecompressChunkPath *path;
+	AppendRelInfo *appinfo;
+	bool parallel_safe = false;
+
+	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
+
+	path->chunk_rel = chunk_rel;
+	path->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+	path->compressed_rel = compressed_rel;
+	path->compressed_rte = planner_rt_fetch(compressed_rel->relid, root);
+	path->hypertable_id = ht->fd.id;
+	path->compression_info = compression_info;
+
+	appinfo = ts_get_appendrelinfo(root, chunk_rel->relid);
+	path->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
+
+	path->cpath.path.pathtype = T_CustomScan;
+	path->cpath.path.parent = chunk_rel;
+	path->cpath.path.pathtarget = chunk_rel->reltarget;
+
+	path->cpath.flags = CUSTOMPATH_SUPPORT_BACKWARD_SCAN;
+	path->cpath.methods = &decompress_chunk_path_methods;
+
 	path->cpath.path.rows = path->compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 
-	create_compressed_scan_paths(root, path);
-	path->cpath.custom_paths = list_make1(path->compressed_rel->cheapest_total_path);
+	if (parallel_workers > 0 && list_length(compressed_rel->partial_pathlist) > 0)
+		parallel_safe = true;
+
+	path->cpath.path.parallel_aware = false;
+	path->cpath.path.parallel_safe = parallel_safe;
+	path->cpath.path.parallel_workers = parallel_workers;
+
+	if (parallel_safe)
+		path->cpath.custom_paths = list_make1(linitial(compressed_rel->partial_pathlist));
+	else
+		path->cpath.custom_paths = list_make1(compressed_rel->cheapest_total_path);
 
 	cost_decompress_chunk(&path->cpath.path, path->compressed_rel->cheapest_total_path);
 
@@ -135,24 +199,30 @@ ts_decompress_chunk_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *
 }
 
 static void
-create_compressed_scan_paths(PlannerInfo *root, DecompressChunkPath *path)
+create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int parallel_workers)
 {
-	List *pathlist = NIL;
 	Path *compressed_path;
 
-	compressed_path = create_seqscan_path(root, path->compressed_rel, NULL, 0);
-	pathlist = lappend(pathlist, compressed_path);
+	/* create non parallel scan path */
+	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
+	add_path(compressed_rel, compressed_path);
 
-	path->compressed_rel->pathlist = pathlist;
+	/* create parallel scan path */
+	if (compressed_rel->consider_parallel && parallel_workers > 0)
+	{
+		compressed_path = create_seqscan_path(root, compressed_rel, NULL, parallel_workers);
+		Assert(compressed_path->parallel_aware);
+		add_partial_path(compressed_rel, compressed_path);
+	}
 
-	set_cheapest(path->compressed_rel);
+	set_cheapest(compressed_rel);
 }
 
 /*
  * create RangeTblEntry for compressed chunk
  */
 static RangeTblEntry *
-decompress_chunk_make_rte(PlannerInfo *root, Oid compressed_relid, LOCKMODE lockmode)
+decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 {
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
 	Relation r = heap_open(compressed_relid, lockmode);

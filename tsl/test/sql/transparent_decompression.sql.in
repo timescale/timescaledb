@@ -24,26 +24,53 @@ ALTER TABLE metrics DROP COLUMN filler_3;
 INSERT INTO metrics(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 ANALYZE metrics;
 
+-- create identical hypertable with space partitioning
+CREATE TABLE metrics_space(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v1 float, v2 float, v3 float);
+SELECT create_hypertable('metrics_space','time','device_id',3);
+
+ALTER TABLE metrics_space DROP COLUMN filler_1;
+INSERT INTO metrics_space(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_space DROP COLUMN filler_2;
+INSERT INTO metrics_space(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE metrics_space DROP COLUMN filler_3;
+INSERT INTO metrics_space(time,device_id,v1,v2,v3) SELECT time, device_id, device_id + 0.25, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ANALYZE metrics_space;
+
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
 \set ECHO none
 SET client_min_messages TO error;
 \o :TEST_RESULTS_UNCOMPRESSED
+\set TEST_TABLE 'metrics'
+\ir :TEST_QUERY_NAME
+\set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 \o
 RESET client_min_messages;
 \set ECHO all
 
--- compress some chunks on the hypertable
-ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='time asc nulls last', timescaledb.compress_segmentby='device_id');
+-- compress first and last chunk on the hypertable
+ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
+
+-- compress some chunks on space partitioned hypertable
+-- we compress all chunks of first time slice, none of second, and 2 of the last time slice
+ALTER TABLE metrics_space SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk('_timescaledb_internal._hyper_2_4_chunk');
+SELECT compress_chunk('_timescaledb_internal._hyper_2_5_chunk');
+SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
+SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
+SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
 
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set ECHO none
 SET client_min_messages TO error;
 \o :TEST_RESULTS_COMPRESSED
+\set TEST_TABLE 'metrics'
+\ir :TEST_QUERY_NAME
+\set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 \o
 RESET client_min_messages;
@@ -62,7 +89,16 @@ SELECT
 SET max_parallel_workers_per_gather TO 0;
 
 -- get explain for queries on hypertable with compression
+\set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
+\set TEST_TABLE 'metrics_space'
+\ir :TEST_QUERY_NAME
+
+-- run query with parallel enabled to ensure nothing is preventing parallel execution
+-- this is just a sanity check, the result queries dont run with parallel disabled
+SET max_parallel_workers_per_gather TO 4;
+EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
+EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
 
 -- diff compressed and uncompressed results
 :DIFF_CMD
