@@ -1672,7 +1672,7 @@ ts_dimensions_rename_schema_name(char *old_name, char *new_name)
 List *
 ts_dimension_get_partexprs(Dimension *dim, Index hyper_varno)
 {
-	Expr *expr;
+	Expr *expr = NULL;
 	HeapTuple tuple;
 	Form_pg_attribute att;
 	List *exprs = NIL;

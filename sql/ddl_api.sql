@@ -160,9 +160,9 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
 -- Add a data node to a TimescaleDB distributed database.
 CREATE OR REPLACE FUNCTION add_data_node(
     node_name              NAME,
-    host                   TEXT = 'localhost',
+    host                   TEXT = NULL,
     database               NAME = current_database(),
-    port                   INTEGER = inet_server_port(),
+    port                   INTEGER = NULL,
     if_not_exists          BOOLEAN = FALSE,
     bootstrap_database     NAME = 'postgres',
     bootstrap_user         NAME = NULL
