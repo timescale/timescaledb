@@ -656,9 +656,15 @@ data_node_attach(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable: cannot be NULL")));
+	Assert(get_rel_name(table_id));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_id, CACHE_FLAG_NONE, &hcache);
 	Assert(ht != NULL);
+
+	if (!hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_DISTRIBUTED),
+				 errmsg("hypertable \"%s\" is not distributed", get_rel_name(table_id))));
 
 	/* Must have owner permissions on the hypertable to attach a new data
 	   node. Must also have USAGE on the foreign server.  */

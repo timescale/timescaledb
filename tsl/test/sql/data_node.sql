@@ -250,6 +250,8 @@ CREATE EXTENSION postgres_fdw;
 CREATE SERVER pg_server_1 FOREIGN DATA WRAPPER postgres_fdw;
 SET ROLE :ROLE_1;
 
+CREATE TABLE standalone(time TIMESTAMPTZ, device INT, value FLOAT);
+SELECT * FROM create_hypertable('standalone','time');
 \set ON_ERROR_STOP 0
 -- Throw ERROR for non-existing data node
 SELECT * FROM _timescaledb_internal.ping_data_node('data_node_123456789');
@@ -257,7 +259,10 @@ SELECT * FROM _timescaledb_internal.ping_data_node('data_node_123456789');
 SELECT * FROM _timescaledb_internal.ping_data_node(NULL);
 -- ERROR when not passing TimescaleDB data node
 SELECT * FROM _timescaledb_internal.ping_data_node('pg_data_node_1');
+-- ERROR on attaching to non-distributed hypertable
+SELECT * FROM attach_data_node('data_node_1', 'standalone');
 \set ON_ERROR_STOP 1
+DROP TABLE standalone;
 
 -- Some attach data node error cases
 \set ON_ERROR_STOP 0
