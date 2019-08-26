@@ -152,7 +152,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("chunks can be compressed only if compression property is set on the "
 						"hypertable"),
-				 errhint("use ALTER TABLE with timescaledb.compression option ")));
+				 errhint("Use ALTER TABLE with timescaledb.compress option.")));
 	}
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
