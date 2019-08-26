@@ -474,6 +474,39 @@ SELECT c gorilla_text FROM compressed;
 (1 row)
 
 DROP TABLE  base_doubles;
+-- single element
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+             109
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_doubles;
 --special values
 CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
     (
@@ -766,6 +799,39 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 (1 row)
 
 DROP TABLE base_texts;
+-- single element
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              41
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_texts;
 -- high cardinality with toasted values
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
     (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
@@ -938,9 +1004,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 (1 row)
 
 DROP TABLE base_texts;
-------------------------
--- Arrayy Compression --
-------------------------
+-----------------------
+-- Array Compression --
+-----------------------
 SELECT
   $$
   select item from  base_texts order by rn
@@ -987,6 +1053,39 @@ SELECT c from compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                             c                                                                                                                                                                                                                                                                                                                                                                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  AQBwZ19jYXRhbG9nAHRleHQAAAEAAABkAAAAAjU5AAAAAjg2AAAAAjE2AAAAAjM2AAAAAjk2AAAAAjM4AAAAAjI4AAAAAjEzAAAAAjczAAAAAjM3AAAAAjY5AAAAAjMxAAAAATkAAAACMTQAAAACNDQAAAABMQAAAAI3MQAAAAI2NgAAAAIxMAAAAAI4NQAAAAIyMwAAAAI3MAAAAAIyNQAAAAI4MAAAAAEzAAAAAjgzAAAAAjU2AAAAAjQ5AAAAAjUzAAAAAjI5AAAAAjk5AAAAATUAAAACNTIAAAACMjcAAAACNzkAAAACNDEAAAACNjUAAAACNTUAAAACNTAAAAACNjcAAAACNjEAAAACOTUAAAACNzcAAAACNzIAAAABNgAAAAI4MgAAAAIzNAAAAAI0NQAAAAI5NAAAAAI4NwAAAAI2MwAAAAI0NgAAAAIxOQAAAAI1MQAAAAI0NwAAAAEyAAAAATgAAAACOTIAAAACNTgAAAACNzUAAAACMTgAAAACOTMAAAACNDgAAAACNjAAAAACODQAAAACMTUAAAACMzAAAAACODgAAAACNzgAAAACNjQAAAACOTcAAAABNAAAAAI2MgAAAAI4MQAAAAI5OAAAAAI0MAAAAAI5MQAAAAE3AAAAAjI2AAAAAjQyAAAAAjg5AAAAAjEyAAAAAjkwAAAAAjE3AAAAAjc2AAAAAjM5AAAAAjMzAAAAAjMyAAAAAjIyAAAAAjY4AAAAAjQzAAAAAzEwMAAAAAIyMAAAAAIyNAAAAAI1NwAAAAIxMQAAAAIzNQAAAAI1NAAAAAI3NAAAAAIyMQ==
+(1 row)
+
+DROP TABLE base_texts;
+-- single element
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ compressed size 
+-----------------
+              41
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
 (1 row)
 
 DROP TABLE base_texts;

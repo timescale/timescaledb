@@ -142,6 +142,11 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 SELECT c gorilla_text FROM compressed;
 DROP TABLE  base_doubles;
 
+-- single element
+CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_doubles;
+
 --special values
 CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
     (
@@ -210,6 +215,11 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 
 DROP TABLE base_texts;
 
+-- single element
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_texts;
+
 -- high cardinality with toasted values
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, repeat(item::text, 100000) as item FROM
     (select sub.item from (SELECT generate_series(1, 10) item) as sub ORDER BY gen_rand_minstd()) sub;
@@ -238,9 +248,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
-------------------------
--- Arrayy Compression --
-------------------------
+-----------------------
+-- Array Compression --
+-----------------------
 
 SELECT
   $$
@@ -257,6 +267,11 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
     (select sub.item from (SELECT generate_series(1, 100) item) as sub ORDER BY gen_rand_minstd()) sub;
 \ir include/compression_test.sql
 SELECT c from compressed;
+DROP TABLE base_texts;
+
+-- single element
+CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
 DROP TABLE base_texts;
 
 -- toasted values
