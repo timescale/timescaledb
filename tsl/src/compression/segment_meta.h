@@ -7,6 +7,7 @@
 #define TIMESCALEDB_TSL_COMPRESSION_SEGMENT_META_H
 
 #include <postgres.h>
+#include <fmgr.h>
 #include <lib/stringinfo.h>
 
 typedef struct SegmentMetaMinMax SegmentMetaMinMax;
@@ -16,6 +17,7 @@ SegmentMetaMinMaxBuilder *segment_meta_min_max_builder_create(Oid type, Oid coll
 void segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum val);
 void segment_meta_min_max_builder_update_null(SegmentMetaMinMaxBuilder *builder);
 SegmentMetaMinMax *segment_meta_min_max_builder_finish(SegmentMetaMinMaxBuilder *builder);
+SegmentMetaMinMax *segment_meta_min_max_builder_finish_and_reset(SegmentMetaMinMaxBuilder *builder);
 
 Datum tsl_segment_meta_min_max_get_min(Datum meta, Oid type);
 Datum tsl_segment_meta_min_max_get_max(Datum meta, Oid type);
@@ -28,7 +30,8 @@ SegmentMetaMinMax *segment_meta_min_max_from_binary_string(StringInfo buf);
 static inline bytea *
 tsl_segment_meta_min_max_send(Datum arg1)
 {
-	return segment_meta_min_max_to_binary_string((SegmentMetaMinMax *) DatumGetPointer(arg1));
+	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(arg1);
+	return segment_meta_min_max_to_binary_string(meta);
 }
 
 static inline Datum

@@ -118,6 +118,23 @@ segment_meta_min_max_builder_update_null(SegmentMetaMinMaxBuilder *builder)
 	builder->has_null = true;
 }
 
+static void
+segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder)
+{
+	if (!builder->empty)
+	{
+		if (!builder->type_by_val)
+		{
+			pfree(DatumGetPointer(builder->min));
+			pfree(DatumGetPointer(builder->max));
+		}
+		builder->min = 0;
+		builder->max = 0;
+	}
+	builder->empty = true;
+	builder->has_null = false;
+}
+
 SegmentMetaMinMax *
 segment_meta_min_max_builder_finish(SegmentMetaMinMaxBuilder *builder)
 {
@@ -162,6 +179,14 @@ segment_meta_min_max_builder_finish(SegmentMetaMinMaxBuilder *builder)
 
 	Assert(total_size == 0);
 
+	return res;
+}
+
+SegmentMetaMinMax *
+segment_meta_min_max_builder_finish_and_reset(SegmentMetaMinMaxBuilder *builder)
+{
+	SegmentMetaMinMax *res = segment_meta_min_max_builder_finish(builder);
+	segment_meta_min_max_builder_reset(builder);
 	return res;
 }
 
@@ -225,7 +250,7 @@ segment_meta_min_max_from_binary_string(StringInfo buf)
 Datum
 tsl_segment_meta_min_max_get_min(Datum meta_datum, Oid type)
 {
-	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) DatumGetPointer(meta_datum);
+	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	DatumDeserializer *deser;
 	Datum min, max;
 
@@ -240,7 +265,7 @@ tsl_segment_meta_min_max_get_min(Datum meta_datum, Oid type)
 Datum
 tsl_segment_meta_min_max_get_max(Datum meta_datum, Oid type)
 {
-	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) DatumGetPointer(meta_datum);
+	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	DatumDeserializer *deser = create_datum_deserializer(meta->type);
 	Datum min, max;
 
@@ -253,6 +278,6 @@ tsl_segment_meta_min_max_get_max(Datum meta_datum, Oid type)
 bool
 tsl_segment_meta_min_max_has_null(Datum meta_datum)
 {
-	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) DatumGetPointer(meta_datum);
+	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	return (meta->flags & HAS_NULLS) != 0;
 }

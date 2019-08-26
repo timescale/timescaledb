@@ -3,6 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \ir include/rand_generator.sql
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/compression_utils.sql
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
@@ -19,6 +22,11 @@ SELECT
 SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 
 \ir include/compression_test_hypertable.sql
+\set TYPE timestamptz
+\set ORDER_BY_COL_NAME Time
+\set SEGMENT_META_COL _ts_meta_min_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
@@ -45,6 +53,16 @@ SELECT
 
 SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
+
+\set TYPE int
+\set ORDER_BY_COL_NAME c
+\set SEGMENT_META_COL _ts_meta_min_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+
+\set TYPE timestamptz
+\set ORDER_BY_COL_NAME Time
+\set SEGMENT_META_COL _ts_meta_min_max_2
+\ir include/compression_test_hypertable_segment_meta.sql
 
 --TEST4 create segments with > 1000 rows.
 CREATE TABLE test4 (
@@ -74,3 +92,37 @@ SELECT $$ SELECT * FROM test4 ORDER BY timec $$ AS "QUERY" \gset
 SELECT 'test4' AS "HYPERTABLE_NAME" \gset
 
 \ir include/compression_test_hypertable.sql
+\set TYPE TIMESTAMPTZ
+\set ORDER_BY_COL_NAME timec
+\set SEGMENT_META_COL _ts_meta_min_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+
+
+--add hypertable with order by a non by-val type with NULLs
+
+CREATE TABLE test5 (
+      time      TIMESTAMPTZ       NOT NULL,
+      device_id   TEXT              NULL,
+      temperature DOUBLE PRECISION  NULL
+    );
+--we want all the data to go into 1 chunk. so use 1 year chunk interval
+select create_hypertable( 'test5', 'time', chunk_time_interval=> '1 day'::interval);
+alter table test5 set (timescaledb.compress, timescaledb.compress_orderby = 'device_id, time');
+
+insert into test5
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', gen_rand_minstd();
+insert into test5
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_2', gen_rand_minstd();
+insert into test5
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), NULL, gen_rand_minstd();
+
+
+SELECT $$ SELECT * FROM test5 ORDER BY device_id, time $$ AS "QUERY" \gset
+
+SELECT 'test5' AS "HYPERTABLE_NAME" \gset
+
+\ir include/compression_test_hypertable.sql
+\set TYPE TEXT
+\set ORDER_BY_COL_NAME device_id
+\set SEGMENT_META_COL _ts_meta_min_max_1
+\ir include/compression_test_hypertable_segment_meta.sql

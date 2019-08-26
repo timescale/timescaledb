@@ -1,6 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license
+-- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_segment_meta_min_max_append(internal, ANYELEMENT)
    RETURNS internal
@@ -18,7 +18,7 @@ CREATE AGGREGATE _timescaledb_internal.segment_meta_min_max_agg(ANYELEMENT) (
 \ir include/rand_generator.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license
+-- LICENSE-TIMESCALE for a copy of the license.
 --------------------------
 -- cheap rand generator --
 --------------------------

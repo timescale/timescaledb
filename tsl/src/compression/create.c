@@ -92,6 +92,60 @@ get_default_algorithm_id(Oid typeoid)
 	}
 }
 
+char *
+compression_column_segment_min_max_name(const FormData_hypertable_compression *fd)
+{
+	char *buf = palloc(sizeof(char) * NAMEDATALEN);
+	int ret;
+
+	Assert(fd->orderby_column_index > 0);
+	ret = snprintf(buf,
+				   NAMEDATALEN,
+				   COMPRESSION_COLUMN_METADATA_PREFIX "min_max_%d",
+				   fd->orderby_column_index);
+	if (ret < 0 || ret > NAMEDATALEN)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("bad segment metadata min max column name")));
+	}
+	return buf;
+}
+
+static void
+compresscolinfo_add_metadata_columns(CompressColInfo *cc)
+{
+	/* additional metadata columns.
+	 * these are not listed in hypertable_compression catalog table
+	 * and so only has a ColDef entry */
+	int colno;
+	Oid segment_meta_min_max_oid =
+		ts_custom_type_cache_get(CUSTOM_TYPE_SEGMENT_META_MIN_MAX)->type_oid;
+
+	/* count column */
+	cc->coldeflist = lappend(cc->coldeflist,
+
+							 /* count of the number of uncompressed rows */
+							 makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+										   INT4OID,
+										   -1 /* typemod */,
+										   0 /*collation*/));
+
+	for (colno = 0; colno < cc->numcols; colno++)
+	{
+		if (cc->col_meta[colno].orderby_column_index > 0)
+		{
+			/* segment_meta_min_max columns */
+			cc->coldeflist =
+				lappend(cc->coldeflist,
+						makeColumnDef(compression_column_segment_min_max_name(&cc->col_meta[colno]),
+									  segment_meta_min_max_oid,
+									  -1 /* typemod */,
+									  0 /*collation*/));
+		}
+	}
+}
+
 /*
  * return the columndef list for compressed hypertable.
  * we do this by getting the source hypertable's attrs,
@@ -205,16 +259,9 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		colno++;
 	}
 	cc->numcols = colno;
-	/* additional metadata columns.
-	 * these are not listed in hypertable_compression catalog table
-	 * and so only has a ColDef entry */
-	cc->coldeflist = lappend(cc->coldeflist,
-							 (
-								 /* count of the number of uncompressed rows */
-								 makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-											   INT4OID,
-											   -1 /* typemod */,
-											   0 /*collation*/)));
+
+	compresscolinfo_add_metadata_columns(cc);
+
 	relation_close(rel, AccessShareLock);
 }
 

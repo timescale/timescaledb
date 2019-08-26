@@ -86,6 +86,12 @@ typedef struct PerColumn
 {
 	/* the compressor to use for regular columns, NULL for segmenters */
 	Compressor *compressor;
+	/*
+	 * Information on the metadata we'll store for this column (currently only min/max).
+	 * Only used for order-by columns right now, will be {-1, NULL} for others.
+	 */
+	int16 min_max_metadata_attr_offset;
+	SegmentMetaMinMaxBuilder *min_max_metadata_builder;
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;
@@ -451,13 +457,33 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		Assert(AttrNumberGetAttrOffset(compressed_colnum) < num_columns_in_compressed_table);
 		if (!COMPRESSIONCOL_IS_SEGMENT_BY(compression_info))
 		{
+			int16 segment_min_max_attr_offset = -1;
+			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
 			if (compressed_column_attr->atttypid != compressed_data_type_oid)
 				elog(ERROR,
 					 "expected column '%s' to be a compressed data type",
 					 compression_info->attname.data);
+
+			if (compression_info->orderby_column_index > 0)
+			{
+				char *segment_col_name = compression_column_segment_min_max_name(compression_info);
+				AttrNumber segment_min_max_attr_number =
+					attno_find_by_attname(out_desc,
+										  DatumGetName(DirectFunctionCall1(namein,
+																		   CStringGetDatum(
+																			   segment_col_name))));
+				if (segment_min_max_attr_number == InvalidAttrNumber)
+					elog(ERROR, "couldn't find metadata column %s", segment_col_name);
+				segment_min_max_attr_offset = AttrNumberGetAttrOffset(segment_min_max_attr_number);
+				segment_min_max_builder =
+					segment_meta_min_max_builder_create(column_attr->atttypid,
+														column_attr->attcollation);
+			}
 			*column = (PerColumn){
 				.compressor = compressor_for_algorithm_and_type(compression_info->algo_id,
 																column_attr->atttypid),
+				.min_max_metadata_attr_offset = segment_min_max_attr_offset,
+				.min_max_metadata_builder = segment_min_max_builder,
 			};
 		}
 		else
@@ -468,6 +494,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 					 compression_info->attname.data);
 			*column = (PerColumn){
 				.segment_info = segment_info_new(column_attr),
+				.min_max_metadata_attr_offset = -1,
 			};
 		}
 	}
@@ -595,9 +622,20 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		//     overhead here, and we should just access the array directly
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
+		{
 			compressor->append_null(compressor);
+			if (row_compressor->per_column[col].min_max_metadata_builder != NULL)
+				segment_meta_min_max_builder_update_null(
+					row_compressor->per_column[col].min_max_metadata_builder);
+		}
 		else
+		{
 			compressor->append_val(compressor, val);
+			if (row_compressor->per_column[col].min_max_metadata_builder != NULL)
+				segment_meta_min_max_builder_update_val(row_compressor->per_column[col]
+															.min_max_metadata_builder,
+														val);
+		}
 	}
 
 	row_compressor->rows_compressed_into_current_value += 1;
@@ -634,6 +672,25 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 			if (compressed_data != NULL)
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
+
+			if (column->min_max_metadata_builder != NULL)
+			{
+				SegmentMetaMinMax *segment_meta_min_max =
+					segment_meta_min_max_builder_finish_and_reset(column->min_max_metadata_builder);
+
+				Assert(column->min_max_metadata_attr_offset >= 0);
+
+				/* both the data and metadata are only NULL if all the data is NULL, thus: either
+				 * both the data and the metadata are both null or neither are */
+				Assert((compressed_data == NULL && segment_meta_min_max == NULL) ||
+					   (compressed_data != NULL && segment_meta_min_max != NULL));
+
+				row_compressor->compressed_is_null[column->min_max_metadata_attr_offset] =
+					segment_meta_min_max == NULL;
+				if (segment_meta_min_max != NULL)
+					row_compressor->compressed_values[column->min_max_metadata_attr_offset] =
+						PointerGetDatum(segment_meta_min_max);
+			}
 		}
 		else if (column->segment_info != NULL)
 		{
@@ -675,6 +732,15 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
+
+		if (column->min_max_metadata_builder != NULL &&
+			row_compressor->compressed_is_null[column->min_max_metadata_attr_offset])
+		{
+			pfree(DatumGetPointer(
+				row_compressor->compressed_values[column->min_max_metadata_attr_offset]));
+			row_compressor->compressed_values[column->min_max_metadata_attr_offset] = 0;
+			row_compressor->compressed_is_null[column->min_max_metadata_attr_offset] = true;
+		}
 
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
