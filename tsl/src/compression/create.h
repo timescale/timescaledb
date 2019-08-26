@@ -18,4 +18,7 @@
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
 Chunk *create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk);
+
+char *compression_column_segment_min_max_name(const FormData_hypertable_compression *fd);
+
 #endif /* TIMESCALEDB_TSL_COMPRESSION_CREATE_H */

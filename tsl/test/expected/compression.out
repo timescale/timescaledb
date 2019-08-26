@@ -1,3 +1,5 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 SET timescaledb.enable_transparent_decompression to OFF;
 --TEST1 ---
@@ -134,15 +136,16 @@ where cl.oid = at.attrelid and  at.attnum > 0
 and cl.relname = '_compressed_hypertable_4'
 and atttypid = ty.oid
 order by at.attnum;
-    attname     | attstorage |     typname     
-----------------+------------+-----------------
- time           | x          | compressed_data
- location       | x          | text
- location2      | x          | compressed_data
- temperature    | e          | compressed_data
- humidity       | e          | compressed_data
- _ts_meta_count | p          | int4
-(6 rows)
+      attname       | attstorage |       typname        
+--------------------+------------+----------------------
+ time               | x          | compressed_data
+ location           | x          | text
+ location2          | x          | compressed_data
+ temperature        | e          | compressed_data
+ humidity           | e          | compressed_data
+ _ts_meta_count     | p          | int4
+ _ts_meta_min_max_1 | e          | segment_meta_min_max
+(7 rows)
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
