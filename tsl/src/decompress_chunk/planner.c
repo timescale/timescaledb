@@ -30,16 +30,14 @@
 #include "decompress_chunk/exec.h"
 #include "planner_import.h"
 #include "guc.h"
+#include "custom_type_cache.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
-#define COMPRESSEDDATA_TYPE_NAME "_timescaledb_internal.compressed_data"
 #define META_COUNT_COLUMN_NAME "_ts_meta_count"
-
-Oid COMPRESSEDDATAOID = InvalidOid;
 
 void
 _decompress_chunk_init(void)
@@ -54,18 +52,6 @@ _decompress_chunk_init(void)
 	{
 		RegisterCustomScanMethods(&decompress_chunk_plan_methods);
 	}
-}
-
-static void
-lookup_compressed_data_oid()
-{
-	COMPRESSEDDATAOID =
-		DatumGetObjectId(DirectFunctionCall1(regtypein, CStringGetDatum(COMPRESSEDDATA_TYPE_NAME)));
-
-	if (!OidIsValid(COMPRESSEDDATAOID))
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("type \"%s\" does not exist", COMPRESSEDDATA_TYPE_NAME)));
 }
 
 static TargetEntry *
@@ -88,8 +74,12 @@ make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno,
 							   0,
 							   0);
 		else
-			scan_var =
-				makeVar(path->compressed_rel->relid, scan_varattno, COMPRESSEDDATAOID, -1, 0, 0);
+			scan_var = makeVar(path->compressed_rel->relid,
+							   scan_varattno,
+							   ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid,
+							   -1,
+							   0,
+							   0);
 		path->varattno_map = lappend_int(path->varattno_map, chunk_attno);
 	}
 	else
@@ -180,9 +170,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	CustomScan *cscan = makeNode(CustomScan);
 	Scan *compressed_scan = linitial(custom_plans);
 	List *settings;
-
-	if (!OidIsValid(COMPRESSEDDATAOID))
-		lookup_compressed_data_oid();
 
 	Assert(list_length(custom_plans) == 1);
 	Assert(IsA(linitial(custom_plans), SeqScan));
