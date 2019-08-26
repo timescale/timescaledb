@@ -18,6 +18,8 @@
 #include <utils/builtins.h>
 #include <utils/syscache.h>
 #include <utils/acl.h>
+#include <utils/guc.h>
+#include <utils/builtins.h>
 #include <utils/inval.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
@@ -536,6 +538,28 @@ remove_distributed_id_from_backend(ForeignServer *fs)
 	remote_connection_close(conn);
 }
 
+/**
+ * Get the configured server port for the server as an integer.
+ *
+ * Returns:
+ *   Port number if a port is configured, -1 if it is not able to get
+ *   the port number.
+ *
+ * Note:
+ *   We cannot use `inet_server_port()` since that will return NULL if
+ *   connecting to a server on localhost since a UNIX socket will be
+ *   used. This is the case even if explicitly using a port when
+ *   connecting. Regardless of how the user connected, we want to use the same
+ *   port as the one that the server listens on.
+ */
+static int32
+get_server_port()
+{
+	const char *const portstr =
+		GetConfigOption("port", /* missing_ok= */ false, /* restrict_privileged= */ false);
+	return pg_atoi(portstr, 2, 0);
+}
+
 /* set_distid may need to be false for some otherwise invalid configurations that are useful for
  * testing */
 static Datum
@@ -547,13 +571,13 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	const char *host =
 		PG_ARGISNULL(1) ? TS_DEFAULT_POSTGRES_HOST : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
-	int32 port = PG_ARGISNULL(3) ? TS_DEFAULT_POSTGRES_PORT : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	const char *bootstrap_database = PG_ARGISNULL(5) ? dbname : PG_GETARG_CSTRING(5);
 	const char *bootstrap_user = PG_ARGISNULL(6) ? username : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
+	long port;
 
 	if (set_distid && dist_util_membership() == DIST_MEMBER_DATA_NODE)
 		ereport(ERROR,
@@ -568,6 +592,21 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	if (NULL == node_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("invalid data node name"))));
+
+	/*
+	 * - If a port was provided, use that.
+	 *
+	 * - If a port was not provided, but a host was provided, use default Postgres port.
+	 *
+	 * - If neither port nor host were provided, use the port of the server
+	 *   (which is not the same as the default Postgres port).
+	 */
+	if (!PG_ARGISNULL(3))
+		port = PG_GETARG_INT32(3);
+	else if (!PG_ARGISNULL(1))
+		port = TS_DEFAULT_POSTGRES_PORT;
+	else
+		port = get_server_port();
 
 	if (port < 1 || port > PG_UINT16_MAX)
 		ereport(ERROR,
