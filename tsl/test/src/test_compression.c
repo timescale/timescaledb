@@ -410,7 +410,7 @@ test_delta()
 
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	Assert(DatumGetPointer(compressed) != NULL);
-	AssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 64);
+	AssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 56);
 
 	i = 0;
 	iter = delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
@@ -442,7 +442,7 @@ test_delta2()
 
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	Assert(DatumGetPointer(compressed) != NULL);
-	AssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 1672);
+	AssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 1664);
 
 	i = 0;
 	iter = delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
