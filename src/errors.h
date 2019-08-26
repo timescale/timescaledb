@@ -23,6 +23,7 @@
 --TS102 - bad hypertable definition
 --TS103 - bad hypertable index definition
 --TS110 - hypertable already exists
+--TS111 - hypertable is not distributed
 --TS120 - node already exists
 --TS130 - user already exists
 --TS140 - tablespace already attached
@@ -37,6 +38,7 @@
 #define ERRCODE_TS_BAD_HYPERTABLE_DEFINITION MAKE_SQLSTATE('T', 'S', '1', '0', '2')
 #define ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION MAKE_SQLSTATE('T', 'S', '1', '0', '3')
 #define ERRCODE_TS_HYPERTABLE_EXISTS MAKE_SQLSTATE('T', 'S', '1', '1', '0')
+#define ERRCODE_TS_HYPERTABLE_NOT_DISTRIBUTED MAKE_SQLSTATE('T', 'S', '1', '1', '1')
 #define ERRCODE_TS_NODE_EXISTS MAKE_SQLSTATE('T', 'S', '1', '2', '0')
 #define ERRCODE_TS_USER_EXISTS MAKE_SQLSTATE('T', 'S', '1', '3', '0')
 #define ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED MAKE_SQLSTATE('T', 'S', '1', '4', '0')
