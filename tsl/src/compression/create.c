@@ -29,6 +29,7 @@
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_compression.h"
+#include "custom_type_cache.h"
 #include "license.h"
 
 /* entrypoint
@@ -57,8 +58,6 @@ static void compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, 
 					 errmsg(" bad compression hypertable internal name")));                        \
 		}                                                                                          \
 	} while (0);
-
-#define COMPRESSEDDATA_TYPE_NAME "_timescaledb_internal.compressed_data"
 
 static enum CompressionAlgorithms
 get_default_algorithm_id(Oid typeoid)
@@ -111,13 +110,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	int32 *segorder_colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
-	const Oid compresseddata_oid =
-		DatumGetObjectId(DirectFunctionCall1(regtypein, CStringGetDatum(COMPRESSEDDATA_TYPE_NAME)));
+	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
-	if (!OidIsValid(compresseddata_oid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("type \"%s\" does not exist", COMPRESSEDDATA_TYPE_NAME)));
 	seg_attnolen = list_length(segmentby_cols);
 	rel = relation_open(srctbl_relid, AccessShareLock);
 	segorder_colindex = palloc0(sizeof(int32) * (rel->rd_att->natts));

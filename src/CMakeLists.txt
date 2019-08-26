@@ -54,6 +54,7 @@ set(SOURCES
   subspace_store.c
   tablespace.c
   time_bucket.c
+  custom_type_cache.c
   trigger.c
   utils.c
   version.c

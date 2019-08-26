@@ -37,6 +37,8 @@
 #include "dictionary.h"
 #include "gorilla.h"
 #include "create.h"
+#include "custom_type_cache.h"
+#include "segment_meta.h"
 
 #define MAX_ROWS_PER_COMPRESSION 1000
 #define COMPRESSIONCOL_IS_SEGMENT_BY(col) (col->segmentby_column_index > 0)
@@ -408,11 +410,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
 	AttrNumber count_metadata_column_num = attno_find_by_attname(out_desc, count_metadata_name);
 	int16 count_metadata_column_offset;
-
-	Oid internal_schema_oid = LookupExplicitNamespace(INTERNAL_SCHEMA_NAME, false);
-	Oid compressed_data_type_oid = GetSysCacheOid2(TYPENAMENSP,
-												   PointerGetDatum("compressed_data"),
-												   ObjectIdGetDatum(internal_schema_oid));
+	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
@@ -837,10 +835,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 
-	Oid internal_schema_oid = LookupExplicitNamespace(INTERNAL_SCHEMA_NAME, false);
-	Oid compressed_data_type_oid = GetSysCacheOid2(TYPENAMENSP,
-												   PointerGetDatum("compressed_data"),
-												   ObjectIdGetDatum(internal_schema_oid));
+	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	Assert(in_desc->natts >= out_desc->natts);
 	Assert(OidIsValid(compressed_data_type_oid));
