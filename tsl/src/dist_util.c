@@ -222,17 +222,23 @@ validate_data_node_settings(void)
 			 errmsg("unsupported PostgreSQL version %s", PG_VERSION)));
 #endif
 
+	/*
+	 * We skip printing the warning if we have already printed the error.
+	 */
 	if (max_prepared_xacts == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("prepared transactions need to be enabled"),
-				 errhint("max_prepared_transactions must be set >= max_connections (changes will "
-						 "require restart)")));
-
-	if (max_prepared_xacts < MaxConnections)
-		ereport(ERROR,
+				 errhint("Configuration parameter max_prepared_transactions must be set >0 "
+						 "(changes will require restart)."),
+				 errdetail("Parameter max_prepared_transactions=%d.", max_prepared_xacts)));
+	else if (max_prepared_xacts < MaxConnections)
+		ereport(WARNING,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("insufficient number of prepared transactions"),
-				 errhint("max_prepared_transactions must be set >= max_connections (changes will "
-						 "require restart)")));
+				 errmsg("max_prepared_transactions is set low"),
+				 errhint("It is recommended that max_prepared_transactions >= max_connections "
+						 "(changes will require restart)."),
+				 errdetail("Parameters max_prepared_transactions=%d, max_connections=%d.",
+						   max_prepared_xacts,
+						   MaxConnections)));
 }
