@@ -51,12 +51,8 @@ static List *
 data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 				 int32 node_hypertable_id, bool block_chunks)
 {
-	ForeignServer *server = GetForeignServerByName(node_name, false);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false);
 	HypertableDataNode *hdn = palloc0(sizeof(HypertableDataNode));
-	ForeignDataWrapper *fdw = GetForeignDataWrapper(server->fdwid);
-
-	if (strcmp(fdw->fdwname, EXTENSION_FDW_NAME) != 0)
-		elog(ERROR, "invalid foreign data wrapper \"%s\" for hypertable", fdw->fdwname);
 
 	hdn->fd.hypertable_id = hypertable_id;
 	namestrcpy(&hdn->fd.node_name, node_name);

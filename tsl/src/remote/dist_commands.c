@@ -16,6 +16,7 @@
 #include "data_node.h"
 #include "dist_util.h"
 #include "miscadmin.h"
+#include "errors.h"
 
 typedef struct DistPreparedStmt
 {
@@ -34,15 +35,6 @@ typedef struct DistCmdResult
 	Size num_responses;
 	DistCmdResponse responses[FLEXIBLE_ARRAY_MEMBER];
 } DistCmdResult;
-
-static TSConnection *
-ts_dist_cmd_get_connection_for_data_node(const char *data_node, RemoteTxnPrepStmtOption ps_opt)
-{
-	TSConnectionId id =
-		remote_connection_id(GetForeignServerByName(data_node, false)->serverid, GetUserId());
-
-	return remote_dist_txn_get_connection(id, ps_opt);
-}
 
 static DistCmdResult *
 ts_dist_cmd_collect_responses(List *requests)
@@ -84,8 +76,7 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *node_names)
 	foreach (lc, node_names)
 	{
 		const char *node_name = lfirst(lc);
-		TSConnection *connection =
-			ts_dist_cmd_get_connection_for_data_node(node_name, REMOTE_TXN_NO_PREP_STMT);
+		TSConnection *connection = data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT);
 
 		AsyncRequest *req = async_request_send(connection, sql);
 
@@ -181,8 +172,7 @@ ts_dist_cmd_prepare_command(const char *sql, size_t n_params, List *node_names)
 	foreach (lc, node_names)
 	{
 		const char *name = lfirst(lc);
-		TSConnection *connection =
-			ts_dist_cmd_get_connection_for_data_node(name, REMOTE_TXN_USE_PREP_STMT);
+		TSConnection *connection = data_node_get_connection(name, REMOTE_TXN_USE_PREP_STMT);
 		DistPreparedStmt *cmd = palloc(sizeof(DistPreparedStmt));
 		AsyncRequest *ar = async_request_send_prepare(connection, sql, n_params);
 

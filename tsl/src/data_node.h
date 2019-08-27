@@ -9,6 +9,7 @@
 #include <foreign/foreign.h>
 
 #include "catalog.h"
+#include "remote/dist_txn.h"
 
 /* Used to skip ACL checks */
 #define ACL_NO_CHECK N_ACL_RIGHTS
@@ -16,6 +17,9 @@
 extern ForeignServer *data_node_get_foreign_server(const char *node_name, AclMode mode,
 												   bool missing_ok);
 extern ForeignServer *data_node_get_foreign_server_by_oid(Oid foreign_server_oid, AclMode mode);
+
+extern TSConnection *data_node_get_connection(const char *const data_node,
+											  RemoteTxnPrepStmtOption const ps_opt);
 
 extern Datum data_node_add(PG_FUNCTION_ARGS);
 extern Datum data_node_delete(PG_FUNCTION_ARGS);

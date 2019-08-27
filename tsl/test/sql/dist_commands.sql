@@ -148,3 +148,13 @@ SELECT * FROM distributed_exec('SELECT 1');
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
+
+-- Test TS execution on non-TSDB server
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER myserver FOREIGN DATA WRAPPER postgres_fdw 
+    OPTIONS (host 'foo', dbname 'foodb', port '5432');
+\set ON_ERROR_STOP 0
+SELECT * FROM test.remote_exec('{myserver}', $$ SELECT 1; $$);
+\set ON_ERROR_STOP 1
+DROP SERVER myserver;
+DROP EXTENSION postgres_fdw;

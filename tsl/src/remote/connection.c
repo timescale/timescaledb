@@ -75,6 +75,20 @@ static RemoteConnectionStats connstats = { 0 };
 
 static int eventproc(PGEventId eventid, void *eventinfo, void *data);
 
+TSConnectionId
+remote_connection_id(const Oid server_oid, const Oid user_oid)
+{
+	TSConnectionId id = { .server_id = server_oid, .user_id = user_oid };
+	return id;
+}
+
+void
+remote_connection_id_set(TSConnectionId *const id, Oid const server_oid, Oid const user_oid)
+{
+	id->server_id = server_oid;
+	id->user_id = user_oid;
+}
+
 /*
  * A simple circular list implementation for tracking libpq connection and
  * result objects. We can't use pg_list here since it is bound to PostgreSQL's

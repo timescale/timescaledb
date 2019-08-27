@@ -25,6 +25,7 @@
 #include "guc.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
+#include "data_node.h"
 
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
@@ -286,11 +287,8 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 	foreach (lc, chunk->data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		TSConnectionId id =
-			remote_connection_id(GetForeignServerByName(NameStr(cdn->fd.node_name), false)
-									 ->serverid,
-								 GetUserId());
-		TSConnection *connection = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
+		TSConnection *connection =
+			data_node_get_connection(NameStr(cdn->fd.node_name), REMOTE_TXN_NO_PREP_STMT);
 
 		start_remote_copy_on_new_connection(state, connection);
 		chunk_connections->connections = lappend(chunk_connections->connections, connection);
