@@ -51,6 +51,8 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 
 select hypertable_id, attname, compression_algorithm_id , al.name
 from _timescaledb_catalog.hypertable_compression hc,
@@ -92,6 +94,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
+SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 
 \x
 select * from timescaledb_information.compressed_chunk_size

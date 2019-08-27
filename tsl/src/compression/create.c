@@ -131,6 +131,14 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc)
 										   INT4OID,
 										   -1 /* typemod */,
 										   0 /*collation*/));
+	/* sequence_num column */
+	cc->coldeflist = lappend(cc->coldeflist,
+
+							 /* count of the number of uncompressed rows */
+							 makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+										   INT4OID,
+										   -1 /* typemod */,
+										   0 /*collation*/));
 
 	for (colno = 0; colno < cc->numcols; colno++)
 	{
