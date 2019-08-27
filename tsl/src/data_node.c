@@ -6,7 +6,6 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <access/htup_details.h>
-#include <foreign/foreign.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
 #include <catalog/pg_foreign_server.h>
@@ -54,12 +53,12 @@
  * Verify that server is TimescaleDB server and perform optional ACL check
  */
 static void
-validate_foreign_server(ForeignServer *server, AclMode mode)
+validate_foreign_server(const ForeignServer *server, AclMode const mode)
 {
-	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
-	Assert(NULL != fdw);
+	Oid const fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
 
-	if (server->fdwid != fdw->fdwid)
+	Assert(NULL != server);
+	if (server->fdwid != fdwid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("data node \"%s\" is not a TimescaleDB server", server->servername)));
@@ -169,6 +168,18 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 		*created = true;
 
 	return objaddr.objectId;
+}
+
+TSConnection *
+data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption const ps_opt)
+{
+	const ForeignServer *server;
+	TSConnectionId id;
+
+	Assert(data_node != NULL);
+	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false);
+	id = remote_connection_id(server->serverid, GetUserId());
+	return remote_dist_txn_get_connection(id, ps_opt);
 }
 
 /* Attribute numbers for datum returned by create_data_node() */

@@ -23,6 +23,7 @@
 #include "remote/async.h"
 #include "remote/dist_txn.h"
 #include "remote/connection.h"
+#include "remote/dist_commands.h"
 #include "data_node.h"
 
 TS_FUNCTION_INFO_V1(ts_remote_exec);
@@ -178,9 +179,7 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 	foreach (lc, data_node_list)
 	{
 		const char *node_name = lfirst(lc);
-		TSConnectionId id =
-			remote_connection_id(GetForeignServerByName(node_name, false)->serverid, GetUserId());
-		TSConnection *conn = remote_dist_txn_get_connection(id, REMOTE_TXN_USE_PREP_STMT);
+		TSConnection *conn = data_node_get_connection(node_name, REMOTE_TXN_USE_PREP_STMT);
 
 		/* Configure connection to be compatible with current options of the test env */
 		set_connection_settings(conn);

@@ -277,23 +277,20 @@ process_add_hypertable(ProcessUtilityArgs *args, Hypertable *ht)
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
 
-static void
-process_create_foreign_table_start(ProcessUtilityArgs *args)
+static bool
+block_on_foreign_server(const char *const server_name)
 {
-	CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) args->parsetree;
-	ForeignServer *server = GetForeignServerByName(stmt->servername, true);
+	const ForeignServer *server;
 
+	Assert(server_name != NULL);
+	server = GetForeignServerByName(server_name, true);
 	if (NULL != server)
 	{
-		ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
-
-		if (fdw->fdwid == server->fdwid)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported"),
-					 errdetail("It is not possible to create stand-alone TimescaleDB "
-							   "foreign tables.")));
+		Oid ts_fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+		if (server->fdwid == ts_fdwid)
+			return true;
 	}
+	return false;
 }
 
 static void
@@ -318,36 +315,27 @@ process_drop_foreign_server_start(DropStmt *stmt)
 	{
 		Value *value = lfirst(lc);
 		const char *servername = strVal(value);
-		ForeignServer *server = GetForeignServerByName(servername, true);
 
-		if (NULL != server)
-		{
-			ForeignDataWrapper *fdw = GetForeignDataWrapperByName(EXTENSION_FDW_NAME, false);
-
-			if (fdw->fdwid == server->fdwid)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on a TimescaleDB data node"),
-						 errhint("Use delete_data_node() to remove data nodes from a "
-								 "TimescaleDB distributed database.")));
-		}
+		if (block_on_foreign_server(servername))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on a TimescaleDB data node"),
+					 errhint("Use delete_data_node() to remove data nodes from a "
+							 "TimescaleDB distributed database.")));
 	}
 }
 
 static void
-block_alter_foreign_server(const char *server_name)
+process_create_foreign_table_start(ProcessUtilityArgs *args)
 {
-	ForeignServer *server = GetForeignServerByName(server_name, true);
+	CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) args->parsetree;
 
-	if (NULL != server)
-	{
-		Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
-
-		if (fdwid == server->fdwid)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on a TimescaleDB data node")));
-	}
+	if (block_on_foreign_server(stmt->servername))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("operation not supported"),
+				 errdetail(
+					 "It is not possible to create stand-alone TimescaleDB foreign tables.")));
 }
 
 static void
@@ -355,7 +343,10 @@ process_alter_foreign_server(ProcessUtilityArgs *args)
 {
 	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
 
-	block_alter_foreign_server(stmt->servername);
+	if (block_on_foreign_server(stmt->servername))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("alter server not supported on a TimescaleDB data node")));
 }
 
 static void
@@ -363,8 +354,13 @@ process_alter_owner(ProcessUtilityArgs *args)
 {
 	AlterOwnerStmt *stmt = (AlterOwnerStmt *) args->parsetree;
 
-	if (stmt->objectType == OBJECT_FOREIGN_SERVER)
-		block_alter_foreign_server(strVal(stmt->object));
+	if ((stmt->objectType == OBJECT_FOREIGN_SERVER) &&
+		block_on_foreign_server(strVal(stmt->object)))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("alter owner not supported on a TimescaleDB data node")));
+	}
 }
 
 static void
@@ -1530,12 +1526,13 @@ process_rename(ProcessUtilityArgs *args)
 		 * stmt->relation never be NULL unless we are renaming a schema or
 		 * other objects, like foreign server
 		 */
-		if (stmt->renameType == OBJECT_FOREIGN_SERVER)
+		if ((stmt->renameType == OBJECT_FOREIGN_SERVER) &&
+			block_on_foreign_server(strVal(stmt->object)))
 		{
-			block_alter_foreign_server(strVal(stmt->object));
-			return;
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("rename not supported on a TimescaleDB data node")));
 		}
-
 		if (stmt->renameType != OBJECT_SCHEMA)
 			return;
 	}
