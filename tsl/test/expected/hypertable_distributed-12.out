@@ -51,11 +51,11 @@ SELECT * FROM add_data_node('data_node_3',
 
 -- Verify lack of tables
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
 (3 rows)
 
 \set ON_ERROR_STOP 0
@@ -390,11 +390,11 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
 (1 row)
 
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3} | t       |               2 |               2 | 112 kB
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               2 |               2 | 112 kB
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               2 |               2 | 112 kB
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=data_node_3} | t       |               2 |               2 | 112 kB
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               2 |               2 | 112 kB
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               2 |               2 | 112 kB
 (3 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('disttable');
