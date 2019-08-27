@@ -4,14 +4,13 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/xact.h>
-#include <catalog/namespace.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
 #include <access/relscan.h>
 #include <access/xact.h>
-#include <storage/lmgr.h>
+#include <catalog/namespace.h>
 #include <storage/bufmgr.h>
+#include <storage/lmgr.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/tqual.h>
 

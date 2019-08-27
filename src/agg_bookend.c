@@ -5,16 +5,15 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
+#include <access/htup_details.h>
 #include <catalog/namespace.h>
-#include <nodes/value.h>
-#include <utils/lsyscache.h>
-#include <utils/datum.h>
-#include <lib/stringinfo.h>
+#include <catalog/pg_type.h>
 #include <libpq/pqformat.h>
-#include "catalog/pg_type.h"
+#include <lib/stringinfo.h>
+#include <nodes/value.h>
+#include <utils/datum.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <access/htup_details.h>
 
 #include "compat.h"
 

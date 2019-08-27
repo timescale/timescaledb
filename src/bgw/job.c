@@ -4,16 +4,15 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/builtins.h>
-#include <postmaster/bgworker.h>
-#include <access/xact.h>
-#include <pgstat.h>
-#include <utils/memutils.h>
-#include <utils/timestamp.h>
 #include <miscadmin.h>
+#include <pgstat.h>
+#include <access/xact.h>
+#include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/tcopprot.h>
 #include <utils/builtins.h>
+#include <utils/memutils.h>
+#include <utils/timestamp.h>
 
 #include "job.h"
 #include "scanner.h"
