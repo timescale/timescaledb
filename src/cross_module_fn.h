@@ -7,15 +7,11 @@
 #define TIMESCALEDB_CROSS_MODULE_FN_H
 
 #include <postgres.h>
-#include <c.h>
-#include <postgres.h>
 #include <fmgr.h>
 #include <commands/event_trigger.h>
-
+#include <optimizer/planner.h>
 #include <utils/timestamp.h>
 #include <utils/jsonb.h>
-
-#include <optimizer/planner.h>
 
 #include "export.h"
 #include "bgw/job.h"
