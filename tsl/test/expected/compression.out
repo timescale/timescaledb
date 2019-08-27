@@ -117,6 +117,8 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 select hypertable_id, attname, compression_algorithm_id , al.name
 from _timescaledb_catalog.hypertable_compression hc,
      _timescaledb_catalog.hypertable ht,
@@ -136,16 +138,17 @@ where cl.oid = at.attrelid and  at.attnum > 0
 and cl.relname = '_compressed_hypertable_4'
 and atttypid = ty.oid
 order by at.attnum;
-      attname       | attstorage |       typname        
---------------------+------------+----------------------
- time               | e          | compressed_data
- location           | x          | text
- location2          | x          | compressed_data
- temperature        | e          | compressed_data
- humidity           | e          | compressed_data
- _ts_meta_count     | p          | int4
- _ts_meta_min_max_1 | e          | segment_meta_min_max
-(7 rows)
+        attname        | attstorage |       typname        
+-----------------------+------------+----------------------
+ time                  | e          | compressed_data
+ location              | x          | text
+ location2             | x          | compressed_data
+ temperature           | e          | compressed_data
+ humidity              | e          | compressed_data
+ _ts_meta_count        | p          | int4
+ _ts_meta_sequence_num | p          | int4
+ _ts_meta_min_max_1    | e          | segment_meta_min_max
+(8 rows)
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
@@ -153,15 +156,15 @@ LIMIT 1 \gset
 SELECT count(*) from :CHUNK_NAME;
  count 
 -------
-    21
+    42
 (1 row)
 
 SELECT count(*) as "ORIGINAL_CHUNK_COUNT" from :CHUNK_NAME \gset
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
                 tableoid                | count 
 ----------------------------------------+-------
- _timescaledb_internal._hyper_3_7_chunk |    21
- _timescaledb_internal._hyper_3_8_chunk |    10
+ _timescaledb_internal._hyper_3_7_chunk |    42
+ _timescaledb_internal._hyper_3_8_chunk |    20
 (2 rows)
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
@@ -176,7 +179,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
                 tableoid                | count 
 ----------------------------------------+-------
- _timescaledb_internal._hyper_3_8_chunk |    10
+ _timescaledb_internal._hyper_3_8_chunk |    20
 (1 row)
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
@@ -203,14 +206,21 @@ SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
  count 
 -------
-     1
+     2
 (1 row)
 
 SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
  sum 
 -----
-  21
+  42
 (1 row)
+
+SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
+ _ts_meta_sequence_num 
+-----------------------
+                    10
+                    20
+(2 rows)
 
 \x
 select * from timescaledb_information.compressed_chunk_size
@@ -274,7 +284,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
  count | ?column? 
 -------+----------
-    21 | t
+    42 | t
 (1 row)
 
 --check that the compressed chunk is dropped

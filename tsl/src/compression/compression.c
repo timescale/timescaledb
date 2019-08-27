@@ -41,6 +41,8 @@
 #include "segment_meta.h"
 
 #define MAX_ROWS_PER_COMPRESSION 1000
+/* gap in sequence id between rows, potential for adding rows in gap later */
+#define SEQUENCE_NUM_GAP 10
 #define COMPRESSIONCOL_IS_SEGMENT_BY(col) (col->segmentby_column_index > 0)
 #define COMPRESSIONCOL_IS_ORDER_BY(col) (col->orderby_column_index > 0)
 
@@ -116,9 +118,12 @@ typedef struct RowCompressor
 	 */
 	int16 *uncompressed_col_to_compressed_col;
 	int16 count_metadata_column_offset;
+	int16 sequence_num_metadata_column_offset;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
+	/* a unique monotonically increasing (according to order by) id for each compressed row */
+	int32 sequence_num;
 
 	/* cached arrays used to build the HeapTuple */
 	Datum *compressed_values;
@@ -414,8 +419,12 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 	int col;
 	Name count_metadata_name = DatumGetName(
 		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
+	Name sequence_num_metadata_name = DatumGetName(
+		DirectFunctionCall1(namein,
+							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
 	AttrNumber count_metadata_column_num = attno_find_by_attname(out_desc, count_metadata_name);
-	int16 count_metadata_column_offset;
+	AttrNumber sequence_num_column_num =
+		attno_find_by_attname(out_desc, sequence_num_metadata_name);
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	if (count_metadata_column_num == InvalidAttrNumber)
@@ -423,7 +432,10 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			 "missing metadata column '%s' in compressed table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num);
+	if (sequence_num_column_num == InvalidAttrNumber)
+		elog(ERROR,
+			 "missing metadata column '%s' in compressed table",
+			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
 
 	*row_compressor = (RowCompressor){
 		.compressed_table = compressed_table,
@@ -433,10 +445,12 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.uncompressed_col_to_compressed_col =
 			palloc0(sizeof(*row_compressor->uncompressed_col_to_compressed_col) *
 					uncompressed_tuple_desc->natts),
-		.count_metadata_column_offset = count_metadata_column_offset,
+		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
+		.sequence_num_metadata_column_offset = AttrNumberGetAttrOffset(sequence_num_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
 		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
 		.rows_compressed_into_current_value = 0,
+		.sequence_num = SEQUENCE_NUM_GAP,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -702,6 +716,16 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
+
+	row_compressor->compressed_values[row_compressor->sequence_num_metadata_column_offset] =
+		Int32GetDatum(row_compressor->sequence_num);
+	row_compressor->compressed_is_null[row_compressor->sequence_num_metadata_column_offset] = false;
+
+	/* overflow could happen only if chunk has more than 200B rows */
+	if (row_compressor->sequence_num > PG_INT32_MAX - SEQUENCE_NUM_GAP)
+		elog(ERROR, "sequence id overflow");
+
+	row_compressor->sequence_num += SEQUENCE_NUM_GAP;
 
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,

@@ -14,6 +14,8 @@
 
 #define COMPRESSION_COLUMN_METADATA_PREFIX "_ts_meta_"
 #define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"
+#define COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME                                              \
+	COMPRESSION_COLUMN_METADATA_PREFIX "sequence_num"
 
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
