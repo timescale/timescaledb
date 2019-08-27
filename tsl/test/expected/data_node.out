@@ -54,17 +54,26 @@ SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
--- Test altering some server options
+-- Test altering server command is blocked
+\set ON_ERROR_STOP 0
 ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
-ALTER SERVER data_node_1 OPTIONS (ADD fdw_startup_cost '110.0');
-ALTER SERVER data_node_1 OPTIONS (ADD connect_timeout '3');
+ERROR:  operation not supported on a TimescaleDB data node
+ALTER SERVER data_node_1 OPTIONS (SET fdw_startup_cost '110.0');
+ERROR:  operation not supported on a TimescaleDB data node
+ALTER SERVER data_node_1 OPTIONS (DROP sslmode);
+ERROR:  operation not supported on a TimescaleDB data node
+ALTER SERVER data_node_1 RENAME TO data_node_k;
+ERROR:  operation not supported on a TimescaleDB data node
+ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
+ERROR:  operation not supported on a TimescaleDB data node
+\set ON_ERROR_STOP 1
 -- List foreign data nodes
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                                                     options                                                      | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------------------------------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_3}                                                                   | t       |               0 |                 | 
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1,use_remote_estimate=true,fdw_startup_cost=110.0,connect_timeout=3} | t       |               0 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2}                                                                   | t       |               0 |                 | 
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
 (3 rows)
 
 -- Delete a data node
@@ -76,10 +85,10 @@ SELECT * FROM delete_data_node('data_node_3');
 
 -- List data nodes
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                                                     options                                                      | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------------------------------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1,use_remote_estimate=true,fdw_startup_cost=110.0,connect_timeout=3} | t       |               0 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2}                                                                   | t       |               0 |                 | 
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
 (2 rows)
 
 \set ON_ERROR_STOP 0
@@ -96,10 +105,10 @@ NOTICE:  data node "data_node_3" does not exist, skipping
 (1 row)
 
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                                                     options                                                      | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------------------------------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1,use_remote_estimate=true,fdw_startup_cost=110.0,connect_timeout=3} | t       |               0 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2}                                                                   | t       |               0 |                 | 
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
 (2 rows)
 
 DROP SERVER data_node_1 CASCADE;
@@ -145,11 +154,11 @@ SELECT * FROM add_data_node('data_node_4', database => 'data_node_4',
 (1 row)
 
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
+  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+ data_node_4 | test_role_1 | {host=localhost,port=15432,dbname=data_node_4} | t       |               0 |                 | 
 (3 rows)
 
 -- Now create a distributed hypertable using the data nodes

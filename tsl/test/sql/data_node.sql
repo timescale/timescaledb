@@ -42,10 +42,14 @@ SELECT * FROM add_data_node('data_node_3', database => 'data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 
 
--- Test altering some server options
+-- Test altering server command is blocked
+\set ON_ERROR_STOP 0
 ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
-ALTER SERVER data_node_1 OPTIONS (ADD fdw_startup_cost '110.0');
-ALTER SERVER data_node_1 OPTIONS (ADD connect_timeout '3');
+ALTER SERVER data_node_1 OPTIONS (SET fdw_startup_cost '110.0');
+ALTER SERVER data_node_1 OPTIONS (DROP sslmode);
+ALTER SERVER data_node_1 RENAME TO data_node_k;
+ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
+\set ON_ERROR_STOP 1
 
 -- List foreign data nodes
 SELECT * FROM timescaledb_information.data_node;

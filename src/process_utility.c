@@ -297,6 +297,39 @@ process_create_foreign_table_start(ProcessUtilityArgs *args)
 }
 
 static void
+block_alter_foreign_server(const char *server_name)
+{
+	ForeignServer *server = GetForeignServerByName(server_name, true);
+
+	if (NULL != server)
+	{
+		Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+
+		if (fdwid == server->fdwid)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on a TimescaleDB data node")));
+	}
+}
+
+static void
+process_alter_foreign_server(ProcessUtilityArgs *args)
+{
+	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
+
+	block_alter_foreign_server(stmt->servername);
+}
+
+static void
+process_alter_owner(ProcessUtilityArgs *args)
+{
+	AlterOwnerStmt *stmt = (AlterOwnerStmt *) args->parsetree;
+
+	if (stmt->objectType == OBJECT_FOREIGN_SERVER)
+		block_alter_foreign_server(strVal(stmt->object));
+}
+
+static void
 process_altertableschema(ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
@@ -1453,8 +1486,15 @@ process_rename(ProcessUtilityArgs *args)
 	else
 	{
 		/*
-		 * stmt->relation never be NULL unless we are renaming a schema
+		 * stmt->relation never be NULL unless we are renaming a schema or
+		 * other objects, like foreign server
 		 */
+		if (stmt->renameType == OBJECT_FOREIGN_SERVER)
+		{
+			block_alter_foreign_server(strVal(stmt->object));
+			return;
+		}
+
 		if (stmt->renameType != OBJECT_SCHEMA)
 			return;
 	}
@@ -3186,6 +3226,12 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 	{
 		case T_CreateForeignTableStmt:
 			process_create_foreign_table_start(args);
+			break;
+		case T_AlterForeignServerStmt:
+			process_alter_foreign_server(args);
+			break;
+		case T_AlterOwnerStmt:
+			process_alter_owner(args);
 			break;
 		case T_AlterObjectSchemaStmt:
 			process_alterobjectschema(args);

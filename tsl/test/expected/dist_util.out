@@ -285,12 +285,12 @@ INSERT INTO disttable VALUES
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
 SELECT * FROM timescaledb_information.data_node;
-  node_name  |        owner         |                    options                    | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+----------------------+-----------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | default_cluster_user | {host=localhost,port=15432,dbname=backend_1}  | t       |               1 |               1 | 24 kB
- data_node_2 | default_cluster_user | {host=localhost,port=15432,dbname=backend_2}  | t       |               1 |               1 | 24 kB
- data_node_4 | default_cluster_user | {host=localhost,port=15432,dbname=frontend_b} | t       |               1 |               0 | 
- data_node_3 | default_cluster_user | {host=localhost,port=15432,dbname=backend_3}  | t       |               1 |               1 | 24 kB
+  node_name  |    owner    |                    options                    | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
+-------------+-------------+-----------------------------------------------+---------+-----------------+-----------------+-----------------
+ data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=backend_2}  | t       |               1 |               1 | 24 kB
+ data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=backend_1}  | t       |               1 |               1 | 24 kB
+ data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=backend_3}  | t       |               1 |               1 | 24 kB
+ data_node_4 | test_role_1 | {host=localhost,port=15432,dbname=frontend_b} | t       |               1 |               0 | 
 (4 rows)
 
 SELECT * FROM timescaledb_information.hypertable;
@@ -315,10 +315,10 @@ SELECT * FROM hypertable_relation_size('nondisttable');
 SELECT * FROM hypertable_data_node_relation_size('disttable');
   node_name  | num_chunks | table_size | index_size | toast_size | total_size 
 -------------+------------+------------+------------+------------+------------
- data_node_1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
  data_node_2 |          1 | 8192 bytes | 16 kB      |            | 24 kB
- data_node_4 |          0 |            |            |            | 
+ data_node_1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
  data_node_3 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ data_node_4 |          0 |            |            |            | 
 (4 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('nondisttable');
