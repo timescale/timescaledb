@@ -199,7 +199,8 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 
 					column->compressed.iterator =
 						tsl_get_decompression_iterator_init(header->compression_algorithm,
-															state->reverse)(value, column->typid);
+															state->reverse)(PointerGetDatum(header),
+																			column->typid);
 				}
 				else
 					column->compressed.iterator = NULL;
