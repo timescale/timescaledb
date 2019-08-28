@@ -70,6 +70,7 @@ get_default_algorithm_id(Oid typeoid)
 		case INTERVALOID:
 		case DATEOID:
 		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
 		{
 			return COMPRESSION_ALGORITHM_DELTADELTA;
 		}

@@ -124,7 +124,7 @@ from _timescaledb_catalog.hypertable_compression hc,
 where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id;
  hypertable_id |   attname   | compression_algorithm_id |               name               
 ---------------+-------------+--------------------------+----------------------------------
-             3 | time        |                        2 | COMPRESSION_ALGORITHM_DICTIONARY
+             3 | time        |                        4 | COMPRESSION_ALGORITHM_DELTADELTA
              3 | location    |                        0 | COMPRESSION_ALGORITHM_NONE
              3 | location2   |                        2 | COMPRESSION_ALGORITHM_DICTIONARY
              3 | temperature |                        3 | COMPRESSION_ALGORITHM_GORILLA
@@ -138,7 +138,7 @@ and atttypid = ty.oid
 order by at.attnum;
       attname       | attstorage |       typname        
 --------------------+------------+----------------------
- time               | x          | compressed_data
+ time               | e          | compressed_data
  location           | x          | text
  location2          | x          | compressed_data
  temperature        | e          | compressed_data
