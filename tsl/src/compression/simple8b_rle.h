@@ -196,7 +196,7 @@ static inline bool simple8brle_selector_is_rle(uint8 selector);
 static inline uint64 simple8brle_selector_get_bitmask(uint8 selector);
 static inline uint32 simple8brle_bits_for_value(uint64 v);
 static inline uint32 simple8brle_rledata_repeatcount(uint64 rledata);
-static inline uint32 simple8brle_rledata_value(uint64 rledata);
+static inline uint64 simple8brle_rledata_value(uint64 rledata);
 static uint32 simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks);
 
 /*******************************
@@ -491,6 +491,9 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 			{
 				/* RLE would save space over slot-based encodings */
 				Simple8bRleBlock block = simple8brle_block_create_rle(rle_count, rle_val);
+				Assert(bits_per_int <= SIMPLE8B_RLE_MAX_VALUE_BITS);
+				Assert(simple8brle_rledata_repeatcount(block.data) == rle_count);
+				Assert(simple8brle_rledata_value(block.data) == rle_val);
 				simple8brle_compressor_push_block(compressor, block);
 				idx += rle_count;
 				continue;
@@ -803,7 +806,7 @@ simple8brle_rledata_repeatcount(uint64 rledata)
 	return (uint32)((rledata >> SIMPLE8B_RLE_MAX_VALUE_BITS) & SIMPLE8B_RLE_MAX_COUNT_MASK);
 }
 
-static inline uint32
+static inline uint64
 simple8brle_rledata_value(uint64 rledata)
 {
 	return rledata & SIMPLE8B_RLE_MAX_VALUE_MASK;
