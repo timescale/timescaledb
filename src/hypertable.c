@@ -546,7 +546,14 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
 	bool isnull;
-	int hypertable_id = heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull);
+	bool compressed_hypertable_id_isnull;
+	int hypertable_id =
+		DatumGetInt32(heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull));
+	int compressed_hypertable_id =
+		DatumGetInt32(heap_getattr(ti->tuple,
+								   Anum_hypertable_compressed_hypertable_id,
+								   ti->desc,
+								   &compressed_hypertable_id_isnull));
 
 	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
@@ -557,6 +564,14 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
+
+	if (!compressed_hypertable_id_isnull)
+	{
+		Hypertable *compressed_hypertable = ts_hypertable_get_by_id(compressed_hypertable_id);
+		/* The hypertable may have already been deleted by a cascade */
+		if (compressed_hypertable != NULL)
+			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);

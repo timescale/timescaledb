@@ -312,3 +312,39 @@ SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last
     where job_id=:drop_chunks_job_id;
 
 SELECT show_chunks('test_drop_chunks_table');
+
+--drop the view to allow drop chunks to work
+DROP VIEW tdc_view CASCADE;
+
+--turn on compression and compress all chunks
+ALTER TABLE test_drop_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table' and chunk.compressed_chunk_id IS NULL;
+
+--make sure same # of compressed and uncompressed chunks before policy
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table';
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100000, 10000);
+
+--make sure same # of compressed and uncompressed chunks after policy, reduced by 1
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table';
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';

@@ -1,0 +1,281 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/rand_generator.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--------------------------
+-- cheap rand generator --
+--------------------------
+create table rand_minstd_state(i bigint);
+create function rand_minstd_advance(bigint) returns bigint
+language sql immutable as
+$$
+	select (16807 * $1) % 2147483647
+$$;
+create function gen_rand_minstd() returns bigint
+language sql security definer as
+$$
+	update rand_minstd_state set i = rand_minstd_advance(i) returning i
+$$;
+-- seed the random num generator
+insert into rand_minstd_state values (321);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/compression_utils.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
+NOTICE:  adding not-null constraint to column "Time"
+ table_name 
+------------
+ test1
+(1 row)
+
+INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = '"Time" DESC');
+WARNING:  Timescale License expired
+--
+-- DROP CHUNKS
+--
+SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL;
+ count_compressed 
+------------------
+               27
+(1 row)
+
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1';
+ count_chunks_uncompressed 
+---------------------------
+                        27
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1';
+ count_chunks_compressed 
+-------------------------
+                      27
+(1 row)
+
+SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+DROP TABLE :UNCOMPRESSED_CHUNK_NAME;
+--should decrease #chunks both compressed and decompressed
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1';
+ count_chunks_uncompressed 
+---------------------------
+                        26
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1';
+ count_chunks_compressed 
+-------------------------
+                      26
+(1 row)
+
+SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-10'::TIMESTAMPTZ);
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+(7 rows)
+
+--should decrease #chunks both compressed and decompressed
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1';
+ count_chunks_uncompressed 
+---------------------------
+                        19
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1';
+ count_chunks_compressed 
+-------------------------
+                      19
+(1 row)
+
+SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1' LIMIT 1
+\gset
+\set ON_ERROR_STOP 0
+DROP TABLE :COMPRESSED_CHUNK_NAME;
+ERROR:  dropping compressed chunks not supported
+\set ON_ERROR_STOP 1
+SELECT
+    chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
+    comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+--create a dependent object on the compressed chunk to test cascade behaviour
+CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
+\set ON_ERROR_STOP 0
+--errors due to dependent objects
+DROP TABLE :UNCOMPRESSED_CHUNK_NAME;
+ERROR:  cannot drop table _timescaledb_internal.compress_hyper_2_36_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE :UNCOMPRESSED_CHUNK_NAME CASCADE;
+NOTICE:  drop cascades to view dependent_1
+--should decrease #chunks both compressed and decompressed
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1';
+ count_chunks_uncompressed 
+---------------------------
+                        18
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1';
+ count_chunks_compressed 
+-------------------------
+                      18
+(1 row)
+
+SELECT
+    chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
+    comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
+\set ON_ERROR_STOP 0
+--errors due to dependent objects
+SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+ERROR:  cannot drop table _timescaledb_internal.compress_hyper_2_37_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ, cascade=>true);
+NOTICE:  drop cascades to view dependent_1
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_1_10_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_12_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_14_chunk
+ _timescaledb_internal._hyper_1_15_chunk
+ _timescaledb_internal._hyper_1_16_chunk
+ _timescaledb_internal._hyper_1_17_chunk
+ _timescaledb_internal._hyper_1_18_chunk
+ _timescaledb_internal._hyper_1_19_chunk
+ _timescaledb_internal._hyper_1_20_chunk
+ _timescaledb_internal._hyper_1_21_chunk
+ _timescaledb_internal._hyper_1_22_chunk
+ _timescaledb_internal._hyper_1_23_chunk
+ _timescaledb_internal._hyper_1_24_chunk
+ _timescaledb_internal._hyper_1_25_chunk
+ _timescaledb_internal._hyper_1_26_chunk
+(17 rows)
+
+--should decrease #chunks both compressed and decompressed
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1';
+ count_chunks_uncompressed 
+---------------------------
+                         1
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1';
+ count_chunks_compressed 
+-------------------------
+                       1
+(1 row)
+
+--
+-- DROP HYPERTABLE
+--
+SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
+FROM _timescaledb_catalog.hypertable comp_hyper
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1' LIMIT 1 \gset
+\set ON_ERROR_STOP 0
+DROP TABLE :COMPRESSED_HYPER_NAME;
+ERROR:  dropping compressed hypertables not supported
+\set ON_ERROR_STOP 1
+BEGIN;
+SELECT hypertable.schema_name|| '.' || hypertable.table_name as "UNCOMPRESSED_HYPER_NAME"
+FROM _timescaledb_catalog.hypertable hypertable
+WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+--before the drop there are 2 hypertables: the compressed and uncompressed ones
+SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
+ count 
+-------
+     2
+(1 row)
+
+DROP TABLE :UNCOMPRESSED_HYPER_NAME;
+--verify that there are no more hypertable remaining
+SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+--create a dependent object on the compressed hypertable to test cascade behaviour
+CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_HYPER_NAME;
+\set ON_ERROR_STOP 0
+DROP TABLE :UNCOMPRESSED_HYPER_NAME;
+ERROR:  cannot drop table _timescaledb_internal._compressed_hypertable_2 because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
+NOTICE:  drop cascades to 2 other objects
+--verify that there are no more hypertable remaining
+SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable
+ count 
+-------
+     0
+(1 row)
+

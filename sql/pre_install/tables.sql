@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
 );
 CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx
 ON _timescaledb_catalog.chunk(hypertable_id);
+CREATE INDEX IF NOT EXISTS chunk_compressed_chunk_id_idx
+ON _timescaledb_catalog.chunk(compressed_chunk_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 

@@ -120,19 +120,25 @@ ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 }
 
 static void
-chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
+chunk_formdata_fill(FormData_chunk *fd, HeapTuple tuple, TupleDesc desc)
 {
 	bool isnull;
 	Datum compress_id;
 
-	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
+	memcpy(fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	/* this is valid because NULLS are only at the end of the struct */
 	/* compressed_chunk_id can be null, so retrieve it */
 	compress_id = heap_getattr(tuple, Anum_chunk_compressed_chunk_id, desc, &isnull);
 	if (isnull)
-		chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
+		fd->compressed_chunk_id = INVALID_CHUNK_ID;
 	else
-		chunk->fd.compressed_chunk_id = DatumGetInt32(compress_id);
+		fd->compressed_chunk_id = DatumGetInt32(compress_id);
+}
+
+static void
+chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
+{
+	chunk_formdata_fill(&chunk->fd, tuple, desc);
 
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
@@ -1338,6 +1344,9 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	{
 		ht = lfirst(lc);
 
+		if (ht->fd.compressed)
+			elog(ERROR, "cannot call chunk_get_chunks_in_time_range on a compressed hypertable");
+
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 		if (time_dim_type == InvalidOid)
@@ -1657,13 +1666,15 @@ ts_chunk_exists_relid(Oid relid)
 static ScanTupleResult
 chunk_tuple_delete(TupleInfo *ti, void *data)
 {
-	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ti->tuple);
+	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
 	ChunkConstraints *ccs = ts_chunk_constraints_alloc(2, ti->mctx);
 	int i;
+	DropBehavior *behavior = data;
 
-	ts_chunk_constraint_delete_by_chunk_id(form->id, ccs);
-	ts_chunk_index_delete_by_chunk_id(form->id, true);
+	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+	ts_chunk_index_delete_by_chunk_id(form.id, true);
 
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (i = 0; i < ccs->num_constraints; i++)
@@ -1682,7 +1693,15 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 	}
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
-	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form->id);
+	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);
+
+	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
+	{
+		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, 0, false);
+		/* The chunk may have been delete by a CASCADE */
+		if (compressed_chunk != NULL)
+			ts_chunk_drop(compressed_chunk, *behavior, DEBUG1);
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);
@@ -1692,7 +1711,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_chunk_delete_by_name(const char *schema, const char *table)
+ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
 	ScanKeyData scankey[2];
 
@@ -1711,27 +1730,29 @@ ts_chunk_delete_by_name(const char *schema, const char *table)
 							   scankey,
 							   2,
 							   chunk_tuple_delete,
-							   NULL,
+							   &behavior,
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
 }
 
-int
-ts_chunk_delete_by_relid(Oid relid)
+static int
+ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
 	return ts_chunk_delete_by_name(get_namespace_name(get_rel_namespace(relid)),
-								   get_rel_name(relid));
+								   get_rel_name(relid),
+								   behavior);
 }
 
 int
 ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 {
 	ScanKeyData scankey[1];
+	DropBehavior behavior = DROP_RESTRICT;
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_hypertable_id_idx_hypertable_id,
@@ -1743,7 +1764,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 							   scankey,
 							   1,
 							   chunk_tuple_delete,
-							   NULL,
+							   &behavior,
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
@@ -1782,6 +1803,33 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 		}
 	}
 	ts_scan_iterator_close(&iterator);
+	return found;
+}
+
+static void
+init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_id)
+{
+	iterator->ctx.index =
+		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(compressed_chunk_id));
+}
+
+bool
+ts_chunk_is_compressed(Chunk *chunk)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	bool found = false;
+
+	init_scan_by_compressed_chunk_id(&iterator, chunk->fd.id);
+	ts_scanner_foreach(&iterator)
+	{
+		Assert(!found);
+		found = true;
+	}
 	return found;
 }
 
@@ -2035,7 +2083,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 void
-ts_chunk_drop(Chunk *chunk, bool cascade, int32 log_level)
+ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ObjectAddress objaddr = {
 		.classId = RelationRelationId,
@@ -2049,10 +2097,10 @@ ts_chunk_drop(Chunk *chunk, bool cascade, int32 log_level)
 			 chunk->fd.table_name.data);
 
 	/* Remove the chunk from the hypertable table */
-	ts_chunk_delete_by_relid(chunk->table_id);
+	ts_chunk_delete_by_relid(chunk->table_id, behavior);
 
 	/* Drop the table */
-	performDeletion(&objaddr, cascade, 0);
+	performDeletion(&objaddr, behavior, 0);
 }
 
 List *
@@ -2110,7 +2158,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		ts_chunk_drop(chunks[i], cascade, log_level);
+		ts_chunk_drop(chunks[i], (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
 	}
 
 	if (cascades_to_materializations)

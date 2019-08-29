@@ -144,6 +144,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
 			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
+			[CHUNK_COMPRESSED_CHUNK_ID_INDEX] = "chunk_compressed_chunk_id_idx",
 		},
 	},
 	[CHUNK_CONSTRAINT] = {
