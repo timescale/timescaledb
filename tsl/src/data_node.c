@@ -1073,8 +1073,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-	bool cascade = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	List *hypertable_data_nodes = NIL;
 	DropStmt stmt;
 	ObjectAddress address;
@@ -1118,7 +1117,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 		.type = T_DropStmt,
 		.objects = list_make1(makeString(pstrdup(node_name))),
 		.removeType = OBJECT_FOREIGN_SERVER,
-		.behavior = cascade ? DROP_CASCADE : DROP_RESTRICT,
+		.behavior = DROP_RESTRICT,
 		.missing_ok = if_exists,
 	};
 

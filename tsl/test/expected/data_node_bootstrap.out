@@ -57,7 +57,7 @@ WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 -- After delete database and extension should still be there
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
  t
@@ -161,7 +161,7 @@ WHERE e.extnamespace = n.oid;
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
  t
@@ -235,7 +235,7 @@ WHERE e.extnamespace = n.oid;
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
  t
@@ -320,13 +320,13 @@ SELECT true FROM pg_database WHERE datname = U&'\0441\043B\043E\043D';
  t
 (1 row)
 
-SELECT true FROM delete_data_node('bootstrap_test1', cascade => true);
+SELECT true FROM delete_data_node('bootstrap_test1');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM delete_data_node('bootstrap_test2', cascade => true);
+SELECT true FROM delete_data_node('bootstrap_test2');
  bool 
 ------
  t

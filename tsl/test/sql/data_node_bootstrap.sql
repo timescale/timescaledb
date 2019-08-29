@@ -44,7 +44,7 @@ WHERE e.extnamespace = n.oid;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 -- After delete database and extension should still be there
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
 SELECT * FROM show_data_nodes();
 \c bootstrap_test :ROLE_SUPERUSER;
 SELECT extname, nspname
@@ -94,7 +94,7 @@ WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
 
 -- Test automatic schema creation in a new database. Use template0 to
@@ -136,7 +136,7 @@ FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM delete_data_node('bootstrap_test', cascade => true);
+SELECT * FROM delete_data_node('bootstrap_test');
 
 -- Test for ongoing transaction
 BEGIN;
@@ -168,8 +168,8 @@ SELECT count(*) FROM show_data_nodes();
 SELECT true FROM pg_database WHERE datname = 'Unusual Name';
 SELECT true FROM pg_database WHERE datname = U&'\0441\043B\043E\043D';
 
-SELECT true FROM delete_data_node('bootstrap_test1', cascade => true);
-SELECT true FROM delete_data_node('bootstrap_test2', cascade => true);
+SELECT true FROM delete_data_node('bootstrap_test1');
+SELECT true FROM delete_data_node('bootstrap_test2');
 
 DROP DATABASE "Unusual Name";
 DROP DATABASE U&"\0441\043B\043E\043D";

@@ -71,7 +71,7 @@ SELECT * FROM delete_data_node('data_node_3', if_exists => true);
 SELECT * FROM timescaledb_information.data_node;
 
 DROP SERVER data_node_1 CASCADE;
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
+SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
 SELECT * FROM timescaledb_information.data_node;
@@ -199,7 +199,7 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_in
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
+SELECT * FROM delete_data_node('data_node_2');
 -- non-existing chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_4');
 -- non-existing data node
@@ -216,7 +216,7 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node
 -- the future we might want to fallback to a replica data node for those
 -- chunks that have multiple data nodes so that the chunk is not removed
 -- unnecessarily. We use force => true b/c data_node_2 contains chunks.
-SELECT * FROM delete_data_node('data_node_2', cascade => true, force => true);
+SELECT * FROM delete_data_node('data_node_2', force => true);
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT foreign_table_name, foreign_server_name
@@ -228,7 +228,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 \set ON_ERROR_STOP 0
 -- can't delete b/c it's last data replica
-SELECT * FROM delete_data_node('data_node_4', cascade => true, force => true);
+SELECT * FROM delete_data_node('data_node_4', force => true);
 \set ON_ERROR_STOP 1
 
 -- Should also clean up hypertable_data_node when using standard DDL commands
@@ -304,7 +304,7 @@ AND column_name = 'device';
 
 -- Clean up
 DROP TABLE disttable;
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
+SELECT * FROM delete_data_node('data_node_3');
 
 -- Creating a distributed hypertable without any servers should fail
 CREATE TABLE disttable(time timestamptz, device int, temp float);
@@ -314,7 +314,7 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '{ }');
 \set ON_ERROR_STOP 1
 
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM timescaledb_information.data_node;
 
 SELECT * FROM test.show_subtables('disttable');
@@ -506,22 +506,22 @@ SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
 SELECT * FROM detach_data_node('data_node_4');
 
 -- Cleanup
-SELECT * FROM delete_data_node('data_node_1', cascade => true, force =>true);
-SELECT * FROM delete_data_node('data_node_2', cascade => true, force =>true);
-SELECT * FROM delete_data_node('data_node_3', cascade => true, force =>true);
+SELECT * FROM delete_data_node('data_node_1', force =>true);
+SELECT * FROM delete_data_node('data_node_2', force =>true);
+SELECT * FROM delete_data_node('data_node_3', force =>true);
 
 \set ON_ERROR_STOP 0
 -- Cannot delete a data node which is attached to a table that we don't
 -- have owner permissions on
-SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
-SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
+SELECT * FROM delete_data_node('data_node_4', force =>true);
+SELECT * FROM delete_data_node('data_node_5', force =>true);
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 DROP TABLE disttable_3;
 
 -- Now we should be able to delete the data nodes
-SELECT * FROM delete_data_node('data_node_4', cascade => true, force =>true);
-SELECT * FROM delete_data_node('data_node_5', cascade => true, force =>true);
+SELECT * FROM delete_data_node('data_node_4', force =>true);
+SELECT * FROM delete_data_node('data_node_5', force =>true);
 
 -- Test case for missing pgpass user password
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_2;

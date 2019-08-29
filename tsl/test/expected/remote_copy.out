@@ -304,19 +304,19 @@ select * from show_chunks('"+ri(k33_'')"');
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
 DROP TABLE "+ri(k33_')" CASCADE;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
+SELECT * FROM delete_data_node('data_node_2');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
+SELECT * FROM delete_data_node('data_node_3');
  delete_data_node 
 ------------------
  t
