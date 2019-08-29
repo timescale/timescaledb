@@ -139,9 +139,9 @@ select * from show_chunks('"+ri(k33_'')"');
 SET ROLE :ROLE_1;
 
 DROP TABLE "+ri(k33_')" CASCADE;
-SELECT * FROM delete_data_node('data_node_1', cascade => true);
-SELECT * FROM delete_data_node('data_node_2', cascade => true);
-SELECT * FROM delete_data_node('data_node_3', cascade => true);
+SELECT * FROM delete_data_node('data_node_1');
+SELECT * FROM delete_data_node('data_node_2');
+SELECT * FROM delete_data_node('data_node_3');
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;

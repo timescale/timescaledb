@@ -174,7 +174,6 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION delete_data_node(
     node_name              NAME,
     if_exists              BOOLEAN = FALSE,
-    cascade                BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
 
