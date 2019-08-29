@@ -276,7 +276,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 	compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
-	ts_chunk_drop(compressed_chunk, false, -1);
+	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 
 	ts_cache_release(hcache);
 }

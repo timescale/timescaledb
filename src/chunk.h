@@ -103,17 +103,18 @@ extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
 
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
+extern TSDLLEXPORT bool ts_chunk_is_compressed(Chunk *chunk);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
-extern int ts_chunk_delete_by_relid(Oid chunk_oid);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
-extern int ts_chunk_delete_by_name(const char *schema, const char *table);
+extern int ts_chunk_delete_by_name(const char *schema, const char *table,
+								   DropBehavior DropBehavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
 													  bool isnull);
-extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, bool cascade, int32 log_level);
+extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum,
 												 Datum newer_than_datum, Oid older_than_type,
 												 Oid newer_than_type, bool cascade,

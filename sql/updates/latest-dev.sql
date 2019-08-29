@@ -119,6 +119,8 @@ ALTER TABLE _timescaledb_catalog.hypertable add constraint hypertable_dim_compre
 alter table _timescaledb_catalog.hypertable add constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null ));
 
 ALTER TABLE _timescaledb_catalog.chunk add column compressed_chunk_id integer references _timescaledb_catalog.chunk(id);
+CREATE INDEX IF NOT EXISTS chunk_compressed_chunk_id_idx
+ON _timescaledb_catalog.chunk(compressed_chunk_id);
 
 CREATE TABLE _timescaledb_catalog.compression_algorithm(
 	id SMALLINT PRIMARY KEY,

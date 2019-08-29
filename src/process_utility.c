@@ -683,12 +683,56 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
+/* Block drop compressed chunks directly and drop corresponding compressed chunks if
+ * cascade is on. */
+static void
+process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		List *object = lfirst(lc);
+		RangeVar *relation = makeRangeVarFromNameList(object);
+		Oid relid;
+		Chunk *chunk;
+
+		if (NULL == relation)
+			continue;
+
+		relid = RangeVarGetRelid(relation, NoLock, true);
+		chunk = ts_chunk_get_by_relid(relid, 0, false);
+		if (chunk != NULL)
+		{
+			if (ts_chunk_is_compressed(chunk))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("dropping compressed chunks not supported"),
+						 errhint(
+							 "Please drop the corresponding chunk on the uncompressed hypertable "
+							 "instead.")));
+
+			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
+			 *  it would be blocked if there are depenent objects */
+			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			{
+				Chunk *compressed_chunk =
+					ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, false);
+				/* The chunk may have been delete by a CASCADE */
+				if (compressed_chunk != NULL)
+					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
+			}
+		}
+	}
+}
+
 /*
- *  We need to drop hypertable chunks before the hypertable to avoid the need
- *  to CASCADE such drops;
+ * We need to drop hypertable chunks and associated compressed hypertables
+ * when dropping hypertables to maintain correct semantics wrt CASCADE modifiers.
+ * Also block dropping compressed hypertables directly.
  */
 static bool
-process_drop_hypertable_chunks(ProcessUtilityArgs *args, DropStmt *stmt)
+process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -716,8 +760,29 @@ process_drop_hypertable_chunks(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "cannot drop a hypertable along with other objects");
 
-				/* Drop each chunk table */
+				if (ht->fd.compressed)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("dropping compressed hypertables not supported"),
+							 errhint("Please drop the corresponding uncompressed hypertable "
+									 "instead.")));
+
+				/*
+				 *  We need to drop hypertable chunks before the hypertable to avoid the need
+				 *  to CASCADE such drops;
+				 */
 				foreach_chunk(ht, process_drop_table_chunk, stmt);
+				/* The usual path for deleting an associated compressed hypertable uses
+				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
+				 * the compressed hypertable.
+				 */
+				if (stmt->behavior == DROP_CASCADE &&
+					ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+				{
+					Hypertable *compressed_hypertable =
+						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
+				}
 			}
 
 			handled = true;
@@ -896,7 +961,8 @@ process_drop(ProcessUtilityArgs *args)
 	switch (stmt->removeType)
 	{
 		case OBJECT_TABLE:
-			process_drop_hypertable_chunks(args, stmt);
+			process_drop_hypertable(args, stmt);
+			process_drop_chunk(args, stmt);
 			break;
 		case OBJECT_INDEX:
 			process_drop_hypertable_index(args, stmt);
@@ -2964,7 +3030,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	table = (EventTriggerDropTable *) obj;
 
 	ts_hypertable_delete_by_name(table->schema, table->table_name);
-	ts_chunk_delete_by_name(table->schema, table->table_name);
+	ts_chunk_delete_by_name(table->schema, table->table_name, DROP_RESTRICT);
 }
 
 static void

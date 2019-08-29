@@ -16,6 +16,7 @@ set(TEST_FILES_DEBUG
     compress_table.sql
     compression.sql
     compression_algos.sql
+    compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql
     compression_segment_meta.sql

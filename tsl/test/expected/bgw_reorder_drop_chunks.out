@@ -677,3 +677,63 @@ SELECT show_chunks('test_drop_chunks_table');
  _timescaledb_internal._hyper_2_12_chunk
 (4 rows)
 
+--drop the view to allow drop chunks to work
+DROP VIEW tdc_view CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_13_chunk
+--turn on compression and compress all chunks
+ALTER TABLE test_drop_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table' and chunk.compressed_chunk_id IS NULL;
+ count_compressed 
+------------------
+                4
+(1 row)
+
+--make sure same # of compressed and uncompressed chunks before policy
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table';
+ count_chunks_uncompressed 
+---------------------------
+                         4
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
+ count_chunks_compressed 
+-------------------------
+                       4
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100000, 10000);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+--make sure same # of compressed and uncompressed chunks after policy, reduced by 1
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_drop_chunks_table';
+ count_chunks_uncompressed 
+---------------------------
+                         3
+(1 row)
+
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
+ count_chunks_compressed 
+-------------------------
+                       3
+(1 row)
+
