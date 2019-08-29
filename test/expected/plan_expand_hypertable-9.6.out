@@ -105,6 +105,30 @@ ANALYZE hyper_timefunc;
 -- create normal table for JOIN tests
 CREATE TABLE regular_timestamptz(time timestamptz);
 INSERT INTO regular_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
+\ir include/plan_expand_hypertable_errors.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\set ON_ERROR_STOP 0
+\qecho test timestamp upper boundary
+test timestamp upper boundary
+\qecho this will error because even though the transformation results in a valid timestamp
+this will error because even though the transformation results in a valid timestamp
+\qecho our supported range of values for time is smaller then postgres
+our supported range of values for time is smaller then postgres
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
+psql:include/plan_expand_hypertable_errors.sql:10: ERROR:  timestamp out of range
+\qecho transformation would be out of range
+transformation would be out of range
+\qecho test timestamptz upper boundary
+test timestamptz upper boundary
+\qecho this will error because even though the transformation results in a valid timestamp
+this will error because even though the transformation results in a valid timestamp
+\qecho our supported range of values for time is smaller then postgres
+our supported range of values for time is smaller then postgres
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
+psql:include/plan_expand_hypertable_errors.sql:16: ERROR:  timestamp out of range
+\set ON_ERROR_STOP 1
 \ir include/plan_expand_hypertable_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -112,7 +136,8 @@ INSERT INTO regular_timestamptz SELECT generate_series('2000-01-01'::timestamptz
 --we want to see how our logic excludes chunks
 --and not how much work constraint_exclusion does
 SET constraint_exclusion = 'off';
---test upper bounds
+\qecho test upper bounds
+test upper bounds
 :PREFIX SELECT * FROM hyper WHERE time < 10 ORDER BY value;
                 QUERY PLAN                
 ------------------------------------------
@@ -157,7 +182,8 @@ SET constraint_exclusion = 'off';
                Filter: (10 >= "time")
 (7 rows)
 
---test lower bounds
+\qecho test lower bounds
+test lower bounds
 :PREFIX SELECT * FROM hyper WHERE time >= 10 and time < 20 ORDER BY value;
                         QUERY PLAN                        
 ----------------------------------------------------------
@@ -202,7 +228,8 @@ SET constraint_exclusion = 'off';
                Filter: (("time" > 9) AND ("time" < 20))
 (5 rows)
 
---test empty result
+\qecho test empty result
+test empty result
 :PREFIX SELECT * FROM hyper WHERE time < 0;
         QUERY PLAN        
 --------------------------
@@ -210,7 +237,8 @@ SET constraint_exclusion = 'off';
    One-Time Filter: false
 (2 rows)
 
---test expression evaluation
+\qecho test expression evaluation
+test expression evaluation
 :PREFIX SELECT * FROM hyper WHERE time < (5*2)::smallint;
                 QUERY PLAN                 
 -------------------------------------------
@@ -219,7 +247,8 @@ SET constraint_exclusion = 'off';
          Filter: ("time" < '10'::smallint)
 (3 rows)
 
---test logic at INT64_MAX
+\qecho test logic at INT64_MAX
+test logic at INT64_MAX
 :PREFIX SELECT * FROM hyper WHERE time = 9223372036854775807::bigint ORDER BY value;
                            QUERY PLAN                           
 ----------------------------------------------------------------
@@ -269,7 +298,8 @@ SET constraint_exclusion = 'off';
                Filter: ("time" > '9223372036854775806'::bigint)
 (5 rows)
 
---cte
+\qecho cte
+cte
 :PREFIX WITH cte AS(
   SELECT * FROM hyper WHERE time < 10
 )
@@ -285,7 +315,8 @@ SELECT * FROM cte ORDER BY value;
    ->  CTE Scan on cte
 (7 rows)
 
---subquery
+\qecho subquery
+subquery
 :PREFIX SELECT 0 = ANY (SELECT value FROM hyper WHERE time < 10);
                  QUERY PLAN                 
 --------------------------------------------
@@ -296,7 +327,8 @@ SELECT * FROM cte ORDER BY value;
                  Filter: ("time" < 10)
 (5 rows)
 
---no space constraint
+\qecho no space constraint
+no space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 ORDER BY value;
                  QUERY PLAN                 
 --------------------------------------------
@@ -313,7 +345,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ("time" < 10)
 (11 rows)
 
---valid space constraint
+\qecho valid space constraint
+valid space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and device_id = 'dev5' ORDER BY value;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
@@ -344,7 +377,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND ('dev5'::text = device_id))
 (5 rows)
 
---only space constraint
+\qecho only space constraint
+only space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE 'dev5' = device_id ORDER BY value;
                     QUERY PLAN                    
 --------------------------------------------------
@@ -359,7 +393,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ('dev5'::text = device_id)
 (9 rows)
 
---unhandled space constraint
+\qecho unhandled space constraint
+unhandled space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and device_id > 'dev5' ORDER BY value;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
@@ -376,7 +411,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id > 'dev5'::text))
 (11 rows)
 
---use of OR - does not filter chunks
+\qecho use of OR - does not filter chunks
+use of OR - does not filter chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND (device_id = 'dev5' or device_id = 'dev6') ORDER BY value;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
@@ -393,7 +429,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND ((device_id = 'dev5'::text) OR (device_id = 'dev6'::text)))
 (11 rows)
 
---cte
+\qecho cte
+cte
 :PREFIX WITH cte AS(
    SELECT * FROM hyper_w_space WHERE time < 10 and device_id = 'dev5'
 )
@@ -409,7 +446,8 @@ SELECT * FROM cte ORDER BY value;
    ->  CTE Scan on cte
 (7 rows)
 
---subquery
+\qecho subquery
+subquery
 :PREFIX SELECT 0 = ANY (SELECT value FROM hyper_w_space WHERE time < 10 and device_id = 'dev5');
                                QUERY PLAN                               
 ------------------------------------------------------------------------
@@ -420,7 +458,8 @@ SELECT * FROM cte ORDER BY value;
                  Filter: (("time" < 10) AND (device_id = 'dev5'::text))
 (5 rows)
 
---view
+\qecho view
+view
 :PREFIX SELECT * FROM hyper_w_space_view WHERE time < 10 and device_id = 'dev5' ORDER BY value;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
@@ -431,7 +470,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = 'dev5'::text))
 (5 rows)
 
---IN statement - simple
+\qecho IN statement - simple
+IN statement - simple
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev5') ORDER BY value;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
@@ -442,7 +482,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = 'dev5'::text))
 (5 rows)
 
---IN statement - two chunks
+\qecho IN statement - two chunks
+IN statement - two chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev5','dev6') ORDER BY value;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
@@ -455,7 +496,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
 (7 rows)
 
---IN statement - one chunk
+\qecho IN statement - one chunk
+IN statement - one chunk
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev4','dev5') ORDER BY value;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
@@ -466,7 +508,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = ANY ('{dev4,dev5}'::text[])))
 (5 rows)
 
---NOT IN - does not filter chunks
+\qecho NOT IN - does not filter chunks
+NOT IN - does not filter chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id NOT IN ('dev5','dev6') ORDER BY value;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
@@ -483,7 +526,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id <> ALL ('{dev5,dev6}'::text[])))
 (11 rows)
 
---IN statement with subquery - does not filter chunks
+\qecho IN statement with subquery - does not filter chunks
+IN statement with subquery - does not filter chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN (SELECT 'dev5'::text) ORDER BY value;
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
@@ -504,7 +548,8 @@ SELECT * FROM cte ORDER BY value;
                      Filter: (("time" < 10) AND (('dev5'::text) = device_id))
 (15 rows)
 
---ANY
+\qecho ANY
+ANY
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) ORDER BY value;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
@@ -517,7 +562,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
 (7 rows)
 
---ANY with intersection
+\qecho ANY with intersection
+ANY with intersection
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) AND device_id = ANY(ARRAY['dev6','dev7']) ORDER BY value;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
@@ -528,7 +574,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])) AND (device_id = ANY ('{dev6,dev7}'::text[])))
 (5 rows)
 
---ANY without intersection shouldn't scan any chunks
+\qecho ANY without intersection shouldnt scan any chunks
+ANY without intersection shouldnt scan any chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) AND device_id = ANY(ARRAY['dev8','dev9']) ORDER BY value;
            QUERY PLAN           
 --------------------------------
@@ -538,7 +585,8 @@ SELECT * FROM cte ORDER BY value;
          One-Time Filter: false
 (4 rows)
 
---ANY/IN/ALL only works for equals operator
+\qecho ANY/IN/ALL only works for equals operator
+ANY/IN/ALL only works for equals operator
 :PREFIX SELECT * FROM hyper_w_space WHERE device_id < ANY(ARRAY['dev5','dev6']) ORDER BY value;
                            QUERY PLAN                            
 -----------------------------------------------------------------
@@ -573,7 +621,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (device_id < ANY ('{dev5,dev6}'::text[]))
 (29 rows)
 
---ALL with equals and different values shouldn't scan any chunks
+\qecho ALL with equals and different values shouldnt scan any chunks
+ALL with equals and different values shouldnt scan any chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE device_id = ALL(ARRAY['dev5','dev6']) ORDER BY value;
            QUERY PLAN           
 --------------------------------
@@ -583,7 +632,8 @@ SELECT * FROM cte ORDER BY value;
          One-Time Filter: false
 (4 rows)
 
---Multi AND
+\qecho Multi AND
+Multi AND
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND time < 100 ORDER BY value;
                         QUERY PLAN                        
 ----------------------------------------------------------
@@ -600,7 +650,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 10) AND ("time" < 100))
 (11 rows)
 
---Time dimension doesn't filter chunks when using IN/ANY with multiple arguments
+\qecho Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
+Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1,2]) ORDER BY value;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -635,7 +686,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ("time" < ANY ('{1,2}'::integer[]))
 (29 rows)
 
---Time dimension chunk filtering works for ANY with single argument
+\qecho Time dimension chunk filtering works for ANY with single argument
+Time dimension chunk filtering works for ANY with single argument
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1]) ORDER BY value;
                        QUERY PLAN                        
 ---------------------------------------------------------
@@ -652,7 +704,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ("time" < ANY ('{1}'::integer[]))
 (11 rows)
 
---Time dimension chunk filtering works for ALL with single argument
+\qecho Time dimension chunk filtering works for ALL with single argument
+Time dimension chunk filtering works for ALL with single argument
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1]) ORDER BY value;
                        QUERY PLAN                        
 ---------------------------------------------------------
@@ -669,7 +722,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ("time" < ALL ('{1}'::integer[]))
 (11 rows)
 
---Time dimension chunk filtering works for ALL with multiple arguments
+\qecho Time dimension chunk filtering works for ALL with multiple arguments
+Time dimension chunk filtering works for ALL with multiple arguments
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1,10,20,30]) ORDER BY value;
                             QUERY PLAN                            
 ------------------------------------------------------------------
@@ -686,7 +740,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ("time" < ALL ('{1,10,20,30}'::integer[]))
 (11 rows)
 
---AND intersection using IN and EQUALS
+\qecho AND intersection using IN and EQUALS
+AND intersection using IN and EQUALS
 :PREFIX SELECT * FROM hyper_w_space WHERE device_id IN ('dev1','dev2') AND device_id = 'dev1' ORDER BY value;
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
@@ -701,7 +756,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: ((device_id = ANY ('{dev1,dev2}'::text[])) AND (device_id = 'dev1'::text))
 (9 rows)
 
---AND with no intersection using IN and EQUALS
+\qecho AND with no intersection using IN and EQUALS
+AND with no intersection using IN and EQUALS
 :PREFIX SELECT * FROM hyper_w_space WHERE device_id IN ('dev1','dev2') AND device_id = 'dev3' ORDER BY value;
            QUERY PLAN           
 --------------------------------
@@ -711,8 +767,10 @@ SELECT * FROM cte ORDER BY value;
          One-Time Filter: false
 (4 rows)
 
---timestamps
---these should work since they are immutable functions
+\qecho timestamps
+timestamps
+\qecho these should work since they are immutable functions
+these should work since they are immutable functions
 :PREFIX SELECT * FROM hyper_ts WHERE time < 'Wed Dec 31 16:00:10 1969 PST'::timestamptz ORDER BY value;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
@@ -759,7 +817,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
 (5 rows)
 
---these should not work since uses stable functions;
+\qecho these should not work since uses stable functions;
+these should not work since uses stable functions;
 :PREFIX SELECT * FROM hyper_ts WHERE time < 'Wed Dec 31 16:00:10 1969'::timestamp ORDER BY value;
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
@@ -797,7 +856,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (now() < "time")
 (6 rows)
 
---joins
+\qecho joins
+joins
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
                                                                     QUERY PLAN                                                                     
 ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -880,8 +940,10 @@ SELECT * FROM cte ORDER BY value;
                Filter: (name = 'tag1'::text)
 (9 rows)
 
--- test constraint exclusion for constraints in ON clause of JOINs
--- should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
+\qecho test constraint exclusion for constraints in ON clause of JOINs
+test constraint exclusion for constraints in ON clause of JOINs
+\qecho should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
+should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -902,7 +964,8 @@ SELECT * FROM cte ORDER BY value;
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
--- should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
+\qecho should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
+should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -923,7 +986,8 @@ SELECT * FROM cte ORDER BY value;
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
--- must not exclude on m1
+\qecho must not exclude on m1
+must not exclude on m1
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -947,7 +1011,8 @@ SELECT * FROM cte ORDER BY value;
                ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
 (18 rows)
 
--- should exclude chunks on m2
+\qecho should exclude chunks on m2
+should exclude chunks on m2
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -969,7 +1034,8 @@ SELECT * FROM cte ORDER BY value;
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 (16 rows)
 
--- should exclude chunks on m1
+\qecho should exclude chunks on m1
+should exclude chunks on m1
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
@@ -993,7 +1059,8 @@ SELECT * FROM cte ORDER BY value;
                      ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_4
 (18 rows)
 
--- must not exclude chunks on m2
+\qecho must not exclude chunks on m2
+must not exclude chunks on m2
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
@@ -1019,7 +1086,8 @@ SELECT * FROM cte ORDER BY value;
                      ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
 (20 rows)
 
--- time_bucket exclusion
+\qecho time_bucket exclusion
+time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
@@ -1087,7 +1155,8 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time")))
 (9 rows)
 
--- test overflow behaviour of time_bucket exclusion
+\qecho test overflow behaviour of time_bucket exclusion
+test overflow behaviour of time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time > 950 AND time_bucket(10, time) < '9223372036854775807'::bigint ORDER BY time;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
@@ -1110,14 +1179,10 @@ SELECT * FROM cte ORDER BY value;
                Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
 (17 rows)
 
--- test timestamp upper boundary
--- this will error because even though the transformation results in a valid timestamp
--- our supported range of values for time is smaller then postgres
-\set ON_ERROR_STOP 0
-:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
-psql:include/plan_expand_hypertable_query.sql:171: ERROR:  timestamp out of range
-\set ON_ERROR_STOP 1
--- transformation would be out of range
+\qecho test timestamp upper boundary
+test timestamp upper boundary
+\qecho transformation would be out of range
+transformation would be out of range
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1000d',time) < '294276-01-01'::timestamp ORDER BY time;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
@@ -1135,14 +1200,10 @@ psql:include/plan_expand_hypertable_query.sql:171: ERROR:  timestamp out of rang
          Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
 (12 rows)
 
--- test timestamptz upper boundary
--- this will error because even though the transformation results in a valid timestamp
--- our supported range of values for time is smaller then postgres
-\set ON_ERROR_STOP 0
-:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
-psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of range
-\set ON_ERROR_STOP 1
--- transformation would be out of range
+\qecho test timestamptz upper boundary
+test timestamptz upper boundary
+\qecho transformation would be out of range
+transformation would be out of range
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -1222,7 +1283,8 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
                Filter: (("time" > 10) AND ("time" < '30'::bigint) AND (10 < time_bucket('10'::bigint, "time")) AND (20 > time_bucket('10'::bigint, "time")))
 (7 rows)
 
--- time_bucket exclusion with date
+\qecho time_bucket exclusion with date
+time_bucket exclusion with date
 :PREFIX SELECT * FROM metrics_date WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                              QUERY PLAN                                              
 -----------------------------------------------------------------------------------------------------
@@ -1246,7 +1308,8 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= '01-03-2000'::date) AND (time_bucket('@ 1 day'::interval, "time") <= '01-10-2000'::date))
 (8 rows)
 
--- time_bucket exclusion with timestamp
+\qecho time_bucket exclusion with timestamp
+time_bucket exclusion with timestamp
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
@@ -1270,7 +1333,8 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000'::timestamp without time zone) AND (time_bucket('@ 1 day'::interval, "time") <= 'Mon Jan 10 00:00:00 2000'::timestamp without time zone))
 (8 rows)
 
--- time_bucket exclusion with timestamptz
+\qecho time_bucket exclusion with timestamptz
+time_bucket exclusion with timestamptz
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
@@ -1294,7 +1358,8 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: ((time_bucket('@ 6 hours'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (8 rows)
 
--- time_bucket exclusion with timestamptz and day interval
+\qecho time_bucket exclusion with timestamptz and day interval
+time_bucket exclusion with timestamptz and day interval
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
@@ -1334,9 +1399,12 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (11 rows)
 
---exclude chunks based on time column with partitioning function. This
---transparently applies the time partitioning function on the time
---value to be able to exclude chunks (similar to a closed dimension).
+\qecho exclude chunks based on time column with partitioning function. This
+exclude chunks based on time column with partitioning function. This
+\qecho transparently applies the time partitioning function on the time
+transparently applies the time partitioning function on the time
+\qecho value to be able to exclude chunks (similar to a closed dimension).
+value to be able to exclude chunks (similar to a closed dimension).
 :PREFIX SELECT * FROM hyper_timefunc WHERE time < 4 ORDER BY value;
                        QUERY PLAN                       
 --------------------------------------------------------
@@ -1353,7 +1421,8 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
                Filter: ("time" < '4'::double precision)
 (11 rows)
 
---excluding based on time expression is currently unoptimized
+\qecho excluding based on time expression is currently unoptimized
+excluding based on time expression is currently unoptimized
 :PREFIX SELECT * FROM hyper_timefunc WHERE unix_to_timestamp(time) < 'Wed Dec 31 16:00:04 1969 PST' ORDER BY value;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
@@ -1424,9 +1493,11 @@ psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of rang
                Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
 (65 rows)
 
--- test qual propagation for joins
+\qecho test qual propagation for joins
+test qual propagation for joins
 RESET constraint_exclusion;
--- nothing to propagate
+\qecho nothing to propagate
+nothing to propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -1517,7 +1588,8 @@ RESET constraint_exclusion;
                      ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
 (19 rows)
 
--- OR constraints should not propagate
+\qecho OR constraints should not propagate
+OR constraints should not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' OR m1.time > '2001-01-01' ORDER BY m1.time;
                                                                              QUERY PLAN                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1539,9 +1611,12 @@ RESET constraint_exclusion;
                ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m2_5
 (16 rows)
 
--- test single constraint
--- constraint should be on both scans
--- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+\qecho test single constraint
+test single constraint
+\qecho constraint should be on both scans
+constraint should be on both scans
+\qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -1621,8 +1696,10 @@ RESET constraint_exclusion;
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
--- test 2 constraints on single relation
--- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+\qecho test 2 constraints on single relation
+test 2 constraints on single relation
+\qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                                                   QUERY PLAN                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1701,8 +1778,10 @@ RESET constraint_exclusion;
                      Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (15 rows)
 
--- test 2 constraints with 1 constraint on each relation
--- these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+\qecho test 2 constraints with 1 constraint on each relation
+test 2 constraints with 1 constraint on each relation
+\qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
+these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                                                   QUERY PLAN                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1783,7 +1862,8 @@ RESET constraint_exclusion;
                      Index Cond: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone))
 (15 rows)
 
--- test constraints in ON clause of INNER JOIN
+\qecho test constraints in ON clause of INNER JOIN
+test constraints in ON clause of INNER JOIN
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                                                   QUERY PLAN                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1804,8 +1884,10 @@ RESET constraint_exclusion;
                      Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (15 rows)
 
--- test constraints in ON clause of LEFT JOIN
--- must not propagate
+\qecho test constraints in ON clause of LEFT JOIN
+test constraints in ON clause of LEFT JOIN
+\qecho must not propagate
+must not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                                                   QUERY PLAN                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1827,8 +1909,10 @@ RESET constraint_exclusion;
                      Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (16 rows)
 
--- test constraints in ON clause of RIGHT JOIN
--- must not propagate
+\qecho test constraints in ON clause of RIGHT JOIN
+test constraints in ON clause of RIGHT JOIN
+\qecho must not propagate
+must not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                                                 QUERY PLAN                                                                                
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1854,7 +1938,8 @@ RESET constraint_exclusion;
                      ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
 (20 rows)
 
--- test equality condition not in ON clause
+\qecho test equality condition not in ON clause
+test equality condition not in ON clause
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -1875,8 +1960,10 @@ RESET constraint_exclusion;
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
--- test constraints not joined on
--- device_id constraint must not propagate
+\qecho test constraints not joined on
+test constraints not joined on
+\qecho device_id constraint must not propagate
+device_id constraint must not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
@@ -1896,8 +1983,10 @@ RESET constraint_exclusion;
                Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (14 rows)
 
--- test multiple join conditions
--- device_id constraint should propagate
+\qecho test multiple join conditions
+test multiple join conditions
+\qecho device_id constraint should propagate
+device_id constraint should propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
@@ -1919,7 +2008,8 @@ RESET constraint_exclusion;
                Filter: (device_id = 1)
 (16 rows)
 
--- test join with 3 tables
+\qecho test join with 3 tables
+test join with 3 tables
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time INNER JOIN metrics_timestamptz m3 ON m2.time=m3.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1949,7 +2039,8 @@ RESET constraint_exclusion;
                      Index Cond: (("time" > 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (24 rows)
 
--- test non-Const constraints
+\qecho test non-Const constraints
+test non-Const constraints
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10'::text::timestamptz ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -1972,7 +2063,8 @@ RESET constraint_exclusion;
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (17 rows)
 
--- test now()
+\qecho test now()
+test now()
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < now() ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -2007,8 +2099,10 @@ RESET constraint_exclusion;
                      Index Cond: ("time" < now())
 (29 rows)
 
--- test volatile function
--- should not propagate
+\qecho test volatile function
+test volatile function
+\qecho should not propagate
+should not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < clock_timestamp() ORDER BY m1.time;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
@@ -2065,8 +2159,10 @@ RESET constraint_exclusion;
                ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
 (23 rows)
 
--- test JOINs with normal table
--- will not propagate because constraints are only added to hypertables
+\qecho test JOINs with normal table
+test JOINs with normal table
+\qecho will not propagate because constraints are only added to hypertables
+will not propagate because constraints are only added to hypertables
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
@@ -2083,7 +2179,8 @@ RESET constraint_exclusion;
          ->  Seq Scan on regular_timestamptz m2
 (11 rows)
 
--- test JOINs with normal table
+\qecho test JOINs with normal table
+test JOINs with normal table
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m2.time < '2000-01-10' ORDER BY m1.time;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
@@ -2367,6 +2464,7 @@ psql:include/plan_expand_hypertable_chunks_in_query.sql:35: ERROR:  illegal invo
 -- passing func as chunk id
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, array_append(ARRAY[1],current_setting('server_version_num')::int));
 psql:include/plan_expand_hypertable_chunks_in_query.sql:37: ERROR:  second argument to chunk_in should contain only integer consts
+\set ON_ERROR_STOP 1
 -- chunks_in is STRICT function and for NULL arguments a null result is returned
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
  value | time 
@@ -2374,146 +2472,4 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 (0 rows)
 
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);
-psql:include/plan_expand_hypertable_chunks_in_query.sql:40: ERROR:  chunk id can't be NULL
-\set ECHO errors
-psql:include/plan_expand_hypertable_query.sql:171: ERROR:  timestamp out of range
-psql:include/plan_expand_hypertable_query.sql:171: STATEMENT:  SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
-psql:include/plan_expand_hypertable_query.sql:180: ERROR:  timestamp out of range
-psql:include/plan_expand_hypertable_query.sql:180: STATEMENT:  SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
-1468a1469,1604
->            time           
-> --------------------------
->  Sat Jan 01 00:00:00 2000
->  Sun Jan 02 00:00:00 2000
->  Mon Jan 03 00:00:00 2000
->  Tue Jan 04 00:00:00 2000
->  Wed Jan 05 00:00:00 2000
->  Thu Jan 06 00:00:00 2000
->  Fri Jan 07 00:00:00 2000
->  Sat Jan 08 00:00:00 2000
->  Sun Jan 09 00:00:00 2000
->  Mon Jan 10 00:00:00 2000
->  Tue Jan 11 00:00:00 2000
->  Wed Jan 12 00:00:00 2000
->  Thu Jan 13 00:00:00 2000
->  Fri Jan 14 00:00:00 2000
->  Sat Jan 15 00:00:00 2000
->  Sun Jan 16 00:00:00 2000
->  Mon Jan 17 00:00:00 2000
->  Tue Jan 18 00:00:00 2000
->  Wed Jan 19 00:00:00 2000
->  Thu Jan 20 00:00:00 2000
->  Fri Jan 21 00:00:00 2000
->  Sat Jan 22 00:00:00 2000
->  Sun Jan 23 00:00:00 2000
->  Mon Jan 24 00:00:00 2000
->  Tue Jan 25 00:00:00 2000
->  Wed Jan 26 00:00:00 2000
->  Thu Jan 27 00:00:00 2000
->  Fri Jan 28 00:00:00 2000
->  Sat Jan 29 00:00:00 2000
->  Sun Jan 30 00:00:00 2000
->  Mon Jan 31 00:00:00 2000
->  Tue Feb 01 00:00:00 2000
-> (32 rows)
-> 
->              time             
-> ------------------------------
->  Sat Jan 01 00:00:00 2000 PST
->  Sat Jan 01 00:00:00 2000 PST
->  Sat Jan 01 00:00:00 2000 PST
->  Sun Jan 02 00:00:00 2000 PST
->  Sun Jan 02 00:00:00 2000 PST
->  Sun Jan 02 00:00:00 2000 PST
->  Mon Jan 03 00:00:00 2000 PST
->  Mon Jan 03 00:00:00 2000 PST
->  Mon Jan 03 00:00:00 2000 PST
->  Tue Jan 04 00:00:00 2000 PST
->  Tue Jan 04 00:00:00 2000 PST
->  Tue Jan 04 00:00:00 2000 PST
->  Wed Jan 05 00:00:00 2000 PST
->  Wed Jan 05 00:00:00 2000 PST
->  Wed Jan 05 00:00:00 2000 PST
->  Thu Jan 06 00:00:00 2000 PST
->  Thu Jan 06 00:00:00 2000 PST
->  Thu Jan 06 00:00:00 2000 PST
->  Fri Jan 07 00:00:00 2000 PST
->  Fri Jan 07 00:00:00 2000 PST
->  Fri Jan 07 00:00:00 2000 PST
->  Sat Jan 08 00:00:00 2000 PST
->  Sat Jan 08 00:00:00 2000 PST
->  Sat Jan 08 00:00:00 2000 PST
->  Sun Jan 09 00:00:00 2000 PST
->  Sun Jan 09 00:00:00 2000 PST
->  Sun Jan 09 00:00:00 2000 PST
->  Mon Jan 10 00:00:00 2000 PST
->  Mon Jan 10 00:00:00 2000 PST
->  Mon Jan 10 00:00:00 2000 PST
->  Tue Jan 11 00:00:00 2000 PST
->  Tue Jan 11 00:00:00 2000 PST
->  Tue Jan 11 00:00:00 2000 PST
->  Wed Jan 12 00:00:00 2000 PST
->  Wed Jan 12 00:00:00 2000 PST
->  Wed Jan 12 00:00:00 2000 PST
->  Thu Jan 13 00:00:00 2000 PST
->  Thu Jan 13 00:00:00 2000 PST
->  Thu Jan 13 00:00:00 2000 PST
->  Fri Jan 14 00:00:00 2000 PST
->  Fri Jan 14 00:00:00 2000 PST
->  Fri Jan 14 00:00:00 2000 PST
->  Sat Jan 15 00:00:00 2000 PST
->  Sat Jan 15 00:00:00 2000 PST
->  Sat Jan 15 00:00:00 2000 PST
->  Sun Jan 16 00:00:00 2000 PST
->  Sun Jan 16 00:00:00 2000 PST
->  Sun Jan 16 00:00:00 2000 PST
->  Mon Jan 17 00:00:00 2000 PST
->  Mon Jan 17 00:00:00 2000 PST
->  Mon Jan 17 00:00:00 2000 PST
->  Tue Jan 18 00:00:00 2000 PST
->  Tue Jan 18 00:00:00 2000 PST
->  Tue Jan 18 00:00:00 2000 PST
->  Wed Jan 19 00:00:00 2000 PST
->  Wed Jan 19 00:00:00 2000 PST
->  Wed Jan 19 00:00:00 2000 PST
->  Thu Jan 20 00:00:00 2000 PST
->  Thu Jan 20 00:00:00 2000 PST
->  Thu Jan 20 00:00:00 2000 PST
->  Fri Jan 21 00:00:00 2000 PST
->  Fri Jan 21 00:00:00 2000 PST
->  Fri Jan 21 00:00:00 2000 PST
->  Sat Jan 22 00:00:00 2000 PST
->  Sat Jan 22 00:00:00 2000 PST
->  Sat Jan 22 00:00:00 2000 PST
->  Sun Jan 23 00:00:00 2000 PST
->  Sun Jan 23 00:00:00 2000 PST
->  Sun Jan 23 00:00:00 2000 PST
->  Mon Jan 24 00:00:00 2000 PST
->  Mon Jan 24 00:00:00 2000 PST
->  Mon Jan 24 00:00:00 2000 PST
->  Tue Jan 25 00:00:00 2000 PST
->  Tue Jan 25 00:00:00 2000 PST
->  Tue Jan 25 00:00:00 2000 PST
->  Wed Jan 26 00:00:00 2000 PST
->  Wed Jan 26 00:00:00 2000 PST
->  Wed Jan 26 00:00:00 2000 PST
->  Thu Jan 27 00:00:00 2000 PST
->  Thu Jan 27 00:00:00 2000 PST
->  Thu Jan 27 00:00:00 2000 PST
->  Fri Jan 28 00:00:00 2000 PST
->  Fri Jan 28 00:00:00 2000 PST
->  Fri Jan 28 00:00:00 2000 PST
->  Sat Jan 29 00:00:00 2000 PST
->  Sat Jan 29 00:00:00 2000 PST
->  Sat Jan 29 00:00:00 2000 PST
->  Sun Jan 30 00:00:00 2000 PST
->  Sun Jan 30 00:00:00 2000 PST
->  Sun Jan 30 00:00:00 2000 PST
->  Mon Jan 31 00:00:00 2000 PST
->  Mon Jan 31 00:00:00 2000 PST
->  Mon Jan 31 00:00:00 2000 PST
->  Tue Feb 01 00:00:00 2000 PST
->  Tue Feb 01 00:00:00 2000 PST
->  Tue Feb 01 00:00:00 2000 PST
-> (96 rows)
-> 
+psql:include/plan_expand_hypertable_chunks_in_query.sql:42: ERROR:  chunk id can't be NULL
