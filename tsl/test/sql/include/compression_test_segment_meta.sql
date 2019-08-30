@@ -14,9 +14,9 @@ SELECT
 FROM :"TABLE" \gset
 
 SELECT
-    _timescaledb_internal.segment_meta_min_max_get_min(meta, :NULLTYPE) = :'TRUE_MIN' as min_correct,
-    _timescaledb_internal.segment_meta_min_max_get_max(meta, :NULLTYPE) = :'TRUE_MAX' as max_correct,
-    _timescaledb_internal.segment_meta_min_max_has_null(meta) = :'TRUE_HAS_NULL' as has_null_correct
+    _timescaledb_internal.segment_meta_get_min(meta, :NULLTYPE) = :'TRUE_MIN' as min_correct,
+    _timescaledb_internal.segment_meta_get_max(meta, :NULLTYPE) = :'TRUE_MAX' as max_correct,
+    _timescaledb_internal.segment_meta_has_null(meta) = :'TRUE_HAS_NULL' as has_null_correct
 FROM
 (
         SELECT

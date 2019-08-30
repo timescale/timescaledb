@@ -248,7 +248,7 @@ segment_meta_min_max_from_binary_string(StringInfo buf)
 }
 
 Datum
-tsl_segment_meta_min_max_get_min(Datum meta_datum, Oid type)
+tsl_segment_meta_get_min(Datum meta_datum, Oid type)
 {
 	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	DatumDeserializer *deser;
@@ -263,7 +263,7 @@ tsl_segment_meta_min_max_get_min(Datum meta_datum, Oid type)
 }
 
 Datum
-tsl_segment_meta_min_max_get_max(Datum meta_datum, Oid type)
+tsl_segment_meta_get_max(Datum meta_datum, Oid type)
 {
 	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	DatumDeserializer *deser = create_datum_deserializer(meta->type);
@@ -276,7 +276,7 @@ tsl_segment_meta_min_max_get_max(Datum meta_datum, Oid type)
 }
 
 bool
-tsl_segment_meta_min_max_has_null(Datum meta_datum)
+tsl_segment_meta_has_null(Datum meta_datum)
 {
 	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(meta_datum);
 	return (meta->flags & HAS_NULLS) != 0;

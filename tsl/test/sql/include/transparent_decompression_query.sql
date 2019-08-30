@@ -41,8 +41,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test qual pushdown
 --
 
--- time is not segment by column so should not be pushed down
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time < '2000-01-08' ORDER BY time, device_id;
+-- v3 is not segment by or order by column so should not be pushed down
+:PREFIX SELECT * FROM :TEST_TABLE WHERE v3 > 10.0 ORDER BY time, device_id;
 
 -- device_id constraint should be pushed down
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time, device_id LIMIT 10;
@@ -57,12 +57,46 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test cast pushdown
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = '1'::text::int ORDER BY time, device_id LIMIT 10;
 
+--test var op var with two segment by
+:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = device_id_peer ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id_peer < device_id ORDER BY time, device_id LIMIT 10;
+
 -- test expressions
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id =  1 + 4/2 ORDER BY time, device_id LIMIT 10;
 
 -- test function calls
 -- not yet pushed down
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(),1,3)) ORDER BY time, device_id LIMIT 10;
+
+--
+-- test segment meta pushdown
+--
+
+-- order by column and const
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time = '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time < '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time <= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time >= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE '2000-01-01 1:00:00+0' < time ORDER BY time, device_id LIMIT 10;
+
+--pushdowns between order by and segment by columns
+:PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < 1 ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id < v0 ORDER BY time, device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE WHERE v1 = device_id ORDER BY time, device_id LIMIT 10;
+
+--pushdown between two order by column (not pushed down)
+:PREFIX SELECT * FROM :TEST_TABLE WHERE v0 = v1 ORDER BY time, device_id LIMIT 10;
+
+--pushdown of quals on order by and segment by cols anded together
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' and device_id = 1 ORDER BY time, device_id LIMIT 10;
+
+--pushdown of quals on order by and segment by cols or together (not pushed down)
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' or device_id = 1 ORDER BY time, device_id LIMIT 10;
+
+--functions not yet optimized
+:PREFIX SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
 
 --
 -- test constraint exclusion

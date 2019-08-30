@@ -4,7 +4,9 @@
 
 SET timescaledb.enable_transparent_decompression to OFF;
 
---TEST1 ---
+\ir include/rand_generator.sql
+
+--test_collation ---
 --basic test with count
 create table foo (a integer, b integer, c integer, d integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
@@ -144,3 +146,49 @@ SELECT compress_chunk(:'CHUNK_NAME');
 EXECUTE prep_plan;
 EXPLAIN (COSTS OFF) EXECUTE prep_plan;
 
+CREATE TABLE test_collation (
+      time      TIMESTAMPTZ       NOT NULL,
+      device_id  TEXT   COLLATE "C"           NULL,
+      device_id_2  TEXT  COLLATE "POSIX"           NULL,
+      val_1 TEXT  COLLATE "C" NULL,
+      val_2 TEXT COLLATE "POSIX"  NULL
+    );
+--we want all the data to go into 1 chunk. so use 1 year chunk interval
+select create_hypertable( 'test_collation', 'time', chunk_time_interval=> '1 day'::interval);
+
+\set ON_ERROR_STOP 0
+--forbid setting collation in compression ORDER BY clause. (parse error is fine)
+alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1 COLLATE "POSIX", val2, time');
+\set ON_ERROR_STOP 1
+alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1, val_2, time');
+
+insert into test_collation
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', 'device_3', gen_rand_minstd(), gen_rand_minstd();
+insert into test_collation
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_2', 'device_4', gen_rand_minstd(), gen_rand_minstd();
+insert into test_collation
+select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), NULL, 'device_5', gen_rand_minstd(), gen_rand_minstd();
+
+--compress 2 chunks
+SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
+and ht.table_name like 'test_collation' LIMIT 2;
+
+--segment bys are pushed down correctly
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
+
+\set ON_ERROR_STOP 0
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
+SELECT device_id < device_id_2  FROM test_collation;
+\set ON_ERROR_STOP 1
+
+--segment meta on order bys pushdown
+--should work
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
+--cannot pushdown when op collation does not match column's collation since min/max used different collation than what op needs
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
+EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";

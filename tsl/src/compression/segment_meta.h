@@ -13,15 +13,18 @@
 typedef struct SegmentMetaMinMax SegmentMetaMinMax;
 typedef struct SegmentMetaMinMaxBuilder SegmentMetaMinMaxBuilder;
 
+#define SEGMENT_META_ACCESSOR_MAX_SQL_FUNCTION "segment_meta_get_max"
+#define SEGMENT_META_ACCESSOR_MIN_SQL_FUNCTION "segment_meta_get_min"
+
 SegmentMetaMinMaxBuilder *segment_meta_min_max_builder_create(Oid type, Oid collation);
 void segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum val);
 void segment_meta_min_max_builder_update_null(SegmentMetaMinMaxBuilder *builder);
 SegmentMetaMinMax *segment_meta_min_max_builder_finish(SegmentMetaMinMaxBuilder *builder);
 SegmentMetaMinMax *segment_meta_min_max_builder_finish_and_reset(SegmentMetaMinMaxBuilder *builder);
 
-Datum tsl_segment_meta_min_max_get_min(Datum meta, Oid type);
-Datum tsl_segment_meta_min_max_get_max(Datum meta, Oid type);
-bool tsl_segment_meta_min_max_has_null(Datum meta);
+Datum tsl_segment_meta_get_min(Datum meta, Oid type);
+Datum tsl_segment_meta_get_max(Datum meta, Oid type);
+bool tsl_segment_meta_has_null(Datum meta);
 
 bytea *segment_meta_min_max_to_binary_string(SegmentMetaMinMax *meta);
 

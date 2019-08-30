@@ -365,21 +365,21 @@ segment_meta_min_max_recv_default(StringInfo buf)
 }
 
 static Datum
-segment_meta_min_max_get_min_default(Datum meta, Oid type)
+segment_meta_get_min_default(Datum meta, Oid type)
 {
 	error_no_default_fn_enterprise();
 	pg_unreachable();
 }
 
 static Datum
-segment_meta_min_max_get_max_default(Datum meta, Oid type)
+segment_meta_get_max_default(Datum meta, Oid type)
 {
 	error_no_default_fn_enterprise();
 	pg_unreachable();
 }
 
 static bool
-segment_meta_min_max_has_null_default(Datum meta)
+segment_meta_has_null_default(Datum meta)
 {
 	error_no_default_fn_enterprise();
 	pg_unreachable();
@@ -438,9 +438,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_chunk = error_no_default_fn_pg_enterprise,
 	.segment_meta_min_max_send = segment_meta_min_max_send_default,
 	.segment_meta_min_max_recv = segment_meta_min_max_recv_default,
-	.segment_meta_min_max_get_min = segment_meta_min_max_get_min_default,
-	.segment_meta_min_max_get_max = segment_meta_min_max_get_max_default,
-	.segment_meta_min_max_has_null = segment_meta_min_max_has_null_default,
+	.segment_meta_get_min = segment_meta_get_min_default,
+	.segment_meta_get_max = segment_meta_get_max_default,
+	.segment_meta_has_null = segment_meta_has_null_default,
 
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,

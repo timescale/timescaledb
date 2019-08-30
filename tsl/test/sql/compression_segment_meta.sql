@@ -52,9 +52,9 @@ CREATE TABLE metric (i int);
 insert into metric select i from generate_series(1, 10) i;
 
 SELECT
-    _timescaledb_internal.segment_meta_min_max_get_min(meta, NULL::int),
-    _timescaledb_internal.segment_meta_min_max_get_max(meta, NULL::int),
-    _timescaledb_internal.segment_meta_min_max_has_null(meta)
+    _timescaledb_internal.segment_meta_get_min(meta, NULL::int),
+    _timescaledb_internal.segment_meta_get_max(meta, NULL::int),
+    _timescaledb_internal.segment_meta_has_null(meta)
 FROM
 (
         SELECT
@@ -93,9 +93,9 @@ FROM metric;
 
 --accessor functions work on NULLs
 SELECT
- _timescaledb_internal.segment_meta_min_max_get_min(NULL, NULL::int) IS NULL,
- _timescaledb_internal.segment_meta_min_max_get_max(NULL, NULL::int) IS NULL,
- _timescaledb_internal.segment_meta_min_max_has_null(NULL);
+ _timescaledb_internal.segment_meta_get_min(NULL, NULL::int) IS NULL,
+ _timescaledb_internal.segment_meta_get_max(NULL, NULL::int) IS NULL,
+ _timescaledb_internal.segment_meta_has_null(NULL);
 
 
 

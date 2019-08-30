@@ -20,9 +20,9 @@ INNER JOIN _timescaledb_catalog.hypertable comp_hypertable ON (comp_hypertable.i
 WHERE uc_hypertable.table_name like :'HYPERTABLE_NAME' \gset
 
 SELECT
-     bool_and(_timescaledb_internal.segment_meta_min_max_get_min(:SEGMENT_META_COL, :NULLTYPE) = true_min) as min_correct,
-     bool_and(_timescaledb_internal.segment_meta_min_max_get_max(:SEGMENT_META_COL, :NULLTYPE) = true_max) as max_correct,
-     bool_and(_timescaledb_internal.segment_meta_min_max_has_null(:SEGMENT_META_COL) = true_has_null) as has_null_correct
+     bool_and(_timescaledb_internal.segment_meta_get_min(:SEGMENT_META_COL, :NULLTYPE) = true_min) as min_correct,
+     bool_and(_timescaledb_internal.segment_meta_get_max(:SEGMENT_META_COL, :NULLTYPE) = true_max) as max_correct,
+     bool_and(_timescaledb_internal.segment_meta_has_null(:SEGMENT_META_COL) = true_has_null) as has_null_correct
 FROM
 :"COMP_SCHEMA_NAME".:"COMP_TABLE_NAME", LATERAL (
     SELECT min(decomp) true_min, max(decomp) true_max, ((count(*)-count(decomp)) > 0) true_has_null
