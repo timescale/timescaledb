@@ -288,3 +288,17 @@ RESET constraint_exclusion;
 -- test JOINs with normal table
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m2.time < '2000-01-10' ORDER BY m1.time;
 
+\qecho test quals are not pushed into OUTER JOIN
+CREATE TABLE outer_join_1 (id int, name text,time timestamptz NOT NULL DEFAULT '2000-01-01');
+CREATE TABLE outer_join_2 (id int, name text,time timestamptz NOT NULL DEFAULT '2000-01-01');
+
+SELECT (SELECT table_name FROM create_hypertable(tbl, 'time')) FROM (VALUES ('outer_join_1'),('outer_join_2')) v(tbl);
+
+INSERT INTO outer_join_1 VALUES(1,'a'), (2,'b');
+INSERT INTO outer_join_2 VALUES(1,'a');
+
+:PREFIX SELECT one.id, two.name FROM outer_join_1 one LEFT OUTER JOIN outer_join_2 two ON one.id=two.id WHERE one.id=2;
+:PREFIX SELECT one.id, two.name FROM outer_join_2 two RIGHT OUTER JOIN outer_join_1 one ON one.id=two.id WHERE one.id=2;
+
+DROP TABLE outer_join_1;
+DROP TABLE outer_join_2;
