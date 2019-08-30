@@ -333,6 +333,30 @@ get_libpq_options()
 	return libpq_options;
 }
 
+static void
+unset_libpq_envvar(void)
+{
+	PQconninfoOption *lopt;
+	PQconninfoOption *options = PQconndefaults();
+
+	Assert(options != NULL);
+
+	/* Explicitly unset all libpq environment variables.
+	 *
+	 * By default libpq uses environment variables as a fallback
+	 * to specify connection options, potentially they could be in
+	 * a conflict with PostgreSQL variables and introduce
+	 * security risks.
+	 */
+	for (lopt = options; lopt->keyword; lopt++)
+	{
+		if (lopt->envvar)
+			unsetenv(lopt->envvar);
+	}
+
+	PQconninfoFree(options);
+}
+
 static bool
 is_libpq_option(const char *keyword, char **display_option)
 {
@@ -819,8 +843,32 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 /* fallback_application_name, client_encoding, end marker */
 #define REMOTE_CONNECTION_SESSION_OPTIONS_N 3
 
+/* passfile */
+#define REMOTE_CONNECTION_PASSWORD_OPTIONS_N 1
+
 /* sslmode, sslrootcert, sslcert, sslkey */
 #define REMOTE_CONNECTION_SSL_OPTIONS_N 4
+
+/* default password file basename */
+#define DEFAULT_PASSFILE_NAME "passfile"
+
+static void
+set_password_options(const char **keywords, const char **values, int *option_start)
+{
+	int option_pos = *option_start;
+
+	/* Set user specified password file path using timescaledb.passfile or
+	 * use default path assuming that the file is stored in the
+	 * data directory */
+	keywords[option_pos] = "passfile";
+	if (ts_guc_passfile)
+		values[option_pos] = ts_guc_passfile;
+	else
+		values[option_pos] = psprintf("%s/" DEFAULT_PASSFILE_NAME, DataDir);
+	option_pos++;
+
+	*option_start = option_pos;
+}
 
 static void
 set_ssl_options(const char *user_name, const char **keywords, const char **values,
@@ -884,10 +932,10 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 	 * and user. (Some of them might not be libpq options, in
 	 * which case we'll just waste a few array slots.)  Add 3 extra slots
 	 * for fallback_application_name, client_encoding, end marker.
-	 * Add additional 4 slots for ssl options.
+	 * One additional slot to set passfile and 4 slots for ssl options.
 	 */
 	option_count = list_length(connection_options) + REMOTE_CONNECTION_SESSION_OPTIONS_N +
-				   REMOTE_CONNECTION_SSL_OPTIONS_N;
+				   REMOTE_CONNECTION_PASSWORD_OPTIONS_N + REMOTE_CONNECTION_SSL_OPTIONS_N;
 	keywords = (const char **) palloc(option_count * sizeof(char *));
 	values = (const char **) palloc(option_count * sizeof(char *));
 
@@ -902,6 +950,9 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 	keywords[option_pos] = "client_encoding";
 	values[option_pos] = GetDatabaseEncodingName();
 	option_pos++;
+
+	/* Set passfile options */
+	set_password_options(keywords, values, &option_pos);
 
 	/* Set client specific SSL connection options */
 	set_ssl_options(user_name, keywords, values, &option_pos);
@@ -926,9 +977,6 @@ remote_connection_open_internal(const char *node_name, List *connection_options)
 
 	return ts_conn;
 }
-
-#undef REMOTE_CONNECTION_SSL_OPTIONS
-#undef REMOTE_CONNECTION_ADDITIONAL_OPTIONS
 
 /*
  * Opens a connection.
@@ -1389,6 +1437,8 @@ _remote_connection_init(void)
 {
 	RegisterXactCallback(remote_connection_xact_end, NULL);
 	RegisterSubXactCallback(remote_connection_subxact_end, NULL);
+
+	unset_libpq_envvar();
 }
 
 void
