@@ -16,10 +16,10 @@ LANGUAGE C STRICT;
 
 DO $d$
     BEGIN
-        EXECUTE $$SELECT add_data_node('loopback_1',
+        EXECUTE $$SELECT add_data_node('loopback_1', host => 'localhost',
                 database => 'loopback_1',
                 port => current_setting('port')::int)$$;
-        EXECUTE $$SELECT add_data_node('loopback_2',
+        EXECUTE $$SELECT add_data_node('loopback_2', host => 'localhost',
                 database => 'loopback_2',
                 port => current_setting('port')::int)$$;
     END;

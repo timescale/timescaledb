@@ -18,7 +18,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 ERROR:  [bootstrap_test]: permission denied to create database
 \set ON_ERROR_STOP 1
 SELECT * FROM show_data_nodes();
@@ -31,7 +31,7 @@ SELECT * FROM show_data_nodes();
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 RESET ROLE;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -83,7 +83,8 @@ WHERE e.extnamespace = n.oid;
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                        database => 'bootstrap_test', if_not_exists => false);
 NOTICE:  database "bootstrap_test" already exists on data node, not creating it
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
@@ -97,14 +98,16 @@ SELECT * FROM show_data_nodes();
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => false);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', if_not_exists => false);
 ERROR:  server "bootstrap_test" already exists
 \set ON_ERROR_STOP 1
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, not creating it
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
@@ -142,7 +145,8 @@ WHERE e.extnamespace = n.oid;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, not creating it
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
@@ -185,7 +189,7 @@ WHERE e.extnamespace = n.oid;
  timescaledb | bootstrap_schema
 (2 rows)
 
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test');
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -202,7 +206,8 @@ WHERE e.extnamespace = n.oid;
 (2 rows)
 
 \c bootstrap_schema_test :ROLE_SUPERUSER;
-SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', database => 'bootstrap_test', if_not_exists => true);
+SELECT * FROM bootstrap_schema.add_data_node('bootstrap_test', host => 'localhost',
+                                             database => 'bootstrap_test', if_not_exists => true);
 NOTICE:  data node "bootstrap_test" already exists, skipping
 NOTICE:  database "bootstrap_test" already exists on data node, not creating it
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
@@ -218,7 +223,10 @@ SET ROLE :ROLE_1;
 --
 -- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
 -- bootstrap_database = 'template1'
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test', bootstrap_user => :'ROLE_CLUSTER_SUPERUSER', bootstrap_database => 'template1');
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test',
+                bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
+                bootstrap_database => 'template1');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
  bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
@@ -244,7 +252,7 @@ SELECT * FROM delete_data_node('bootstrap_test');
 -- Test for ongoing transaction
 BEGIN;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', database => 'bootstrap_test');
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 ERROR:  add_data_node cannot run inside a transaction block
 \set ON_ERROR_STOP 1
 COMMIT;
@@ -258,13 +266,14 @@ DROP DATABASE bootstrap_test;
 --
 -- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name');
+SELECT true FROM add_data_node('bootstrap_test1', host => 'localhost', database => 'Unusual Name');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test1', database => 'Unusual Name', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test1', host => 'localhost',
+                               database => 'Unusual Name', if_not_exists => true);
 NOTICE:  data node "bootstrap_test1" already exists, skipping
 NOTICE:  database "Unusual Name" already exists on data node, not creating it
  bool 
@@ -272,13 +281,15 @@ NOTICE:  database "Unusual Name" already exists on data node, not creating it
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D');
+SELECT true FROM add_data_node('bootstrap_test2', host => 'localhost',
+                               database => U&'\0441\043B\043E\043D');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test2', database => U&'\0441\043B\043E\043D', if_not_exists => true);
+SELECT true FROM add_data_node('bootstrap_test2', host => 'localhost',
+                               database => U&'\0441\043B\043E\043D', if_not_exists => true);
 NOTICE:  data node "bootstrap_test2" already exists, skipping
 NOTICE:  database "слон" already exists on data node, not creating it
  bool 
@@ -289,13 +300,13 @@ NOTICE:  database "слон" already exists on data node, not creating it
 -- Testing that the check for database privileges does not croak on a
 -- strange database name. The check is executed when a database
 -- already exists.
-SELECT true FROM add_data_node('bootstrap_test3', database => 'dat''abase');
+SELECT true FROM add_data_node('bootstrap_test3', host => 'localhost', database => 'dat''abase');
  bool 
 ------
  t
 (1 row)
 
-SELECT true FROM add_data_node('bootstrap_test4', database => 'dat''abase');
+SELECT true FROM add_data_node('bootstrap_test4', host => 'localhost', database => 'dat''abase');
 NOTICE:  database "dat'abase" already exists on data node, not creating it
  bool 
 ------

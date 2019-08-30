@@ -529,16 +529,21 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	Oid userid = GetUserId();
 	const char *username = GetUserNameFromId(userid, false);
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	const char *host =
-		PG_ARGISNULL(1) ? TS_DEFAULT_POSTGRES_HOST : TextDatumGetCString(PG_GETARG_DATUM(1));
+	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
+	long port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	const char *bootstrap_database = PG_ARGISNULL(5) ? dbname : PG_GETARG_CSTRING(5);
 	const char *bootstrap_user = PG_ARGISNULL(6) ? username : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
-	long port;
+
+	if (host == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 (errmsg("a host needs to be specified"),
+				  errhint("Provide a host name or IP address of a data node to add."))));
 
 	if (set_distid && dist_util_membership() == DIST_MEMBER_DATA_NODE)
 		ereport(ERROR,
@@ -553,21 +558,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	if (NULL == node_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("invalid data node name"))));
-
-	/*
-	 * - If a port was provided, use that.
-	 *
-	 * - If a port was not provided, but a host was provided, use default Postgres port.
-	 *
-	 * - If neither port nor host were provided, use the port of the server
-	 *   (which is not the same as the default Postgres port).
-	 */
-	if (!PG_ARGISNULL(3))
-		port = PG_GETARG_INT32(3);
-	else if (!PG_ARGISNULL(1))
-		port = TS_DEFAULT_POSTGRES_PORT;
-	else
-		port = get_server_port();
 
 	if (port < 1 || port > PG_UINT16_MAX)
 		ereport(ERROR,
