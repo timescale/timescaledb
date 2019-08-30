@@ -59,6 +59,7 @@ TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
+TSDLLEXPORT char *ts_guc_passfile = NULL;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -265,6 +266,18 @@ _guc_init(void)
 							   "Determines a path which is used to search user certificates and "
 							   "private keys",
 							   &ts_guc_ssl_dir,
+							   NULL,
+							   PGC_SIGHUP,
+							   GUC_SUPERUSER_ONLY,
+							   NULL,
+							   NULL,
+							   NULL);
+
+	DefineCustomStringVariable("timescaledb.passfile",
+							   "TimescaleDB password file path",
+							   "Specifies the name of the file used to store passwords used for "
+							   "data node connections",
+							   &ts_guc_passfile,
 							   NULL,
 							   PGC_SIGHUP,
 							   GUC_SUPERUSER_ONLY,

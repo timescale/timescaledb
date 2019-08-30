@@ -15,4 +15,5 @@ log_line_prefix='%u [%p] %d '
 # numbers. Setting extra_float_digits=0 retains the old behavior which
 # is needed to make our tests work for multiple PostgreSQL versions.
 extra_float_digits=0
+timescaledb.passfile='@TEST_PASSFILE@'
 hba_file='@TEST_PG_HBA_FILE@'

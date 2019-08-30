@@ -10,16 +10,16 @@ DO $d$
     BEGIN
         EXECUTE $$CREATE SERVER loopback_1 FOREIGN DATA WRAPPER timescaledb_fdw
             OPTIONS (dbname '$$||current_database()||$$',
+                     host 'localhost',
                      port '$$||current_setting('port')||$$'
             )$$;
         EXECUTE $$CREATE SERVER loopback_2 FOREIGN DATA WRAPPER timescaledb_fdw
             OPTIONS (dbname '$$||current_database()||$$',
+                     host 'localhost',
                      port '$$||current_setting('port')||$$'
             )$$;
     END;
 $d$;
-CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_1;
-CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_2;
 SELECT _timescaledb_internal.test_remote_connection_cache();
  test_remote_connection_cache 
 ------------------------------

@@ -28,8 +28,6 @@
 #include "test_utils.h"
 #include "connection.h"
 
-#define NEW_APPLICATION_NAME "app2"
-
 TS_FUNCTION_INFO_V1(tsl_test_remote_connection_cache);
 
 static void
