@@ -16,9 +16,9 @@ TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_recv);
 TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_out);
 TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_in);
 
-TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_get_min);
-TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_get_max);
-TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_has_null);
+TS_FUNCTION_INFO_V1(ts_segment_meta_get_min);
+TS_FUNCTION_INFO_V1(ts_segment_meta_get_max);
+TS_FUNCTION_INFO_V1(ts_segment_meta_has_null);
 
 Datum
 ts_segment_meta_min_max_send(PG_FUNCTION_ARGS)
@@ -79,29 +79,29 @@ ts_segment_meta_min_max_in(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_segment_meta_min_max_get_min(PG_FUNCTION_ARGS)
+ts_segment_meta_get_min(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 	PG_RETURN_DATUM(PointerGetDatum(
-		ts_cm_functions->segment_meta_min_max_get_min(PG_GETARG_DATUM(0),
-													  get_fn_expr_argtype(fcinfo->flinfo, 1))));
+		ts_cm_functions->segment_meta_get_min(PG_GETARG_DATUM(0),
+											  get_fn_expr_argtype(fcinfo->flinfo, 1))));
 }
 
 Datum
-ts_segment_meta_min_max_get_max(PG_FUNCTION_ARGS)
+ts_segment_meta_get_max(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 	PG_RETURN_DATUM(PointerGetDatum(
-		ts_cm_functions->segment_meta_min_max_get_max(PG_GETARG_DATUM(0),
-													  get_fn_expr_argtype(fcinfo->flinfo, 1))));
+		ts_cm_functions->segment_meta_get_max(PG_GETARG_DATUM(0),
+											  get_fn_expr_argtype(fcinfo->flinfo, 1))));
 }
 
 Datum
-ts_segment_meta_min_max_has_null(PG_FUNCTION_ARGS)
+ts_segment_meta_has_null(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
 		PG_RETURN_BOOL(true);
-	PG_RETURN_BOOL(ts_cm_functions->segment_meta_min_max_has_null(PG_GETARG_DATUM(0)));
+	PG_RETURN_BOOL(ts_cm_functions->segment_meta_has_null(PG_GETARG_DATUM(0)));
 }
