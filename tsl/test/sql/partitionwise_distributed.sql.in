@@ -30,10 +30,10 @@ CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1',
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_2',
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 

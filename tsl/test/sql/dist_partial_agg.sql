@@ -18,13 +18,13 @@ SET client_min_messages TO NOTICE;
 \ir 'include/aggregate_table_create.sql'
 
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1',
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_2',
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_3',
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3',
                             bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 

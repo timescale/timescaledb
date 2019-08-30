@@ -45,7 +45,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_3', if_not_exists => true);
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | backend_3 | t            | f                | f
@@ -68,7 +68,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  uuid | 77348176-09da-4a80-bc78-e31bdf5e63ec | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, not creating it
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -86,17 +86,17 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 -- Let's try some invalid configurations
 \set ON_ERROR_STOP 0
 -- Adding frontend as backend to a different frontend
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', host => 'localhost', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, not creating it
 ERROR:  [frontend_b]: database is already a member of a distributed database
 -- Adding backend from a different group as a backend
-SELECT * FROM add_data_node('data_node_b', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_b', host => 'localhost', database => 'backend_3', if_not_exists => true);
 NOTICE:  database "backend_3" already exists on data node, not creating it
 ERROR:  [data_node_b]: database is already a member of a distributed database
 -- Adding a valid backend target but to an existing backend
 \c backend_1
 SET ROLE :ROLE_1;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_2', if_not_exists => true);
 ERROR:  unable to assign data nodes from an existing distributed database
 \c backend_2
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_1;
@@ -107,7 +107,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 (0 rows)
 
 -- Adding a frontend as a backend to a nondistributed node
-SELECT * FROM add_data_node('frontend_b', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_data_node('frontend_b', host => 'localhost', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, not creating it
 ERROR:  [frontend_b]: database is already a member of a distributed database
 SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
@@ -126,7 +126,7 @@ END
 $BODY$;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
-SELECT * FROM add_data_node('invalid_data_node', database => 'backend_2', if_not_exists => true);
+SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'backend_2', if_not_exists => true);
 NOTICE:  database "backend_2" already exists on data node, not creating it
 ERROR:  could not add data node invalid_data_node
 -- Restore original validation function
@@ -137,7 +137,7 @@ AS :MODULE_PATHNAME, 'ts_dist_validate_as_data_node' LANGUAGE C VOLATILE STRICT;
 -- Add a second backend to TEST_DB
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
-SELECT * FROM add_data_node('data_node_2', database => 'backend_2', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_2', if_not_exists => true);
 NOTICE:  database "backend_2" already exists on data node, not creating it
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -187,7 +187,7 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
  dist_uuid | 87c235e9-d857-4f16-b59f-7fbac9b87664 | t
 (2 rows)
 
-SELECT * FROM add_data_node('data_node_2', database => 'backend_1', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, not creating it
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
@@ -225,21 +225,21 @@ SELECT * FROM _timescaledb_catalog.metadata WHERE key LIKE 'uuid' OR key LIKE 'd
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
-SELECT * FROM add_data_node('data_node_1', database => 'backend_1', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1', if_not_exists => true);
 NOTICE:  database "backend_1" already exists on data node, not creating it
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | backend_1 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', database => 'backend_3', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'backend_3', if_not_exists => true);
 NOTICE:  database "backend_3" already exists on data node, not creating it
   node_name  |   host    | port  | database  | node_created | database_created | extension_created 
 -------------+-----------+-------+-----------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | backend_3 | t            | f                | f
 (1 row)
 
-SELECT * FROM add_data_node('data_node_4', database => 'frontend_b', if_not_exists => true);
+SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'frontend_b', if_not_exists => true);
 NOTICE:  database "frontend_b" already exists on data node, not creating it
   node_name  |   host    | port  |  database  | node_created | database_created | extension_created 
 -------------+-----------+-------+------------+--------------+------------------+-------------------
