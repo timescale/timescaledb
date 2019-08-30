@@ -51,6 +51,7 @@ typedef struct CollectQualCtx
 	List *restrictions;
 	FuncExpr *chunk_exclusion_func;
 	List *join_conditions;
+	List *propagate_conditions;
 	List *all_quals;
 } CollectQualCtx;
 
@@ -432,7 +433,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
  * will throw an error when executed.
  */
 static Node *
-process_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
+process_quals(Node *quals, CollectQualCtx *ctx)
 {
 	ListCell *lc;
 	ListCell *prev = NULL;
@@ -441,35 +442,8 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
 	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
 	{
 		Expr *qual = lfirst(lc);
-		RestrictInfo *restrictinfo;
 		Relids relids = pull_varnos((Node *) qual);
 		int num_rels = bms_num_members(relids);
-
-		/* collect equality JOIN conditions for current rel */
-		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
-		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Expr *left = linitial(op->args);
-			Expr *right = lsecond(op->args);
-
-			if (IsA(left, Var) && IsA(right, Var))
-			{
-				Var *ht_var =
-					castNode(Var, castNode(Var, left)->varno == ctx->rel->relid ? left : right);
-				TypeCacheEntry *tce = lookup_type_cache(ht_var->vartype, TYPECACHE_EQ_OPR);
-
-				if (op->opno == tce->eq_opr)
-					ctx->join_conditions = lappend(ctx->join_conditions, op);
-			}
-			continue;
-		}
-
-		/*
-		 * collect quals to propagate to join relations
-		 */
-		if (num_rels == 1 && propagate && IsA(qual, OpExpr) &&
-			list_length(castNode(OpExpr, qual)->args) == 2)
-			ctx->all_quals = lappend(ctx->all_quals, qual);
 
 		/* stop processing if not for current rel */
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
@@ -519,21 +493,73 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
 			}
 		}
 
-#if PG96
-		restrictinfo = make_restrictinfo(qual, true, false, false, relids, NULL, NULL);
-#else
-		restrictinfo = make_restrictinfo(qual,
-										 true,
-										 false,
-										 false,
-										 ctx->root->qual_security_level,
-										 relids,
-										 NULL,
-										 NULL);
-#endif
-		ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
+}
+
+/*
+ * collect JOIN information
+ *
+ * This function adds information to two lists in the CollectQualCtx
+ *
+ * join_conditions
+ *
+ * This list contains all equality join conditions and is used by
+ * ChunkAppend to decide whether the ordered append optimization
+ * can be applied.
+ *
+ * propagate_conditions
+ *
+ * This list contains toplevel or INNER JOIN equality conditions.
+ * This list is used for propagating quals to the other side of
+ * a JOIN.
+ */
+static void
+collect_join_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
+{
+	ListCell *lc;
+
+	foreach (lc, (List *) quals)
+	{
+		Expr *qual = lfirst(lc);
+		Relids relids = pull_varnos((Node *) qual);
+		int num_rels = bms_num_members(relids);
+
+		/*
+		 * collect quals to propagate to join relations
+		 */
+		if (num_rels == 1 && propagate && IsA(qual, OpExpr) &&
+			list_length(castNode(OpExpr, qual)->args) == 2)
+			ctx->all_quals = lappend(ctx->all_quals, qual);
+
+		if (!bms_is_member(ctx->rel->relid, relids))
+			continue;
+
+		/* collect equality JOIN conditions for current rel */
+		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if (IsA(left, Var) && IsA(right, Var))
+			{
+				Var *ht_var =
+					castNode(Var, castNode(Var, left)->varno == ctx->rel->relid ? left : right);
+				TypeCacheEntry *tce = lookup_type_cache(ht_var->vartype, TYPECACHE_EQ_OPR);
+
+				if (op->opno == tce->eq_opr)
+				{
+					ctx->join_conditions = lappend(ctx->join_conditions, op);
+
+					if (propagate)
+						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
+				}
+			}
+			continue;
+		}
+	}
 }
 
 static bool
@@ -545,25 +571,14 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	if (IsA(node, FromExpr))
 	{
 		FromExpr *f = castNode(FromExpr, node);
-		f->quals = process_quals(f->quals, ctx, true);
+		f->quals = process_quals(f->quals, ctx);
+		collect_join_quals(f->quals, ctx, true);
 	}
 	else if (IsA(node, JoinExpr))
 	{
-		/*
-		 * expressions from JOIN ON clause are only safe to use for
-		 * constraint exclusion for INNER JOINs
-		 * for OUTER JOIN we only process quals if they are appropriate
-		 * for our current relation
-		 */
 		JoinExpr *j = castNode(JoinExpr, node);
-		if (!IS_OUTER_JOIN(j->jointype))
-			j->quals = process_quals(j->quals, ctx, true);
-		else if (j->jointype == JOIN_LEFT && IsA(j->rarg, RangeTblRef) &&
-				 ctx->rel->relid == castNode(RangeTblRef, j->rarg)->rtindex)
-			j->quals = process_quals(j->quals, ctx, false);
-		else if (j->jointype == JOIN_RIGHT && IsA(j->larg, RangeTblRef) &&
-				 ctx->rel->relid == castNode(RangeTblRef, j->larg)->rtindex)
-			j->quals = process_quals(j->quals, ctx, false);
+		j->quals = process_quals(j->quals, ctx);
+		collect_join_quals(j->quals, ctx, !IS_OUTER_JOIN(j->jointype));
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
@@ -872,6 +887,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		.chunk_exclusion_func = NULL,
 		.all_quals = NIL,
 		.join_conditions = NIL,
+		.propagate_conditions = NIL,
 	};
 
 	/* double check our permissions are valid */
@@ -888,7 +904,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 
-	if (ctx.join_conditions != NIL)
+	if (ctx.propagate_conditions != NIL)
 		propagate_join_quals(root, rel, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
@@ -992,7 +1008,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 	ListCell *lc;
 
 	/* propagate join constraints */
-	foreach (lc, ctx->join_conditions)
+	foreach (lc, ctx->propagate_conditions)
 	{
 		ListCell *lc_qual;
 		OpExpr *op = lfirst(lc);
