@@ -117,7 +117,9 @@ endif()
 
 if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
   list(APPEND TEST_FILES
-    partitionwise.sql)
+    join.sql
+    partitionwise.sql
+  )
 endif()
 
 set(TEST_TEMPLATES
