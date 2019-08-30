@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.4.2 (unreleased)
+
+**Bugfixes**
+* #1420 Fix OUTER JOIN qual propagation
+
+**Thanks**
+* @shahidhk for reporting an issue with OUTER JOINs
+
 ## 1.4.1 (2019-08-01)
 
 This maintenance release contains bugfixes since the 1.4.0 release. We deem it medium
