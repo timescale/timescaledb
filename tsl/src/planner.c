@@ -5,7 +5,7 @@
  */
 #include <postgres.h>
 #include "planner.h"
-#include "gapfill/planner.h"
+#include "nodes/gapfill/planner.h"
 
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,

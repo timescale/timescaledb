@@ -18,9 +18,9 @@
 #include <parser/parse_func.h>
 
 #include "license.h"
-#include "gapfill/gapfill.h"
-#include "gapfill/planner.h"
-#include "gapfill/exec.h"
+#include "nodes/gapfill/gapfill.h"
+#include "nodes/gapfill/planner.h"
+#include "nodes/gapfill/exec.h"
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",

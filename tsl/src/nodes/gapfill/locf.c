@@ -8,8 +8,8 @@
 #include <catalog/pg_type.h>
 #include <utils/datum.h>
 
-#include "gapfill/exec.h"
-#include "gapfill/locf.h"
+#include "nodes/gapfill/exec.h"
+#include "nodes/gapfill/locf.h"
 
 /*
  * gapfill_locf_initialize gets called when plan is initialized for every locf column

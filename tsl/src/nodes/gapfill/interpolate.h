@@ -3,10 +3,10 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_GAPFILL_INTERPOLATE_H
-#define TIMESCALEDB_GAPFILL_INTERPOLATE_H
+#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_INTERPOLATE_H
+#define TIMESCALEDB_TSL_NODES_GAPFILL_INTERPOLATE_H
 
-#include "gapfill/exec.h"
+#include "nodes/gapfill/exec.h"
 
 typedef struct GapFillInterpolateSample
 {
@@ -31,4 +31,4 @@ void gapfill_interpolate_tuple_returned(GapFillInterpolateColumnState *, int64, 
 void gapfill_interpolate_calculate(GapFillInterpolateColumnState *, GapFillState *, int64, Datum *,
 								   bool *);
 
-#endif /* TIMESCALEDB_GAPFILL_INTERPOLATE_H */
+#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_INTERPOLATE_H */
