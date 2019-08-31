@@ -12,8 +12,8 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
-#include "gapfill/interpolate.h"
-#include "gapfill/exec.h"
+#include "nodes/gapfill/interpolate.h"
+#include "nodes/gapfill/exec.h"
 
 #define INTERPOLATE(x, x0, x1, y0, y1) (((y0) * ((x1) - (x)) + (y1) * ((x) - (x0))) / ((x1) - (x0)))
 

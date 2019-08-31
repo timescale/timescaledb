@@ -25,10 +25,10 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
-#include "gapfill/gapfill.h"
-#include "gapfill/locf.h"
-#include "gapfill/interpolate.h"
-#include "gapfill/exec.h"
+#include "nodes/gapfill/gapfill.h"
+#include "nodes/gapfill/locf.h"
+#include "nodes/gapfill/interpolate.h"
+#include "nodes/gapfill/exec.h"
 #include "time_bucket.h"
 
 typedef enum GapFillBoundary

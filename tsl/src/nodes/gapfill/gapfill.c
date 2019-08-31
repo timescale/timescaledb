@@ -9,7 +9,7 @@
 
 #include "license.h"
 #include "time_bucket.h"
-#include "gapfill/gapfill.h"
+#include "nodes/gapfill/gapfill.h"
 
 Datum
 gapfill_marker(PG_FUNCTION_ARGS)

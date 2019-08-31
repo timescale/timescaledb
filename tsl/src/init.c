@@ -11,7 +11,7 @@
 #include <license_guc.h>
 
 #include "planner.h"
-#include "gapfill/gapfill.h"
+#include "nodes/gapfill/gapfill.h"
 #include "partialize_finalize.h"
 
 #include "license.h"

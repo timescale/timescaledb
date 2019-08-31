@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_GAPFILL_PLANNER_H
-#define TIMESCALEDB_GAPFILL_PLANNER_H
+#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_PLANNER_H
+#define TIMESCALEDB_TSL_NODES_GAPFILL_PLANNER_H
 
 #include <postgres.h>
 #include <optimizer/planner.h>
@@ -19,4 +19,4 @@ typedef struct GapFillPath
 	FuncExpr *func; /* time_bucket_gapfill function call */
 } GapFillPath;
 
-#endif /* TIMESCALEDB_GAPFILL_PLANNER_H */
+#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_PLANNER_H */

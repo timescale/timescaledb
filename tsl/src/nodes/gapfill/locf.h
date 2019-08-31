@@ -4,13 +4,13 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#ifndef TIMESCALEDB_GAPFILL_LOCF_H
-#define TIMESCALEDB_GAPFILL_LOCF_H
+#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H
+#define TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H
 
 #include <postgres.h>
 
-#include "gapfill/gapfill.h"
-#include "gapfill/exec.h"
+#include "nodes/gapfill/gapfill.h"
+#include "nodes/gapfill/exec.h"
 
 typedef struct GapFillLocfColumnState
 {
@@ -26,4 +26,4 @@ void gapfill_locf_group_change(GapFillLocfColumnState *);
 void gapfill_locf_tuple_returned(GapFillLocfColumnState *, Datum, bool);
 void gapfill_locf_calculate(GapFillLocfColumnState *, GapFillState *, int64, Datum *, bool *);
 
-#endif /* TIMESCALEDB_GAPFILL_LOCF_H */
+#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H */
