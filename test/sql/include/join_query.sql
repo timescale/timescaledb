@@ -983,14 +983,14 @@ where t1.unique1 < i4.f1;
 
 :PREFIX
 select * from tenk1 a join tenk1 b on
-  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.hundred = 4);
+  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.hundred = 4) ORDER BY a.unique2,b.unique2;
 :PREFIX
 select * from tenk1 a join tenk1 b on
-  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.ten = 4);
+  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.ten = 4) ORDER BY a.unique2,b.unique2;
 :PREFIX
 select * from tenk1 a join tenk1 b on
   (a.unique1 = 1 and b.unique1 = 2) or
-  ((a.unique2 = 3 or a.unique2 = 7) and b.hundred = 4);
+  ((a.unique2 = 3 or a.unique2 = 7) and b.hundred = 4) ORDER BY a.unique2,b.unique2;
 
 --
 -- test placement of movable quals in a parameterized join tree
