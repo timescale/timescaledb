@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+\set PREFIX 'EXPLAIN (VERBOSE, COSTS OFF)'
+
 -- Create a two dimensional hypertable
 CREATE TABLE hyper (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('hyper', 'time', 'device', 2);
@@ -51,14 +53,14 @@ SELECT * FROM pg2dim_h2_t2;
 
 -- All partition keys covered by GROUP BY
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
 ORDER BY 1;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
@@ -66,14 +68,14 @@ ORDER BY 1;
 
 -- All partition keys not covered by GROUP BY (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
 ORDER BY 1;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
@@ -81,14 +83,14 @@ ORDER BY 1;
 
 -- All partition keys covered by GROUP BY (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -97,14 +99,14 @@ ORDER BY 1, 2;
 -- All partition keys not covered by GROUP BY because of date_trunc
 -- expression on time (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -114,14 +116,14 @@ ORDER BY 1, 2;
 
 -- All partition keys not covered by GROUP BY (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
@@ -129,14 +131,14 @@ ORDER BY 1;
 
 -- All partition keys covered (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -144,14 +146,14 @@ ORDER BY 1, 2;
 
 -- Partial aggregation since date_trunc(time) is not a partition key
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -159,14 +161,14 @@ ORDER BY 1, 2;
 
 -- Also test time_bucket
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -183,24 +185,24 @@ INSERT INTO hyper_meta VALUES
 
 SET enable_partitionwise_join = 'off';
 
-EXPLAIN
+:PREFIX
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
 
-EXPLAIN
+:PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
 
 SET enable_partitionwise_join = 'on';
 
-EXPLAIN
+:PREFIX
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
 
-EXPLAIN
+:PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
@@ -229,14 +231,14 @@ FROM generate_series(0,5000-1) AS x;
 
 -- All partition keys covered (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
 
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -245,7 +247,7 @@ LIMIT 10;
 
 -- Grouping on original time column should be pushed-down
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -254,7 +256,7 @@ LIMIT 10;
 
 -- Applying the time partitioning function should also allow push-down
 -- on open dimensions
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -262,7 +264,7 @@ ORDER BY 1, 2
 LIMIT 10;
 
 -- Should also work to use partitioning function on closed dimensions
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), _timescaledb_internal.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
