@@ -174,7 +174,7 @@ ts_interval_form_heaptuple(FormData_ts_interval *invl)
 	{
 		nulls[AttrNumberGetAttrOffset(Anum_time_interval)] = true;
 		values[AttrNumberGetAttrOffset(Anum_integer_interval)] =
-			DatumGetInt64(invl->integer_interval);
+			Int64GetDatum(invl->integer_interval);
 	}
 
 	typeid =
