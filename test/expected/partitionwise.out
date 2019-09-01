@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+\set PREFIX 'EXPLAIN (VERBOSE, COSTS OFF)'
 -- Create a two dimensional hypertable
 CREATE TABLE hyper (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('hyper', 'time', 'device', 2);
@@ -74,7 +75,7 @@ SELECT * FROM pg2dim_h2_t2;
 -- on PG partitioned tables for reference.
 -- All partition keys covered by GROUP BY
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
@@ -95,7 +96,7 @@ ORDER BY 1;
 (11 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
@@ -120,7 +121,7 @@ ORDER BY 1;
 
 -- All partition keys not covered by GROUP BY (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
@@ -145,7 +146,7 @@ ORDER BY 1;
 (15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
@@ -183,7 +184,7 @@ ORDER BY 1;
 
 -- All partition keys covered by GROUP BY (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -208,7 +209,7 @@ ORDER BY 1, 2;
 (15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -244,7 +245,7 @@ ORDER BY 1, 2;
 -- All partition keys not covered by GROUP BY because of date_trunc
 -- expression on time (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -269,7 +270,7 @@ ORDER BY 1, 2;
 (15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
@@ -308,7 +309,7 @@ ORDER BY 1, 2;
 -- Now run on hypertable
 -- All partition keys not covered by GROUP BY (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
@@ -333,7 +334,7 @@ ORDER BY 1;
 (15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
@@ -371,7 +372,7 @@ ORDER BY 1;
 
 -- All partition keys covered (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -396,7 +397,7 @@ ORDER BY 1, 2;
 (15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -431,7 +432,7 @@ ORDER BY 1, 2;
 
 -- Partial aggregation since date_trunc(time) is not a partition key
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -458,7 +459,7 @@ ORDER BY 1, 2;
 (17 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -496,7 +497,7 @@ ORDER BY 1, 2;
 
 -- Also test time_bucket
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -523,7 +524,7 @@ ORDER BY 1, 2;
 (17 rows)
 
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
@@ -573,99 +574,136 @@ INSERT INTO hyper_meta VALUES
        ('2018-02-19 13:01', 1, 'device_1'),
        ('2018-02-19 13:02', 3, 'device_3');
 SET enable_partitionwise_join = 'off';
-EXPLAIN
+:PREFIX
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
- Merge Join  (cost=0.97..1491.71 rows=76840 width=52)
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: h."time", h.device, h.temp, hm.info
    Merge Cond: (hm.device = h.device)
-   ->  Merge Append  (cost=0.32..80.82 rows=2260 width=36)
+   ->  Merge Append
          Sort Key: hm.device
-         ->  Index Scan using _hyper_2_5_chunk_hyper_meta_device_time_idx on _hyper_2_5_chunk hm  (cost=0.15..29.10 rows=1130 width=36)
-         ->  Index Scan using _hyper_2_6_chunk_hyper_meta_device_time_idx on _hyper_2_6_chunk hm_1  (cost=0.15..29.10 rows=1130 width=36)
-   ->  Materialize  (cost=0.65..269.65 rows=6800 width=20)
-         ->  Merge Append  (cost=0.65..252.65 rows=6800 width=20)
+         ->  Index Scan using _hyper_2_5_chunk_hyper_meta_device_time_idx on _timescaledb_internal._hyper_2_5_chunk hm
+               Output: hm.info, hm.device
+         ->  Index Scan using _hyper_2_6_chunk_hyper_meta_device_time_idx on _timescaledb_internal._hyper_2_6_chunk hm_1
+               Output: hm_1.info, hm_1.device
+   ->  Materialize
+         Output: h."time", h.device, h.temp
+         ->  Merge Append
                Sort Key: h.device
-               ->  Index Scan using _hyper_1_1_chunk_hyper_device_time_idx on _hyper_1_1_chunk h  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_2_chunk_hyper_device_time_idx on _hyper_1_2_chunk h_1  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_3_chunk_hyper_device_time_idx on _hyper_1_3_chunk h_2  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _hyper_1_4_chunk h_3  (cost=0.15..37.65 rows=1700 width=20)
-(13 rows)
+               ->  Index Scan using _hyper_1_1_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_1_chunk h
+                     Output: h."time", h.device, h.temp
+               ->  Index Scan using _hyper_1_2_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_2_chunk h_1
+                     Output: h_1."time", h_1.device, h_1.temp
+               ->  Index Scan using _hyper_1_3_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_3_chunk h_2
+                     Output: h_2."time", h_2.device, h_2.temp
+               ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_4_chunk h_3
+                     Output: h_3."time", h_3.device, h_3.temp
+(21 rows)
 
-EXPLAIN
+:PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Merge Join  (cost=845.30..2596.30 rows=115600 width=28)
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Merge Join
+   Output: pg2."time", pg2.device, pg2.temp, pg1.temp
    Merge Cond: (pg1.device = pg2.device)
-   ->  Sort  (cost=270.43..278.93 rows=3400 width=12)
+   ->  Sort
+         Output: pg1.temp, pg1.device
          Sort Key: pg1.device
-         ->  Append  (cost=0.00..71.00 rows=3400 width=12)
-               ->  Seq Scan on pg1dim_h1 pg1  (cost=0.00..27.00 rows=1700 width=12)
-               ->  Seq Scan on pg1dim_h2 pg1_1  (cost=0.00..27.00 rows=1700 width=12)
-   ->  Sort  (cost=574.86..591.86 rows=6800 width=20)
+         ->  Append
+               ->  Seq Scan on public.pg1dim_h1 pg1
+                     Output: pg1.temp, pg1.device
+               ->  Seq Scan on public.pg1dim_h2 pg1_1
+                     Output: pg1_1.temp, pg1_1.device
+   ->  Sort
+         Output: pg2."time", pg2.device, pg2.temp
          Sort Key: pg2.device
-         ->  Append  (cost=0.00..142.00 rows=6800 width=20)
-               ->  Seq Scan on pg2dim_h1_t1 pg2  (cost=0.00..27.00 rows=1700 width=20)
-               ->  Seq Scan on pg2dim_h1_t2 pg2_1  (cost=0.00..27.00 rows=1700 width=20)
-               ->  Seq Scan on pg2dim_h2_t1 pg2_2  (cost=0.00..27.00 rows=1700 width=20)
-               ->  Seq Scan on pg2dim_h2_t2 pg2_3  (cost=0.00..27.00 rows=1700 width=20)
-(14 rows)
+         ->  Append
+               ->  Seq Scan on public.pg2dim_h1_t1 pg2
+                     Output: pg2."time", pg2.device, pg2.temp
+               ->  Seq Scan on public.pg2dim_h1_t2 pg2_1
+                     Output: pg2_1."time", pg2_1.device, pg2_1.temp
+               ->  Seq Scan on public.pg2dim_h2_t1 pg2_2
+                     Output: pg2_2."time", pg2_2.device, pg2_2.temp
+               ->  Seq Scan on public.pg2dim_h2_t2 pg2_3
+                     Output: pg2_3."time", pg2_3.device, pg2_3.temp
+(23 rows)
 
 SET enable_partitionwise_join = 'on';
-EXPLAIN
+:PREFIX
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
- Merge Join  (cost=0.97..1491.71 rows=76840 width=52)
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Output: h."time", h.device, h.temp, hm.info
    Merge Cond: (hm.device = h.device)
-   ->  Merge Append  (cost=0.32..80.82 rows=2260 width=36)
+   ->  Merge Append
          Sort Key: hm.device
-         ->  Index Scan using _hyper_2_5_chunk_hyper_meta_device_time_idx on _hyper_2_5_chunk hm  (cost=0.15..29.10 rows=1130 width=36)
-         ->  Index Scan using _hyper_2_6_chunk_hyper_meta_device_time_idx on _hyper_2_6_chunk hm_1  (cost=0.15..29.10 rows=1130 width=36)
-   ->  Materialize  (cost=0.65..269.65 rows=6800 width=20)
-         ->  Merge Append  (cost=0.65..252.65 rows=6800 width=20)
+         ->  Index Scan using _hyper_2_5_chunk_hyper_meta_device_time_idx on _timescaledb_internal._hyper_2_5_chunk hm
+               Output: hm.info, hm.device
+         ->  Index Scan using _hyper_2_6_chunk_hyper_meta_device_time_idx on _timescaledb_internal._hyper_2_6_chunk hm_1
+               Output: hm_1.info, hm_1.device
+   ->  Materialize
+         Output: h."time", h.device, h.temp
+         ->  Merge Append
                Sort Key: h.device
-               ->  Index Scan using _hyper_1_1_chunk_hyper_device_time_idx on _hyper_1_1_chunk h  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_2_chunk_hyper_device_time_idx on _hyper_1_2_chunk h_1  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_3_chunk_hyper_device_time_idx on _hyper_1_3_chunk h_2  (cost=0.15..37.65 rows=1700 width=20)
-               ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _hyper_1_4_chunk h_3  (cost=0.15..37.65 rows=1700 width=20)
-(13 rows)
+               ->  Index Scan using _hyper_1_1_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_1_chunk h
+                     Output: h."time", h.device, h.temp
+               ->  Index Scan using _hyper_1_2_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_2_chunk h_1
+                     Output: h_1."time", h_1.device, h_1.temp
+               ->  Index Scan using _hyper_1_3_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_3_chunk h_2
+                     Output: h_2."time", h_2.device, h_2.temp
+               ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_4_chunk h_3
+                     Output: h_3."time", h_3.device, h_3.temp
+(21 rows)
 
-EXPLAIN
+:PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Append  (cost=388.65..1950.30 rows=57800 width=28)
-   ->  Merge Join  (cost=388.65..830.65 rows=28900 width=28)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Append
+   ->  Merge Join
+         Output: pg2."time", pg2.device, pg2.temp, pg1.temp
          Merge Cond: (pg1.device = pg2.device)
-         ->  Sort  (cost=118.22..122.47 rows=1700 width=12)
+         ->  Sort
+               Output: pg1.temp, pg1.device
                Sort Key: pg1.device
-               ->  Seq Scan on pg1dim_h1 pg1  (cost=0.00..27.00 rows=1700 width=12)
-         ->  Sort  (cost=270.43..278.93 rows=3400 width=20)
+               ->  Seq Scan on public.pg1dim_h1 pg1
+                     Output: pg1.temp, pg1.device
+         ->  Sort
+               Output: pg2."time", pg2.device, pg2.temp
                Sort Key: pg2.device
-               ->  Append  (cost=0.00..71.00 rows=3400 width=20)
-                     ->  Seq Scan on pg2dim_h1_t1 pg2  (cost=0.00..27.00 rows=1700 width=20)
-                     ->  Seq Scan on pg2dim_h1_t2 pg2_1  (cost=0.00..27.00 rows=1700 width=20)
-   ->  Merge Join  (cost=388.65..830.65 rows=28900 width=28)
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h1_t1 pg2
+                           Output: pg2."time", pg2.device, pg2.temp
+                     ->  Seq Scan on public.pg2dim_h1_t2 pg2_1
+                           Output: pg2_1."time", pg2_1.device, pg2_1.temp
+   ->  Merge Join
+         Output: pg2_2."time", pg2_2.device, pg2_2.temp, pg1_1.temp
          Merge Cond: (pg1_1.device = pg2_2.device)
-         ->  Sort  (cost=118.22..122.47 rows=1700 width=12)
+         ->  Sort
+               Output: pg1_1.temp, pg1_1.device
                Sort Key: pg1_1.device
-               ->  Seq Scan on pg1dim_h2 pg1_1  (cost=0.00..27.00 rows=1700 width=12)
-         ->  Sort  (cost=270.43..278.93 rows=3400 width=20)
+               ->  Seq Scan on public.pg1dim_h2 pg1_1
+                     Output: pg1_1.temp, pg1_1.device
+         ->  Sort
+               Output: pg2_2."time", pg2_2.device, pg2_2.temp
                Sort Key: pg2_2.device
-               ->  Append  (cost=0.00..71.00 rows=3400 width=20)
-                     ->  Seq Scan on pg2dim_h2_t1 pg2_2  (cost=0.00..27.00 rows=1700 width=20)
-                     ->  Seq Scan on pg2dim_h2_t2 pg2_3  (cost=0.00..27.00 rows=1700 width=20)
-(21 rows)
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h2_t1 pg2_2
+                           Output: pg2_2."time", pg2_2.device, pg2_2.temp
+                     ->  Seq Scan on public.pg2dim_h2_t2 pg2_3
+                           Output: pg2_3."time", pg2_3.device, pg2_3.temp
+(33 rows)
 
 -- Test hypertable with time partitioning function
 CREATE OR REPLACE FUNCTION time_func(unixtime float8)
@@ -699,7 +737,7 @@ SELECT x, ceil(random() * 8), random() * 20
 FROM generate_series(0,5000-1) AS x;
 -- All partition keys covered (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -722,7 +760,7 @@ LIMIT 10;
                            Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
 (13 rows)
 
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -749,7 +787,7 @@ LIMIT 10;
 
 -- Grouping on original time column should be pushed-down
 SET enable_partitionwise_aggregate = 'on';
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -777,7 +815,7 @@ LIMIT 10;
 
 -- Applying the time partitioning function should also allow push-down
 -- on open dimensions
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
@@ -804,7 +842,7 @@ LIMIT 10;
 (16 rows)
 
 -- Should also work to use partitioning function on closed dimensions
-EXPLAIN (VERBOSE, COSTS OFF)
+:PREFIX
 SELECT time_func(time), _timescaledb_internal.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
