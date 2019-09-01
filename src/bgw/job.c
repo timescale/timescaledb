@@ -75,14 +75,32 @@ ts_bgw_job_owner(BgwJob *job)
 		case JOB_TYPE_VERSION_CHECK:
 			return ts_catalog_database_info_get()->owner_uid;
 		case JOB_TYPE_REORDER:
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(
-				ts_bgw_policy_reorder_find_by_job(job->fd.id)->fd.hypertable_id));
+		{
+			BgwPolicyReorder *policy = ts_bgw_policy_reorder_find_by_job(job->fd.id);
+
+			if (policy == NULL)
+				elog(ERROR, "reorder policy for job with id \"%d\" not found", job->fd.id);
+
+			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
+		}
 		case JOB_TYPE_DROP_CHUNKS:
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(
-				ts_bgw_policy_drop_chunks_find_by_job(job->fd.id)->fd.hypertable_id));
+		{
+			BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_job(job->fd.id);
+
+			if (policy == NULL)
+				elog(ERROR, "drop_chunks policy for job with id \"%d\" not found", job->fd.id);
+
+			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
+		}
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-			return ts_rel_get_owner(
-				ts_continuous_agg_get_user_view_oid(ts_continuous_agg_find_by_job_id(job->fd.id)));
+		{
+			ContinuousAgg *ca = ts_continuous_agg_find_by_job_id(job->fd.id);
+
+			if (ca == NULL)
+				elog(ERROR, "continuous aggregate for job with id \"%d\" not found", job->fd.id);
+
+			return ts_rel_get_owner(ts_continuous_agg_get_user_view_oid(ca));
+		}
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_owner_hook != NULL)
 				return unknown_job_type_owner_hook(job);

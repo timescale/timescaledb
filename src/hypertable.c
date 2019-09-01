@@ -65,6 +65,11 @@ ts_rel_get_owner(Oid relid)
 	HeapTuple tuple;
 	Oid ownerid;
 
+	if (!OidIsValid(relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("unable to get owner for relation with OID %u: invalid OID", relid)));
+
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tuple))
