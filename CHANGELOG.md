@@ -7,10 +7,18 @@ accidentally triggering the load of a previous DB version.**
 ## 1.4.2 (unreleased)
 
 **Bugfixes**
+* #1327 Fix chunk exclusion with ordered append
+* #1392 Fix cagg_agg_validate expression handling
+* #1408 Fix ChunkAppend space partitioning support for ordered append
 * #1420 Fix OUTER JOIN qual propagation
+* #1422 Fix background worker segfaults
+* #1423 Fix segfault on ARM/32-bit builds
+* #1424 Fix ChunkAppend LIMIT pushdown
 
 **Thanks**
 * @shahidhk for reporting an issue with OUTER JOINs
+* @cossbow and @xxGL1TCHxx for reporting reporting issues with ChunkAppend and space partitioning
+* @est for reporting an issue with CASE expressions in continuous aggregates
 
 ## 1.4.1 (2019-08-01)
 
