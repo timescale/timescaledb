@@ -330,7 +330,10 @@ finish_outstanding_copies(CopyConnectionState *state)
 		results = lappend(results, PQgetResult(pg_conn));
 		/* Need to get result a second time to move the connection out of copy mode */
 		res = PQgetResult(pg_conn);
-		Assert(res == NULL);
+		if (res != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("COPY command resulted in unexpected state")));
 	}
 
 	foreach (lc, results)
