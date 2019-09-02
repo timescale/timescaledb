@@ -335,3 +335,19 @@ PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
 
+-- test LIMIT pushdown
+-- no aggregates/window functions/SRF should pushdown limit
+:PREFIX SELECT FROM metrics_timestamptz ORDER BY time LIMIT 1;
+
+-- aggregates should prevent pushdown
+:PREFIX SELECT count(*) FROM metrics_timestamptz LIMIT 1;
+:PREFIX SELECT count(*) FROM metrics_space LIMIT 1;
+
+-- HAVING should prevent pushdown
+:PREFIX SELECT 1 FROM metrics_timestamptz HAVING count(*) > 1 LIMIT 1;
+:PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
+
+-- DISTINCT should prevent pushdown
+:PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
+:PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
+

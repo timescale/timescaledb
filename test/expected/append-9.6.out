@@ -2076,6 +2076,118 @@ PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics
 (9 rows)
 
 DEALLOCATE prep;
+-- test LIMIT pushdown
+-- no aggregates/window functions/SRF should pushdown limit
+:PREFIX SELECT FROM metrics_timestamptz ORDER BY time LIMIT 1;
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz
+         Order: metrics_timestamptz."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk
+(8 rows)
+
+-- aggregates should prevent pushdown
+:PREFIX SELECT count(*) FROM metrics_timestamptz LIMIT 1;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Limit
+   ->  Aggregate
+         ->  Append
+               ->  Seq Scan on _hyper_5_17_chunk
+               ->  Seq Scan on _hyper_5_18_chunk
+               ->  Seq Scan on _hyper_5_19_chunk
+               ->  Seq Scan on _hyper_5_20_chunk
+               ->  Seq Scan on _hyper_5_21_chunk
+(8 rows)
+
+:PREFIX SELECT count(*) FROM metrics_space LIMIT 1;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Limit
+   ->  Aggregate
+         ->  Append
+               ->  Seq Scan on _hyper_6_22_chunk
+               ->  Seq Scan on _hyper_6_23_chunk
+               ->  Seq Scan on _hyper_6_24_chunk
+               ->  Seq Scan on _hyper_6_25_chunk
+               ->  Seq Scan on _hyper_6_26_chunk
+               ->  Seq Scan on _hyper_6_27_chunk
+               ->  Seq Scan on _hyper_6_28_chunk
+               ->  Seq Scan on _hyper_6_29_chunk
+               ->  Seq Scan on _hyper_6_30_chunk
+(12 rows)
+
+-- HAVING should prevent pushdown
+:PREFIX SELECT 1 FROM metrics_timestamptz HAVING count(*) > 1 LIMIT 1;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Limit
+   ->  Aggregate
+         Filter: (count(*) > 1)
+         ->  Append
+               ->  Seq Scan on _hyper_5_17_chunk
+               ->  Seq Scan on _hyper_5_18_chunk
+               ->  Seq Scan on _hyper_5_19_chunk
+               ->  Seq Scan on _hyper_5_20_chunk
+               ->  Seq Scan on _hyper_5_21_chunk
+(9 rows)
+
+:PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Limit
+   ->  Aggregate
+         Filter: (count(*) > 1)
+         ->  Append
+               ->  Seq Scan on _hyper_6_22_chunk
+               ->  Seq Scan on _hyper_6_23_chunk
+               ->  Seq Scan on _hyper_6_24_chunk
+               ->  Seq Scan on _hyper_6_25_chunk
+               ->  Seq Scan on _hyper_6_26_chunk
+               ->  Seq Scan on _hyper_6_27_chunk
+               ->  Seq Scan on _hyper_6_28_chunk
+               ->  Seq Scan on _hyper_6_29_chunk
+               ->  Seq Scan on _hyper_6_30_chunk
+(13 rows)
+
+-- DISTINCT should prevent pushdown
+:PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Unique
+         ->  Merge Append
+               Sort Key: _hyper_5_17_chunk.device_id
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk
+(9 rows)
+
+:PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Unique
+         ->  Merge Append
+               Sort Key: _hyper_6_22_chunk.device_id
+               ->  Index Only Scan using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk
+               ->  Index Only Scan using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk
+               ->  Index Only Scan using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk
+               ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+               ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk
+               ->  Index Only Scan using _hyper_6_27_chunk_metrics_space_device_id_time_idx on _hyper_6_27_chunk
+               ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+               ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk
+               ->  Index Only Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk
+(13 rows)
+
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results

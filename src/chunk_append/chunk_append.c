@@ -37,6 +37,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	ChunkAppendPath *path;
 	ListCell *lc;
 	double rows = 0.0;
+	double limit_tuples;
 	Cost total_cost = 0.0;
 	List *children = NIL;
 
@@ -61,6 +62,24 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	 */
 	path->cpath.flags = 0;
 	path->cpath.methods = &chunk_append_path_methods;
+
+	/*
+	 * Figure out whether there's a hard limit on the number of rows that
+	 * query_planner's result subplan needs to return.  Even if we know a
+	 * hard limit overall, it doesn't apply if the query has any
+	 * grouping/aggregation operations, or SRFs in the tlist.
+	 */
+	if (root->parse->groupClause || root->parse->groupingSets || root->parse->distinctClause ||
+		root->parse->hasAggs || root->parse->hasWindowFuncs || root->hasHavingQual ||
+#if PG96
+		expression_returns_set((Node *) root->parse->targetList)
+#else
+		root->parse->hasTargetSRFs
+#endif
+	)
+		limit_tuples = -1.0;
+	else
+		limit_tuples = root->limit_tuples;
 
 	/*
 	 * check if we should do startup and runtime exclusion
@@ -219,7 +238,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		 * We do this to prevent planner choosing parallel plan which might
 		 * otherwise look preferable cost wise.
 		 */
-		if (!path->pushdown_limit || root->limit_tuples == -1.0 || rows < root->limit_tuples)
+		if (!path->pushdown_limit || limit_tuples == -1.0 || rows < limit_tuples)
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;

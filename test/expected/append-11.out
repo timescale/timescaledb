@@ -2477,6 +2477,137 @@ PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics
 (11 rows)
 
 DEALLOCATE prep;
+-- test LIMIT pushdown
+-- no aggregates/window functions/SRF should pushdown limit
+:PREFIX SELECT FROM metrics_timestamptz ORDER BY time LIMIT 1;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=1 loops=1)
+         Order: metrics_timestamptz."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (never executed)
+               Heap Fetches: 0
+(13 rows)
+
+-- aggregates should prevent pushdown
+:PREFIX SELECT count(*) FROM metrics_timestamptz LIMIT 1;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Append (actual rows=2235 loops=1)
+               ->  Seq Scan on _hyper_5_17_chunk (actual rows=336 loops=1)
+               ->  Seq Scan on _hyper_5_18_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_19_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_20_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_21_chunk (actual rows=387 loops=1)
+(8 rows)
+
+:PREFIX SELECT count(*) FROM metrics_space LIMIT 1;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Append (actual rows=3130 loops=1)
+               ->  Seq Scan on _hyper_6_22_chunk (actual rows=448 loops=1)
+               ->  Seq Scan on _hyper_6_23_chunk (actual rows=448 loops=1)
+               ->  Seq Scan on _hyper_6_24_chunk (actual rows=224 loops=1)
+               ->  Seq Scan on _hyper_6_25_chunk (actual rows=672 loops=1)
+               ->  Seq Scan on _hyper_6_26_chunk (actual rows=672 loops=1)
+               ->  Seq Scan on _hyper_6_27_chunk (actual rows=336 loops=1)
+               ->  Seq Scan on _hyper_6_28_chunk (actual rows=132 loops=1)
+               ->  Seq Scan on _hyper_6_29_chunk (actual rows=132 loops=1)
+               ->  Seq Scan on _hyper_6_30_chunk (actual rows=66 loops=1)
+(12 rows)
+
+-- HAVING should prevent pushdown
+:PREFIX SELECT 1 FROM metrics_timestamptz HAVING count(*) > 1 LIMIT 1;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         Filter: (count(*) > 1)
+         ->  Append (actual rows=2235 loops=1)
+               ->  Seq Scan on _hyper_5_17_chunk (actual rows=336 loops=1)
+               ->  Seq Scan on _hyper_5_18_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_19_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_20_chunk (actual rows=504 loops=1)
+               ->  Seq Scan on _hyper_5_21_chunk (actual rows=387 loops=1)
+(9 rows)
+
+:PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         Filter: (count(*) > 1)
+         ->  Append (actual rows=3130 loops=1)
+               ->  Seq Scan on _hyper_6_22_chunk (actual rows=448 loops=1)
+               ->  Seq Scan on _hyper_6_23_chunk (actual rows=448 loops=1)
+               ->  Seq Scan on _hyper_6_24_chunk (actual rows=224 loops=1)
+               ->  Seq Scan on _hyper_6_25_chunk (actual rows=672 loops=1)
+               ->  Seq Scan on _hyper_6_26_chunk (actual rows=672 loops=1)
+               ->  Seq Scan on _hyper_6_27_chunk (actual rows=336 loops=1)
+               ->  Seq Scan on _hyper_6_28_chunk (actual rows=132 loops=1)
+               ->  Seq Scan on _hyper_6_29_chunk (actual rows=132 loops=1)
+               ->  Seq Scan on _hyper_6_30_chunk (actual rows=66 loops=1)
+(13 rows)
+
+-- DISTINCT should prevent pushdown
+:PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   ->  Unique (actual rows=3 loops=1)
+         ->  Merge Append (actual rows=1491 loops=1)
+               Sort Key: _hyper_5_17_chunk.device_id
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=225 loops=1)
+                     Heap Fetches: 225
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=337 loops=1)
+                     Heap Fetches: 337
+               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=337 loops=1)
+                     Heap Fetches: 337
+               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=337 loops=1)
+                     Heap Fetches: 337
+               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=259 loops=1)
+                     Heap Fetches: 259
+(14 rows)
+
+:PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   ->  Unique (actual rows=3 loops=1)
+         ->  Merge Append (actual rows=627 loops=1)
+               Sort Key: _hyper_6_22_chunk.device_id
+               ->  Index Only Scan using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=113 loops=1)
+                     Heap Fetches: 113
+               ->  Index Only Scan using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=113 loops=1)
+                     Heap Fetches: 113
+               ->  Index Only Scan using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=169 loops=1)
+                     Heap Fetches: 169
+               ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk (actual rows=169 loops=1)
+                     Heap Fetches: 169
+               ->  Index Only Scan using _hyper_6_27_chunk_metrics_space_device_id_time_idx on _hyper_6_27_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=34 loops=1)
+                     Heap Fetches: 34
+               ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk (actual rows=34 loops=1)
+                     Heap Fetches: 34
+               ->  Index Only Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+(22 rows)
+
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results
