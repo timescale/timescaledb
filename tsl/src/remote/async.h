@@ -137,6 +137,9 @@ extern void async_request_set_wait_all_ok_commands(AsyncRequestSet *set);
  */
 extern AsyncResponseResult *async_request_set_wait_any_result(AsyncRequestSet *set);
 
+/* Consume any pending response and throw it away */
+extern void async_request_discard_response(AsyncRequest *req);
+
 /* Prepared Statements */
 extern void prepared_stmt_close(PreparedStmt *stmt);
 

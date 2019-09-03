@@ -261,7 +261,13 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 	tuple = remote_cursor_get_next_tuple(fsstate->cursor);
 
 	if (NULL == tuple)
+	{
+		/* no need to drain the connection since at this point we should have completed any ongoing
+		 * data fetch request */
+		remote_cursor_set_should_drain(fsstate->cursor, false);
 		return ExecClearTuple(slot);
+	}
+
 	/*
 	 * Return the next tuple. Must force the tuple into the slot since
 	 * CustomScan initializes ss_ScanTupleSlot to a VirtualTupleTableSlot

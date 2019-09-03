@@ -50,6 +50,7 @@ typedef struct Cursor
 	bool async;				  /* indicating that a cursor should support async data fetching */
 	AsyncRequest *create_req; /* a request to create cursor */
 	AsyncRequest *data_req;   /* a request to fetch data from cursor */
+	bool should_drain; /* indicating if we should cancel ongoing request and drain the connection */
 } Cursor;
 
 static void remote_cursor_fetch_data_start(Cursor *cursor);
@@ -145,6 +146,7 @@ remote_cursor_init_with_params(Cursor *cursor, TSConnection *conn, Relation rel,
 	cursor->create_req = NULL;
 	cursor->data_req = NULL;
 	cursor->async = !block;
+	cursor->should_drain = true;
 
 	cursor_create_req(cursor, params);
 	remote_cursor_set_fetch_size(cursor, DEFAULT_FETCH_SIZE);
@@ -295,7 +297,9 @@ remote_cursor_fetch_data_complete(Cursor *cursor)
 
 	verify_cursor_open(cursor);
 
-	if (cursor->next_tuple < cursor->num_tuples)
+	/* ANALYZE command is accessing random tuples so we should never fail here when running ANALYZE
+	 */
+	if (cursor->next_tuple != 0 && cursor->next_tuple < cursor->num_tuples)
 		elog(ERROR, "shouldn't fetch new data before consuming exising");
 
 	/*
@@ -451,6 +455,8 @@ remote_cursor_rewind(Cursor *cursor)
 	{
 		char sql[64];
 
+		if (cursor->should_drain)
+			async_request_discard_response(cursor->data_req);
 		/* We are beyond the first fetch, so need to rewind the remote end */
 		snprintf(sql, sizeof(sql), "MOVE BACKWARD ALL IN c%u", cursor->id);
 		remote_cursor_exec_cmd(cursor, sql);
@@ -468,10 +474,22 @@ remote_cursor_close(Cursor *cursor)
 {
 	char sql[64];
 
-	if (cursor->create_req != NULL)
-		async_request_wait_ok_command(cursor->create_req);
+	if (!cursor->isopen && cursor->should_drain)
+	{
+		async_request_discard_response(cursor->create_req);
+		return;
+	}
+
+	if (cursor->should_drain)
+		async_request_discard_response(cursor->data_req);
 
 	snprintf(sql, sizeof(sql), "CLOSE c%u", cursor->id);
 	cursor->isopen = false;
 	remote_cursor_exec_cmd(cursor, sql);
+}
+
+void
+remote_cursor_set_should_drain(Cursor *cursor, bool drain)
+{
+	cursor->should_drain = drain;
 }
