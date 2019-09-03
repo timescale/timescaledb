@@ -33,6 +33,7 @@ set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   continuous_aggs_ddl.sql.in
   continuous_aggs_permissions.sql.in
+  compression_permissions.sql.in
   plan_gapfill.sql.in
   transparent_decompression.sql.in
 )
