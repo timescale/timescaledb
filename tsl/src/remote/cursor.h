@@ -37,5 +37,5 @@ extern HeapTuple remote_cursor_get_next_tuple(Cursor *cursor);
 extern HeapTuple remote_cursor_get_tuple(Cursor *cursor, int row);
 extern void remote_cursor_close(Cursor *cursor);
 extern void remote_cursor_rewind(Cursor *cursor);
-
+extern void remote_cursor_set_should_drain(Cursor *cursor, bool drain);
 #endif /* TIMESCALEDB_TSL_REMOTE_CURSOR_H */

@@ -462,7 +462,10 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
 
 		if (remote_connection_is_processing(req->conn) && req->state == DEFERRED)
-			elog(ERROR, "can't get a response because previous request hasn't completed");
+			elog(ERROR,
+				 "can't get a response because previous request hasn't completed. Aborted SQL "
+				 "statement: %s",
+				 req->sql);
 
 		if (req->state == DEFERRED)
 			async_request_send_internal(req, ERROR);
@@ -660,6 +663,17 @@ async_request_set_wait_all_ok_commands(AsyncRequestSet *set)
 			elog(ERROR, "unexpected tuple received while expecting a command");
 		async_response_result_close(ar);
 	}
+}
+
+void
+async_request_discard_response(AsyncRequest *req)
+{
+	AsyncResponseResult *result;
+	if (NULL == req)
+		return;
+	result = async_request_wait_any_result(req);
+	if (result != NULL)
+		async_response_result_close(result);
 }
 
 void
