@@ -1,0 +1,63 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP 0
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- stop the background workers 
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+ERROR:  must be owner of relation conditions
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+ERROR:  permission denied for relation conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--now owner tries and succeeds --
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+--try modifying compress properties --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'humidity');
+ERROR:  must be owner of relation conditions
+--- compress_chunks and decompress_chunks fail without correct perm --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+ERROR:  must be owner of hypertable "conditions"
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+ERROR:  must be owner of hypertable "conditions"
+select add_compress_chunks_policy('conditions', '1day'::interval);
+ERROR:  must be owner of hypertable "conditions"
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select add_compress_chunks_policy('conditions', '1day'::interval);
+ add_compress_chunks_policy 
+----------------------------
+                       1000
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--try dropping policy
+select remove_compress_chunks_policy('conditions', true);
+ERROR:  must be owner of hypertable "conditions"
