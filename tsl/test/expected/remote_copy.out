@@ -1,41 +1,39 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
-SET ROLE :ROLE_1;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 -- Start out testing text copy code
 SET timescaledb.enable_connection_binary_data=false;
+SET ROLE :ROLE_1;
 -- Use some horrible names to make sure the parsing code works
 CREATE TABLE "+ri(k33_')" (
     "thyme" bigint NOT NULL,
@@ -304,6 +302,7 @@ select * from show_chunks('"+ri(k33_'')"');
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_1;
 DROP TABLE "+ri(k33_')" CASCADE;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
  delete_data_node 
 ------------------

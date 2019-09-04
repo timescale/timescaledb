@@ -2,8 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_1;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 \set TEST_BASE_NAME dist_query
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",

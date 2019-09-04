@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -34,22 +34,23 @@ OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 -- Add data nodes using the TimescaleDB node management API
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2 TO PUBLIC;
+SET ROLE :ROLE_3;
 -- Create a 2-dimensional partitioned table for comparision
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);

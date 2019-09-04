@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -14,13 +14,13 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
-SET ROLE :ROLE_1;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
+SET ROLE :ROLE_1;
 \set TEST_TABLE 'conditions'
 \ir 'include/aggregate_table_create.sql'
 -- This file and its contents are licensed under the Timescale License.
@@ -42,31 +42,30 @@ CREATE TABLE :TEST_TABLE (
       bit_int     smallint,
       good_life   boolean
     );
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',
 $$
        CREATE TYPE custom_type AS (high int, low int);
@@ -82,6 +81,7 @@ NOTICE:  [data_node_3]:
  
 (1 row)
 
+SET ROLE :ROLE_1;
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
  table_name 
 ------------

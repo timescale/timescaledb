@@ -4,7 +4,7 @@
 
 -- Test functionality of add_data_node() bootstrapping.
 -- Most of this already done in other tests, so we check some corner cases.
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 
 CREATE OR REPLACE FUNCTION show_data_nodes()
@@ -20,7 +20,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Super user is required to bootstrap
 --
--- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
@@ -28,8 +27,6 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => '
 SELECT * FROM show_data_nodes();
 
 -- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 RESET ROLE;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
@@ -37,24 +34,23 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM show_data_nodes();
 
 -- Ensure database and extensions are installed
-\c bootstrap_test :ROLE_SUPERUSER
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 -- After delete database and extension should still be there
 SELECT * FROM delete_data_node('bootstrap_test');
 SELECT * FROM show_data_nodes();
-\c bootstrap_test :ROLE_SUPERUSER;
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                         database => 'bootstrap_test', if_not_exists => false);
@@ -66,7 +62,6 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
 
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', if_not_exists => true);
@@ -74,7 +69,6 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (has local server, has database database but no extension installed)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
 SELECT extname, nspname
@@ -131,23 +125,13 @@ DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
 
 SET ROLE :ROLE_1;
--- Test with non-superuser
---
--- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
--- bootstrap_database = 'template1'
+-- Test with non-superuser. Should fail.
+\set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test',
-                bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                bootstrap_database => 'template1');
-\c bootstrap_test :ROLE_DEFAULT_PERM_USER;
+                            database => 'bootstrap_test');
+\set ON_ERROR_STOP 1
 
-SELECT extname, nspname
-FROM pg_extension e, pg_namespace n
-WHERE e.extnamespace = n.oid;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM delete_data_node('bootstrap_test');
-
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 -- Test for ongoing transaction
 BEGIN;
 \set ON_ERROR_STOP 0
@@ -160,7 +144,6 @@ DROP DATABASE bootstrap_test;
 
 -- Test unusual database names
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT true FROM add_data_node('bootstrap_test1', host => 'localhost', database => 'Unusual Name');
 SELECT true FROM add_data_node('bootstrap_test1', host => 'localhost',

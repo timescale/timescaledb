@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 
 -- Support for execute_sql_and_filter_data_node_name_on_error()
@@ -12,8 +12,6 @@
 \ir include/filter_exec.sql
 \o
 \set ECHO all
-
-SET ROLE :ROLE_1;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -24,17 +22,17 @@ SET client_min_messages TO NOTICE;
 
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+
+SET ROLE :ROLE_1;
 
 -- Verify lack of tables
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
@@ -174,7 +172,7 @@ SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
 SELECT * FROM disttable;
 $$);
 
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 SELECT * FROM hypertable_data_node_relation_size('disttable');
 
 -- Show what some queries would look like on the frontend

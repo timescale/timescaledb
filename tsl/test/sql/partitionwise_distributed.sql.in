@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
@@ -30,13 +30,14 @@ CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 
 -- Add data nodes using the TimescaleDB node management API
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2 TO PUBLIC;
 
+SET ROLE :ROLE_3;
 -- Create a 2-dimensional partitioned table for comparision
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);

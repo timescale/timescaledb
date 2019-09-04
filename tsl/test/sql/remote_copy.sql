@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -11,21 +11,19 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-SET ROLE :ROLE_1;
-
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
 -- Start out testing text copy code
 SET timescaledb.enable_connection_binary_data=false;
+
+SET ROLE :ROLE_1;
 
 -- Use some horrible names to make sure the parsing code works
 CREATE TABLE "+ri(k33_')" (
@@ -139,6 +137,7 @@ select * from show_chunks('"+ri(k33_'')"');
 SET ROLE :ROLE_1;
 
 DROP TABLE "+ri(k33_')" CASCADE;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 SELECT * FROM delete_data_node('data_node_3');

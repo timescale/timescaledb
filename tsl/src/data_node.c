@@ -269,7 +269,7 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 static bool
 data_node_bootstrap_database(const char *node_name, const char *host, int32 port,
 							 const char *dbname, const char *username,
-							 const char *bootstrap_database, const char *bootstrap_user)
+							 const char *bootstrap_database)
 {
 	/* Required database privileges. Need to be a comma-separated list of
 	 * privileges suitable for both GRANT and has_database_privileges. */
@@ -285,9 +285,8 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 	Assert(NULL != username);
 	Assert(NULL != host);
 	Assert(NULL != bootstrap_database);
-	Assert(NULL != bootstrap_user);
 
-	node_options = create_data_node_options(host, port, bootstrap_database, bootstrap_user);
+	node_options = create_data_node_options(host, port, bootstrap_database, username);
 
 	conn = remote_connection_open_with_options(node_name, node_options, false);
 
@@ -369,8 +368,7 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 
 static bool
 data_node_bootstrap_extension(const char *node_name, const char *host, int32 port,
-							  const char *dbname, const char *username, bool if_not_exists,
-							  const char *bootstrap_user)
+							  const char *dbname, const char *username, bool if_not_exists)
 {
 	TSConnection *conn;
 	List *node_options;
@@ -381,7 +379,7 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 	Oid schema_oid = get_namespace_oid(schema_name, true);
 	bool extension_exists = false;
 
-	node_options = create_data_node_options(host, port, dbname, bootstrap_user);
+	node_options = create_data_node_options(host, port, dbname, username);
 	conn = remote_connection_open_with_options(node_name, node_options, false);
 
 	res = remote_connection_execf(conn,
@@ -426,17 +424,12 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 static void
 data_node_bootstrap(const char *node_name, const char *host, int32 port, const char *dbname,
 					const char *username, bool if_not_exists, const char *bootstrap_database,
-					const char *bootstrap_user, bool *database_created, bool *extension_created)
+					bool *database_created, bool *extension_created)
 {
 	bool created;
 
-	created = data_node_bootstrap_database(node_name,
-										   host,
-										   port,
-										   dbname,
-										   username,
-										   bootstrap_database,
-										   bootstrap_user);
+	created =
+		data_node_bootstrap_database(node_name, host, port, dbname, username, bootstrap_database);
 
 	if (NULL != database_created)
 		*database_created = created;
@@ -447,13 +440,7 @@ data_node_bootstrap(const char *node_name, const char *host, int32 port, const c
 	if (created)
 		if_not_exists = true;
 
-	created = data_node_bootstrap_extension(node_name,
-											host,
-											port,
-											dbname,
-											username,
-											if_not_exists,
-											bootstrap_user);
+	created = data_node_bootstrap_extension(node_name, host, port, dbname, username, if_not_exists);
 
 	if (NULL != extension_created)
 		*extension_created = created;
@@ -534,7 +521,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	long port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	const char *bootstrap_database = PG_ARGISNULL(5) ? dbname : PG_GETARG_CSTRING(5);
-	const char *bootstrap_user = PG_ARGISNULL(6) ? username : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
@@ -587,7 +573,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 						username,
 						if_not_exists,
 						bootstrap_database,
-						bootstrap_user,
 						&database_created,
 						&extension_created);
 
@@ -596,12 +581,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 			dist_util_set_as_frontend();
 
-		add_distributed_id_to_data_node(node_name,
-										host,
-										port,
-										dbname,
-										if_not_exists,
-										bootstrap_user);
+		add_distributed_id_to_data_node(node_name, host, port, dbname, if_not_exists, username);
 	}
 
 	PG_RETURN_DATUM(create_data_node_datum(fcinfo,

@@ -1,43 +1,43 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 -- Support for execute_sql_and_filter_server_name_on_error()
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-SET ROLE :ROLE_1;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 \des+
-                                                                   List of foreign servers
-    Name     |    Owner    | Foreign-data wrapper | Access privileges | Type | Version |                      FDW options                       | Description 
--------------+-------------+----------------------+-------------------+------+---------+--------------------------------------------------------+-------------
- data_node_1 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node_1') | 
- data_node_2 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node_2') | 
- data_node_3 | test_role_1 | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'data_node_3') | 
+                                                                                  List of foreign servers
+    Name     |       Owner        | Foreign-data wrapper |            Access privileges            | Type | Version |                      FDW options                       | Description 
+-------------+--------------------+----------------------+-----------------------------------------+------+---------+--------------------------------------------------------+-------------
+ data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_1') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
+ data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_2') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
+ data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_3') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
 (3 rows)
 
 RESET ROLE;
