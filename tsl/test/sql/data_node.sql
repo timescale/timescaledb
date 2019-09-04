@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 \o /dev/null
 \ir include/remote_exec.sql
@@ -16,23 +16,18 @@ DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 
-SET ROLE :ROLE_1;
-
 -- Add data nodes using TimescaleDB data_node management API. NOTE that the
 -- extension won't be created since it is installed in the template1
 -- database
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
 
 SELECT * FROM add_data_node('data_node_2', 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
 \set ON_ERROR_STOP 0
 -- Add again
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
 -- No host provided
 SELECT * FROM add_data_node('data_node_99');
 SELECT * FROM add_data_node(NULL);
@@ -48,11 +43,9 @@ DROP SERVER data_node_1, data_node_2;
 
 -- Should not generate error with if_not_exists option
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             if_not_exists => true);
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
 
 
 -- Test altering server command is blocked
@@ -65,13 +58,13 @@ ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 \set ON_ERROR_STOP 1
 
 -- List foreign data nodes
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 -- Delete a data node
 SELECT * FROM delete_data_node('data_node_3');
 
 -- List data nodes
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
@@ -81,13 +74,13 @@ SELECT * FROM delete_data_node('data_node_3');
 -- Deleting non-existing data node with "if_exists" set does not generate error
 SELECT * FROM delete_data_node('data_node_3', if_exists => true);
 
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 -- Cleanup databases
 RESET ROLE;
@@ -96,16 +89,31 @@ DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO INFO;
+
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
+                            database => 'data_node_3');
+
+-- We need to allow anybody to create distributed tables on these.
+GRANT USAGE
+   ON FOREIGN SERVER data_node_1, data_node_2, data_node_3
+   TO :ROLE_1;
+
+SELECT node_name, "options"
+  FROM timescaledb_information.data_node
+ORDER BY node_name;
+
+SELECT object_name, object_type, ARRAY_AGG(privilege_type)
+FROM information_schema.role_usage_grants
+WHERE object_schema NOT IN ('information_schema','pg_catalog')
+  AND object_type LIKE 'FOREIGN%'
+GROUP BY object_schema, object_name, object_type
+ORDER BY object_name, object_type;
+
 SET ROLE :ROLE_1;
-
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-
-SELECT * FROM timescaledb_information.data_node;
 
 -- Now create a distributed hypertable using the data nodes
 CREATE TABLE disttable(time timestamptz, device int, temp float);
@@ -120,7 +128,7 @@ FROM _timescaledb_catalog.dimension
 WHERE column_name = 'device';
 
 -- All data nodes should be added.
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 ROLLBACK;
 
@@ -129,7 +137,7 @@ ROLLBACK;
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 
 -- All data nodes should be added.
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 -- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
 SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable';
@@ -140,7 +148,7 @@ FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
 INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
 
 -- Chunk mapping created
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 DROP TABLE disttable;
 
@@ -149,8 +157,6 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Now create tables as cluster user
-SET ROLE :ROLE_1;
-
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
 \set ON_ERROR_STOP 0
@@ -212,6 +218,7 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_in
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_2');
 -- non-existing chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
@@ -306,8 +313,8 @@ FROM _timescaledb_catalog.dimension
 WHERE num_slices IS NOT NULL
 AND column_name = 'device';
 
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
                             if_not_exists => true);
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 
@@ -321,6 +328,7 @@ AND column_name = 'device';
 DROP TABLE disttable;
 SELECT * FROM delete_data_node('data_node_4');
 
+SET ROLE :ROLE_1;
 -- Creating a distributed hypertable without any servers should fail
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
@@ -329,8 +337,9 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '{ }');
 \set ON_ERROR_STOP 1
 
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -343,8 +352,8 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time');
 \set ON_ERROR_STOP 1
 
 DROP DATABASE IF EXISTS data_node_3;
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
+                            database => 'data_node_3');
 
 -- These data nodes have been deleted, so safe to remove their databases.
 DROP DATABASE data_node_1;
@@ -367,16 +376,18 @@ SELECT delete_data_node('data_node_3');
 SELECT delete_data_node('data_node_3', force => true);
 
 -- there should be no data nodes
-SELECT * FROM timescaledb_information.data_node;
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
 
 -- let's add some
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
+                            database => 'data_node_3');
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
+SET ROLE :ROLE_1;
 DROP TABLE disttable;
 
 CREATE TABLE disttable(time timestamptz, device int, temp float);
@@ -516,12 +527,12 @@ ORDER BY foreign_table_name;
 SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
 
 -- Let's add more data nodes
-SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
-SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => 'data_node_5',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4');
+SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => 'data_node_5');
+GRANT ALL ON FOREIGN SERVER data_node_4, data_node_5 TO PUBLIC;
 -- Create table as super user
+SET ROLE :ROLE_SUPERUSER;
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
 
@@ -540,10 +551,12 @@ SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
 SELECT * FROM detach_data_node('data_node_4');
 
 -- Cleanup
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1', force =>true);
 SELECT * FROM delete_data_node('data_node_2', force =>true);
 SELECT * FROM delete_data_node('data_node_3', force =>true);
 
+SET ROLE :ROLE_1;
 \set ON_ERROR_STOP 0
 -- Cannot delete a data node which is attached to a table that we don't
 -- have owner permissions on
@@ -557,17 +570,9 @@ DROP TABLE disttable_3;
 SELECT * FROM delete_data_node('data_node_4', force =>true);
 SELECT * FROM delete_data_node('data_node_5', force =>true);
 
--- Test case for missing pgpass user password
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_2;
-SET ROLE :ROLE_2;
-SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
--- Must return false
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_6');
-
 \set ON_ERROR_STOP 0
 -- Should fail because host has to be provided.
-SELECT * FROM add_data_node('data_node_7');
+SELECT * FROM add_data_node('data_node_6');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
@@ -577,4 +582,3 @@ DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 DROP DATABASE data_node_5;
-DROP DATABASE data_node_6;

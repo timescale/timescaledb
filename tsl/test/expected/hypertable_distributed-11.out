@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add data nodes
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -17,7 +17,6 @@ LANGUAGE C;
 -- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-SET ROLE :ROLE_1;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
@@ -26,36 +25,35 @@ DROP DATABASE IF EXISTS data_node_3;
 SET client_min_messages TO NOTICE;
 -- Add data nodes using the TimescaleDB node management API
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SET ROLE :ROLE_1;
 -- Verify lack of tables
-SELECT * FROM timescaledb_information.data_node;
-  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=data_node_3} | t       |               0 |                 | 
- data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               0 |                 | 
- data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               0 |                 | 
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+  node_name  |                    options                     
+-------------+------------------------------------------------
+ data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
 (3 rows)
 
 \set ON_ERROR_STOP 0
@@ -389,12 +387,12 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
  
 (1 row)
 
-SELECT * FROM timescaledb_information.data_node;
-  node_name  |    owner    |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+-------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_3 | test_role_1 | {host=localhost,port=15432,dbname=data_node_3} | t       |               2 |               2 | 112 kB
- data_node_1 | test_role_1 | {host=localhost,port=15432,dbname=data_node_1} | t       |               2 |               2 | 112 kB
- data_node_2 | test_role_1 | {host=localhost,port=15432,dbname=data_node_2} | t       |               2 |               2 | 112 kB
+SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+  node_name  |                    options                     
+-------------+------------------------------------------------
+ data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
 (3 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('disttable');

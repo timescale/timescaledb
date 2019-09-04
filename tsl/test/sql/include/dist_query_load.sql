@@ -4,20 +4,20 @@
 
 -- Cleanup from other tests that might have created these databases
 SET client_min_messages TO ERROR;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 DROP DATABASE IF EXISTS data_node_3;
 
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3',
-                            bootstrap_user => :'ROLE_CLUSTER_SUPERUSER');
+                            database => 'data_node_3');
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 
+SET ROLE :ROLE_1;
 CREATE TABLE hyper (time TIMESTAMPTZ, device INT, temp FLOAT);
 CREATE TABLE hyper_repart (LIKE hyper);
 SELECT create_distributed_hypertable('hyper', 'time', 'device', 3,

@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test functionality of add_data_node() bootstrapping.
 -- Most of this already done in other tests, so we check some corner cases.
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 CREATE OR REPLACE FUNCTION show_data_nodes()
 RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
@@ -15,7 +15,6 @@ SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Super user is required to bootstrap
 --
--- bootstrap_user     = :ROLE_DEFAULT_PERM_USER
 -- bootstrap_database = 'postgres'
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
@@ -27,8 +26,6 @@ SELECT * FROM show_data_nodes();
 (0 rows)
 
 -- local_user         = :ROLE_SUPERUSER
--- remote_user        = :ROLE_SUPERUSER
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 RESET ROLE;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
@@ -45,7 +42,7 @@ SELECT * FROM show_data_nodes();
 (1 row)
 
 -- Ensure database and extensions are installed
-\c bootstrap_test :ROLE_SUPERUSER
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
@@ -55,7 +52,7 @@ WHERE e.extnamespace = n.oid;
  timescaledb | public
 (2 rows)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- After delete database and extension should still be there
 SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
@@ -68,7 +65,7 @@ SELECT * FROM show_data_nodes();
 ----------------+------+------+--------
 (0 rows)
 
-\c bootstrap_test :ROLE_SUPERUSER;
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid;
@@ -78,10 +75,9 @@ WHERE e.extnamespace = n.oid;
  timescaledb | public
 (2 rows)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                         database => 'bootstrap_test', if_not_exists => false);
@@ -104,7 +100,6 @@ ERROR:  server "bootstrap_test" already exists
 \set ON_ERROR_STOP 1
 -- Test if_not_exists functionality (no local server, but remote database and extension exists)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', if_not_exists => true);
@@ -123,7 +118,6 @@ SELECT * FROM show_data_nodes();
 
 -- Test if_not_exists functionality (has local server, has database database but no extension installed)
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 \c bootstrap_test :ROLE_SUPERUSER;
 SELECT extname, nspname
@@ -219,36 +213,13 @@ NOTICE:  database "bootstrap_test" already exists on data node, not creating it
 DROP DATABASE bootstrap_schema_test;
 DROP DATABASE bootstrap_test;
 SET ROLE :ROLE_1;
--- Test with non-superuser
---
--- bootstrap_user     = :ROLE_CLUSTER_SUPERUSER
--- bootstrap_database = 'template1'
+-- Test with non-superuser. Should fail.
+\set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test',
-                bootstrap_user => :'ROLE_CLUSTER_SUPERUSER',
-                bootstrap_database => 'template1');
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
-(1 row)
-
-\c bootstrap_test :ROLE_DEFAULT_PERM_USER;
-SELECT extname, nspname
-FROM pg_extension e, pg_namespace n
-WHERE e.extnamespace = n.oid;
-   extname   |  nspname   
--------------+------------
- plpgsql     | pg_catalog
- timescaledb | public
-(2 rows)
-
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SELECT * FROM delete_data_node('bootstrap_test');
- delete_data_node 
-------------------
- t
-(1 row)
-
+                            database => 'bootstrap_test');
+ERROR:  [bootstrap_test]: permission denied to create extension "timescaledb"
+\set ON_ERROR_STOP 1
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 -- Test for ongoing transaction
 BEGIN;
 \set ON_ERROR_STOP 0
@@ -264,7 +235,6 @@ SELECT * FROM show_data_nodes();
 DROP DATABASE bootstrap_test;
 -- Test unusual database names
 --
--- bootstrap_user     = :ROLE_SUPERUSER
 -- bootstrap_database = 'postgres'
 SELECT true FROM add_data_node('bootstrap_test1', host => 'localhost', database => 'Unusual Name');
  bool 
