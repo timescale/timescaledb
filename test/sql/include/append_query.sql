@@ -326,7 +326,8 @@ PREPARE prep AS SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE tim
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
 
--- test constraint exclusion for subqueries with mergeappend
+-- test constraint exclusion for subqueries with ConstraintAwareAppend
+SET timescaledb.enable_chunk_append TO false;
 PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
@@ -334,6 +335,7 @@ PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
+RESET timescaledb.enable_chunk_append;
 
 -- test LIMIT pushdown
 -- no aggregates/window functions/SRF should pushdown limit
