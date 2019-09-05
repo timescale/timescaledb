@@ -335,6 +335,20 @@ path_process(PlannerInfo *root, Path **path)
 			path_process(root, &((JoinPath *) subp)->outerjoinpath);
 			path_process(root, &((JoinPath *) subp)->innerjoinpath);
 			return;
+		case T_MinMaxAggPath:
+		{
+			MinMaxAggPath *mm_path = castNode(MinMaxAggPath, subp);
+			ListCell *mm_lc;
+			foreach (mm_lc, mm_path->mmaggregates)
+			{
+				MinMaxAggInfo *mm_info = lfirst_node(MinMaxAggInfo, mm_lc);
+				path_process(root, &mm_info->path);
+			}
+			return;
+		}
+		case T_WindowAggPath:
+			path_process(root, &castNode(WindowAggPath, subp)->subpath);
+			return;
 		default:
 			return;
 	}
