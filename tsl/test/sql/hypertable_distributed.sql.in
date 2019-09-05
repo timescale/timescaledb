@@ -206,6 +206,29 @@ GROUP BY 1, 2
 HAVING avg(temp) > 1.2
 ORDER BY 1;
 
+-- Test AsyncAppend when using min/max aggregates
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+
+SELECT max(temp)
+FROM disttable;
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT min(temp), max(temp)
+FROM disttable;
+
+SELECT min(temp), max(temp)
+FROM disttable;
+
+-- Test AsyncAppend when using window functions
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT device, temp, avg(temp) OVER (PARTITION BY device)
+FROM disttable;
+
+SELECT device, temp, avg(temp) OVER (PARTITION BY device)
+FROM disttable;
+
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
 -- aren't enforced on a foreign table)

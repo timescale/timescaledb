@@ -530,6 +530,123 @@ ORDER BY 1;
  Sun Jul 01 08:00:00 2018 PDT |     90 |      2.7
 (2 rows)
 
+-- Test AsyncAppend when using min/max aggregates
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit
+           Output: disttable.temp
+           ->  Custom Scan (AsyncAppend)
+                 Output: disttable.temp
+                 ->  Merge Append
+                       Sort Key: disttable_1.temp DESC
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                             Output: disttable_1.temp
+                             Data node: data_node_1
+                             Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                             Output: disttable_2.temp
+                             Data node: data_node_2
+                             Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                             Output: disttable_3.temp
+                             Data node: data_node_3
+                             Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+(24 rows)
+
+SELECT max(temp)
+FROM disttable;
+ max 
+-----
+ 2.7
+(1 row)
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT min(temp), max(temp)
+FROM disttable;
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: min(disttable.temp), max(disttable.temp)
+   ->  Custom Scan (AsyncAppend)
+         Output: disttable.temp
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                     Output: disttable_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                     Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                     Output: disttable_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                     Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                     Output: disttable_3.temp
+                     Data node: data_node_3
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                     Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2])
+(20 rows)
+
+SELECT min(temp), max(temp)
+FROM disttable;
+ min | max 
+-----+-----
+ 1.1 | 2.7
+(1 row)
+
+-- Test AsyncAppend when using window functions
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT device, temp, avg(temp) OVER (PARTITION BY device)
+FROM disttable;
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg
+   Output: disttable.device, disttable.temp, avg(disttable.temp) OVER (?)
+   ->  Custom Scan (AsyncAppend)
+         Output: disttable.device, disttable.temp
+         ->  Merge Append
+               Sort Key: disttable_1.device
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                     Output: disttable_1.device, disttable_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                     Output: disttable_2.device, disttable_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                     Output: disttable_3.device, disttable_3.temp
+                     Data node: data_node_3
+                     Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
+(21 rows)
+
+SELECT device, temp, avg(temp) OVER (PARTITION BY device)
+FROM disttable;
+ device | temp |       avg        
+--------+------+------------------
+      1 |  1.2 | 1.23333333333333
+      1 |  1.4 | 1.23333333333333
+      1 |  1.1 | 1.23333333333333
+      2 |  1.3 |              1.3
+      3 |  2.1 |              2.1
+     13 |  1.4 |              1.4
+     29 |  1.5 |              1.5
+     87 |  1.6 |              1.6
+     90 |  2.7 |              2.7
+(9 rows)
+
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
 -- aren't enforced on a foreign table)
