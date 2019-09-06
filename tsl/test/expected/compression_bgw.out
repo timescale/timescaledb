@@ -128,7 +128,7 @@ select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_con
 -- try to execute the policy after it has been dropped --
 \set ON_ERROR_STOP 0
 select test_compress_chunks_policy(:compressjob_id);
-ERROR:  bgw job not found
+ERROR:  job 1000 not found
 \set ON_ERROR_STOP 1
 --TEST 7 
 --compress chunks policy for integer based partition hypertable

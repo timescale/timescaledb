@@ -344,7 +344,7 @@ bgw_policy_job_requires_enterprise_license(BgwJob *job)
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return false;
 		case JOB_TYPE_COMPRESS_CHUNKS:
-			return true;
+			return false;
 		default:
 			elog(ERROR,
 				 "scheduler could not determine the license type for job type: \"%s\"",
