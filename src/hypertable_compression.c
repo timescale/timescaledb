@@ -15,33 +15,48 @@
 static void
 hypertable_compression_fill_from_tuple(FormData_hypertable_compression *fd, TupleInfo *ti)
 {
-	HeapTuple tuple = ti->tuple;
-	TupleDesc desc = ti->desc;
-	Datum val;
-	bool isnull;
-	memcpy((void *) fd, GETSTRUCT(tuple), sizeof(FormData_hypertable_compression));
-	/* copy the part that could have null values explictly */
-	val = heap_getattr(tuple, Anum_hypertable_compression_segmentby_column_index, desc, &isnull);
-	if (isnull)
+	Datum values[Natts_hypertable_compression];
+	bool isnulls[Natts_hypertable_compression];
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, isnulls);
+
+	Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_hypertable_id)]);
+	Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)]);
+	Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_algo_id)]);
+
+	fd->hypertable_id =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_hypertable_id)]);
+	memcpy(&fd->attname,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)]),
+		   NAMEDATALEN);
+	fd->algo_id =
+		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_algo_id)]);
+
+	if (isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_segmentby_column_index)])
 		fd->segmentby_column_index = 0;
 	else
-		fd->segmentby_column_index = DatumGetInt16(val);
-	val = heap_getattr(tuple, Anum_hypertable_compression_orderby_column_index, desc, &isnull);
-	if (isnull)
+		fd->segmentby_column_index = DatumGetInt16(
+			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_segmentby_column_index)]);
+
+	if (isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_column_index)])
 		fd->orderby_column_index = 0;
 	else
 	{
-		fd->orderby_column_index = DatumGetInt16(val);
-		val = heap_getattr(tuple, Anum_hypertable_compression_orderby_asc, desc, &isnull);
-		fd->orderby_asc = BoolGetDatum(val);
-		val = heap_getattr(tuple, Anum_hypertable_compression_orderby_nullsfirst, desc, &isnull);
-		fd->orderby_nullsfirst = BoolGetDatum(val);
+		Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_asc)]);
+		Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_nullsfirst)]);
+
+		fd->orderby_column_index = DatumGetInt16(
+			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_column_index)]);
+		fd->orderby_asc =
+			BoolGetDatum(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_asc)]);
+		fd->orderby_nullsfirst = BoolGetDatum(
+			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_nullsfirst)]);
 	}
 }
 
-void
-hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Datum *values,
-										 bool *nulls)
+TSDLLEXPORT void
+ts_hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Datum *values,
+											bool *nulls)
 {
 	memset(nulls, 0, sizeof(bool) * Natts_hypertable_compression);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_compression_hypertable_id)] =
@@ -80,8 +95,8 @@ hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Da
 /* returns length of list and fills passed in list with pointers
  * to FormData_hypertable_compression
  */
-List *
-get_hypertablecompression_info(int32 htid)
+TSDLLEXPORT List *
+ts_hypertable_compression_get(int32 htid)
 {
 	List *fdlist = NIL;
 	FormData_hypertable_compression *colfd = NULL;
@@ -109,8 +124,8 @@ get_hypertablecompression_info(int32 htid)
 	return fdlist;
 }
 
-bool
-hypertable_compression_delete_by_hypertable_id(int32 htid)
+TSDLLEXPORT bool
+ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
 {
 	int count = 0;
 	ScanIterator iterator =

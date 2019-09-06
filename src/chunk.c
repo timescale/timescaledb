@@ -55,6 +55,7 @@
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
 #include "scan_iterator.h"
+#include "compression_chunk_size.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -1701,6 +1702,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 	chunk_formdata_fill(&form, ti->tuple, ti->desc);
 	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
 	ts_chunk_index_delete_by_chunk_id(form.id, true);
+	ts_compression_chunk_size_delete(form.id);
 
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (i = 0; i < ccs->num_constraints; i++)

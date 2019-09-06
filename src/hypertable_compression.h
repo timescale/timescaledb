@@ -11,12 +11,11 @@
 #include <catalog.h>
 #include <chunk.h>
 
-extern TSDLLEXPORT List *get_hypertablecompression_info(int32 htid);
+extern TSDLLEXPORT List *ts_hypertable_compression_get(int32 htid);
 extern TSDLLEXPORT void
-hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Datum *values,
-										 bool *nulls);
+ts_hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Datum *values,
+											bool *nulls);
 
-extern TSDLLEXPORT bool hypertable_compression_delete_by_hypertable_id(int32 htid);
-extern TSDLLEXPORT bool ts_is_compression_hypertable(int32 hypertable_id);
+extern TSDLLEXPORT bool ts_hypertable_compression_delete_by_hypertable_id(int32 htid);
 
 #endif

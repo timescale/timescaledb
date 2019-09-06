@@ -17,6 +17,7 @@ set(SOURCES
   constraint_aware_append.c
   cross_module_fn.c
   copy.c
+  compression_chunk_size.c
   compression_with_clause.c
   compression_segment_meta_min_max.c
   dimension.c

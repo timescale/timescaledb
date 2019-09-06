@@ -84,6 +84,16 @@ WHERE hypertable.table_name like 'test1';
                         26
 (1 row)
 
+--make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
+SELECT count(*) as orphaned_compression_chunk_size
+FROM _timescaledb_catalog.compression_chunk_size size
+LEFT JOIN _timescaledb_catalog.chunk chunk ON (chunk.id = size.chunk_id)
+WHERE chunk.id IS NULL;
+ orphaned_compression_chunk_size 
+---------------------------------
+                               0
+(1 row)
+
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
@@ -232,6 +242,16 @@ WHERE uncomp_hyper.table_name like 'test1';
                        1
 (1 row)
 
+--make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
+SELECT count(*) as orphaned_compression_chunk_size
+FROM _timescaledb_catalog.compression_chunk_size size
+LEFT JOIN _timescaledb_catalog.chunk chunk ON (chunk.id = size.chunk_id)
+WHERE chunk.id IS NULL;
+ orphaned_compression_chunk_size 
+---------------------------------
+                               0
+(1 row)
+
 --
 -- DROP HYPERTABLE
 --
@@ -262,6 +282,12 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
      0
 (1 row)
 
+SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
+ count 
+-------
+     0
+(1 row)
+
 ROLLBACK;
 --create a dependent object on the compressed hypertable to test cascade behaviour
 CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_HYPER_NAME;
@@ -269,12 +295,25 @@ CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_HYPER_NAME;
 DROP TABLE :UNCOMPRESSED_HYPER_NAME;
 ERROR:  cannot drop table _timescaledb_internal._compressed_hypertable_2 because other objects depend on it
 \set ON_ERROR_STOP 1
+BEGIN;
 DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
 NOTICE:  drop cascades to 2 other objects
---verify that there are no more hypertable remaining
-SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable
+SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
  count 
 -------
      0
 (1 row)
 
+ROLLBACK;
+DROP VIEW dependent_1;
+--create a cont agg view on the ht as well then the drop should nuke everything
+--TODO put back when cont aggs work
+--CREATE VIEW test1_cont_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+--AS SELECT time_bucket('1 hour', "Time"), SUM(i)
+--    FROM test1
+--    GROUP BY 1;
+--REFRESH MATERIALIZED VIEW test1_cont_view;
+--SELECT count(*) FROM test1_cont_view;
+--DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
+--verify that there are no more hypertable remaining
+--SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;

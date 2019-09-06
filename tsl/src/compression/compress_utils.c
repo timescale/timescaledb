@@ -25,6 +25,7 @@
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "license.h"
+#include "compression_chunk_size.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -65,34 +66,6 @@ compute_chunk_size(Oid chunk_relid)
 	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
 	ret.toast_size = tot_size - ret.heap_size;
 	return ret;
-}
-
-static void
-init_scan_by_uncompressed_chunk_id(ScanIterator *iterator, int32 uncompressed_chunk_id)
-{
-	iterator->ctx.index =
-		catalog_get_index(ts_catalog_get(), COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_compression_chunk_size_pkey_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(uncompressed_chunk_id));
-}
-
-static int
-compression_chunk_size_delete(int32 uncompressed_chunk_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	init_scan_by_uncompressed_chunk_id(&iterator, uncompressed_chunk_id);
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
-	}
-	return count;
 }
 
 static void
@@ -197,7 +170,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
 	// get compression properties for hypertable
-	htcols_list = get_hypertablecompression_info(cxt.srcht->fd.id);
+	htcols_list = ts_hypertable_compression_get(cxt.srcht->fd.id);
 	htcols_listlen = list_length(htcols_list);
 	// create compressed chunk DDL and compress the data
 	compress_ht_chunk = create_compress_chunk_table(cxt.compress_ht, cxt.srcht_chunk);
@@ -274,7 +247,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
-	compression_chunk_size_delete(uncompressed_chunk->fd.id);
+	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 
