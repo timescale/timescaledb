@@ -40,6 +40,7 @@
 #include "dimension.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
+#include "hypertable_compression.h"
 
 #include "subspace_store.h"
 #include "hypertable_cache.h"
@@ -564,6 +565,9 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
+
+	/* remove any associated compression definitions */
+	ts_hypertable_compression_delete_by_hypertable_id(hypertable_id);
 
 	if (!compressed_hypertable_id_isnull)
 	{

@@ -328,7 +328,7 @@ compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
 	{
 		FormData_hypertable_compression *fd = &compress_cols->col_meta[i];
 		fd->hypertable_id = htid;
-		hypertable_compression_fill_tuple_values(fd, &values[0], &nulls[0]);
+		ts_hypertable_compression_fill_tuple_values(fd, &values[0], &nulls[0]);
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		ts_catalog_insert_values(rel, desc, values, nulls);
 		ts_catalog_restore_user(&sec_ctx);
@@ -561,7 +561,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		/* need to drop the old compressed hypertable in case the segment by columns changed (and
 		 * thus the column types of compressed hypertable need to change) */
 		ts_hypertable_drop(compressed, DROP_RESTRICT);
-		hypertable_compression_delete_by_hypertable_id(ht->fd.id);
+		ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
 	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);

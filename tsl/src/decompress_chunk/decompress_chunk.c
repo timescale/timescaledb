@@ -53,7 +53,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	Index compressed_index;
 	RelOptInfo *compressed_rel;
 	Path *path;
-	List *compression_info = get_hypertablecompression_info(ht->fd.id);
+	List *compression_info = ts_hypertable_compression_get(ht->fd.id);
 	/*
 	 * since we rely on parallel coordination from the scan below
 	 * this node it is probably not beneficial to have more

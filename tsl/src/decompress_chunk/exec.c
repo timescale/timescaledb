@@ -170,7 +170,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	if (eflags & EXEC_FLAG_BACKWARD)
 		state->reverse = !state->reverse;
 
-	state->hypertable_compression_info = get_hypertablecompression_info(state->hypertable_id);
+	state->hypertable_compression_info = ts_hypertable_compression_get(state->hypertable_id);
 
 	initialize_column_state(state);
 
