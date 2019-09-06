@@ -81,31 +81,73 @@ static Chunk **chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 
-static void
-chunk_insert_relation(Relation rel, Chunk *chunk)
+static HeapTuple
+chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 {
-	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_chunk];
 	bool nulls[Natts_chunk] = { false };
-	CatalogSecurityContext sec_ctx;
 
-	memset(values, 0, sizeof(values));
-	values[AttrNumberGetAttrOffset(Anum_chunk_id)] = Int32GetDatum(chunk->fd.id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)] =
-		Int32GetDatum(chunk->fd.hypertable_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&chunk->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&chunk->fd.table_name);
+	memset(values, 0, sizeof(Datum) * Natts_chunk);
+
+	values[AttrNumberGetAttrOffset(Anum_chunk_id)] = Int32GetDatum(fd->id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)] = Int32GetDatum(fd->hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&fd->schema_name);
+	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&fd->table_name);
 	/*when we insert a chunk the compressed chunk id is always NULL */
-	if (chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+	if (fd->compressed_chunk_id == INVALID_CHUNK_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
 	else
 	{
 		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
-			Int32GetDatum(chunk->fd.compressed_chunk_id);
+			Int32GetDatum(fd->compressed_chunk_id);
 	}
+
+	return heap_form_tuple(desc, values, nulls);
+}
+
+static void
+chunk_formdata_fill(FormData_chunk *fd, const HeapTuple tuple, const TupleDesc desc)
+{
+	bool nulls[Natts_chunk];
+	Datum values[Natts_chunk];
+
+	heap_deform_tuple(tuple, desc, values, nulls);
+
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_id)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_table_name)]);
+
+	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
+	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
+	memcpy(&fd->schema_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]),
+		   NAMEDATALEN);
+	memcpy(&fd->table_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]),
+		   NAMEDATALEN);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)])
+		fd->compressed_chunk_id = INVALID_CHUNK_ID;
+	else
+		fd->compressed_chunk_id =
+			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
+}
+
+static void
+chunk_insert_relation(Relation rel, Chunk *chunk)
+{
+	HeapTuple new_tuple;
+
+	CatalogSecurityContext sec_ctx;
+
+	new_tuple = chunk_formdata_make_tuple(&chunk->fd, RelationGetDescr(rel));
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_insert(rel, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
+
+	heap_freetuple(new_tuple);
 }
 
 void
@@ -117,22 +159,6 @@ ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 	rel = heap_open(catalog_get_table_id(catalog, CHUNK), lock);
 	chunk_insert_relation(rel, chunk);
 	heap_close(rel, lock);
-}
-
-static void
-chunk_formdata_fill(FormData_chunk *fd, HeapTuple tuple, TupleDesc desc)
-{
-	bool isnull;
-	Datum compress_id;
-
-	memcpy(fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
-	/* this is valid because NULLS are only at the end of the struct */
-	/* compressed_chunk_id can be null, so retrieve it */
-	compress_id = heap_getattr(tuple, Anum_chunk_compressed_chunk_id, desc, &isnull);
-	if (isnull)
-		fd->compressed_chunk_id = INVALID_CHUNK_ID;
-	else
-		fd->compressed_chunk_id = DatumGetInt32(compress_id);
 }
 
 static void
@@ -1819,7 +1845,7 @@ init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_
 }
 
 bool
-ts_chunk_is_compressed(Chunk *chunk)
+ts_chunk_contains_compressed_data(Chunk *chunk)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	bool found = false;
@@ -1871,22 +1897,24 @@ ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_
 }
 
 static ScanTupleResult
-chunk_tuple_update(TupleInfo *ti, void *data)
+chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
 {
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(tuple);
+	FormData_chunk form;
 	FormData_chunk *update = data;
 	CatalogSecurityContext sec_ctx;
+	HeapTuple new_tuple;
 
-	namecpy(&form->schema_name, &update->schema_name);
-	namecpy(&form->table_name, &update->table_name);
+	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+
+	namecpy(&form.schema_name, &update->schema_name);
+	namecpy(&form.table_name, &update->table_name);
+
+	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update(ti->scanrel, tuple);
+	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
-
-	heap_freetuple(tuple);
-
+	heap_freetuple(new_tuple);
 	return SCAN_DONE;
 }
 
@@ -1900,7 +1928,7 @@ chunk_update_form(FormData_chunk *form)
 	return chunk_scan_internal(CHUNK_ID_INDEX,
 							   scankey,
 							   1,
-							   chunk_tuple_update,
+							   chunk_tuple_update_schema_and_table,
 							   form,
 							   0,
 							   ForwardScanDirection,
@@ -1927,31 +1955,19 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 static ScanTupleResult
 chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
 {
-	bool nulls[Natts_chunk];
-	Datum values[Natts_chunk];
-	bool repl[Natts_chunk] = { false };
+	FormData_chunk form;
+	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
-
-	HeapTuple tuple;
 	int32 compressed_chunk_id = *((int32 *) data);
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-	if (compressed_chunk_id == INVALID_CHUNK_ID)
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = false;
-		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
-			Int32GetDatum(compressed_chunk_id);
-	}
-	repl[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
+	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	form.compressed_chunk_id = compressed_chunk_id;
+	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
 
 	return SCAN_DONE;
 }
@@ -1986,14 +2002,19 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id, bool isnu
 static ScanTupleResult
 chunk_rename_schema_name(TupleInfo *ti, void *data)
 {
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_chunk *chunk = (FormData_chunk *) GETSTRUCT(tuple);
+	FormData_chunk form;
+	HeapTuple new_tuple;
+	CatalogSecurityContext sec_ctx;
 
+	chunk_formdata_fill(&form, ti->tuple, ti->desc);
 	/* Rename schema name */
-	namestrcpy(&chunk->schema_name, (char *) data);
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	namestrcpy(&form.schema_name, (char *) data);
+	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
 
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
 	return SCAN_CONTINUE;
 }
 
@@ -2361,7 +2382,7 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 
 /* has chunk ,specifieid by chunk_id, been compressed */
 bool
-ts_chunk_is_compressed(int32 chunk_id)
+ts_chunk_has_associated_compressed_chunk(int32 chunk_id)
 {
 	bool compressed = false;
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);

@@ -791,7 +791,7 @@ dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *dat
 	foreach (lc, chunk_ids)
 	{
 		int32 chunk_id = lfirst_int(lc);
-		if (!ts_chunk_is_compressed(chunk_id))
+		if (!ts_chunk_has_associated_compressed_chunk(chunk_id))
 		{
 			/* found a chunk that has not yet been compressed */
 			*((int32 *) data) = chunk_id;
