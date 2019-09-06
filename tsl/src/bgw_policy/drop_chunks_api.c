@@ -57,15 +57,31 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
+	/* Make sure that an existing policy doesn't exist on this hypertable */
+	hcache = ts_hypertable_cache_pin();
+	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
+
+	if (NULL == hypertable)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("\"%s\" is not a hypertable", get_rel_name(ht_oid)),
+				 errhint("add_drop_chunk_policy can only be used with hypertables.")));
+
+	if (hypertable->fd.compressed)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot add drop chunks policy to hypertable \"%s\" which contains "
+						"compressed data",
+						get_rel_name(ht_oid)),
+				 errhint("Please add the policy to the corresponding uncompressed hypertable "
+						 "instead.")));
+
 	older_than = ts_interval_from_sql_input(ht_oid,
 											older_than_datum,
 											older_than_type,
 											"older_than",
 											"add_drop_chunks_policy");
 
-	/* Make sure that an existing policy doesn't exist on this hypertable */
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
 	existing = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable->fd.id);
 
 	if (existing != NULL)
