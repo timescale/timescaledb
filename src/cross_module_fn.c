@@ -300,7 +300,7 @@ static bool
 process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
 							   WithClauseResult *with_clause_options)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
@@ -353,35 +353,35 @@ continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **
 static bytea *
 segment_meta_min_max_send_default(Datum arg1)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
 static Datum
 segment_meta_min_max_recv_default(StringInfo buf)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
 static Datum
 segment_meta_get_min_default(Datum meta, Oid type)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
 static Datum
 segment_meta_get_max_default(Datum meta, Oid type)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
 static bool
 segment_meta_has_null_default(Datum meta)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
@@ -402,10 +402,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_materialize = cagg_materialize_default_fn,
 	.add_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.add_reorder_policy = error_no_default_fn_pg_enterprise,
-	.add_compress_chunks_policy = error_no_default_fn_pg_enterprise,
+	.add_compress_chunks_policy = error_no_default_fn_pg_community,
 	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.remove_reorder_policy = error_no_default_fn_pg_enterprise,
-	.remove_compress_chunks_policy = error_no_default_fn_pg_enterprise,
+	.remove_compress_chunks_policy = error_no_default_fn_pg_community,
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_hook = NULL,
 	.gapfill_marker = error_no_default_fn_pg_community,
@@ -434,8 +434,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_in = error_no_default_fn_pg_community,
 	.compressed_data_out = error_no_default_fn_pg_community,
 	.process_compress_table = process_compress_table_default,
-	.compress_chunk = error_no_default_fn_pg_enterprise,
-	.decompress_chunk = error_no_default_fn_pg_enterprise,
+	.compress_chunk = error_no_default_fn_pg_community,
+	.decompress_chunk = error_no_default_fn_pg_community,
 	.segment_meta_min_max_send = segment_meta_min_max_send_default,
 	.segment_meta_min_max_recv = segment_meta_min_max_recv_default,
 	.segment_meta_get_min = segment_meta_get_min_default,
