@@ -109,6 +109,10 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, char *p
 						get_rel_name(relid))));
 	/* validate that the open dimension uses a time type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
+
+	if (NULL == open_dim)
+		elog(ERROR, "internal error: no open dimension found while parsing interval");
+
 	partitioning_type = ts_dimension_get_partition_type(open_dim);
 	ts_cache_release(hcache);
 

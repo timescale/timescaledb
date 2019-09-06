@@ -531,7 +531,7 @@ CREATE TABLE non_hypertable(junk int, more_junk int);
 CREATE INDEX non_ht_index on non_hypertable(junk);
 \set ON_ERROR_STOP 0
 select add_drop_chunks_policy('non_hypertable', INTERVAL '2 month');
-ERROR:  could not add drop_chunks policy because "non_hypertable" is not a hypertable
+ERROR:  "non_hypertable" is not a hypertable
 select add_reorder_policy('non_hypertable', 'non_ht_index');
 ERROR:  could not add reorder policy because "non_hypertable" is not a hypertable
 \set ON_ERROR_STOP 1
