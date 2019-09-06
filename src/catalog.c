@@ -602,8 +602,8 @@ ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
 /*
  * Insert a new row into a catalog table.
  */
-static void
-catalog_insert(Relation rel, HeapTuple tuple)
+void
+ts_catalog_insert(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleInsert(rel, tuple);
 	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_INSERT);
@@ -619,7 +619,7 @@ ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *n
 {
 	HeapTuple tuple = heap_form_tuple(tupdesc, values, nulls);
 
-	catalog_insert(rel, tuple);
+	ts_catalog_insert(rel, tuple);
 	heap_freetuple(tuple);
 }
 

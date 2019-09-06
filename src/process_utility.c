@@ -704,7 +704,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		chunk = ts_chunk_get_by_relid(relid, 0, false);
 		if (chunk != NULL)
 		{
-			if (ts_chunk_is_compressed(chunk))
+			if (ts_chunk_contains_compressed_data(chunk))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("dropping compressed chunks not supported"),

@@ -1265,6 +1265,8 @@ extern Oid ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 extern TSDLLEXPORT bool ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
 															  CatalogSecurityContext *sec_ctx);
 extern TSDLLEXPORT void ts_catalog_restore_user(CatalogSecurityContext *sec_ctx);
+
+extern TSDLLEXPORT void ts_catalog_insert(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values,
 												 bool *nulls);
 extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);

@@ -103,7 +103,6 @@ extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
 
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
-extern TSDLLEXPORT bool ts_chunk_is_compressed(Chunk *chunk);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int ts_chunk_delete_by_name(const char *schema, const char *table,
@@ -120,7 +119,9 @@ extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Oid table_relid, Datum older_th
 												 Oid newer_than_type, bool cascade,
 												 bool cascades_to_materializations,
 												 int32 log_level);
-extern TSDLLEXPORT bool ts_chunk_is_compressed(int32 chunk_id);
+
+extern bool TSDLLEXPORT ts_chunk_contains_compressed_data(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_has_associated_compressed_chunk(int32 chunk_id);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
