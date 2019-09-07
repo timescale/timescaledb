@@ -29,8 +29,8 @@ extern void ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id,
 								  Relation hypertable_idxrel, int32 chunk_id, Relation chunkrel);
 
 extern List *ts_get_expr_index_attnames(IndexInfo *ii, Relation htrel);
-void ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel,
-									Relation chunkrel, List *attnames);
+void ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation template_indexrel,
+								Relation chunkrel);
 extern void ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id,
 														   Relation hypertable_idxrel,
 														   int32 chunk_id, Relation chunkrel,

@@ -86,79 +86,23 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 	return idxname;
 }
 
-static inline Name
-find_attname_by_attno(TupleDesc tupdesc, AttrNumber attno)
-{
-	int i;
-
-	for (i = 0; i < tupdesc->natts; i++)
-	{
-		FormData_pg_attribute *attr = TupleDescAttr(tupdesc, i);
-
-		if (attr->attnum == attno)
-			return &attr->attname;
-	}
-	return NULL;
-}
-
-/*
- * Adjust attribute numbers for expression index definitions.
- */
-List *
-ts_get_expr_index_attnames(IndexInfo *ii, Relation htrel)
-{
-	ListCell *lc;
-	List *name_list = NIL;
-
-	foreach (lc, ii->ii_Expressions)
-	{
-		/* Get a list of references to all Vars in the expression */
-		List *vars = pull_var_clause(lfirst(lc), 0);
-		ListCell *lc_var;
-
-		foreach (lc_var, vars)
-		{
-			/*
-			 * Find the chunk attribute that matches the Var. First, we need
-			 * to find the attributes name by looking up the hypertable
-			 * attribute using the Var's varattno. Then, given the attribute's
-			 * name, find the chunk attribute that matches.
-			 */
-			Var *var = lfirst(lc_var);
-			Name attname = find_attname_by_attno(htrel->rd_att, var->varattno);
-
-			lappend(name_list, attname);
-		}
-	}
-	return name_list;
-}
-
 static void
-adjust_expr_attnos_from_attnames(IndexInfo *ii, List *attnames, Relation chunkrel)
+adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 {
 	ListCell *lc;
-	ListCell *lc_name = list_head(attnames);
-	foreach (lc, ii->ii_Expressions)
+
+	/* Get a list of references to all Vars in the expression */
+	List *vars = pull_var_clause((Node *) ii->ii_Expressions, 0);
+
+	foreach (lc, vars)
 	{
-		/* Get a list of references to all Vars in the expression */
-		List *vars = pull_var_clause(lfirst(lc), 0);
-		ListCell *lc_var;
-		foreach (lc_var, vars)
-		{
-			Var *var = lfirst(lc_var);
-			for_each_cell (lc_name, lc_name)
-			{
-				Name attname = lfirst(lc_name);
-				if (NULL == attname)
-					elog(ERROR, "index expression var %u not found in chunk", var->varattno);
+		Var *var = lfirst(lc);
 
-				/* Adjust the Var's attno to match the chunk's attno */
-				var->varattno = attno_find_by_attname(chunkrel->rd_att, attname);
+		char *attname = get_attname_compat(ht_relid, var->varattno, false);
+		var->varattno = get_attnum(chunkrel->rd_id, attname);
 
-				if (var->varattno == InvalidAttrNumber)
-					elog(ERROR, "index attribute %s not found in chunk", NameStr(*attname));
-			}
-		}
+		if (var->varattno == InvalidAttrNumber)
+			elog(ERROR, "index attribute %s not found in chunk", attname);
 	}
 }
 
@@ -173,7 +117,7 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 	for (i = 0; i < idxrel->rd_att->natts; i++)
 	{
 		FormData_pg_attribute *idxattr = TupleDescAttr(idxrel->rd_att, i);
-		AttrNumber attno = attno_find_by_attname(chunkrel->rd_att, &idxattr->attname);
+		AttrNumber attno = get_attnum(chunkrel->rd_id, NameStr(idxattr->attname));
 
 		if (attno == InvalidAttrNumber)
 			elog(ERROR, "index attribute %s not found in chunk", NameStr(idxattr->attname));
@@ -186,8 +130,8 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 }
 
 void
-ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel, Relation chunkrel,
-							   List *attnames)
+ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation template_indexrel,
+						   Relation chunkrel)
 {
 	/*
 	 * Adjust a hypertable's index attribute numbers to match a chunk.
@@ -204,10 +148,7 @@ ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel,
 	if (list_length(indexinfo->ii_Expressions) == 0)
 		chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
 	else
-	{
-		Assert(attnames != NIL);
-		adjust_expr_attnos_from_attnames(indexinfo, attnames, chunkrel);
-	}
+		adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
 }
 
 #define CHUNK_INDEX_TABLESPACE_OFFSET 1
@@ -278,8 +219,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 			chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
 		else
 		{
-			List *attnames = ts_get_expr_index_attnames(indexinfo, htrel);
-			adjust_expr_attnos_from_attnames(indexinfo, attnames, chunkrel);
+			adjust_expr_attnos(htrel->rd_id, indexinfo, chunkrel);
 		}
 	}
 

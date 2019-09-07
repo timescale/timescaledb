@@ -1448,7 +1448,6 @@ typedef struct HypertableIndexOptions
 	 */
 	bool multitransaction;
 	IndexInfo *indexinfo;
-	List *attnames;
 	int n_ht_atts;
 	bool ht_hasoid;
 
@@ -1472,6 +1471,7 @@ typedef struct CreateIndexInfo
 {
 	IndexStmt *stmt;
 	ObjectAddress obj;
+	Oid main_table_relid;
 	HypertableIndexOptions extended_options;
 	MemoryContext mctx;
 } CreateIndexInfo;
@@ -1567,10 +1567,10 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
 									RelationGetDescr(chunk_rel)))
-		ts_adjust_attnos_from_attnames(info->extended_options.indexinfo,
-									   hypertable_index_rel,
-									   chunk_rel,
-									   info->extended_options.attnames);
+		ts_adjust_indexinfo_attnos(info->extended_options.indexinfo,
+								   info->main_table_relid,
+								   hypertable_index_rel,
+								   chunk_rel);
 
 	ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
 												   hypertable_index_rel,
@@ -1636,7 +1636,6 @@ process_index_start(ProcessUtilityArgs *args)
 #endif
 	};
 	ObjectAddress root_table_index;
-	Oid main_table_id;
 	Relation main_table_relation;
 	TupleDesc main_table_desc;
 	Relation main_table_index_relation;
@@ -1731,7 +1730,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* create chunk indexes using a separate transaction for each chunk */
 
 	/* we're about to release the hcache so store the main_table_relid for later */
-	main_table_id = ht->main_table_relid;
+	info.main_table_relid = ht->main_table_relid;
 	main_table_relation = relation_open(ht->main_table_relid, AccessShareLock);
 	main_table_desc = RelationGetDescr(main_table_relation);
 
@@ -1739,8 +1738,6 @@ process_index_start(ProcessUtilityArgs *args)
 	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
 
 	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
-	info.extended_options.attnames =
-		ts_get_expr_index_attnames(info.extended_options.indexinfo, main_table_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
 	info.extended_options.ht_hasoid = main_table_desc->tdhasoid;
 
@@ -1765,7 +1762,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * completed successfully or  not
 	 */
 	ts_indexing_mark_as_invalid(info.obj.objectId);
-	CacheInvalidateRelcacheByRelid(main_table_id);
+	CacheInvalidateRelcacheByRelid(info.main_table_relid);
 	CacheInvalidateRelcacheByRelid(info.obj.objectId);
 
 	ts_cache_release(hcache);
@@ -1777,7 +1774,7 @@ process_index_start(ProcessUtilityArgs *args)
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
-	foreach_chunk_multitransaction(main_table_id,
+	foreach_chunk_multitransaction(info.main_table_relid,
 								   info.mctx,
 								   process_index_chunk_multitransaction,
 								   &info);
@@ -1790,7 +1787,7 @@ process_index_start(ProcessUtilityArgs *args)
 		/* we're done, the index is now valid */
 		ts_indexing_mark_as_valid(info.obj.objectId);
 
-		CacheInvalidateRelcacheByRelid(main_table_id);
+		CacheInvalidateRelcacheByRelid(info.main_table_relid);
 		CacheInvalidateRelcacheByRelid(info.obj.objectId);
 	}
 
