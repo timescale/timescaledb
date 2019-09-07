@@ -15,12 +15,14 @@ accidentally triggering the load of a previous DB version.**
 * #1422 Fix background worker segfaults
 * #1423 Fix segfault on ARM/32-bit builds
 * #1424 Fix ChunkAppend LIMIT pushdown
+* #1429 Fix expression index creation
 
 **Thanks**
 * @shahidhk for reporting an issue with OUTER JOINs
 * @cossbow and @xxGL1TCHxx for reporting reporting issues with ChunkAppend and space partitioning
 * @est for reporting an issue with CASE expressions in continuous aggregates
 * @devlucasc for reporting the issue with deleting a background worker while a job is running
+* @ryan-shaw for reporting an issue with expression indexes on hypertables with dropped columns
 
 ## 1.4.1 (2019-08-01)
 
