@@ -204,7 +204,19 @@ CREATE UNIQUE INDEX index_test_2_idx ON index_test_2 (time, temp);
 DROP INDEX index_test_idx, index_test_2_idx;
 \set ON_ERROR_STOP 1
 
-DROP INDEX index_test_idx;
-DROP INDEX index_test_2_idx;
-DROP TABLE index_test;
-DROP TABLE index_test_2;
+-- test expression index with dropped columns
+CREATE TABLE idx_expr_test(filler int, time timestamptz, meta text);
+SELECT table_name FROM create_hypertable('idx_expr_test', 'time');
+ALTER TABLE idx_expr_test DROP COLUMN filler;
+CREATE INDEX tag_idx ON idx_expr_test(('foo'||meta));
+INSERT INTO idx_expr_test(time, meta) VALUES ('2000-01-01', 'bar');
+DROP TABLE idx_expr_test CASCADE;
+
+-- test multicolumn expression index with dropped columns
+CREATE TABLE idx_expr_test(filler int, time timestamptz, t1 text, t2 text, t3 text);
+SELECT table_name FROM create_hypertable('idx_expr_test', 'time');
+ALTER TABLE idx_expr_test DROP COLUMN filler;
+CREATE INDEX tag_idx ON idx_expr_test((t1||t2||t3));
+INSERT INTO idx_expr_test(time, t1, t2, t3) VALUES ('2000-01-01', 'foo', 'bar', 'baz');
+DROP TABLE idx_expr_test CASCADE;
+
