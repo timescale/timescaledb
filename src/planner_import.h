@@ -23,6 +23,8 @@
 #include <utils/relcache.h>
 #include <utils/selfuncs.h>
 
+#include "export.h"
+
 extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
 										 List **translated_vars);
 extern size_t ts_estimate_hashagg_tablesize(struct Path *path,
@@ -40,6 +42,12 @@ extern Plan *ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relid
 										   int *p_numsortkeys, AttrNumber **p_sortColIdx,
 										   Oid **p_sortOperators, Oid **p_collations,
 										   bool **p_nullsFirst);
+
+extern TSDLLEXPORT Sort *ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids);
+extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr,
+														Relids nullable_relids, Oid ordering_op,
+														bool nulls_first, Index sortref,
+														bool create_it);
 
 extern List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 

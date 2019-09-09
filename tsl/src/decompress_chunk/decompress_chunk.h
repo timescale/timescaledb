@@ -13,18 +13,35 @@
 #include "chunk.h"
 #include "hypertable.h"
 
-typedef struct DecompressChunkPath
+typedef struct CompressionInfo
 {
-	CustomPath cpath;
 	RelOptInfo *chunk_rel;
 	RelOptInfo *compressed_rel;
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	RangeTblEntry *ht_rte;
-	List *varattno_map;
+
 	int hypertable_id;
-	List *compression_info;
+	List *hypertable_compression_info;
+
+	int num_orderby_columns;
+	int num_segmentby_columns;
+
+} CompressionInfo;
+
+typedef struct DecompressChunkPath
+{
+	CustomPath cpath;
+	CompressionInfo *info;
+	/*
+	 * varattno_map maps targetlist entries of the compressed scan
+	 * to tuple attribute number of the uncompressed chunk
+	 * negative values are special columns in the compressed scan
+	 * that do not have a representation in the uncompressed chunk
+	 */
+	List *varattno_map;
 	bool reverse;
+	bool needs_sequence_num;
 } DecompressChunkPath;
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
@@ -32,6 +49,6 @@ void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hype
 
 FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
 															char *column_name);
-AttrNumber get_compressed_attno(DecompressChunkPath *dcpath, AttrNumber chunk_attno);
+AttrNumber get_compressed_attno(CompressionInfo *info, AttrNumber chunk_attno);
 
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

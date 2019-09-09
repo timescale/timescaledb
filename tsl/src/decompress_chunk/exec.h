@@ -14,6 +14,9 @@
 
 #include "compression/compression.h"
 
+#define DECOMPRESS_CHUNK_COUNT_ID -9
+#define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
+
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
 
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_EXEC_H */
