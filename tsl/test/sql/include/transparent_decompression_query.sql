@@ -99,6 +99,41 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
 
 --
+-- test ordered path
+--
+
+-- should not produce ordered path
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY time, device_id;
+
+-- should produce ordered path
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer,v0,v1 desc,time;
+
+-- test order by columns not in targetlist
+:PREFIX_VERBOSE SELECT device_id, device_id_peer FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer,v0,v1 desc,time LIMIT 100;
+
+-- test ordering only by segmentby columns
+-- should produce ordered path and not have sequence number in targetlist of compressed scan
+:PREFIX_VERBOSE SELECT device_id, device_id_peer FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer LIMIT 100;
+
+-- should produce ordered path
+-- only referencing PREFIX_VERBOSE should work
+:PREFIX_VERBOSE SELECT device_id,device_id_peer,v0 FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer,v0;
+
+-- should produce ordered path
+-- only referencing PREFIX_VERBOSE should work
+:PREFIX_VERBOSE SELECT device_id,device_id_peer,v0, v1 FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer,v0, v1 desc;
+
+-- should not produce ordered path
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer,v0,v1 desc,time,v3;
+
+-- should produce ordered path
+-- ASC/DESC for segmentby columns can be pushed down
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id DESC,device_id_peer DESC,v0,v1 desc,time;
+
+-- should not produce ordered path
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id DESC,device_id_peer DESC,v0,v1,time;
+
+--
 -- test constraint exclusion
 --
 

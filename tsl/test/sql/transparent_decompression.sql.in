@@ -38,6 +38,7 @@ ANALYZE metrics_space;
 
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
+\set PREFIX_VERBOSE ''
 \set ECHO none
 SET client_min_messages TO error;
 \o :TEST_RESULTS_UNCOMPRESSED
@@ -70,6 +71,7 @@ ANALYZE _timescaledb_internal._compressed_hypertable_4;
 
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
+\set PREFIX_VERBOSE ''
 \set ECHO none
 SET client_min_messages TO error;
 \o :TEST_RESULTS_COMPRESSED
@@ -86,7 +88,11 @@ SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
     THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
     ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX"
+  END AS "PREFIX",
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+    ELSE 'EXPLAIN (costs off, verbose)'
+  END AS "PREFIX_VERBOSE"
 \gset
 
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output

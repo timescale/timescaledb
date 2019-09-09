@@ -23,6 +23,7 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
+#include <optimizer/paths.h>
 #include <optimizer/placeholder.h>
 #include <optimizer/planner.h>
 #include <optimizer/subselect.h>
@@ -593,6 +594,168 @@ find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
 	}
 
 	return NULL;
+}
+
+/*
+ * make_pathkey_from_sortinfo
+ *    Given an expression and sort-order information, create a PathKey.
+ *    The result is always a "canonical" PathKey, but it might be redundant.
+ *
+ * expr is the expression, and nullable_relids is the set of base relids
+ * that are potentially nullable below it.
+ *
+ * If the PathKey is being generated from a SortGroupClause, sortref should be
+ * the SortGroupClause's SortGroupRef; otherwise zero.
+ *
+ * If rel is not NULL, it identifies a specific relation we're considering
+ * a path for, and indicates that child EC members for that relation can be
+ * considered.  Otherwise child members are ignored.  (See the comments for
+ * get_eclass_for_sort_expr.)
+ *
+ * create_it is true if we should create any missing EquivalenceClass
+ * needed to represent the sort key.  If it's false, we return NULL if the
+ * sort key isn't already present in any EquivalenceClass.
+ */
+static PathKey *
+ts_make_pathkey_from_sortinfo(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid opfamily,
+							  Oid opcintype, Oid collation, bool reverse_sort, bool nulls_first,
+							  Index sortref, Relids rel, bool create_it)
+{
+	int16 strategy;
+	Oid equality_op;
+	List *opfamilies;
+	EquivalenceClass *eclass;
+
+	strategy = reverse_sort ? BTGreaterStrategyNumber : BTLessStrategyNumber;
+
+	/*
+	 * EquivalenceClasses need to contain opfamily lists based on the family
+	 * membership of mergejoinable equality operators, which could belong to
+	 * more than one opfamily.  So we have to look up the opfamily's equality
+	 * operator and get its membership.
+	 */
+	equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
+	if (!OidIsValid(equality_op)) /* shouldn't happen */
+		elog(ERROR,
+			 "missing operator %d(%u,%u) in opfamily %u",
+			 BTEqualStrategyNumber,
+			 opcintype,
+			 opcintype,
+			 opfamily);
+	opfamilies = get_mergejoin_opfamilies(equality_op);
+	if (!opfamilies) /* certainly should find some */
+		elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
+
+	/* Now find or (optionally) create a matching EquivalenceClass */
+	eclass = get_eclass_for_sort_expr(root,
+									  expr,
+									  nullable_relids,
+									  opfamilies,
+									  opcintype,
+									  collation,
+									  sortref,
+									  rel,
+									  create_it);
+
+	/* Fail if no EC and !create_it */
+	if (!eclass)
+		return NULL;
+
+	/* And finally we can find or create a PathKey node */
+	return make_canonical_pathkey(root, eclass, opfamily, strategy, nulls_first);
+}
+
+/*
+ * make_pathkey_from_sortop
+ *    Like make_pathkey_from_sortinfo, but work from a sort operator.
+ *
+ * This should eventually go away, but we need to restructure SortGroupClause
+ * first.
+ */
+PathKey *
+ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid ordering_op,
+							bool nulls_first, Index sortref, bool create_it)
+{
+	Oid opfamily, opcintype, collation;
+	int16 strategy;
+
+	/* Find the operator in pg_amop --- failure shouldn't happen */
+	if (!get_ordering_op_properties(ordering_op, &opfamily, &opcintype, &strategy))
+		elog(ERROR, "operator %u is not a valid ordering operator", ordering_op);
+
+	/* Because SortGroupClause doesn't carry collation, consult the expr */
+	collation = exprCollation((Node *) expr);
+
+	return ts_make_pathkey_from_sortinfo(root,
+										 expr,
+										 nullable_relids,
+										 opfamily,
+										 opcintype,
+										 collation,
+										 (strategy == BTGreaterStrategyNumber),
+										 nulls_first,
+										 sortref,
+										 NULL,
+										 create_it);
+}
+
+/*
+ * make_sort --- basic routine to build a Sort plan node
+ *
+ * Caller must have built the sortColIdx, sortOperators, collations, and
+ * nullsFirst arrays already.
+ */
+static Sort *
+make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators, Oid *collations,
+		  bool *nullsFirst)
+{
+	Sort *node = makeNode(Sort);
+	Plan *plan = &node->plan;
+
+	plan->targetlist = lefttree->targetlist;
+	plan->qual = NIL;
+	plan->lefttree = lefttree;
+	plan->righttree = NULL;
+	node->numCols = numCols;
+	node->sortColIdx = sortColIdx;
+	node->sortOperators = sortOperators;
+	node->collations = collations;
+	node->nullsFirst = nullsFirst;
+
+	return node;
+}
+
+/*
+ * make_sort_from_pathkeys
+ *    Create sort plan to sort according to given pathkeys
+ *
+ *    'lefttree' is the node which yields input tuples
+ *    'pathkeys' is the list of pathkeys by which the result is to be sorted
+ *    'relids' is the set of relations required by prepare_sort_from_pathkeys()
+ */
+Sort *
+ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
+{
+	int numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid *sortOperators;
+	Oid *collations;
+	bool *nullsFirst;
+
+	/* Compute sort column info, and adjust lefttree as needed */
+	lefttree = ts_prepare_sort_from_pathkeys(lefttree,
+											 pathkeys,
+											 relids,
+											 NULL,
+											 false,
+											 &numsortkeys,
+											 &sortColIdx,
+											 &sortOperators,
+											 &collations,
+											 &nullsFirst);
+
+	/* Now build the Sort node */
+	return make_sort(lefttree, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
 }
 
 /*

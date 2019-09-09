@@ -37,13 +37,14 @@ typedef enum DecompressChunkColumnType
 	SEGMENTBY_COLUMN,
 	COMPRESSED_COLUMN,
 	COUNT_COLUMN,
+	SEQUENCE_NUM_COLUMN,
 } DecompressChunkColumnType;
 
 typedef struct DecompressChunkColumnState
 {
 	DecompressChunkColumnType type;
 	Oid typid;
-	Oid attno;
+	AttrNumber attno;
 	union
 	{
 		struct
@@ -126,7 +127,6 @@ initialize_column_state(DecompressChunkState *state)
 	for (i = 0, lc = list_head(state->varattno_map); i < state->num_columns; lc = lnext(lc), i++)
 	{
 		DecompressChunkColumnState *column = &state->columns[i];
-		Assert(lfirst_int(lc) >= 0);
 		column->attno = lfirst_int(lc);
 
 		if (column->attno > 0)
@@ -147,8 +147,19 @@ initialize_column_state(DecompressChunkState *state)
 		}
 		else
 		{
-			/* special column with metadata */
-			column->type = COUNT_COLUMN;
+			/* metadata columns */
+			switch (column->attno)
+			{
+				case DECOMPRESS_CHUNK_COUNT_ID:
+					column->type = COUNT_COLUMN;
+					break;
+				case DECOMPRESS_CHUNK_SEQUENCE_NUM_ID:
+					column->type = SEQUENCE_NUM_COLUMN;
+					break;
+				default:
+					elog(ERROR, "Invalid column attno \"%d\"", column->attno);
+					break;
+			}
 		}
 	}
 }
@@ -221,6 +232,12 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 				state->counter = DatumGetInt32(value);
 				/* count column should never be NULL */
 				Assert(!isnull);
+				break;
+			case SEQUENCE_NUM_COLUMN:
+				/*
+				 * nothing to do here for sequence number
+				 * we only needed this for sorting in node below
+				 */
 				break;
 		}
 	}
@@ -384,6 +401,12 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 					slot->tts_isnull[attr] = column->segmentby.isnull;
 					break;
 				}
+				case SEQUENCE_NUM_COLUMN:
+					/*
+					 * nothing to do here for sequence number
+					 * we only needed this for sorting in node below
+					 */
+					break;
 			}
 		}
 
