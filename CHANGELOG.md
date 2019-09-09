@@ -4,16 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.4.2 (unreleased)
+## 1.4.2 (2019-09-11)
+
+This maintenance release contains bugfixes since the 1.4.1 release. We deem it medium
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address 2 potential
+segfaults and no other security vulnerabilities. The bugfixes are related to
+background workers, OUTER JOINs, ordered append on space partitioned hypertables
+and expression indexes.
 
 **Bugfixes**
 * #1327 Fix chunk exclusion with ordered append
 * #1390 Fix deletes of background workers while a job is running
-* #1392 Fix cagg_agg_validate expression handling
+* #1392 Fix cagg_agg_validate expression handling (segfault)
 * #1408 Fix ChunkAppend space partitioning support for ordered append
 * #1420 Fix OUTER JOIN qual propagation
-* #1422 Fix background worker segfaults
-* #1423 Fix segfault on ARM/32-bit builds
+* #1422 Fix background worker error handling (segfault)
 * #1424 Fix ChunkAppend LIMIT pushdown
 * #1429 Fix expression index creation
 
