@@ -222,6 +222,25 @@ validate_data_node_settings(void)
 			 errmsg("unsupported PostgreSQL version %s", PG_VERSION)));
 #endif
 
+	switch (dist_util_membership())
+	{
+		case DIST_MEMBER_DATA_NODE:
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+					 errmsg("node is already a data node")));
+			break;
+
+		case DIST_MEMBER_ACCESS_NODE:
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+					 errmsg("node is already an access node")));
+			break;
+
+		default:
+			/* Nothing to do */
+			break;
+	}
+
 	/*
 	 * We skip printing the warning if we have already printed the error.
 	 */

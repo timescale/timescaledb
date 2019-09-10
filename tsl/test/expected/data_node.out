@@ -54,7 +54,6 @@ ERROR:  operation not supported on a TimescaleDB data node
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2',
                             if_not_exists => true);
 NOTICE:  data node "data_node_2" already exists, skipping
-NOTICE:  database "data_node_2" already exists on data node, not creating it
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
  data_node_2 | localhost | 15432 | data_node_2 | f            | f                | f
@@ -1270,11 +1269,9 @@ BEGIN
 END
 $BODY$;
 CREATE EXTENSION timescaledb VERSION '0.0.0';
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
-                            if_not_exists => true);
-NOTICE:  database "data_node_1" already exists on data node, not creating it
-WARNING:  data node "data_node_1" has an outdated timescaledb extension version
+                            bootstrap => false);
 WARNING:  data node "data_node_1" has an outdated timescaledb extension version
 WARNING:  data node "data_node_1" has an outdated timescaledb extension version
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 

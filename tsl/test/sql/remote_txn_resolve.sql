@@ -20,16 +20,16 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
     if_not_exists          BOOLEAN = FALSE,
-    bootstrap_database     NAME = 'postgres',
-    bootstrap_user         NAME = NULL
+    bootstrap		   BOOLEAN = TRUE,
+    bootstrap_database     NAME = 'postgres'
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
                 server_created BOOL, database_created BOOL, extension_created BOOL)
 AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
 LANGUAGE C;
 
-SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
-SELECT true FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
-SELECT true FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
+SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
+SELECT true FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
+SELECT true FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', bootstrap => false);
 
 create table table_modified_by_txns (
     describes text

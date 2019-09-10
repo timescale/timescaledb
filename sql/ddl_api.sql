@@ -164,6 +164,7 @@ CREATE OR REPLACE FUNCTION add_data_node(
     database               NAME = NULL,
     port                   INTEGER = NULL,
     if_not_exists          BOOLEAN = FALSE,
+    bootstrap              BOOLEAN = TRUE,
     bootstrap_database     NAME = 'postgres'
 ) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME,
                 node_created BOOL, database_created BOOL, extension_created BOOL)

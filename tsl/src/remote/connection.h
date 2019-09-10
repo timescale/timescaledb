@@ -60,13 +60,15 @@ extern unsigned int remote_connection_get_cursor_number(void);
 extern void remote_connection_reset_cursor_number(void);
 extern unsigned int remote_connection_get_prep_stmt_number(void);
 extern bool remote_connection_configure(TSConnection *conn);
-extern bool remote_connection_check_extension(TSConnection *conn);
+extern bool remote_connection_check_extension(TSConnection *conn, const char **owner_name,
+											  Oid *owner_oid);
 extern bool remote_connection_cancel_query(TSConnection *conn);
 extern PGconn *remote_connection_get_pg_conn(TSConnection *conn);
 extern bool remote_connection_is_processing(TSConnection *conn);
 extern void remote_connection_set_processing(TSConnection *conn, bool processing);
 extern bool remote_connection_configure_if_changed(TSConnection *conn);
 extern void remote_connection_elog(TSConnection *conn, int elevel);
+extern const char *remote_connection_node_name(TSConnection *conn);
 
 /* Functions operating on PGresult objects */
 extern void remote_result_cmd_ok(PGresult *res);

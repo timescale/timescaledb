@@ -108,13 +108,13 @@ data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
 /*
  * Create a foreign server.
  *
- * Returns the OID of the created foreign server.
+ * Returns true if the server was created and set the `oid` to the server oid.
  */
-static Oid
-create_foreign_server(const char *node_name, const char *host, int32 port, const char *dbname,
-					  bool if_not_exists, bool *created)
+static bool
+create_foreign_server(const char *const node_name, const char *const host, int32 port,
+					  const char *const dbname, bool if_not_exists, Oid *const oid)
 {
-	ForeignServer *server;
+	ForeignServer *server = NULL;
 	ObjectAddress objaddr;
 	CreateForeignServerStmt stmt = {
 		.type = T_CreateForeignServerStmt,
@@ -134,9 +134,6 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 				  (errhint("A hostname or IP address must be specified when "
 						   "a data node does not already exist.")))));
 
-	if (NULL != created)
-		*created = false;
-
 	if (if_not_exists)
 	{
 		server = data_node_get_foreign_server(node_name, ACL_USAGE, true);
@@ -147,7 +144,9 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("data node \"%s\" already exists, skipping", node_name)));
 
-			return server->serverid;
+			if (oid != NULL)
+				*oid = server->serverid;
+			return false;
 		}
 	}
 
@@ -161,13 +160,15 @@ create_foreign_server(const char *node_name, const char *host, int32 port, const
 
 		server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
 
-		return server->serverid;
+		if (oid != NULL)
+			*oid = server->serverid;
+		return false;
 	}
 
-	if (NULL != created)
-		*created = true;
+	if (oid != NULL)
+		*oid = objaddr.objectId;
 
-	return objaddr.objectId;
+	return true;
 }
 
 TSConnection *
@@ -266,29 +267,14 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }
 
-static bool
-data_node_bootstrap_database(const char *node_name, const char *host, int32 port,
-							 const char *dbname, const char *username,
-							 const char *bootstrap_database)
+static void
+data_node_bootstrap_database(TSConnection *conn, const char *dbname)
 {
-	/* Required database privileges. Need to be a comma-separated list of
-	 * privileges suitable for both GRANT and has_database_privileges. */
-	static const char DATABASE_PRIVILEGES[] = "CREATE";
+	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 
-	TSConnection *conn;
-	List *node_options;
-	bool created = false;
 	PGresult *res;
 
-	Assert(NULL != node_name);
 	Assert(NULL != dbname);
-	Assert(NULL != username);
-	Assert(NULL != host);
-	Assert(NULL != bootstrap_database);
-
-	node_options = create_data_node_options(host, port, bootstrap_database, username);
-
-	conn = remote_connection_open_with_options(node_name, node_options, false);
 
 	/* Create the database with the user as owner. This command might fail
 	 * if the database already exists, but we catch the error and continue
@@ -306,156 +292,91 @@ data_node_bootstrap_database(const char *node_name, const char *host, int32 port
 		if (!database_exists)
 			remote_result_elog(res, ERROR);
 
-		remote_result_close(res);
-
-		/* Since we are not trying to create anything in the database later in
-		 * the procedure, we need to check that it has the proper privileges
-		 * before proceeding.
+		/* If the database already existed on the remote node, we got a
+		 * duplicate database error above and the database was not created.
 		 *
-		 * If the procedure created a table in the database as part of the
-		 * data node add function (e.g., with bookkeeping information), this
-		 * would allow us to piggyback on that instead since it would cause a
-		 * failure later in the execution of add_data_node, but now we do not
-		 * have anything like that, so we need to check that we have
-		 * sufficient privileges for creating chunks in the database.
-		 */
-		res = remote_connection_queryf_ok(conn,
-										  "SELECT has_database_privilege(%s, %s, %s)",
-										  quote_literal_cstr(username),
-										  quote_literal_cstr(dbname),
-										  quote_literal_cstr(DATABASE_PRIVILEGES));
-
-		Assert(PQntuples(res) > 0);
-
-		if (strcmp(PQgetvalue(res, 0, 0), "t") != 0)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("insufficient privileges for user \"%s\" on remote node "
-							"database \"%s\"",
-							username,
-							dbname),
-					 errdetail("Using database=\"%s\", user=\"%s\", privileges=\"%s\".",
-							   dbname,
-							   username,
-							   DATABASE_PRIVILEGES),
-					 errhint("Use \"GRANT %s ON DATABASE %s TO %s\" on remote node to "
-							 "grant correct privileges.",
-							 quote_literal_cstr(DATABASE_PRIVILEGES),
-							 quote_identifier(dbname),
-							 quote_identifier(username))));
-		}
-		else
-		{
-			/* If the database already existed on the remote node, we
-			 * got a duplicate database error above and the database
-			 * was not created.
-			 *
-			 * In this case, we will log a notice and proceed since it is
-			 * not an error if the database already existed on the remote
-			 * node. */
-			elog(NOTICE, "database \"%s\" already exists on data node, not creating it", dbname);
-		}
+		 * In this case, we will log a notice and proceed since it is not an
+		 * error if the database already existed on the remote node. */
+		elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
 	}
-	else
-		created = true;
-
-	/* Closing the connection will also clean up results */
-	remote_connection_close(conn);
-
-	return created;
 }
 
-static bool
-data_node_bootstrap_extension(const char *node_name, const char *host, int32 port,
-							  const char *dbname, const char *username, bool if_not_exists)
+static void
+data_node_validate_extension(TSConnection *conn)
 {
-	TSConnection *conn;
-	List *node_options;
-	bool created = false;
-	PGresult *res;
-	const char *schema_name = ts_extension_schema_name();
-	const char *schema_name_quoted = quote_identifier(schema_name);
-	Oid schema_oid = get_namespace_oid(schema_name, true);
-	bool extension_exists;
+	const char *const dbname = PQdb(remote_connection_get_pg_conn(conn));
+	const char *const host = PQhost(remote_connection_get_pg_conn(conn));
+	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
+	const char *const port = PQport(remote_connection_get_pg_conn(conn));
 
-	node_options = create_data_node_options(host, port, dbname, username);
-	conn = remote_connection_open_with_options(node_name, node_options, false);
+	const char *actual_username;
 
-	/* Ensure the extension exists and has correct version */
-	extension_exists = remote_connection_check_extension(conn);
+	if (!remote_connection_check_extension(conn, &actual_username, NULL))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("database does not have TimescaleDB extension loaded"),
+				 errdetail("The TimescaleDB extension is not loaded in database %s on node at "
+						   "%s:%s.",
+						   dbname,
+						   host,
+						   port)));
 
-	if (!extension_exists)
-	{
-		if (schema_oid != PG_PUBLIC_NAMESPACE)
-			remote_connection_cmdf_ok(conn,
-									  "CREATE SCHEMA %s%s AUTHORIZATION %s",
-									  if_not_exists ? "IF NOT EXISTS " : "",
-									  schema_name_quoted,
-									  quote_identifier(username));
+	/* Check that the owner is correct */
+	if (strcmp(actual_username, username) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("invalid extension owner"),
+				 errdetail("Expected TimescaleDB owner to be %s, but was %s",
+						   username,
+						   actual_username)));
+}
 
-		remote_connection_cmdf_ok(conn,
-								  "CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
-								  if_not_exists ? "IF NOT EXISTS" : "",
-								  schema_name_quoted);
-		created = true;
-	}
-
-	res = remote_connection_exec(conn, "SELECT _timescaledb_internal.validate_as_data_node()");
+static void
+data_node_validate_as_data_node(TSConnection *conn)
+{
+	PGresult *res =
+		remote_connection_exec(conn, "SELECT _timescaledb_internal.validate_as_data_node()");
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 (errmsg("could not add data node %s", node_name),
+				 (errmsg("%s is not valid as data node", remote_connection_node_name(conn)),
 				  errdetail("%s", PQresultErrorMessage(res)))));
 
 	remote_result_close(res);
-	remote_connection_close(conn);
-
-	return created;
 }
 
+/*
+ * Bootstrap the extension and associated objects.
+ */
 static void
-data_node_bootstrap(const char *node_name, const char *host, int32 port, const char *dbname,
-					const char *username, bool if_not_exists, const char *bootstrap_database,
-					bool *database_created, bool *extension_created)
+data_node_bootstrap_extension(TSConnection *conn)
 {
-	bool created;
+	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 
-	created =
-		data_node_bootstrap_database(node_name, host, port, dbname, username, bootstrap_database);
+	const char *schema_name = ts_extension_schema_name();
+	const char *schema_name_quoted = quote_identifier(schema_name);
+	Oid schema_oid = get_namespace_oid(schema_name, true);
 
-	if (NULL != database_created)
-		*database_created = created;
+	if (schema_oid != PG_PUBLIC_NAMESPACE)
+		remote_connection_cmdf_ok(conn,
+								  "CREATE SCHEMA %s AUTHORIZATION %s",
+								  schema_name_quoted,
+								  quote_identifier(username));
 
-	/* Always use "if_not_exists" when the database was created since the
-	 * extension could have been pre-installed in the template database and
-	 * thus created with the database. */
-	if (created)
-		if_not_exists = true;
-
-	created = data_node_bootstrap_extension(node_name, host, port, dbname, username, if_not_exists);
-
-	if (NULL != extension_created)
-		*extension_created = created;
+	remote_connection_cmdf_ok(conn,
+							  "CREATE EXTENSION " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
+							  schema_name_quoted);
 }
 
 static void
-add_distributed_id_to_data_node(const char *node_name, const char *host, int32 port,
-								const char *dbname, bool if_not_exists, const char *user)
+add_distributed_id_to_data_node(TSConnection *conn)
 {
 	Datum id_string = DirectFunctionCall1(uuid_out, dist_util_get_id());
-	TSConnection *conn;
-	List *node_options;
-	PGresult *res;
-
-	node_options = create_data_node_options(host, port, dbname, user);
-	conn = remote_connection_open_with_options(node_name, node_options, false);
-	res = remote_connection_queryf_ok(conn,
-									  "SELECT * FROM _timescaledb_internal.set_dist_id('%s')",
-									  DatumGetCString(id_string));
+	PGresult *res = remote_connection_queryf_ok(conn,
+												"SELECT _timescaledb_internal.set_dist_id('%s')",
+												DatumGetCString(id_string));
 	remote_result_close(res);
-	remote_connection_close(conn);
 }
 
 static bool
@@ -502,8 +423,8 @@ get_server_port()
 	return pg_atoi(portstr, 2, 0);
 }
 
-/* set_distid may need to be false for some otherwise invalid configurations that are useful for
- * testing */
+/* set_distid may need to be false for some otherwise invalid configurations
+ * that are useful for testing */
 static Datum
 data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 {
@@ -514,10 +435,13 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
 	long port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
-	const char *bootstrap_database = PG_ARGISNULL(5) ? dbname : PG_GETARG_CSTRING(5);
+	bool bootstrap = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
+	const char *bootstrap_database = PG_ARGISNULL(6) ? dbname : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
+	Oid server_id;
+	//	const ForeignServer *server;
 
 	if (host == NULL)
 		ereport(ERROR,
@@ -554,28 +478,75 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 	/* Try to create the foreign server, or get the existing one in case of
 	 * if_not_exists = true. */
-	create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_created);
-
-	/* Make the foreign server visible in current transaction. */
-	CommandCounterIncrement();
-
-	/* Try to create database and extension on remote server */
-	data_node_bootstrap(node_name,
-						host,
-						port,
-						dbname,
-						username,
-						if_not_exists,
-						bootstrap_database,
-						&database_created,
-						&extension_created);
-
-	if (set_distid)
+	if (create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_id))
 	{
-		if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
-			dist_util_set_as_frontend();
+		List *node_options;
+		TSConnection *conn;
 
-		add_distributed_id_to_data_node(node_name, host, port, dbname, if_not_exists, username);
+		server_created = true;
+
+		/* Make the foreign server visible in current transaction. */
+		CommandCounterIncrement();
+
+		/* Ensure that there is a database if we are bootstrapping. This is
+		 * done using a separate connection since the database that is going
+		 * to be used for the data node does not exist yet, so we cannot
+		 * connect to it. */
+
+		if (bootstrap)
+		{
+			node_options = create_data_node_options(host, port, bootstrap_database, username);
+			conn = remote_connection_open_with_options(node_name, node_options, false);
+
+			data_node_bootstrap_database(conn, dbname);
+
+			database_created = true;
+			remote_connection_close(conn);
+		}
+
+		/* Connect to the database we are bootstrapping and either install the
+		 * extension or validate that the extension is installed. The
+		 * following statements are executed inside a transaction so that they
+		 * can be rolled back in the event of a failure.
+		 *
+		 * We could use `remote_dist_txn_get_connection` here, but it is
+		 * comparably heavy and make the code more complicated than
+		 * necessary. Instead using a more straightforward approach here since
+		 * we do not need 2PC support. */
+		node_options = create_data_node_options(host, port, dbname, username);
+		conn = remote_connection_open_with_options(node_name, node_options, false);
+		remote_connection_cmd_ok(conn, "BEGIN");
+
+		if (bootstrap)
+		{
+			data_node_bootstrap_extension(conn);
+			extension_created = true;
+		}
+		else
+		{
+			data_node_validate_extension(conn);
+			data_node_validate_as_data_node(conn);
+		}
+
+		/* After the node is verified or bootstrapped, we set the `dist_uuid`
+		 * using the same connection. We skip this if clustering checks are
+		 * disabled, which means that the `dist_uuid` is neither set nor
+		 * checked.
+		 *
+		 * This is done inside a transaction so that we can roll it back if
+		 * there are any failures. Note that any failure at this point will
+		 * not rollback the creates above. */
+		if (set_distid)
+		{
+			if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
+				dist_util_set_as_frontend();
+			add_distributed_id_to_data_node(conn);
+		}
+
+		/* If there were an error before, we will not reach this point to the
+		 * transaction will be aborted when the connection is closed. */
+		remote_connection_cmd_ok(conn, "COMMIT");
+		remote_connection_close(conn);
 	}
 
 	PG_RETURN_DATUM(create_data_node_datum(fcinfo,
