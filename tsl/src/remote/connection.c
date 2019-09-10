@@ -656,6 +656,12 @@ remote_elog(int elevel, int errorcode, const char *node_name, const char *primar
 			 sql ? errcontext("Remote SQL command: %s", sql) : 0));
 }
 
+const char *
+remote_connection_node_name(TSConnection *conn)
+{
+	return NameStr(conn->node_name);
+}
+
 void
 remote_connection_elog(TSConnection *conn, int elevel)
 {
@@ -836,27 +842,45 @@ remote_result_query_ok(PGresult *res)
  * Compare remote connection extension version with the one installed
  * locally on the access node.
  *
+ * If `owner` is a non-null pointer, it will be updated with the name of the
+ * owner of the extension.
+ *
  * Return false if extension is not found, true otherwise.
  */
 bool
-remote_connection_check_extension(TSConnection *conn)
+remote_connection_check_extension(TSConnection *conn, const char **owner_name, Oid *owner_oid)
 {
 	PGresult *res;
 	int rc;
+	const char *data_node_version;
 
 	res = remote_connection_execf(conn,
-								  "SELECT extversion FROM pg_extension WHERE extname = %s",
+								  "SELECT usename, extowner, extversion FROM pg_extension JOIN "
+								  "pg_user ON extowner = usesysid WHERE extname = %s",
 								  quote_literal_cstr(EXTENSION_NAME));
 
-	/* extension does not exists */
-	if (PQntuples(res) == 0)
+	/* Just to capture any bugs in the SELECT above */
+	Assert(PQnfields(res) == 3);
+
+	switch (PQntuples(res))
 	{
-		PQclear(res);
-		return false;
+		case 0: /* extension does not exists */
+			PQclear(res);
+			return false;
+
+		case 1:
+			break;
+
+		default: /* something strange happend */
+			ereport(WARNING,
+					(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+					 errmsg("more than one TimescaleDB extension loaded")));
+			break;
 	}
 
 	/* compare extension version */
-	rc = dist_util_version_compare(PQgetvalue(res, 0, 0), TIMESCALEDB_VERSION_MOD);
+	data_node_version = PQgetvalue(res, 0, 2);
+	rc = dist_util_version_compare(data_node_version, TIMESCALEDB_VERSION_MOD);
 	if (rc < 0)
 		ereport(WARNING,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
@@ -864,7 +888,14 @@ remote_connection_check_extension(TSConnection *conn)
 						NameStr(conn->node_name)),
 				 errdetail_internal("Access node version: %s, data node version: %s.",
 									TIMESCALEDB_VERSION_MOD,
-									PQgetvalue(res, 0, 0))));
+									data_node_version)));
+
+	/* extract owner */
+	if (owner_name != NULL)
+		*owner_name = PQgetvalue(res, 0, 0);
+
+	if (owner_oid != NULL)
+		*owner_oid = pg_atoi(PQgetvalue(res, 0, 1), sizeof(int32), 0);
 
 	PQclear(res);
 	return true;
@@ -1076,7 +1107,7 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 
 		/* Check a data node extension version and show a warning
 		 * message if it differs */
-		remote_connection_check_extension(conn);
+		remote_connection_check_extension(conn, NULL, NULL);
 
 		if (set_dist_id)
 		{

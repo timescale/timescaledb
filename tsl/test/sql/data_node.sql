@@ -616,10 +616,10 @@ $BODY$;
 
 CREATE EXTENSION timescaledb VERSION '0.0.0';
 
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
-                            if_not_exists => true);
+                            bootstrap => false);
 
 GRANT USAGE ON FOREIGN SERVER data_node_1 TO :ROLE_1;
 
