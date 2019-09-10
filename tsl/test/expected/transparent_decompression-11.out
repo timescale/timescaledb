@@ -89,6 +89,10 @@ SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
  
 (1 row)
 
+ANALYZE metrics;
+ANALYZE metrics_space;
+ANALYZE _timescaledb_internal._compressed_hypertable_3;
+ANALYZE _timescaledb_internal._compressed_hypertable_4;
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set ECHO none
@@ -2495,28 +2499,26 @@ EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
 (8 rows)
 
 EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
-   ->  Gather
-         Workers Planned: 4
-         ->  Parallel Append
-               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk
-                     ->  Parallel Seq Scan on compress_hyper_4_15_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
-                     ->  Parallel Seq Scan on compress_hyper_4_16_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk
-                     ->  Parallel Seq Scan on compress_hyper_4_17_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
-                     ->  Parallel Seq Scan on compress_hyper_4_18_chunk
-               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
-                     ->  Parallel Seq Scan on compress_hyper_4_19_chunk
-               ->  Parallel Seq Scan on _hyper_2_8_chunk
-               ->  Parallel Seq Scan on _hyper_2_7_chunk
-               ->  Parallel Seq Scan on _hyper_2_9_chunk
-               ->  Parallel Seq Scan on _hyper_2_12_chunk
-(19 rows)
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk
+               ->  Seq Scan on compress_hyper_4_15_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
+               ->  Seq Scan on compress_hyper_4_16_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk
+               ->  Seq Scan on compress_hyper_4_17_chunk
+         ->  Seq Scan on _hyper_2_7_chunk
+         ->  Seq Scan on _hyper_2_8_chunk
+         ->  Seq Scan on _hyper_2_9_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
+               ->  Seq Scan on compress_hyper_4_18_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
+               ->  Seq Scan on compress_hyper_4_19_chunk
+         ->  Seq Scan on _hyper_2_12_chunk
+(17 rows)
 
 -- diff compressed and uncompressed results
 :DIFF_CMD

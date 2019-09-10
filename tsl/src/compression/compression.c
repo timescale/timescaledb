@@ -1169,16 +1169,18 @@ per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *deco
 Datum
 tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 {
-	Datum compressed = PG_ARGISNULL(0) ? ({
-		PG_RETURN_NULL();
-		0;
-	}) :
-										 PG_GETARG_DATUM(0);
-	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	Datum compressed;
+	CompressedDataHeader *header;
 	FuncCallContext *funcctx;
 	MemoryContext oldcontext;
 	DecompressionIterator *iter;
 	DecompressResult res;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	compressed = PG_GETARG_DATUM(0);
+	header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -1210,17 +1212,18 @@ tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 Datum
 tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 {
-	Datum compressed = PG_ARGISNULL(0) ? ({
-		PG_RETURN_NULL();
-		0;
-	}) :
-										 PG_GETARG_DATUM(0);
-	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	Datum compressed;
+	CompressedDataHeader *header;
 	FuncCallContext *funcctx;
 	MemoryContext oldcontext;
 	DecompressionIterator *iter;
 	DecompressResult res;
 
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	compressed = PG_GETARG_DATUM(0);
+	header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
@@ -1266,7 +1269,7 @@ Datum
 tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
-	CompressedDataHeader header = {};
+	CompressedDataHeader header = { { 0 } };
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 

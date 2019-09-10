@@ -17,10 +17,15 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 --
 -- DROP CHUNKS
 --
-SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
+SELECT COUNT(*) AS count_compressed
+FROM 
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL;
+WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+)
+AS sub;
 
 
 SELECT count(*) as count_chunks_uncompressed
@@ -38,7 +43,7 @@ WHERE uncomp_hyper.table_name like 'test1';
 SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
 DROP TABLE :UNCOMPRESSED_CHUNK_NAME;
 
@@ -77,13 +82,13 @@ WHERE uncomp_hyper.table_name like 'test1';
 SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
 SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' LIMIT 1
+WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
 \gset
 
 \set ON_ERROR_STOP 0
@@ -96,7 +101,7 @@ SELECT
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
 --create a dependent object on the compressed chunk to test cascade behaviour
 CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
@@ -126,7 +131,7 @@ SELECT
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
 CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
 
@@ -163,7 +168,7 @@ WHERE chunk.id IS NULL;
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' LIMIT 1 \gset
+WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_hyper.id LIMIT 1 \gset
 
 \set ON_ERROR_STOP 0
 DROP TABLE :COMPRESSED_HYPER_NAME;
@@ -172,7 +177,7 @@ DROP TABLE :COMPRESSED_HYPER_NAME;
 BEGIN;
 SELECT hypertable.schema_name|| '.' || hypertable.table_name as "UNCOMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable hypertable
-WHERE hypertable.table_name like 'test1' LIMIT 1 \gset
+WHERE hypertable.table_name like 'test1' ORDER BY hypertable.id LIMIT 1 \gset
 
 --before the drop there are 2 hypertables: the compressed and uncompressed ones
 SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;

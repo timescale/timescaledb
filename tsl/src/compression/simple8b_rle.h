@@ -83,7 +83,7 @@ typedef struct Simple8bRleSerialized
 static void
 pg_attribute_unused() simple8brle_size_assertions(void)
 {
-	Simple8bRleSerialized test_val = {};
+	Simple8bRleSerialized test_val = { 0 };
 	/* ensure no padding bits make it to disk */
 	StaticAssertStmt(sizeof(Simple8bRleSerialized) ==
 						 sizeof(test_val.num_elements) + sizeof(test_val.num_blocks),

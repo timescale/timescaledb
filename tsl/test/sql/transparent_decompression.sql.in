@@ -63,6 +63,11 @@ SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
 
+ANALYZE metrics;
+ANALYZE metrics_space;
+ANALYZE _timescaledb_internal._compressed_hypertable_3;
+ANALYZE _timescaledb_internal._compressed_hypertable_4;
+
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set ECHO none

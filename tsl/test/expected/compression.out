@@ -142,14 +142,15 @@ select hypertable_id, attname, compression_algorithm_id , al.name
 from _timescaledb_catalog.hypertable_compression hc,
      _timescaledb_catalog.hypertable ht,
       _timescaledb_catalog.compression_algorithm al
-where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id;
+where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id
+ORDER BY hypertable_id, attname;
  hypertable_id |   attname   | compression_algorithm_id |               name               
 ---------------+-------------+--------------------------+----------------------------------
-             3 | time        |                        4 | COMPRESSION_ALGORITHM_DELTADELTA
+             3 | humidity    |                        3 | COMPRESSION_ALGORITHM_GORILLA
              3 | location    |                        0 | COMPRESSION_ALGORITHM_NONE
              3 | location2   |                        2 | COMPRESSION_ALGORITHM_DICTIONARY
              3 | temperature |                        3 | COMPRESSION_ALGORITHM_GORILLA
-             3 | humidity    |                        3 | COMPRESSION_ALGORITHM_GORILLA
+             3 | time        |                        4 | COMPRESSION_ALGORITHM_DELTADELTA
 (5 rows)
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
@@ -171,6 +172,7 @@ order by at.attnum;
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+ORDER BY ch1.id
 LIMIT 1 \gset
 SELECT count(*) from :CHUNK_NAME;
  count 
@@ -187,7 +189,7 @@ select tableoid::regclass, count(*) from conditions group by tableoid order by t
 (2 rows)
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' limit 1;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' ORDER BY ch1.id limit 1;
  compress_chunk 
 ----------------
  
@@ -415,7 +417,7 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 --compress 2 chunks
 SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
-and ht.table_name like 'test_collation' LIMIT 2;
+and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
  compress_chunk 
 ----------------
  
