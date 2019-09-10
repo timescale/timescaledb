@@ -44,14 +44,14 @@ typedef struct DictionaryCompressed
 	uint8 padding[2];
 	Oid element_type;
 	uint32 num_distinct;
-	/* alignment sentinel for the following fields */
-	Simple8bRleSerialized alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
+	/* 8-byte alignment sentinel for the following fields */
+	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } DictionaryCompressed;
 
 static void
 pg_attribute_unused() assertions(void)
 {
-	DictionaryCompressed test_val = {};
+	DictionaryCompressed test_val = { { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DictionaryCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
@@ -617,7 +617,7 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 Datum
 dictionary_compressed_recv(StringInfo buffer)
 {
-	DictionaryCompressorSerializationInfo data = {};
+	DictionaryCompressorSerializationInfo data = { 0 };
 	uint8 has_nulls;
 	const char *element_type_namespace;
 	const char *element_type_name;

@@ -37,15 +37,15 @@ typedef struct ArrayCompressed
 	uint8 has_nulls;
 	uint8 padding[6];
 	Oid element_type;
-	/* alignment sentinel for the following fields */
-	Simple8bRleSerialized alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
+	/* 8-byte alignment sentinel for the following fields */
+	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } ArrayCompressed;
 
 static void
 pg_attribute_unused() assertions(void)
 {
-	ArrayCompressed test_val = {};
-	Simple8bRleSerialized test_simple8b = {};
+	ArrayCompressed test_val = { { 0 } };
+	Simple8bRleSerialized test_simple8b = { 0 };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(ArrayCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +

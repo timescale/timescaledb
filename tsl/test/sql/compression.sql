@@ -60,7 +60,8 @@ select hypertable_id, attname, compression_algorithm_id , al.name
 from _timescaledb_catalog.hypertable_compression hc,
      _timescaledb_catalog.hypertable ht,
       _timescaledb_catalog.compression_algorithm al
-where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id;
+where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id
+ORDER BY hypertable_id, attname;
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
 where cl.oid = at.attrelid and  at.attnum > 0
@@ -70,6 +71,7 @@ order by at.attnum;
 
 SELECT ch1.schema_name|| '.' || ch1.table_name as "CHUNK_NAME", ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+ORDER BY ch1.id
 LIMIT 1 \gset
 
 SELECT count(*) from :CHUNK_NAME;
@@ -78,7 +80,7 @@ SELECT count(*) as "ORIGINAL_CHUNK_COUNT" from :CHUNK_NAME \gset
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' limit 1;
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' ORDER BY ch1.id limit 1;
 
 --test that only one chunk was affected
 --note tables with 0 rows will not show up in here.
@@ -172,7 +174,7 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 --compress 2 chunks
 SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
-and ht.table_name like 'test_collation' LIMIT 2;
+and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
 
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';

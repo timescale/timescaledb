@@ -26,7 +26,7 @@
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
 
-extern bool ts_type_is_int8_binary_compatible(Oid sourcetype);
+extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 typedef enum TimevalInfinity
 {
@@ -65,8 +65,6 @@ extern int64 ts_date_trunc_interval_period_approx(text *units);
  * This is approximate -- to be used for planning;
  */
 extern int64 ts_get_interval_period_approx(Interval *interval);
-
-extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 extern Oid ts_inheritance_parent_relid(Oid relid);
 

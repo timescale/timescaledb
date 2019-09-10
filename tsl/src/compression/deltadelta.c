@@ -39,7 +39,7 @@ typedef struct DeltaDeltaCompressed
 static void
 pg_attribute_unused() assertions(void)
 {
-	DeltaDeltaCompressed test_val = {};
+	DeltaDeltaCompressed test_val = { { 0 } };
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DeltaDeltaCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
