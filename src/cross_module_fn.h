@@ -140,11 +140,7 @@ typedef struct CrossModuleFunctions
 	bool (*remove_from_distributed_db)(void);
 	PGFunction remote_hypertable_info;
 	void (*validate_as_data_node)(void);
-	void (*drop_chunks_on_data_nodes)(Name table_name, Name schema_name, Datum older_than_datum,
-									  Datum newer_than_datum, Oid older_than_type,
-									  Oid newer_than_type, bool cascade,
-									  bool cascades_to_materializations, bool verbose,
-									  List *data_node_oids);
+	void (*func_call_on_data_nodes)(FunctionCallInfo fcinfo, List *data_node_oids);
 	PGFunction distributed_exec;
 } CrossModuleFunctions;
 

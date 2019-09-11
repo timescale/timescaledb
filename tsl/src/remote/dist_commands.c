@@ -17,6 +17,7 @@
 #include "dist_util.h"
 #include "miscadmin.h"
 #include "errors.h"
+#include "deparse.h"
 
 typedef struct DistPreparedStmt
 {
@@ -63,21 +64,40 @@ ts_dist_cmd_collect_responses(List *requests)
 	return results;
 }
 
+/*
+ * Invoke a SQL statement (command) on the given data nodes.
+ *
+ * The list of data nodes can either be a list of data node names, or foreign
+ * server OIDs.
+ */
 DistCmdResult *
-ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *node_names)
+ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes)
 {
 	ListCell *lc;
 	List *requests = NIL;
 	DistCmdResult *results;
 
-	if (node_names == NIL)
+	if (data_nodes == NIL)
 		elog(ERROR, "target data nodes must be specified for ts_dist_cmd_invoke_on_data_nodes");
 
-	foreach (lc, node_names)
+	switch (nodeTag(data_nodes))
+	{
+		case T_OidList:
+			data_nodes = data_node_oids_to_node_name_list(data_nodes, ACL_USAGE);
+			break;
+		case T_List:
+			/* Already in the format we want. Just check permissions. */
+			data_node_name_list_check_acl(data_nodes, ACL_USAGE);
+			break;
+		default:
+			elog(ERROR, "invalid list type %u", nodeTag(data_nodes));
+			break;
+	}
+
+	foreach (lc, data_nodes)
 	{
 		const char *node_name = lfirst(lc);
 		TSConnection *connection = data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT);
-
 		AsyncRequest *req = async_request_send(connection, sql);
 
 		async_request_attach_user_data(req, (char *) node_name);
@@ -125,6 +145,40 @@ DistCmdResult *
 ts_dist_cmd_invoke_on_all_data_nodes(const char *sql)
 {
 	return ts_dist_cmd_invoke_on_data_nodes(sql, data_node_get_node_name_list());
+}
+
+/*
+ * Relay a function call to data nodes.
+ *
+ * A NIL list of data nodes means invoke on ALL data nodes.
+ */
+DistCmdResult *
+ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes)
+{
+	if (NIL == data_nodes)
+		data_nodes = data_node_get_node_name_list();
+
+	return ts_dist_cmd_invoke_on_data_nodes(deparse_func_call(fcinfo), data_nodes);
+}
+
+DistCmdResult *
+ts_dist_cmd_invoke_func_call_on_all_data_nodes(FunctionCallInfo fcinfo)
+{
+	return ts_dist_cmd_invoke_on_data_nodes(deparse_func_call(fcinfo),
+											data_node_get_node_name_list());
+}
+
+/*
+ * Relay a function call to data nodes.
+ *
+ * This version throws away the result.
+ */
+void
+ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes)
+{
+	DistCmdResult *result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
+
+	ts_dist_cmd_close_response(result);
 }
 
 PGresult *

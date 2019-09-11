@@ -7,11 +7,10 @@
 #define TIMESCALEDB_TSL_HYPERTABLE_H
 
 #include <hypertable.h>
-
-#include "catalog.h"
 #include "dimension.h"
 #include "interval.h"
 #include "config.h"
+#include "catalog.h"
 
 extern Datum hypertable_valid_ts_interval(PG_FUNCTION_ARGS);
 

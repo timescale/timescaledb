@@ -31,6 +31,7 @@ extern List *data_node_get_node_name_list(void);
 extern List *data_node_array_to_node_name_list_with_aclcheck(ArrayType *noderarr, AclMode mode);
 extern List *data_node_array_to_node_name_list(ArrayType *nodearr);
 extern List *data_node_oids_to_node_name_list(List *data_node_oids, AclMode mode);
+extern void data_node_name_list_check_acl(List *data_node_names, AclMode mode);
 extern Datum data_node_ping(PG_FUNCTION_ARGS);
 extern Datum data_node_set_chunk_default_data_node(PG_FUNCTION_ARGS);
 

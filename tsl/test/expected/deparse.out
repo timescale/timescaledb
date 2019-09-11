@@ -10,27 +10,49 @@
 (1 row)
 
 -- test drop_chunks function deparsing
-SELECT * FROM tsl_test_deparse_drop_chunks('2019-01-01'::timestamptz, 'test_table', 'test_schema', cascade => false, verbose => true);
-                                                                                                               tsl_test_deparse_drop_chunks                                                                                                                
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(older_than => 'Tue Jan 01 00:00:00 2019 PST'::timestamptz, newer_than => NULL, table_name => 'test_table', schema_name => 'test_schema', cascade => 'false', cascade_to_materializations => 'false', verbose => 'true');
+SELECT * FROM tsl_test_deparse_drop_chunks('2019-01-01'::timestamptz, 'Test_table', 'test_schema', cascade => false, verbose => true);
+                                                                                                             tsl_test_deparse_drop_chunks                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(older_than => 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone,table_name => 'Test_table',schema_name => 'test_schema',cascade => 'f',newer_than => NULL,verbose => 't',cascade_to_materializations => NULL)
 (1 row)
 
 SELECT * FROM tsl_test_deparse_drop_chunks(interval '1 day', table_name => 'weird nAme\\#^.', cascade_to_materializations => true, cascade => true);
-                                                                                                  tsl_test_deparse_drop_chunks                                                                                                   
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(older_than => '@ 1 day'::interval, newer_than => NULL, table_name => E'weird nAme\\\\#^.', schema_name => NULL, cascade => 'true', cascade_to_materializations => 'true', verbose => 'false');
+                                                                                          tsl_test_deparse_drop_chunks                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(older_than => '@ 1 day'::interval,table_name => E'weird nAme\\\\#^.',schema_name => NULL,cascade => 't',newer_than => NULL,verbose => 'f',cascade_to_materializations => 't')
 (1 row)
 
 SELECT * FROM tsl_test_deparse_drop_chunks(newer_than => 12345);
-                                                                                        tsl_test_deparse_drop_chunks                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(older_than => NULL, newer_than => '12345'::int4, table_name => NULL, schema_name => NULL, cascade => 'false', cascade_to_materializations => 'false', verbose => 'false');
+                                                                                 tsl_test_deparse_drop_chunks                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(older_than => NULL,table_name => NULL,schema_name => NULL,cascade => 'f',newer_than => '12345'::integer,verbose => 'f',cascade_to_materializations => NULL)
 (1 row)
 
 SELECT * FROM tsl_test_deparse_drop_chunks(older_than => interval '2 years', newer_than => '2015-01-01'::timestamp);
                                                                                                              tsl_test_deparse_drop_chunks                                                                                                             
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(older_than => '@ 2 years'::interval, newer_than => 'Thu Jan 01 00:00:00 2015'::timestamp, table_name => NULL, schema_name => NULL, cascade => 'false', cascade_to_materializations => 'false', verbose => 'false');
+ SELECT * FROM public.drop_chunks(older_than => '@ 2 years'::interval,table_name => NULL,schema_name => NULL,cascade => 'f',newer_than => 'Thu Jan 01 00:00:00 2015'::timestamp without time zone,verbose => 'f',cascade_to_materializations => NULL)
+(1 row)
+
+-- test generalized deparsing function
+SELECT * FROM tsl_test_deparse_scalar_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+NOTICE:  Deparsed: SELECT * FROM public.tsl_test_deparse_scalar_func(schema_name => 'Foo',table_name => 'bar',time => 'Tue Sep 10 11:08:00 2019 PDT',message => 'This is a test message.',not_set => 't',option => 'f')
+ tsl_test_deparse_scalar_func 
+------------------------------
+ t
+(1 row)
+
+SELECT * FROM tsl_test_deparse_named_scalar_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+NOTICE:  Deparsed: SELECT option FROM public.tsl_test_deparse_named_scalar_func(schema_name => 'Foo',table_name => 'bar',time => 'Tue Sep 10 11:08:00 2019 PDT',message => 'This is a test message.',not_set => 't',option => 'f')
+ option 
+--------
+ t
+(1 row)
+
+SELECT * FROM tsl_test_deparse_composite_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+NOTICE:  Deparsed: SELECT success,message FROM public.tsl_test_deparse_composite_func(schema_name => 'Foo',table_name => 'bar',time => 'Tue Sep 10 11:08:00 2019 PDT',message => 'This is a test message.',not_set => NULL,option => 'f')
+ success | message 
+---------+---------
+         | 
 (1 row)
 
