@@ -1294,3 +1294,27 @@ data_node_oids_to_node_name_list(List *data_node_oids, AclMode mode)
 
 	return node_names;
 }
+
+void
+data_node_name_list_check_acl(List *data_node_names, AclMode mode)
+{
+	AclResult aclresult;
+	Oid curuserid;
+	ListCell *lc;
+
+	if (data_node_names == NIL)
+		return;
+
+	curuserid = GetUserId();
+
+	foreach (lc, data_node_names)
+	{
+		ForeignServer *server = GetForeignServerByName(lfirst(lc), false);
+
+		/* Must have permissions on the server object */
+		aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+
+		if (aclresult != ACLCHECK_OK)
+			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
+	}
+}

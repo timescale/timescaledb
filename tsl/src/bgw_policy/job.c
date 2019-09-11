@@ -14,6 +14,7 @@
 #include <utils/builtins.h>
 #include <hypertable_cache.h>
 #include <utils/snapmgr.h>
+#include <nodes/primnodes.h>
 #include <continuous_agg.h>
 
 #include "bgw/timer.h"
@@ -206,9 +207,9 @@ execute_drop_chunks_policy(int32 job_id)
 	Hypertable *hypertable;
 	Cache *hcache;
 	Dimension *open_dim;
-	List *data_node_oids = NIL;
 	Datum older_than;
 	Datum older_than_type;
+	int num_dropped;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -232,34 +233,31 @@ execute_drop_chunks_policy(int32 job_id)
 	older_than = ts_interval_subtract_from_now(&args->older_than, open_dim);
 	older_than_type = ts_dimension_get_partition_type(open_dim);
 
-	ts_chunk_do_drop_chunks(table_relid,
-							older_than,
-							InvalidOid,
-							older_than_type,
-							InvalidOid,
-							args->cascade,
-							args->cascade_to_materializations,
-							LOG,
-							true /*user_supplied_table_name */,
-							&data_node_oids);
-
 #if PG_VERSION_SUPPORTS_MULTINODE
-	if (data_node_oids != NIL)
-		chunk_drop_remote_chunks(&hypertable->fd.table_name,
-								 &hypertable->fd.schema_name,
-								 older_than,
-								 InvalidOid,
-								 older_than_type,
-								 InvalidOid,
-								 args->cascade,
-								 args->cascade_to_materializations,
-								 false,
-								 data_node_oids);
+	/* Invoke drop chunks via fmgr so that the call can be deparsed and sent
+	 * also to remote data nodes. */
+	num_dropped = chunk_invoke_drop_chunks(&hypertable->fd.schema_name,
+										   &hypertable->fd.table_name,
+										   older_than,
+										   older_than_type,
+										   args->cascade,
+										   args->cascade_to_materializations);
+#else
+	num_dropped = list_length(ts_chunk_do_drop_chunks(table_relid,
+													  older_than,
+													  (Datum) 0,
+													  older_than_type,
+													  InvalidOid,
+													  args->cascade,
+													  args->cascade_to_materializations,
+													  LOG,
+													  true /*user_supplied_table_name */,
+													  NULL));
 #endif
 
 	ts_cache_release(hcache);
 
-	elog(LOG, "job %d completed dropping chunks", job_id);
+	elog(LOG, "job %d completed dropping %d chunks", job_id, num_dropped);
 
 	if (started)
 	{

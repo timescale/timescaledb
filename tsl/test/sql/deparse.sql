@@ -31,7 +31,14 @@ SELECT 'TABLE DEPARSE TEST DONE';
 
 \set ECHO all
 -- test drop_chunks function deparsing
-SELECT * FROM tsl_test_deparse_drop_chunks('2019-01-01'::timestamptz, 'test_table', 'test_schema', cascade => false, verbose => true);
+SELECT * FROM tsl_test_deparse_drop_chunks('2019-01-01'::timestamptz, 'Test_table', 'test_schema', cascade => false, verbose => true);
 SELECT * FROM tsl_test_deparse_drop_chunks(interval '1 day', table_name => 'weird nAme\\#^.', cascade_to_materializations => true, cascade => true);
 SELECT * FROM tsl_test_deparse_drop_chunks(newer_than => 12345);
 SELECT * FROM tsl_test_deparse_drop_chunks(older_than => interval '2 years', newer_than => '2015-01-01'::timestamp);
+
+-- test generalized deparsing function
+SELECT * FROM tsl_test_deparse_scalar_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+
+SELECT * FROM tsl_test_deparse_named_scalar_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+
+SELECT * FROM tsl_test_deparse_composite_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');

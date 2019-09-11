@@ -3,18 +3,33 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 #include <postgres.h>
 #include <foreign/foreign.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
 #include <catalog/dependency.h>
+#include <catalog/namespace.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <nodes/makefuncs.h>
 #include <utils/syscache.h>
 #include <utils/inval.h>
+#include <utils/tuplestore.h>
+#include <utils/palloc.h>
+#include <utils/memutils.h>
+#include <executor/executor.h>
+#include <funcapi.h>
 #include <miscadmin.h>
+#include <fmgr.h>
 
+#if USE_ASSERT_CHECKING
+#include <funcapi.h>
+#endif
+
+#include <compat.h>
 #include <chunk_data_node.h>
+#include <extension.h>
 #include <errors.h>
 
 #include "chunk.h"
@@ -161,40 +176,102 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(chunk_set_foreign_server(chunk, server));
 }
 
-void
-chunk_drop_remote_chunks(Name table_name, Name schema_name, Datum older_than_datum,
-						 Datum newer_than_datum, Oid older_than_type, Oid newer_than_type,
-						 bool cascade, bool cascades_to_materializations, bool verbose,
-						 List *data_node_oids)
+/* Should match definition in ddl_api.sql */
+#define DROP_CHUNKS_FUNCNAME "drop_chunks"
+#define DROP_CHUNKS_NARGS 7
+
+/*
+ * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
+ * remote data nodes.
+ *
+ * Given that drop_chunks is an SRF, and has pseudo parameter types, we need
+ * to provide a FuncExpr with type information for the deparser.
+ *
+ * Returns the number of dropped chunks.
+ */
+int
+chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Datum older_than_type,
+						 bool cascade, bool cascade_to_materializations)
 {
-	List *data_node_names;
-	const char *sql_cmd;
+	EState *estate;
+	ExprContext *econtext;
+	FuncCandidateList funclist;
+	FuncExpr *fexpr;
+	List *args = NIL;
+	int i, num_results = 0;
+	SetExprState *state;
+	Oid restype;
+	Const *argarr[DROP_CHUNKS_NARGS] = {
+		makeConst(older_than_type,
+				  -1,
+				  InvalidOid,
+				  get_typlen(older_than_type),
+				  older_than,
+				  false,
+				  get_typbyval(older_than_type)),
+		makeConst(NAMEOID,
+				  -1,
+				  InvalidOid,
+				  sizeof(NameData),
+				  NameGetDatum(table_name),
+				  false,
+				  false),
+		makeConst(NAMEOID,
+				  -1,
+				  InvalidOid,
+				  sizeof(NameData),
+				  NameGetDatum(schema_name),
+				  false,
+				  false),
+		castNode(Const, makeBoolConst(cascade, false)),
+		makeNullConst(INT8OID, -1, InvalidOid),
+		castNode(Const, makeBoolConst(false, true)),
+		castNode(Const, makeBoolConst(cascade_to_materializations, false))
+	};
 
-	if (table_name == NULL && schema_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot use wildcard to drop chunks on distributed hypertables"),
-				 errhint("Drop chunks on each distributed hypertable individually.")));
+	funclist = FuncnameGetCandidates(list_make2(makeString(ts_extension_schema_name()),
+												makeString(DROP_CHUNKS_FUNCNAME)),
+									 DROP_CHUNKS_NARGS,
+									 NIL,
+									 false,
+									 false,
+									 false);
 
-	/* The schema name must be present when dropping remote chunks because the
-	 * search path on the connection is always set to pg_catalog. Thus, the
-	 * data node will not be able to resolve the same hypertables without the
-	 * schema. */
-	if (schema_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("schema required when dropping chunks on distributed hypertables")));
+	if (funclist->next != NULL)
+		elog(ERROR, "could not find drop_chunks function");
 
-	data_node_names = data_node_oids_to_node_name_list(data_node_oids, ACL_USAGE);
-	sql_cmd = deparse_drop_chunks_func(table_name,
-									   schema_name,
-									   older_than_datum,
-									   newer_than_datum,
-									   older_than_type,
-									   newer_than_type,
-									   cascade,
-									   cascades_to_materializations,
-									   verbose);
+	/* Prepare the function expr with argument list */
+	get_func_result_type(funclist->oid, &restype, NULL);
 
-	ts_dist_cmd_run_on_data_nodes(sql_cmd, data_node_names);
+	for (i = 0; i < DROP_CHUNKS_NARGS; i++)
+		args = lappend(args, argarr[i]);
+
+	fexpr =
+		makeFuncExpr(funclist->oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+	fexpr->funcretset = true;
+
+	/* Execute the SRF */
+	estate = CreateExecutorState();
+	econtext = CreateExprContext(estate);
+	state = ExecInitFunctionResultSet(&fexpr->xpr, econtext, NULL);
+
+	while (true)
+	{
+		ExprDoneCond isdone;
+		bool isnull;
+
+		ExecMakeFunctionResultSet(state, econtext, estate->es_query_cxt, &isnull, &isdone);
+
+		if (isdone == ExprEndResult)
+			break;
+
+		if (!isnull)
+			num_results++;
+	}
+
+	/* Cleanup */
+	FreeExprContext(econtext, false);
+	FreeExecutorState(estate);
+
+	return num_results;
 }

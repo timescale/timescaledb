@@ -5,11 +5,18 @@
  */
 #include <postgres.h>
 #include <utils/builtins.h>
+#include <access/htup.h>
+#include <access/htup_details.h>
+#include <catalog/pg_type.h>
+#include <funcapi.h>
+
+#include <utils.h>
+#include <compat.h>
+#include <extension.h>
 #include "export.h"
 #include "deparse.h"
 
 TS_FUNCTION_INFO_V1(tsl_test_get_tabledef);
-TS_FUNCTION_INFO_V1(tsl_test_deparse_drop_chunks);
 
 Datum
 tsl_test_get_tabledef(PG_FUNCTION_ARGS)
@@ -19,29 +26,82 @@ tsl_test_get_tabledef(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(cmd));
 }
 
+TS_FUNCTION_INFO_V1(tsl_test_deparse_drop_chunks);
+
 Datum
 tsl_test_deparse_drop_chunks(PG_FUNCTION_ARGS)
 {
-	Name table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	Name schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	Datum older_than_datum = PG_GETARG_DATUM(0);
-	Datum newer_than_datum = PG_GETARG_DATUM(4);
-	Oid older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
-	Oid newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
-	bool cascade = PG_GETARG_BOOL(3);
-	bool verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
-	bool cascades_to_materializations = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
+	FmgrInfo flinfo;
+	FunctionCallInfo fcinfo2 = palloc(SizeForFunctionCallInfo(fcinfo->nargs));
+	Oid argtypes[7] = { ANYOID, NAMEOID, NAMEOID, BOOLOID, ANYOID, BOOLOID, BOOLOID };
+	Oid funcid = ts_get_function_oid("drop_chunks", ts_extension_schema_name(), 7, argtypes);
 	const char *sql_cmd;
+	int i;
 
-	sql_cmd = deparse_drop_chunks_func(table_name,
-									   schema_name,
-									   older_than_datum,
-									   newer_than_datum,
-									   older_than_type,
-									   newer_than_type,
-									   cascade,
-									   cascades_to_materializations,
-									   verbose);
+	fmgr_info(funcid, &flinfo);
+	InitFunctionCallInfoData(*fcinfo2,
+							 &flinfo,
+							 fcinfo->nargs,
+							 fcinfo->fncollation,
+							 fcinfo->context,
+							 fcinfo->resultinfo);
+
+	/* Copy over the arguments into the new function call data */
+	for (i = 0; i < fcinfo->nargs; i++)
+	{
+		FC_ARG(fcinfo2, i) = FC_ARG(fcinfo, i);
+		FC_NULL(fcinfo2, i) = FC_NULL(fcinfo, i);
+	}
+
+	/* Use the expression from this function so that the deparse function can
+	 * result the data types of args with ANY type */
+	fcinfo2->flinfo->fn_expr = fcinfo->flinfo->fn_expr;
+	sql_cmd = deparse_func_call(fcinfo2);
 
 	PG_RETURN_TEXT_P(cstring_to_text(sql_cmd));
+}
+
+TS_FUNCTION_INFO_V1(tsl_test_deparse_func);
+
+Datum
+tsl_test_deparse_func(PG_FUNCTION_ARGS)
+{
+	TupleDesc tupdesc;
+	Oid resulttypeid;
+	const char *deparsed = deparse_func_call(fcinfo);
+	Datum retval;
+
+	elog(NOTICE, "Deparsed: %s", deparsed);
+
+	switch (get_call_result_type(fcinfo, &resulttypeid, &tupdesc))
+	{
+		case TYPEFUNC_SCALAR:
+			retval = BoolGetDatum(true);
+			break;
+		case TYPEFUNC_COMPOSITE:
+		{
+			Datum *values = palloc(tupdesc->natts * sizeof(Datum));
+			bool *nulls = palloc(tupdesc->natts * sizeof(bool));
+			HeapTuple tup;
+			int i;
+
+			for (i = 0; i < tupdesc->natts; i++)
+				nulls[i] = true;
+
+			tup = heap_form_tuple(tupdesc, values, nulls);
+			pfree(values);
+			pfree(nulls);
+			retval = HeapTupleGetDatum(tup);
+			break;
+		}
+		case TYPEFUNC_RECORD:
+			/* indeterminate rowtype result */
+		case TYPEFUNC_COMPOSITE_DOMAIN:
+			/* domain over determinable rowtype result */
+		case TYPEFUNC_OTHER:
+			elog(ERROR, "unsupported result type for deparsing");
+			break;
+	}
+
+	PG_RETURN_DATUM(retval);
 }

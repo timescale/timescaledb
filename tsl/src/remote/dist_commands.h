@@ -17,7 +17,10 @@ extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes_using_search_path(const c
 																		 const char *search_path,
 																		 List *node_names);
 extern DistCmdResult *ts_dist_cmd_invoke_on_all_data_nodes(const char *sql);
-
+extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_all_data_nodes(FunctionCallInfo fcinfo);
+extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo,
+																 List *data_nodes);
+extern void ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes);
 extern PGresult *ts_dist_cmd_get_data_node_result(DistCmdResult *response, const char *node_name);
 
 extern void ts_dist_cmd_close_response(DistCmdResult *response);

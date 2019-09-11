@@ -3378,6 +3378,33 @@ list_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_DONE(funcctx);
 }
 
+static void
+drop_remote_chunks(FunctionCallInfo fcinfo, const Name schema_name, const Name table_name,
+				   List *data_node_oids)
+{
+	/* Wildcard drops not supported on distributed hypertables */
+	if (schema_name == NULL && table_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot use wildcard to drop chunks on distributed hypertables"),
+				 errhint("Drop chunks on each distributed hypertable individually.")));
+
+	/* The schema name must be present when dropping remote chunks because the
+	 * search path on the connection is always set to pg_catalog. Thus, the
+	 * data node will not be able to resolve the same hypertables without the
+	 * schema. */
+	if (schema_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("schema required when dropping chunks on distributed hypertables")));
+
+	/* Make sure the schema is set in case it was not given on the command line */
+	FC_ARG(fcinfo, 2) = NameGetDatum(schema_name);
+	FC_NULL(fcinfo, 2) = false;
+
+	ts_cm_functions->func_call_on_data_nodes(fcinfo, data_node_oids);
+}
+
 Datum
 ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
@@ -3461,7 +3488,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (NULL == schema_name && list_length(ht_oids) == 1)
 	{
 		Oid nspid = get_rel_namespace(linitial_oid(ht_oids));
-
 		schema_name =
 			DatumGetName(DirectFunctionCall1(namein, CStringGetDatum(get_namespace_name(nspid))));
 	}
@@ -3540,16 +3566,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	}
 
 	if (data_node_oids != NIL)
-		ts_cm_functions->drop_chunks_on_data_nodes(table_name,
-												   schema_name,
-												   older_than_datum,
-												   newer_than_datum,
-												   older_than_type,
-												   newer_than_type,
-												   cascade,
-												   cascades_to_materializations,
-												   verbose,
-												   data_node_oids);
+		drop_remote_chunks(fcinfo, schema_name, table_name, data_node_oids);
 
 	/* store data for multi function call */
 	funcctx->max_calls = list_length(dc_names);

@@ -9,27 +9,30 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
-#include <catalog/indexing.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
-#include <commands/tablespace.h>
-#include <catalog/pg_class.h>
-#include <utils/rel.h>
-#include <access/relscan.h>
 #include <utils/fmgroids.h>
-#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <commands/tablespace.h>
+#include <access/relscan.h>
+#include <catalog/pg_class.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_index.h>
+#include <catalog/pg_proc.h>
+#include <catalog/namespace.h>
 #include <nodes/pg_list.h>
+#include <funcapi.h>
 #include <fmgr.h>
 
-#include "export.h"
-#include "compat.h"
-#include "constraint.h"
-#include "trigger.h"
-#include "utils.h"
-#include "deparse.h"
+#include <constraint.h>
 #include <extension.h>
+#include <utils.h>
+#include <export.h>
+#include <compat.h>
+#include <trigger.h>
+
+#include "deparse.h"
 
 /*
  * Deparse a table into a set of SQL commands that can be used to recreate it.
@@ -493,128 +496,215 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 	return result;
 }
 
-typedef struct StringInfoWithSeparator
-{
-	StringInfo buff;
-	char *sep;
-	bool empty;
-} StringInfoWithSeparator;
+#define DEFAULT_SCALAR_RESULT_NAME "*"
 
-static StringInfoWithSeparator *
-init_string_info_with_sep(const char *sep)
+static void
+deparse_result_type(StringInfo sql, FunctionCallInfo fcinfo)
 {
-	StringInfoWithSeparator *str = palloc(sizeof(StringInfoWithSeparator));
-	str->buff = makeStringInfo();
-	str->sep = pstrdup(sep);
-	str->empty = true;
-	return str;
+	TupleDesc tupdesc;
+	char *scalarname;
+	Oid resulttypeid;
+	int i;
+
+	switch (get_call_result_type(fcinfo, &resulttypeid, &tupdesc))
+	{
+		case TYPEFUNC_SCALAR:
+			/* scalar result type */
+			Assert(NULL == tupdesc);
+			Assert(OidIsValid(resulttypeid));
+
+			/* Check if the function has a named OUT parameter */
+			scalarname = get_func_result_name(fcinfo->flinfo->fn_oid);
+
+			/* If there is no named OUT parameter, use the default name */
+			if (NULL != scalarname)
+			{
+				appendStringInfoString(sql, scalarname);
+				pfree(scalarname);
+			}
+			else
+				appendStringInfoString(sql, DEFAULT_SCALAR_RESULT_NAME);
+			break;
+		case TYPEFUNC_COMPOSITE:
+			/* determinable rowtype result */
+			Assert(NULL != tupdesc);
+
+			for (i = 0; i < tupdesc->natts; i++)
+			{
+				if (!tupdesc->attrs[i].attisdropped)
+				{
+					appendStringInfoString(sql, NameStr(tupdesc->attrs[i].attname));
+
+					if (i < (tupdesc->natts - 1))
+						appendStringInfoChar(sql, ',');
+				}
+			}
+			break;
+		case TYPEFUNC_RECORD:
+			/* indeterminate rowtype result */
+			elog(NOTICE, "record return type");
+			break;
+		case TYPEFUNC_COMPOSITE_DOMAIN:
+			/* domain over determinable rowtype result */
+		case TYPEFUNC_OTHER:
+			elog(ERROR, "unsupported result type for deparsing");
+			break;
+	}
 }
 
 /*
- * String append with a separator. After first run a separator will be set to `,`, so
- * consecutive runs will result in a proper separator being added.
+ * Deparse a function call.
+ *
+ * Turn a function call back into a string. In theory, we could just call
+ * deparse_expression() (ruleutils.c) on the original function expression (as
+ * given by fcinfo->flinfo->fn_expr), but we'd like to support deparsing also
+ * when the expression is not available (e.g., when invoking by OID from C
+ * code). Further, deparse_expression() doesn't explicitly give the parameter
+ * names, which is important in order to maintain forward-compatibility with
+ * the remote version of the function in case it has reordered the parameters.
  */
-static void pg_attribute_printf(2, 3)
-	string_info_with_separator_append(StringInfoWithSeparator *str, const char *fmt, ...)
-{
-	va_list fmt_args;
-	int needed_bytes;
-
-	if (!str->empty)
-		appendStringInfo(str->buff, "%s", ", ");
-	while (true)
-	{
-		va_start(fmt_args, fmt);
-		needed_bytes = appendStringInfoVA(str->buff, fmt, fmt_args);
-		va_end(fmt_args);
-
-		if (needed_bytes == 0)
-		{
-			str->empty = false;
-			break;
-		}
-		enlargeStringInfo(str->buff, needed_bytes);
-	}
-}
-
-static const char *
-get_typname(Oid type_oid)
-{
-	Form_pg_type form;
-	char *typname;
-	HeapTuple tp;
-
-	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for type %u", type_oid);
-	form = (Form_pg_type) GETSTRUCT(tp);
-	typname = pstrdup(NameStr(form->typname));
-	ReleaseSysCache(tp);
-
-	return typname;
-}
-
 const char *
-deparse_drop_chunks_func(Name table_name, Name schema_name, Datum older_than_datum,
-						 Datum newer_than_datum, Oid older_than_type, Oid newer_than_type,
-						 bool cascade, bool cascades_to_materializations, bool verbose)
+deparse_func_call(FunctionCallInfo fcinfo)
 {
-	Oid out_fn;
-	bool type_is_varlena;
-	char *older_than_str = NULL;
-	char *newer_than_str = NULL;
-	StringInfoWithSeparator *cmd = init_string_info_with_sep(", ");
+	HeapTuple ftup;
+	Form_pg_proc procform;
+	StringInfoData sql;
+	const char *funcnamespace;
+	OverrideSearchPath search_path = {
+		.schemas = NIL,
+		.addCatalog = false,
+		.addTemp = false,
+	};
+	Oid funcid = fcinfo->flinfo->fn_oid;
+	int PG_USED_FOR_ASSERTS_ONLY numargs;
+	Oid *argtypes;
+	char **argnames;
+	char *argmodes;
+	int i;
 
-	appendStringInfo(cmd->buff,
-					 "SELECT * FROM %s.drop_chunks(",
-					 quote_identifier(ts_extension_schema_name()));
+	initStringInfo(&sql);
+	appendStringInfoString(&sql, "SELECT ");
+	deparse_result_type(&sql, fcinfo);
 
-	if (older_than_type != InvalidOid)
+	/* First fetch the function's pg_proc row to inspect its rettype */
+	ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+
+	if (!HeapTupleIsValid(ftup))
+		elog(ERROR, "cache lookup failed for function %u", funcid);
+
+	procform = (Form_pg_proc) GETSTRUCT(ftup);
+	funcnamespace = get_namespace_name(procform->pronamespace);
+	numargs = get_func_arg_info(ftup, &argtypes, &argnames, &argmodes);
+	Assert(numargs >= fcinfo->nargs);
+	appendStringInfo(&sql,
+					 " FROM %s(",
+					 quote_qualified_identifier(funcnamespace, NameStr(procform->proname)));
+	ReleaseSysCache(ftup);
+
+	/* Temporarily set a NULL search path. This makes identifier types (e.g.,
+	 * regclass / tables) be fully qualified, which is needed since the search
+	 * path on a remote node is not guaranteed to be the same. */
+	PushOverrideSearchPath(&search_path);
+
+	for (i = 0; i < fcinfo->nargs; i++)
 	{
-		const char *type_name = get_typname(older_than_type);
-		getTypeOutputInfo(older_than_type, &out_fn, &type_is_varlena);
-		older_than_str = OidOutputFunctionCall(out_fn, older_than_datum);
-		string_info_with_separator_append(cmd,
-										  "older_than => %s::%s",
-										  quote_literal_cstr(older_than_str),
-										  type_name);
-	}
-	else
-		string_info_with_separator_append(cmd, "older_than => NULL");
+		const char *argvalstr = "NULL";
+		bool add_type_cast = false;
 
-	if (newer_than_type != InvalidOid)
+		switch (argtypes[i])
+		{
+			case ANYOID:
+			case ANYELEMENTOID:
+				/* For pseudo types, try to resolve the "real" argument type
+				 * from the function expression, if present */
+				if (NULL != fcinfo->flinfo && NULL != fcinfo->flinfo->fn_expr)
+				{
+					Oid expr_argtype = get_fn_expr_argtype(fcinfo->flinfo, i);
+
+					/* Function parameters that aren't typed need type casts,
+					 * but only add a cast if the expr contained a "real" type
+					 * and not an unknown or pseudo type. */
+					if (OidIsValid(expr_argtype) && expr_argtype != UNKNOWNOID &&
+						expr_argtype != argtypes[i])
+						add_type_cast = true;
+
+					argtypes[i] = expr_argtype;
+				}
+				break;
+			default:
+				break;
+		}
+
+		if (!FC_NULL(fcinfo, i))
+		{
+			bool isvarlena;
+			Oid outfuncid;
+
+			if (!OidIsValid(argtypes[i]))
+				elog(ERROR, "invalid type for argument %d", i);
+
+			getTypeOutputInfo(argtypes[i], &outfuncid, &isvarlena);
+			Assert(OidIsValid(outfuncid));
+			argvalstr = quote_literal_cstr(OidOutputFunctionCall(outfuncid, FC_ARG(fcinfo, i)));
+		}
+
+		appendStringInfo(&sql, "%s => %s", argnames[i], argvalstr);
+
+		if (add_type_cast)
+			appendStringInfo(&sql, "::%s", format_type_be(argtypes[i]));
+
+		if (i < (fcinfo->nargs - 1))
+			appendStringInfoChar(&sql, ',');
+	}
+
+	PopOverrideSearchPath();
+
+	if (NULL != argtypes)
+		pfree(argtypes);
+
+	if (NULL != argnames)
+		pfree(argnames);
+
+	if (NULL != argmodes)
+		pfree(argmodes);
+
+	appendStringInfoChar(&sql, ')');
+
+	return sql.data;
+}
+
+/*
+ * Deparse a function by OID.
+ *
+ * The function arguments should be given as datums in the vararg list and
+ * need to be specified in the order given by the (OID) function's signature.
+ */
+const char *
+deparse_oid_function_call_coll(Oid funcid, Oid collation, unsigned int num_args, ...)
+{
+	FunctionCallInfo fcinfo = palloc(SizeForFunctionCallInfo(num_args));
+	FmgrInfo flinfo;
+	const char *result;
+	va_list args;
+	unsigned int i;
+
+	fmgr_info(funcid, &flinfo);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, num_args, collation, NULL, NULL);
+	va_start(args, num_args);
+
+	for (i = 0; i < num_args; i++)
 	{
-		const char *type_name = get_typname(newer_than_type);
-		getTypeOutputInfo(newer_than_type, &out_fn, &type_is_varlena);
-		newer_than_str = OidOutputFunctionCall(out_fn, newer_than_datum);
-		string_info_with_separator_append(cmd,
-										  "newer_than => %s::%s",
-										  quote_literal_cstr(newer_than_str),
-										  type_name);
+		FC_ARG(fcinfo, i) = va_arg(args, Datum);
+		FC_NULL(fcinfo, i) = false;
 	}
-	else
-		string_info_with_separator_append(cmd, "newer_than => NULL");
 
-	if (table_name != NULL)
-		string_info_with_separator_append(cmd,
-										  "table_name => %s",
-										  quote_literal_cstr(NameStr(*table_name)));
-	else
-		string_info_with_separator_append(cmd, "table_name => NULL");
+	va_end(args);
 
-	if (schema_name != NULL)
-		string_info_with_separator_append(cmd,
-										  "schema_name => %s",
-										  quote_literal_cstr(NameStr(*schema_name)));
-	else
-		string_info_with_separator_append(cmd, "schema_name => NULL");
+	result = deparse_func_call(fcinfo);
 
-	string_info_with_separator_append(cmd, "cascade => '%s'", cascade ? "true" : "false");
-	string_info_with_separator_append(cmd,
-									  "cascade_to_materializations => '%s'",
-									  cascades_to_materializations ? "true" : "false");
-	string_info_with_separator_append(cmd, "verbose => '%s'", verbose ? "true" : "false");
+	/* Check for null result, since caller is clearly not expecting one */
+	if (fcinfo->isnull)
+		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
 
-	appendStringInfo(cmd->buff, ");");
-	return cmd->buff->data;
+	return result;
 }

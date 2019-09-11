@@ -16,4 +16,34 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(older_than "any" = NULL,
     cascade_to_materializations BOOLEAN = NULL) RETURNS TEXT
 AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_drop_chunks' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION tsl_test_deparse_scalar_func(
+    schema_name NAME = NULL,
+    table_name  NAME = NULL,
+    "time" TIMESTAMPTZ = NOW(),
+    message TEXT = NULL,
+    not_set BOOLEAN = TRUE,
+    option BOOLEAN = FALSE
+    ) RETURNS BOOLEAN
+AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION tsl_test_deparse_named_scalar_func(
+    schema_name NAME = NULL,
+    table_name  NAME = NULL,
+    "time" TIMESTAMPTZ = NOW(),
+    message TEXT = NULL,
+    not_set BOOLEAN = TRUE,
+    INOUT option BOOLEAN = FALSE
+    )
+AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION tsl_test_deparse_composite_func(
+    schema_name NAME = NULL,
+    table_name  NAME = NULL,
+    "time" TIMESTAMPTZ = NOW(),
+    message TEXT = NULL,
+    not_set BOOLEAN = NULL,
+    option BOOLEAN = FALSE
+    ) RETURNS TABLE (success BOOLEAN, message TEXT)
+AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+
 SET ROLE :ROLE_DEFAULT_PERM_USER;
