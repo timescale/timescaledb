@@ -61,7 +61,7 @@ ERROR:  bad query error thrown from test
 SELECT * FROM test.get_connection_stats();
  connections_created | connections_closed | results_created | results_cleared 
 ---------------------+--------------------+-----------------+-----------------
-                   1 |                  1 |               6 |               6
+                   1 |                  1 |               7 |               7
 (1 row)
 
 SELECT test.remote_connection_tests();

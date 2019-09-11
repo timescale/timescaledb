@@ -575,8 +575,62 @@ SELECT * FROM delete_data_node('data_node_5', force =>true);
 SELECT * FROM add_data_node('data_node_6');
 \set ON_ERROR_STOP 1
 
+--
+-- Test timescale extension version check during add_data_node()
+-- and create_distributed_hypertable() calls.
+--
+-- Use mock extension and create basic function wrappers to
+-- establish connection to a data node.
+--
 RESET ROLE;
+DROP DATABASE data_node_1;
+CREATE DATABASE data_node_1 OWNER :ROLE_1;
 
+\c data_node_1
+CREATE SCHEMA _timescaledb_internal;
+GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
+
+CREATE FUNCTION _timescaledb_internal.set_dist_id(uuid UUID)
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.set_peer_dist_id(uuid UUID)
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.validate_as_data_node()
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+
+CREATE EXTENSION timescaledb VERSION '0.0.0';
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+
+SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
+                            if_not_exists => true);
+
+GRANT USAGE ON FOREIGN SERVER data_node_1 TO :ROLE_1;
+
+SET ROLE :ROLE_1;
+CREATE TABLE test_disttable(time timestamptz);
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('test_disttable', 'time');
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;

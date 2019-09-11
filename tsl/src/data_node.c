@@ -377,19 +377,13 @@ data_node_bootstrap_extension(const char *node_name, const char *host, int32 por
 	const char *schema_name = ts_extension_schema_name();
 	const char *schema_name_quoted = quote_identifier(schema_name);
 	Oid schema_oid = get_namespace_oid(schema_name, true);
-	bool extension_exists = false;
+	bool extension_exists;
 
 	node_options = create_data_node_options(host, port, dbname, username);
 	conn = remote_connection_open_with_options(node_name, node_options, false);
 
-	res = remote_connection_execf(conn,
-								  "SELECT 1 FROM pg_extension WHERE extname = %s",
-								  quote_literal_cstr(EXTENSION_NAME));
-
-	if (PQntuples(res) > 0)
-		extension_exists = true;
-
-	remote_result_close(res);
+	/* Ensure the extension exists and has correct version */
+	extension_exists = remote_connection_check_extension(conn);
 
 	if (!extension_exists)
 	{

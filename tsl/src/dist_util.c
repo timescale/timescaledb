@@ -242,3 +242,28 @@ validate_data_node_settings(void)
 						   max_prepared_xacts,
 						   MaxConnections)));
 }
+
+int
+dist_util_version_compare(const char *lhs, const char *rhs)
+{
+	unsigned int lhs_major, lhs_minor, lhs_patch;
+	unsigned int rhs_major, rhs_minor, rhs_patch;
+
+	if (sscanf(lhs, "%u.%u.%u", &lhs_major, &lhs_minor, &lhs_patch) != 3)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("invalid version %s", lhs)));
+
+	if (sscanf(rhs, "%u.%u.%u", &rhs_major, &rhs_minor, &rhs_patch) != 3)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("invalid version %s", rhs)));
+
+	if (lhs_major == rhs_major)
+	{
+		if (lhs_minor == rhs_minor)
+		{
+			if (lhs_patch == rhs_patch)
+				return 0;
+			return (lhs_patch < rhs_patch) ? -1 : 1;
+		}
+		return (lhs_minor < rhs_minor) ? -1 : 1;
+	}
+	return (lhs_major < rhs_major) ? -1 : 1;
+}
