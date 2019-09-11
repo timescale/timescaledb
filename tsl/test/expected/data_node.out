@@ -1235,6 +1235,62 @@ WARNING:  new data for hypertable "disttable_4" will be under-replicated due to 
 SELECT * FROM add_data_node('data_node_6');
 ERROR:  function add_data_node(unknown) does not exist at character 15
 \set ON_ERROR_STOP 1
+--
+-- Test timescale extension version check during add_data_node()
+-- and create_distributed_hypertable() calls.
+--
+-- Use mock extension and create basic function wrappers to
+-- establish connection to a data node.
+--
+RESET ROLE;
+DROP DATABASE data_node_1;
+CREATE DATABASE data_node_1 OWNER :ROLE_1;
+\c data_node_1
+CREATE SCHEMA _timescaledb_internal;
+GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
+CREATE FUNCTION _timescaledb_internal.set_dist_id(uuid UUID)
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+CREATE FUNCTION _timescaledb_internal.set_peer_dist_id(uuid UUID)
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+CREATE FUNCTION _timescaledb_internal.validate_as_data_node()
+	RETURNS BOOL LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+	RETURN true;
+END
+$BODY$;
+CREATE EXTENSION timescaledb VERSION '0.0.0';
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
+                            if_not_exists => true);
+NOTICE:  database "data_node_1" already exists on data node, not creating it
+WARNING:  data node "data_node_1" has an outdated timescaledb extension version
+WARNING:  data node "data_node_1" has an outdated timescaledb extension version
+WARNING:  data node "data_node_1" has an outdated timescaledb extension version
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | f                | f
+(1 row)
+
+GRANT USAGE ON FOREIGN SERVER data_node_1 TO :ROLE_1;
+SET ROLE :ROLE_1;
+CREATE TABLE test_disttable(time timestamptz);
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('test_disttable', 'time');
+NOTICE:  adding not-null constraint to column "time"
+WARNING:  data node "data_node_1" has an outdated timescaledb extension version
+ERROR:  [data_node_1]: function public.create_hypertable(unknown, time_column_name => unknown, associated_schema_name => unknown, associated_table_prefix => unknown, chunk_time_interval => bigint, chunk_sizing_func => unknown, chunk_target_size => unknown, if_not_exists => boolean, migrate_data => boolean, create_default_indexes => boolean, replication_factor => integer) does not exist
+\set ON_ERROR_STOP 1
 RESET ROLE;
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;

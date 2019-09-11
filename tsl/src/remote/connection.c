@@ -40,6 +40,7 @@
 #include "guc.h"
 #include "utils.h"
 #include "dist_util.h"
+#include "errors.h"
 
 /*
  * Connection library for TimescaleDB.
@@ -830,6 +831,46 @@ remote_result_query_ok(PGresult *res)
 }
 
 /*
+ * Check timescaledb extension version on a data node.
+ *
+ * Compare remote connection extension version with the one installed
+ * locally on the access node.
+ *
+ * Return false if extension is not found, true otherwise.
+ */
+bool
+remote_connection_check_extension(TSConnection *conn)
+{
+	PGresult *res;
+	int rc;
+
+	res = remote_connection_execf(conn,
+								  "SELECT extversion FROM pg_extension WHERE extname = %s",
+								  quote_literal_cstr(EXTENSION_NAME));
+
+	/* extension does not exists */
+	if (PQntuples(res) == 0)
+	{
+		PQclear(res);
+		return false;
+	}
+
+	/* compare extension version */
+	rc = dist_util_version_compare(PQgetvalue(res, 0, 0), TIMESCALEDB_VERSION_MOD);
+	if (rc < 0)
+		ereport(WARNING,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("data node \"%s\" has an outdated timescaledb extension version",
+						NameStr(conn->node_name)),
+				 errdetail_internal("Access node version: %s, data node version: %s.",
+									TIMESCALEDB_VERSION_MOD,
+									PQgetvalue(res, 0, 0))));
+
+	PQclear(res);
+	return true;
+}
+
+/*
  * Configure remote connection using current instance UUID.
  *
  * This allows remote side to reason about whether this connection has been
@@ -1033,12 +1074,19 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 					 errmsg("could not configure remote connection to \"%s\"", node_name),
 					 errdetail_internal("%s", PQerrorMessage(conn->pg_conn))));
 
-		/* Inform remote node about instance UUID */
-		if (set_dist_id && !remote_connection_set_peer_dist_id(conn))
-			ereport(ERROR,
-					(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
-					 errmsg("could not set distributed ID for \"%s\"", node_name),
-					 errdetail_internal("%s", PQerrorMessage(conn->pg_conn))));
+		/* Check a data node extension version and show a warning
+		 * message if it differs */
+		remote_connection_check_extension(conn);
+
+		if (set_dist_id)
+		{
+			/* Inform remote node about instance UUID */
+			if (!remote_connection_set_peer_dist_id(conn))
+				ereport(ERROR,
+						(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+						 errmsg("could not set distributed ID for \"%s\"", node_name),
+						 errdetail_internal("%s", PQerrorMessage(conn->pg_conn))));
+		}
 	}
 	PG_CATCH();
 	{

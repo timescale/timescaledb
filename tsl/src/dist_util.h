@@ -31,5 +31,6 @@ bool dist_util_is_frontend_session(void);
 Datum dist_util_remote_hypertable_info(PG_FUNCTION_ARGS);
 
 void validate_data_node_settings(void);
+int dist_util_version_compare(const char *lhs, const char *rhs);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */
