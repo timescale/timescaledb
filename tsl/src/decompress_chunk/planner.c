@@ -272,7 +272,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	List *settings;
 
 	Assert(list_length(custom_plans) == 1);
-	Assert(IsA(linitial(custom_plans), SeqScan));
 
 	cscan->flags = path->flags;
 	cscan->methods = &decompress_chunk_plan_methods;

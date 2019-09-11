@@ -44,10 +44,10 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 int parallel_workers);
 
 static Path *decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info,
-										  int parallel_workers);
+										  int parallel_workers, Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
-											 Chunk *chunk);
+static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+											 RelOptInfo *chunk_rel, bool needs_sequence_num);
 
 static bool can_order_by_pathkeys(CompressionInfo *info, List *pathkeys, bool *needs_sequence_num);
 
@@ -94,10 +94,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 								   Chunk *chunk)
 {
 	RelOptInfo *compressed_rel;
-	Path *path;
 	bool needs_sequence_num = false;
+	ListCell *lc;
 
 	CompressionInfo *info = build_compressioninfo(root, ht, chunk_rel);
+
+	bool try_order_by_compressed =
+		root->query_pathkeys &&
+		can_order_by_pathkeys(info, root->query_pathkeys, &needs_sequence_num);
 
 	/*
 	 * since we rely on parallel coordination from the scan below
@@ -112,7 +116,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root, info, chunk);
+	decompress_chunk_add_plannerinfo(root, info, chunk, chunk_rel, try_order_by_compressed);
 	compressed_rel = info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
@@ -124,25 +128,33 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 								 compressed_rel,
 								 compressed_rel->consider_parallel ? parallel_workers : 0);
 
-	/* create non-parallel path */
-	path = decompress_chunk_path_create(root, info, 0);
-	add_path(chunk_rel, path);
-
-	/* create ordered path if compressed order is compatible with query order */
-	if (root->query_pathkeys &&
-		can_order_by_pathkeys(info, root->query_pathkeys, &needs_sequence_num))
+	/* create non-parallel paths */
+	foreach (lc, compressed_rel->pathlist)
 	{
-		DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
-		dcpath->needs_sequence_num = needs_sequence_num;
-		dcpath->cpath.path.pathkeys = root->query_pathkeys;
-		add_path(chunk_rel, (Path *) dcpath);
+		Path *child_path = lfirst(lc);
+		Path *path = decompress_chunk_path_create(root, info, 0, child_path);
+
+		add_path(chunk_rel, path);
+		/* create ordered path if compressed order is compatible with query order */
+		if (try_order_by_compressed)
+		{
+			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
+			dcpath->needs_sequence_num = needs_sequence_num;
+			Assert(dcpath->cpath.path.pathkeys == NIL);
+			dcpath->cpath.path.pathkeys = root->query_pathkeys;
+			add_path(chunk_rel, (Path *) dcpath);
+		}
 	}
 
-	/* create parallel path */
-	if (compressed_rel->consider_parallel && list_length(compressed_rel->partial_pathlist) > 0)
+	/* create parallel paths */
+	if (compressed_rel->consider_parallel)
 	{
-		path = decompress_chunk_path_create(root, info, parallel_workers);
-		add_partial_path(chunk_rel, path);
+		foreach (lc, compressed_rel->partial_pathlist)
+		{
+			Path *child_path = lfirst(lc);
+			Path *path = decompress_chunk_path_create(root, info, parallel_workers, child_path);
+			add_partial_path(chunk_rel, path);
+		}
 	}
 }
 
@@ -161,6 +173,95 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * DECOMPRESS_CHUNK_CPU_TUPLE_COST;
+	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+}
+
+static void
+compressed_reltarget_add_whole_row_var(RelOptInfo *compressed_rel)
+{
+	compressed_rel->reltarget->exprs =
+		lappend(compressed_rel->reltarget->exprs,
+				makeVar(compressed_rel->relid, 0, get_atttype(compressed_rel->relid, 0), -1, 0, 0));
+}
+
+static void
+compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compressed_relid,
+										const char *column_name)
+{
+	AttrNumber attnum = get_attnum(compressed_relid, column_name);
+	Assert(attnum > 0);
+	compressed_rel->reltarget->exprs = lappend(compressed_rel->reltarget->exprs,
+											   makeVar(compressed_rel->relid,
+													   attnum,
+													   get_atttype(compressed_rel->relid, attnum),
+													   -1,
+													   0,
+													   0));
+}
+
+/* copy over the vars from the chunk_rel->reltarget to the compressed_rel->reltarget
+ * altering the fields that need it
+ */
+static void
+compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
+							   bool needs_sequence_num)
+{
+	Oid compressed_relid = info->compressed_rte->relid;
+	ListCell *lc;
+	foreach (lc, info->chunk_rel->reltarget->exprs)
+	{
+		ListCell *lc2;
+		List *chunk_vars = pull_var_clause(lfirst(lc),
+										   PVC_RECURSE_AGGREGATES | PVC_RECURSE_WINDOWFUNCS |
+											   PVC_RECURSE_PLACEHOLDERS);
+		foreach (lc2, chunk_vars)
+		{
+			FormData_hypertable_compression *column_info;
+			char *column_name;
+			Var *chunk_var = castNode(Var, lfirst(lc2));
+
+			/* skip vars that aren't from the uncompressed chunk */
+			if (chunk_var->varno != info->chunk_rel->relid)
+				continue;
+
+			/* if there's a system column or whole-row reference, add a whole-
+			 * row reference, and we're done.
+			 */
+			if (chunk_var->varattno <= 0)
+			{
+				compressed_reltarget_add_whole_row_var(compressed_rel);
+				return;
+			}
+
+			column_name = get_attname_compat(info->chunk_rte->relid, chunk_var->varattno, false);
+			column_info =
+				get_column_compressioninfo(info->hypertable_compression_info, column_name);
+
+			Assert(column_info != NULL);
+
+			compressed_reltarget_add_var_for_column(compressed_rel, compressed_relid, column_name);
+
+			/* if the column is an orderby, add it's metadata column too */
+			if (column_info->orderby_column_index > 0)
+			{
+				column_name = compression_column_segment_min_max_name(column_info);
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														column_name);
+			}
+		}
+	}
+
+	/* always add the count column */
+	compressed_reltarget_add_var_for_column(compressed_rel,
+											compressed_relid,
+											COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	/* add the segment order column if we may try to order by it */
+	if (needs_sequence_num)
+		compressed_reltarget_add_var_for_column(compressed_rel,
+												compressed_relid,
+												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
 }
 
 /*
@@ -168,11 +269,13 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
 	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, true);
 	Oid compressed_relid = compressed_chunk->table_id;
+	RelOptInfo *compressed_rel;
 
 	root->simple_rel_array_size++;
 	root->simple_rel_array =
@@ -192,20 +295,23 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = NULL;
 #if PG96
-	root->simple_rel_array[compressed_index] =
-		build_simple_rel(root, compressed_index, RELOPT_BASEREL);
+	compressed_rel = build_simple_rel(root, compressed_index, RELOPT_BASEREL);
+
 #else
-	root->simple_rel_array[compressed_index] = build_simple_rel(root, compressed_index, NULL);
+	compressed_rel = build_simple_rel(root, compressed_index, NULL);
 #endif
+	root->simple_rel_array[compressed_index] = compressed_rel;
 
 	info->compressed_rel = root->simple_rel_array[compressed_index];
+
+	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
 }
 
 static Path *
-decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int parallel_workers)
+decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int parallel_workers,
+							 Path *compressed_path)
 {
 	DecompressChunkPath *path;
-	bool parallel_safe = false;
 
 	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
 
@@ -218,21 +324,15 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->cpath.flags = 0;
 	path->cpath.methods = &decompress_chunk_path_methods;
 
-	path->cpath.path.rows = info->compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
-
-	if (parallel_workers > 0 && list_length(info->compressed_rel->partial_pathlist) > 0)
-		parallel_safe = true;
+	Assert(parallel_workers == 0 || compressed_path->parallel_safe);
 
 	path->cpath.path.parallel_aware = false;
-	path->cpath.path.parallel_safe = parallel_safe;
+	path->cpath.path.parallel_safe = compressed_path->parallel_safe;
 	path->cpath.path.parallel_workers = parallel_workers;
 
-	if (parallel_safe)
-		path->cpath.custom_paths = list_make1(linitial(info->compressed_rel->partial_pathlist));
-	else
-		path->cpath.custom_paths = list_make1(info->compressed_rel->cheapest_total_path);
+	path->cpath.custom_paths = list_make1(compressed_path);
 
-	cost_decompress_chunk(&path->cpath.path, info->compressed_rel->cheapest_total_path);
+	cost_decompress_chunk(&path->cpath.path, compressed_path);
 
 	return &path->cpath.path;
 }
@@ -254,7 +354,8 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 		add_partial_path(compressed_rel, compressed_path);
 	}
 
-	set_cheapest(compressed_rel);
+	check_index_predicates(root, compressed_rel);
+	create_index_paths(root, compressed_rel);
 }
 
 /*

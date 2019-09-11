@@ -64,10 +64,22 @@ SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
 
-ANALYZE metrics;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- TODO this should change once we have a canonical way to create indexes on compressed tables
+CREATE INDEX c_index ON _timescaledb_internal._compressed_hypertable_3(device_id);
+CREATE INDEX c_space_index ON _timescaledb_internal._compressed_hypertable_4(device_id);
+
+CREATE INDEX c_index_2 ON _timescaledb_internal._compressed_hypertable_3(device_id, _ts_meta_count);
+CREATE INDEX c_space_index_2 ON _timescaledb_internal._compressed_hypertable_4(device_id, _ts_meta_count);
+
+CREATE INDEX ON _timescaledb_internal._compressed_hypertable_3(device_id_peer);
+CREATE INDEX ON _timescaledb_internal._compressed_hypertable_4(device_id_peer);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE INDEX ON metrics_space(device_id,device_id_peer, v0, v1 desc, time);
+CREATE INDEX ON metrics_space(device_id,device_id_peer DESC, v0, v1 desc, time);
+CREATE INDEX ON metrics_space(device_id DESC, device_id_peer DESC, v0, v1 desc, time);
 ANALYZE metrics_space;
-ANALYZE _timescaledb_internal._compressed_hypertable_3;
-ANALYZE _timescaledb_internal._compressed_hypertable_4;
 
 -- run queries on compressed hypertable and store result
 \set PREFIX ''

@@ -176,6 +176,33 @@ EXECUTE prep;
 EXECUTE prep;
 DEALLOCATE prep;
 
+--
+-- test indexes
+--
+
+SET enable_seqscan TO false;
+
+-- IndexScans should work
+:PREFIX_VERBOSE SELECT time, device_id FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id, time;
+
+-- globs should not plan IndexOnlyScans
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id, time;
+
+-- whole row reference should work
+:PREFIX_VERBOSE SELECT test_table FROM :TEST_TABLE as test_table WHERE device_id = 1 ORDER BY device_id, time;
+
+-- even when we select only a segmentby column, we still need count
+:PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id;
+
+:PREFIX_VERBOSE SELECT count(*) FROM :TEST_TABLE WHERE device_id = 1;
+
+--use the peer index
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
+
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
+
+SET enable_seqscan TO true;
+
 -- test explicit self-join
 -- XXX FIXME
 -- :PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time ORDER BY m1.time;
