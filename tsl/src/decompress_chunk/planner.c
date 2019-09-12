@@ -86,6 +86,10 @@ make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno,
 	AttrNumber scan_varattno = get_compressed_attno(path->info, ht_attno);
 	AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, ht_attname);
 
+	Assert(!get_rte_attribute_is_dropped(path->info->ht_rte, ht_attno));
+	Assert(!get_rte_attribute_is_dropped(path->info->chunk_rte, chunk_attno));
+	Assert(!get_rte_attribute_is_dropped(path->info->compressed_rte, scan_varattno));
+
 	if (ht_info->algo_id == 0)
 		scan_var = makeVar(path->info->compressed_rel->relid,
 						   scan_varattno,
@@ -262,6 +266,88 @@ build_compressed_scan_pathkeys(PlannerInfo *root, DecompressChunkPath *path)
 	return compressed_pathkeys;
 }
 
+/* replace vars that reference the compressed table with ones that reference the
+ * uncompressed one. Based on replace_nestloop_params
+ */
+static Node *
+replace_compressed_vars(Node *node, CompressionInfo *info)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Var))
+	{
+		Var *var = (Var *) node;
+		Var *new_var;
+		char *colname;
+
+		/* Upper-level Vars should be long gone at this point */
+		Assert(var->varlevelsup == 0);
+		/* If not to be replaced, we can just return the Var unmodified */
+		if (var->varno != info->compressed_rel->relid)
+			return node;
+
+		/* Create a decompressed Var to replace the compressed one */
+		colname = get_attname_compat(info->compressed_rte->relid, var->varattno, false);
+		new_var = makeVar(info->chunk_rel->relid,
+						  get_attnum(info->chunk_rte->relid, colname),
+						  var->vartype,
+						  var->vartypmod,
+						  var->varcollid,
+						  var->varlevelsup);
+
+		if (!AttributeNumberIsValid(new_var->varattno))
+			elog(ERROR, "cannot find column %s on decompressed chunk", colname);
+
+		/* And return the replacement var */
+		return (Node *) new_var;
+	}
+	if (IsA(node, PlaceHolderVar))
+	{
+		elog(ERROR, "ignoring placeholders");
+		//  PlaceHolderVar *phv = (PlaceHolderVar *) node;
+
+		//  /* Upper-level PlaceHolderVars should be long gone at this point */
+		//  Assert(phv->phlevelsup == 0);
+
+		//  /*
+		//   * Check whether we need to replace the PHV.  We use bms_overlap as a
+		//   * cheap/quick test to see if the PHV might be evaluated in the outer
+		//   * rels, and then grab its PlaceHolderInfo to tell for sure.
+		//   */
+		//  if (!bms_overlap(phv->phrels, root->curOuterRels) ||
+		//      !bms_is_subset(find_placeholder_info(root, phv, false)->ph_eval_at,
+		//                     root->curOuterRels))
+		//  {
+		//      /*
+		//       * We can't replace the whole PHV, but we might still need to
+		//       * replace Vars or PHVs within its expression, in case it ends up
+		//       * actually getting evaluated here.  (It might get evaluated in
+		//       * this plan node, or some child node; in the latter case we don't
+		//       * really need to process the expression here, but we haven't got
+		//       * enough info to tell if that's the case.)  Flat-copy the PHV
+		//       * node and then recurse on its expression.
+		//       *
+		//       * Note that after doing this, we might have different
+		//       * representations of the contents of the same PHV in different
+		//       * parts of the plan tree.  This is OK because equal() will just
+		//       * match on phid/phlevelsup, so setrefs.c will still recognize an
+		//       * upper-level reference to a lower-level copy of the same PHV.
+		//       */
+		//      PlaceHolderVar *newphv = makeNode(PlaceHolderVar);
+
+		//      memcpy(newphv, phv, sizeof(PlaceHolderVar));
+		//      newphv->phexpr = (Expr *)
+		//          replace_compressed_vars((Node *) phv->phexpr,
+		//                                          root);
+		//      return (Node *) newphv;
+		//  }
+		//  /* Replace the PlaceHolderVar with a nestloop Param */
+		//  return (Node *) replace_nestloop_param_placeholdervar(root, phv);
+	}
+	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 							 List *clauses, List *custom_plans)
@@ -269,9 +355,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
 	CustomScan *cscan = makeNode(CustomScan);
 	Scan *compressed_scan = linitial(custom_plans);
+	Path *compressed_path = linitial(path->custom_paths);
 	List *settings;
 
 	Assert(list_length(custom_plans) == 1);
+	Assert(list_length(path->custom_paths) == 1);
 
 	cscan->flags = path->flags;
 	cscan->methods = &decompress_chunk_plan_methods;
@@ -281,7 +369,51 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	cscan->scan.plan.targetlist = tlist;
 	/* input target list */
 	cscan->custom_scan_tlist = NIL;
-	cscan->scan.plan.qual = get_actual_clauses(clauses);
+
+	if (IsA(compressed_path, IndexPath))
+	{
+		/* from create_indexscan_plan() */
+		IndexPath *ipath = castNode(IndexPath, compressed_path);
+		ListCell *lc;
+		foreach (lc, clauses)
+		{
+			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+			if (is_redundant_derived_clause(rinfo, ipath->indexclauses))
+				continue; /* dup or derived from same EquivalenceClass */
+			cscan->scan.plan.qual = lappend(cscan->scan.plan.qual, rinfo->clause);
+		}
+	}
+	else if (IsA(compressed_path, BitmapHeapPath))
+	{
+		// TODO we should remove quals that are redunant with the Bitmap scan
+		/* from create_bitmap_scan_plan */
+		// BitmapHeapPath *bpath = castNode(BitmapHeapPath, compressed_path);
+		// ListCell *l;
+		// foreach(l, clauses)
+		// {
+		// 	RestrictInfo *rinfo = lfirst_node(RestrictInfo, l);
+		// 	Node       *clause = (Node *) rinfo->clause;
+
+		// 	if (rinfo->pseudoconstant)
+		// 		continue;           /* we may drop pseudoconstants here */
+		// 	if (list_member(indexquals, clause))
+		// 		continue;           /* simple duplicate */
+		// 	if (rinfo->parent_ec && list_member_ptr(indexECs, rinfo->parent_ec))
+		// 		continue;           /* derived from same EquivalenceClass */
+		// 	if (!contain_mutable_functions(clause) &&
+		// 		predicate_implied_by(list_make1(clause), indexquals, false))
+		// 		continue;           /* provably implied by indexquals */
+		// 	qpqual = lappend(qpqual, rinfo);
+		// }
+		cscan->scan.plan.qual = get_actual_clauses(clauses);
+	}
+	else
+	{
+		cscan->scan.plan.qual = get_actual_clauses(clauses);
+	}
+
+	cscan->scan.plan.qual =
+		(List *) replace_compressed_vars((Node *) cscan->scan.plan.qual, dcpath->info);
 
 	compressed_scan->plan.targetlist = build_scan_tlist(dcpath);
 	if (path->path.pathkeys)

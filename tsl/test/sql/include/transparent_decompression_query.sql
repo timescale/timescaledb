@@ -4,7 +4,7 @@
 
 
 -- this should use DecompressChunk node
-:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
 
 -- test RECORD by itself
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time;
@@ -42,7 +42,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 --
 
 -- v3 is not segment by or order by column so should not be pushed down
-:PREFIX SELECT * FROM :TEST_TABLE WHERE v3 > 10.0 ORDER BY time, device_id;
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE v3 > 10.0 ORDER BY time, device_id;
 
 -- device_id constraint should be pushed down
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time, device_id LIMIT 10;
@@ -90,7 +90,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 = v1 ORDER BY time, device_id LIMIT 10;
 
 --pushdown of quals on order by and segment by cols anded together
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' and device_id = 1 ORDER BY time, device_id LIMIT 10;
+:PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' and device_id = 1 ORDER BY time, device_id LIMIT 10;
 
 --pushdown of quals on order by and segment by cols or together (not pushed down)
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' or device_id = 1 ORDER BY time, device_id LIMIT 10;
@@ -199,8 +199,24 @@ SET enable_seqscan TO false;
 --use the peer index
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
 
-:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer;
 
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1));
+
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1), (2));
+
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
+
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+
+-- force a BitmapHeapScan
+SET enable_indexscan TO false;
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
+
+SET enable_indexscan TO false;
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+
+SET enable_indexscan TO true;
 SET enable_seqscan TO true;
 
 -- test view
