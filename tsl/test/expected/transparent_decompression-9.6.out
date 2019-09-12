@@ -960,14 +960,14 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test runtime exclusion
 -- first chunk should be excluded
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08'::text::timestamptz ORDER BY time, device_id;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
  Sort
    Sort Key: metrics."time", metrics.device_id
    ->  Custom Scan (ChunkAppend) on metrics
          Chunks excluded during startup: 1
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+               Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
                Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Seq Scan on compress_hyper_3_14_chunk
@@ -1379,8 +1379,8 @@ SET enable_seqscan TO true;
   'text' AS "text",
   :TEST_TABLE AS "RECORD"
 FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
    ->  Result
@@ -1393,8 +1393,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
                ->  Seq Scan on _hyper_2_7_chunk
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
-               ->  Seq Scan on _hyper_2_8_chunk
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Index Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
                      ->  Seq Scan on compress_hyper_4_18_chunk
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
@@ -1648,8 +1648,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 
 -- test IN (Const,Const)
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id LIMIT 10;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -1662,8 +1662,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
                ->  Seq Scan on _hyper_2_7_chunk
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
-               ->  Seq Scan on _hyper_2_8_chunk
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Index Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
                      ->  Seq Scan on compress_hyper_4_18_chunk
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
@@ -1779,8 +1779,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test function calls
 -- not yet pushed down
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(),1,3)) ORDER BY time, device_id LIMIT 10;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Limit
    ->  Custom Scan (ChunkAppend) on metrics_space
          Order: metrics_space."time"
@@ -1813,8 +1813,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Index Cond: (device_id = length("substring"(version(), 1, 3)))
                ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk
                      Index Cond: (device_id = length("substring"(version(), 1, 3)))
-               ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk
-                     Filter: (device_id = length("substring"(version(), 1, 3)))
+               ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk
+                     Index Cond: (device_id = length("substring"(version(), 1, 3)))
          ->  Merge Append
                Sort Key: _hyper_2_10_chunk."time"
                ->  Sort
@@ -1831,8 +1831,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                            ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
                                  Filter: (device_id = length("substring"(version(), 1, 3)))
                                  ->  Seq Scan on compress_hyper_4_19_chunk
-               ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk
-                     Filter: (device_id = length("substring"(version(), 1, 3)))
+               ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk
+                     Index Cond: (device_id = length("substring"(version(), 1, 3)))
 (52 rows)
 
 --
@@ -2033,12 +2033,12 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_4_17_chunk
                            Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
-               ->  Seq Scan on _hyper_2_7_chunk
-                     Filter: (v0 < 1)
-               ->  Seq Scan on _hyper_2_8_chunk
-                     Filter: (v0 < 1)
-               ->  Seq Scan on _hyper_2_9_chunk
-                     Filter: (v0 < 1)
+               ->  Index Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_7_chunk
+                     Index Cond: (v0 < 1)
+               ->  Index Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk
+                     Index Cond: (v0 < 1)
+               ->  Index Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_9_chunk
+                     Index Cond: (v0 < 1)
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_4_18_chunk
@@ -2047,8 +2047,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_4_19_chunk
                            Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
-               ->  Seq Scan on _hyper_2_12_chunk
-                     Filter: (v0 < 1)
+               ->  Index Scan using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_12_chunk
+                     Index Cond: (v0 < 1)
 (32 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
@@ -2297,9 +2297,9 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
          ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk
                Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
                Filter: (_hyper_2_7_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk
+         ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_2_8_chunk
                Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-               Filter: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Index Cond: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk
                Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
                Filter: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -2525,9 +2525,9 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
    Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
    Sort Key: _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1 DESC, _hyper_2_8_chunk."time", _hyper_2_8_chunk.v3
    ->  Append
-         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk
+         ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_2_8_chunk
                Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-               Filter: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Index Cond: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk
                Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
                Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -2598,9 +2598,9 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
    Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
    Sort Key: _hyper_2_8_chunk.device_id DESC, _hyper_2_8_chunk.device_id_peer DESC, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk."time"
    ->  Append
-         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk
+         ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_2_8_chunk
                Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-               Filter: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Index Cond: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk
                Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
                Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -2637,8 +2637,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
    ->  Append
          ->  Seq Scan on _hyper_2_7_chunk
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Seq Scan on _hyper_2_8_chunk
-               Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk
+               Index Cond: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _hyper_2_9_chunk
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
@@ -2656,8 +2656,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test runtime exclusion
 -- first chunk should be excluded
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08'::text::timestamptz ORDER BY time, device_id;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
  Sort
    Sort Key: metrics_space."time", metrics_space.device_id
    ->  Custom Scan (ChunkAppend) on metrics_space
@@ -2672,12 +2672,12 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_17_chunk
          ->  Merge Append
-               ->  Seq Scan on _hyper_2_7_chunk
-                     Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-               ->  Seq Scan on _hyper_2_8_chunk
-                     Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-               ->  Seq Scan on _hyper_2_9_chunk
-                     Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Merge Append
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
@@ -2821,8 +2821,8 @@ SELECT * FROM q ORDER BY v1;
 q1 AS (SELECT time, v1 FROM :TEST_TABLE WHERE device_id=1 ORDER BY time),
 q2 AS (SELECT time, v2 FROM :TEST_TABLE WHERE device_id=2 ORDER BY time)
 SELECT * FROM q1 INNER JOIN q2 ON q1.time=q2.time ORDER BY q1.time;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Merge Join
    Merge Cond: (q1."time" = q2."time")
    CTE q1
@@ -2848,8 +2848,8 @@ SELECT * FROM q1 INNER JOIN q2 ON q1.time=q2.time ORDER BY q1.time;
                  ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
                        ->  Seq Scan on compress_hyper_4_16_chunk
                              Filter: (device_id = 2)
-           ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk
-                 Filter: (device_id = 2)
+           ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk
+                 Index Cond: (device_id = 2)
            ->  Sort
                  Sort Key: _hyper_2_11_chunk."time"
                  ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
@@ -3004,8 +3004,8 @@ SET enable_seqscan TO false;
 
 -- even when we select only a segmentby column, we still need count
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk
          Output: _hyper_2_10_chunk.device_id
@@ -3017,16 +3017,14 @@ SET enable_seqscan TO false;
          ->  Index Only Scan using compress_hyper_4_15_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_4_15_chunk
                Output: compress_hyper_4_15_chunk._ts_meta_count, compress_hyper_4_15_chunk.device_id
                Index Cond: (compress_hyper_4_15_chunk.device_id = 1)
-   ->  Bitmap Heap Scan on _timescaledb_internal._hyper_2_7_chunk
+   ->  Index Only Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_7_chunk
          Output: _hyper_2_7_chunk.device_id
-         Recheck Cond: (_hyper_2_7_chunk.device_id = 1)
-         ->  Bitmap Index Scan on _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2
-               Index Cond: (_hyper_2_7_chunk.device_id = 1)
-(16 rows)
+         Index Cond: (_hyper_2_7_chunk.device_id = 1)
+(14 rows)
 
 :PREFIX_VERBOSE SELECT count(*) FROM :TEST_TABLE WHERE device_id = 1;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
  Aggregate
    Output: count(*)
    ->  Append
@@ -3038,11 +3036,9 @@ SET enable_seqscan TO false;
                ->  Index Only Scan using compress_hyper_4_15_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_4_15_chunk
                      Output: compress_hyper_4_15_chunk._ts_meta_count, compress_hyper_4_15_chunk.device_id
                      Index Cond: (compress_hyper_4_15_chunk.device_id = 1)
-         ->  Bitmap Heap Scan on _timescaledb_internal._hyper_2_7_chunk
-               Recheck Cond: (_hyper_2_7_chunk.device_id = 1)
-               ->  Bitmap Index Scan on _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2
-                     Index Cond: (_hyper_2_7_chunk.device_id = 1)
-(15 rows)
+         ->  Index Only Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_7_chunk
+               Index Cond: (_hyper_2_7_chunk.device_id = 1)
+(13 rows)
 
 --use the peer index
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
