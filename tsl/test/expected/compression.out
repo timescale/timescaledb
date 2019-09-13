@@ -61,6 +61,14 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
  
 (1 row)
 
+select tgname , tgtype, tgenabled , relname
+from pg_trigger t, pg_class rel 
+where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
+             tgname              | tgtype | tgenabled |     relname      
+---------------------------------+--------+-----------+------------------
+ compressed_chunk_insert_blocker |      7 | O         | _hyper_1_2_chunk
+(1 row)
+
 \x
 select * from timescaledb_information.compressed_chunk_size;
 -[ RECORD 1 ]------------+---------------------------------------
@@ -119,6 +127,34 @@ where ch1.compressed_chunk_id = ch2.id;
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 ERROR:  chunk is already compressed
+--TEST2a try DML on a compressed chunk 
+insert into foo values( 11 , 10 , 20, 120);
+ERROR:  insert/update/delete not permitted on this chunk "_hyper_1_2_chunk"
+update foo set b =20 where a = 10;
+delete from foo where a = 10;
+--TEST2b decompress the chunk and try DML
+select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+ decompress_chunk 
+------------------
+ 
+(1 row)
+
+insert into foo values( 11 , 10 , 20, 120);
+update foo set b =20 where a = 10;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+ a  | b  | c  |  d  
+----+----+----+-----
+ 10 | 20 | 20 | 120
+ 11 | 10 | 20 | 120
+(2 rows)
+
+delete from foo where a = 10;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+ a  | b  | c  |  d  
+----+----+----+-----
+ 11 | 10 | 20 | 120
+(1 row)
+
 -- TEST3 check if compress data from views is accurate
 CREATE TABLE conditions (
       time        TIMESTAMPTZ       NOT NULL,
@@ -274,14 +310,14 @@ select * from timescaledb_information.compressed_hypertable_size
 order by hypertable_name;
 -[ RECORD 1 ]------------+-----------
 hypertable_name          | foo
-uncompressed_heap_bytes  | 16 kB
-uncompressed_index_bytes | 32 kB
+uncompressed_heap_bytes  | 8192 bytes
+uncompressed_index_bytes | 16 kB
 uncompressed_toast_bytes | 0 bytes
-uncompressed_total_bytes | 48 kB
-compressed_heap_bytes    | 16 kB
+uncompressed_total_bytes | 24 kB
+compressed_heap_bytes    | 8192 bytes
 compressed_index_bytes   | 0 bytes
-compressed_toast_bytes   | 16 kB
-compressed_total_bytes   | 32 kB
+compressed_toast_bytes   | 8192 bytes
+compressed_total_bytes   | 16 kB
 -[ RECORD 2 ]------------+-----------
 hypertable_name          | conditions
 uncompressed_heap_bytes  | 16 kB
