@@ -576,7 +576,6 @@ deparse_func_call(FunctionCallInfo fcinfo)
 		.addTemp = false,
 	};
 	Oid funcid = fcinfo->flinfo->fn_oid;
-	int PG_USED_FOR_ASSERTS_ONLY numargs;
 	Oid *argtypes;
 	char **argnames;
 	char *argmodes;
@@ -594,8 +593,12 @@ deparse_func_call(FunctionCallInfo fcinfo)
 
 	procform = (Form_pg_proc) GETSTRUCT(ftup);
 	funcnamespace = get_namespace_name(procform->pronamespace);
-	numargs = get_func_arg_info(ftup, &argtypes, &argnames, &argmodes);
-	Assert(numargs >= fcinfo->nargs);
+
+	/* If the function has named OUT-only parameters, then number of arguments
+	 * returned by this get_func_arg_info can be greater than
+	 * fcinfo->nargs. But we don't care about OUT-only arguements here. */
+	get_func_arg_info(ftup, &argtypes, &argnames, &argmodes);
+
 	appendStringInfo(&sql,
 					 " FROM %s(",
 					 quote_qualified_identifier(funcnamespace, NameStr(procform->proname)));
