@@ -214,6 +214,15 @@ FROM disttable;
 SELECT max(temp)
 FROM disttable;
 
+-- Test turning off async append
+SET timescaledb.enable_async_append = OFF;
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+
+SET timescaledb.enable_async_append = ON;
+
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT min(temp), max(temp)
 FROM disttable;

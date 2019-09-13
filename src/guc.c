@@ -46,6 +46,7 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 bool ts_guc_enable_per_data_node_queries = true;
+bool ts_guc_enable_async_append = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
@@ -255,6 +256,18 @@ _guc_init(void)
 							 "Do not restrict execution of DDL operations only by access node",
 							 &ts_guc_enable_client_ddl_on_data_nodes,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_async_append",
+							 "Enable async query execution on data nodes",
+							 "Enable optimization that runs remote queries asynchronously"
+							 "across data nodes",
+							 &ts_guc_enable_async_append,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
