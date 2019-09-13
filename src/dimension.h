@@ -167,7 +167,7 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_reli
 extern void ts_dimension_info_validate(DimensionInfo *info);
 extern int32 ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);
-extern TSDLLEXPORT void ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype,
+extern TSDLLEXPORT void ts_dimension_update(Hypertable *ht, Name dimname, DimensionType dimtype,
 											Datum *interval, Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
 extern TSDLLEXPORT List *ts_dimension_get_partexprs(Dimension *dim, Index hyper_varno);

@@ -157,6 +157,8 @@ extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(Hypertable *ht,
 																bool error_if_missing);
 extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(Hypertable *ht);
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
+extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(Hypertable *ht,
+															  FunctionCallInfo fcinfo);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
