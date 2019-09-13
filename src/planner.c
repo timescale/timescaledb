@@ -189,9 +189,14 @@ get_hypertable(const Oid relid, const unsigned int flags)
 }
 
 bool
-ts_rte_is_hypertable(const RangeTblEntry *rte)
+ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
 {
-	return get_hypertable(rte->relid, CACHE_FLAG_CHECK) != NULL;
+	Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+
+	if (isdistributed && ht != NULL)
+		*isdistributed = hypertable_is_distributed(ht);
+
+	return ht != NULL;
 }
 
 #define IS_UPDL_CMD(parse)                                                                         \
@@ -542,7 +547,7 @@ should_constraint_aware_append(Hypertable *ht, Path *path)
 static bool
 rte_should_expand(const RangeTblEntry *rte)
 {
-	bool is_hypertable = ts_rte_is_hypertable(rte);
+	bool is_hypertable = ts_rte_is_hypertable(rte, NULL);
 
 	return is_hypertable && !rte->inh && rte_is_marked_for_expansion(rte);
 }
