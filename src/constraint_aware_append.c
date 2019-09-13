@@ -68,26 +68,6 @@ get_plans_for_exclusion(Plan *plan)
 	return plan;
 }
 
-static AppendRelInfo *
-get_appendrelinfo(PlannerInfo *root, Index rti)
-{
-#if PG96 || PG10
-	ListCell *lc;
-	foreach (lc, root->append_rel_list)
-	{
-		AppendRelInfo *appinfo = lfirst(lc);
-		if (appinfo->child_relid == rti)
-			return appinfo;
-	}
-#else
-	if (root->append_rel_array[rti])
-		return root->append_rel_array[rti];
-#endif
-	ereport(ERROR,
-			(errcode(ERRCODE_INTERNAL_ERROR), errmsg("no appendrelinfo found for index %d", rti)));
-	pg_unreachable();
-}
-
 static bool
 can_exclude_chunk(PlannerInfo *root, EState *estate, Index rt_index, List *restrictinfos)
 {
@@ -467,7 +447,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 				List *chunk_clauses = NIL;
 				ListCell *lc;
 				Index scanrelid = ((Scan *) plan)->scanrelid;
-				AppendRelInfo *appinfo = get_appendrelinfo(root, scanrelid);
+				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scanrelid);
 
 				foreach (lc, clauses)
 				{
