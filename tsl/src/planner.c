@@ -26,6 +26,27 @@
 
 #include <math.h>
 
+#if PG_VERSION_SUPPORTS_MULTINODE
+
+static bool
+is_dist_hypertable_involved(PlannerInfo *root)
+{
+	int rti;
+
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+	{
+		RangeTblEntry *rte = root->simple_rte_array[rti];
+		bool distributed = false;
+
+		if (ts_rte_is_hypertable(rte, &distributed) && distributed)
+			return true;
+	}
+
+	return false;
+}
+
+#endif /* PG_VERSION_SUPPORTS_MULTINODE */
+
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
@@ -51,8 +72,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 		if (IsA(linitial(input_rel->pathlist), CustomPath))
 			gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 	}
-#if PG11_GE
-	else if (UPPERREL_FINAL == stage && root->parse->resultRelation == 0)
+#if PG_VERSION_SUPPORTS_MULTINODE
+	else if (ts_guc_enable_async_append && UPPERREL_FINAL == stage &&
+			 root->parse->resultRelation == 0 && is_dist_hypertable_involved(root))
 		async_append_add_paths(root, output_rel);
 #endif
 }

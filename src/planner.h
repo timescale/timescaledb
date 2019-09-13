@@ -11,6 +11,7 @@
 #include <nodes/parsenodes.h>
 
 #include "compat.h"
+#include "export.h"
 
 #if PG12_GE
 #include <nodes/pathnodes.h>
@@ -32,7 +33,7 @@ typedef struct TimescaleDBPrivate
 	TsFdwRelationInfo *fdw_relation_info;
 } TimescaleDBPrivate;
 
-extern bool ts_rte_is_hypertable(const RangeTblEntry *rte);
+extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)

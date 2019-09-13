@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <parser/parsetree.h>
 #include <nodes/plannodes.h>
@@ -98,6 +97,28 @@ static CustomScanMethods async_append_plan_methods = {
 	.CreateCustomScanState = async_append_state_create,
 };
 
+static PlanState *
+find_data_node_scan_state_child(PlanState *state)
+{
+	if (state)
+	{
+		switch (nodeTag(state))
+		{
+			case T_CustomScanState:
+				return state;
+			case T_SortState:
+			case T_AggState:
+				/* Data scan state can be buried under AggState or SortState  */
+				return find_data_node_scan_state_child(state->lefttree);
+			default:
+				elog(ERROR, "unexpected child node of Append or MergeAppend: %d", nodeTag(state));
+		}
+	}
+
+	elog(ERROR, "could not find a DataNodeScan in plan state for AsyncAppend");
+	pg_unreachable();
+}
+
 static List *
 get_data_node_async_scan_states(AsyncAppendState *state)
 {
@@ -122,7 +143,7 @@ get_data_node_async_scan_states(AsyncAppendState *state)
 		elog(ERROR, "unexpected child node %u of AsyncAppend", nodeTag(state->subplan_state));
 
 	for (i = 0; i < num_child_plans; i++)
-		dn_plans = lappend(dn_plans, child_plans[i]);
+		dn_plans = lappend(dn_plans, find_data_node_scan_state_child(child_plans[i]));
 
 	return dn_plans;
 }
@@ -142,7 +163,6 @@ async_append_begin(CustomScanState *node, EState *estate, int eflags)
 	subplan_state = ExecInitNode(subplan, estate, eflags);
 	state->subplan_state = subplan_state;
 	state->css.custom_ps = list_make1(state->subplan_state);
-
 	state->data_node_scans = get_data_node_async_scan_states(state);
 }
 
@@ -364,9 +384,11 @@ path_process(PlannerInfo *root, Path **path)
 
 	child = linitial(children);
 
-	/* sometimes data node scan is buried under ProjectionPath */
+	/* sometimes data node scan is buried under ProjectionPath or AggPath */
 	if (IsA(child, ProjectionPath))
 		child = castNode(ProjectionPath, child)->subpath;
+	else if (IsA(child, AggPath))
+		child = castNode(AggPath, child)->subpath;
 
 	if (!is_data_node_scan_path(child))
 		return;

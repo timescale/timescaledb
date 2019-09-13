@@ -569,6 +569,38 @@ FROM disttable;
  2.7
 (1 row)
 
+-- Test turning off async append
+SET timescaledb.enable_async_append = OFF;
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+                                                                                        QUERY PLAN                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit
+           Output: disttable.temp
+           ->  Merge Append
+                 Sort Key: disttable.temp DESC
+                 ->  Custom Scan (DataNodeScan) on public.disttable
+                       Output: disttable.temp
+                       Data node: data_node_1
+                       Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                       Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                 ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                       Output: disttable_1.temp
+                       Data node: data_node_2
+                       Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                       Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                 ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                       Output: disttable_2.temp
+                       Data node: data_node_3
+                       Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                       Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+(22 rows)
+
+SET timescaledb.enable_async_append = ON;
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT min(temp), max(temp)
 FROM disttable;

@@ -1873,29 +1873,31 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                                                            QUERY PLAN                                                                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                               QUERY PLAN                                                                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: hyper."time", hyper.device, (avg(hyper.temp)), (sum((hyper.temp * (((random() <= '1'::double precision))::integer)::double precision)))
-   ->  Merge Append
-         Sort Key: hyper."time", hyper.device
-         ->  GroupAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp), sum((hyper.temp * (((random() <= '1'::double precision))::integer)::double precision))
-               Group Key: hyper."time", hyper.device
-               ->  Custom Scan (DataNodeScan) on public.hyper
-                     Output: hyper."time", hyper.device, hyper.temp
-                     Data node: data_node_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), sum((hyper_1.temp * (((random() <= '1'::double precision))::integer)::double precision))
-               Group Key: hyper_1."time", hyper_1.device
-               ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
-                     Output: hyper_1."time", hyper_1.device, hyper_1.temp
-                     Data node: data_node_2
-                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(20 rows)
+   Output: "time", device, (avg(temp)), (sum((temp * (((random() <= '1'::double precision))::integer)::double precision)))
+   ->  Custom Scan (AsyncAppend)
+         Output: "time", device, (avg(temp)), (sum((temp * (((random() <= '1'::double precision))::integer)::double precision)))
+         ->  Merge Append
+               Sort Key: hyper."time", hyper.device
+               ->  GroupAggregate
+                     Output: hyper."time", hyper.device, avg(hyper.temp), sum((hyper.temp * (((random() <= '1'::double precision))::integer)::double precision))
+                     Group Key: hyper."time", hyper.device
+                     ->  Custom Scan (DataNodeScan) on public.hyper
+                           Output: hyper."time", hyper.device, hyper.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+               ->  GroupAggregate
+                     Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), sum((hyper_1.temp * (((random() <= '1'::double precision))::integer)::double precision))
+                     Group Key: hyper_1."time", hyper_1.device
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                           Output: hyper_1."time", hyper_1.device, hyper_1.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+(22 rows)
 
 -- Pushed down with non-pushable expression taken out
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -1941,28 +1943,30 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                                 QUERY PLAN                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: hyper."time", hyper.device, (avg(hyper.temp)), ((random() * (hyper.device)::double precision)), (custom_sum(hyper.device))
-   ->  Append
-         ->  HashAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp), (random() * (hyper.device)::double precision), custom_sum(hyper.device)
-               Group Key: hyper."time", hyper.device
-               ->  Custom Scan (DataNodeScan) on public.hyper
-                     Output: hyper."time", hyper.device, hyper.temp
-                     Data node: data_node_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), (random() * (hyper_1.device)::double precision), custom_sum(hyper_1.device)
-               Group Key: hyper_1."time", hyper_1.device
-               ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
-                     Output: hyper_1."time", hyper_1.device, hyper_1.temp
-                     Data node: data_node_2
-                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(19 rows)
+   Output: "time", device, (avg(temp)), ((random() * (device)::double precision)), (custom_sum(device))
+   ->  Custom Scan (AsyncAppend)
+         Output: "time", device, (avg(temp)), ((random() * (device)::double precision)), (custom_sum(device))
+         ->  Append
+               ->  HashAggregate
+                     Output: hyper."time", hyper.device, avg(hyper.temp), (random() * (hyper.device)::double precision), custom_sum(hyper.device)
+                     Group Key: hyper."time", hyper.device
+                     ->  Custom Scan (DataNodeScan) on public.hyper
+                           Output: hyper."time", hyper.device, hyper.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  HashAggregate
+                     Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), (random() * (hyper_1.device)::double precision), custom_sum(hyper_1.device)
+                     Group Key: hyper_1."time", hyper_1.device
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                           Output: hyper_1."time", hyper_1.device, hyper_1.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(21 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp) * random() * device as sum_temp
@@ -2013,30 +2017,32 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) * custom_sum(device) > 0.8
 LIMIT 1;
-                                                                                                 QUERY PLAN                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: hyper."time", hyper.device, (avg(hyper.temp)), (((sum(hyper.temp) * random()) * (hyper.device)::double precision))
-   ->  Append
-         ->  HashAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp), ((sum(hyper.temp) * random()) * (hyper.device)::double precision)
-               Group Key: hyper."time", hyper.device
-               Filter: ((avg(hyper.temp) * (custom_sum(hyper.device))::double precision) > '0.8'::double precision)
-               ->  Custom Scan (DataNodeScan) on public.hyper
-                     Output: hyper."time", hyper.device, hyper.temp
-                     Data node: data_node_1
-                     Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), ((sum(hyper_1.temp) * random()) * (hyper_1.device)::double precision)
-               Group Key: hyper_1."time", hyper_1.device
-               Filter: ((avg(hyper_1.temp) * (custom_sum(hyper_1.device))::double precision) > '0.8'::double precision)
-               ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
-                     Output: hyper_1."time", hyper_1.device, hyper_1.temp
-                     Data node: data_node_2
-                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(21 rows)
+   Output: "time", device, (avg(temp)), (((sum(temp) * random()) * (device)::double precision))
+   ->  Custom Scan (AsyncAppend)
+         Output: "time", device, (avg(temp)), (((sum(temp) * random()) * (device)::double precision))
+         ->  Append
+               ->  HashAggregate
+                     Output: hyper."time", hyper.device, avg(hyper.temp), ((sum(hyper.temp) * random()) * (hyper.device)::double precision)
+                     Group Key: hyper."time", hyper.device
+                     Filter: ((avg(hyper.temp) * (custom_sum(hyper.device))::double precision) > '0.8'::double precision)
+                     ->  Custom Scan (DataNodeScan) on public.hyper
+                           Output: hyper."time", hyper.device, hyper.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  HashAggregate
+                     Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), ((sum(hyper_1.temp) * random()) * (hyper_1.device)::double precision)
+                     Group Key: hyper_1."time", hyper_1.device
+                     Filter: ((avg(hyper_1.temp) * (custom_sum(hyper_1.device))::double precision) > '0.8'::double precision)
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                           Output: hyper_1."time", hyper_1.device, hyper_1.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(23 rows)
 
 -- not pushed down because of non-shippable expression on the
 -- underlying rel
