@@ -8,8 +8,13 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
+#include <catalog/dependency.h>
+#include <commands/trigger.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <nodes/pg_list.h>
 #include <storage/lmgr.h>
+#include <trigger.h>
 #include <utils/elog.h>
 #include <utils/builtins.h>
 
@@ -30,6 +35,9 @@
 #if !PG96
 #include <utils/fmgrprotos.h>
 #endif
+
+#define CHUNK_DML_BLOCKER_TRIGGER "chunk_dml_blocker"
+#define CHUNK_DML_BLOCKER_NAME "compressed_chunk_insert_blocker"
 
 typedef struct CompressChunkCxt
 {
@@ -106,6 +114,48 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_close(rel, RowExclusiveLock);
+}
+
+static void
+chunk_dml_blocker_trigger_add(Oid relid)
+{
+	ObjectAddress objaddr;
+	char *relname = get_rel_name(relid);
+	Oid schemaid = get_rel_namespace(relid);
+	char *schema = get_namespace_name(schemaid);
+
+    /* stmt triggers are blocked on hypertable chunks */
+	CreateTrigStmt stmt = {
+		.type = T_CreateTrigStmt,
+		.row = true,
+		.timing = TRIGGER_TYPE_BEFORE,
+		.trigname = CHUNK_DML_BLOCKER_NAME,
+		.relation = makeRangeVar(schema, relname, -1),
+		.funcname =
+			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNK_DML_BLOCKER_TRIGGER)),
+		.args = NIL,
+		.events = TRIGGER_TYPE_INSERT,
+	};
+	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
+
+	if (!OidIsValid(objaddr.objectId))
+		elog(ERROR, "could not create dml blocker trigger");
+
+	return;
+}
+
+static void
+chunk_dml_trigger_drop(Oid relid)
+{
+	if (OidIsValid(relid))
+	{
+		ObjectAddress objaddr = {
+			.classId = TriggerRelationId,
+			.objectId = get_trigger_oid(relid, CHUNK_DML_BLOCKER_NAME, true),
+		};
+		if (OidIsValid(objaddr.objectId))
+			performDeletion(&objaddr, DROP_RESTRICT, 0);
+	}
 }
 
 static void
@@ -186,6 +236,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				   compress_ht_chunk->table_id,
 				   colinfo_array,
 				   htcols_listlen);
+	chunk_dml_blocker_trigger_add(cxt.srcht_chunk->table_id);
 	after_size = compute_chunk_size(compress_ht_chunk->table_id);
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &before_size,
@@ -246,6 +297,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 					AccessShareLock);
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
+	chunk_dml_trigger_drop(uncompressed_chunk->table_id);
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);

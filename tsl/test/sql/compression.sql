@@ -23,7 +23,9 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
 
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
-
+select tgname , tgtype, tgenabled , relname
+from pg_trigger t, pg_class rel 
+where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
 \x
 select * from timescaledb_information.compressed_chunk_size;
 \x
@@ -40,6 +42,19 @@ where ch1.compressed_chunk_id = ch2.id;
 \set ON_ERROR_STOP 0
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+
+--TEST2a try DML on a compressed chunk 
+insert into foo values( 11 , 10 , 20, 120);
+update foo set b =20 where a = 10;
+delete from foo where a = 10;
+
+--TEST2b decompress the chunk and try DML
+select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+insert into foo values( 11 , 10 , 20, 120);
+update foo set b =20 where a = 10;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a;
+delete from foo where a = 10;
+select * from _timescaledb_internal._hyper_1_2_chunk order by a;
 
 -- TEST3 check if compress data from views is accurate
 CREATE TABLE conditions (

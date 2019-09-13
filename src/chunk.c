@@ -61,6 +61,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
+TS_FUNCTION_INFO_V1(ts_chunk_dml_blocker);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -2404,4 +2405,20 @@ ts_chunk_has_associated_compressed_chunk(int32 chunk_id)
 	}
 	ts_scan_iterator_close(&iterator);
 	return compressed;
+}
+
+Datum
+ts_chunk_dml_blocker(PG_FUNCTION_ARGS)
+{
+	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
+
+	if (!CALLED_AS_TRIGGER(fcinfo))
+		elog(ERROR, "dml_blocker: not called by trigger manager");
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("insert/update/delete not permitted on this chunk \"%s\"", relname),
+			 errhint("Make sure the chunk is not compressed.")));
+
+	PG_RETURN_NULL();
 }

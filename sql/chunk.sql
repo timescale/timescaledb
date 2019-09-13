@@ -35,3 +35,7 @@ AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
 --given a chunk's relid, return the id. Error out if not a chunk relid.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+--trigger to block dml on a chunk --
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_dml_blocker() RETURNS trigger
+AS '@MODULE_PATHNAME@', 'ts_chunk_dml_blocker' LANGUAGE C;
