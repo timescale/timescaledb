@@ -156,8 +156,9 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 
 	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
 	cache_entry->previous_chunk_open_dimension =
-		attno_find_by_attname(RelationGetDescr(chunk_relation),
-							  &cache_entry->hypertable_open_dimension.fd.column_name);
+		get_attnum(chunk_relation->rd_id,
+				   NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
+
 	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
 		elog(ERROR, "continuous agg trigger function must be called on hypertable chunks only");
 }

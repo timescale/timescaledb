@@ -605,24 +605,6 @@ get_cast_func(Oid source, Oid target)
 	return result;
 }
 
-AttrNumber
-attno_find_by_attname(TupleDesc tupdesc, Name attname)
-{
-	int i;
-
-	if (NULL == attname)
-		return InvalidAttrNumber;
-
-	for (i = 0; i < tupdesc->natts; i++)
-	{
-		FormData_pg_attribute *attr = TupleDescAttr(tupdesc, i);
-
-		if (strncmp(NameStr(attr->attname), NameStr(*attname), NAMEDATALEN) == 0)
-			return attr->attnum;
-	}
-	return InvalidAttrNumber;
-}
-
 AppendRelInfo *
 ts_get_appendrelinfo(PlannerInfo *root, Index rti)
 {

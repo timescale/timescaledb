@@ -77,7 +77,6 @@ extern TSDLLEXPORT regproc lookup_proc_filtered(const char *schema, const char *
 extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
 
 extern Oid get_cast_func(Oid source, Oid target);
-extern TSDLLEXPORT AttrNumber attno_find_by_attname(TupleDesc tupdesc, Name attname);
 
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 										 size_t copy_size);
