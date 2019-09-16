@@ -182,7 +182,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	foreach (lc, segmentby_cols)
 	{
 		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		AttrNumber col_attno = attno_find_by_attname(tupdesc, &col->colname);
+		AttrNumber col_attno = get_attnum(rel->rd_id, NameStr(col->colname));
 		if (col_attno == InvalidAttrNumber)
 		{
 			ereport(ERROR,
@@ -198,7 +198,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	foreach (lc, orderby_cols)
 	{
 		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		AttrNumber col_attno = attno_find_by_attname(tupdesc, &col->colname);
+		AttrNumber col_attno = get_attnum(rel->rd_id, NameStr(col->colname));
 		if (col_attno == InvalidAttrNumber)
 		{
 			ereport(ERROR,

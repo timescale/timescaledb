@@ -422,9 +422,10 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 	Name sequence_num_metadata_name = DatumGetName(
 		DirectFunctionCall1(namein,
 							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
-	AttrNumber count_metadata_column_num = attno_find_by_attname(out_desc, count_metadata_name);
+	AttrNumber count_metadata_column_num =
+		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
 	AttrNumber sequence_num_column_num =
-		attno_find_by_attname(out_desc, sequence_num_metadata_name);
+		get_attnum(compressed_table->rd_id, NameStr(*sequence_num_metadata_name));
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	if (count_metadata_column_num == InvalidAttrNumber)
@@ -463,7 +464,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		PerColumn *column = &row_compressor->per_column[in_column_offset];
 		Form_pg_attribute column_attr = TupleDescAttr(uncompressed_tuple_desc, in_column_offset);
 		AttrNumber compressed_colnum =
-			attno_find_by_attname(out_desc, (Name) &compression_info->attname);
+			get_attnum(compressed_table->rd_id, NameStr(compression_info->attname));
 		Form_pg_attribute compressed_column_attr =
 			TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
 		row_compressor->uncompressed_col_to_compressed_col[in_column_offset] =
@@ -482,10 +483,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			{
 				char *segment_col_name = compression_column_segment_min_max_name(compression_info);
 				AttrNumber segment_min_max_attr_number =
-					attno_find_by_attname(out_desc,
-										  DatumGetName(DirectFunctionCall1(namein,
-																		   CStringGetDatum(
-																			   segment_col_name))));
+					get_attnum(compressed_table->rd_id, segment_col_name);
 				if (segment_min_max_attr_number == InvalidAttrNumber)
 					elog(ERROR, "couldn't find metadata column %s", segment_col_name);
 				segment_min_max_attr_offset = AttrNumberGetAttrOffset(segment_min_max_attr_number);
@@ -894,6 +892,7 @@ typedef struct RowDecompressor
 } RowDecompressor;
 
 static PerCompressedColumn *create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc,
+														 Oid out_relid,
 														 Oid compressed_data_type_oid);
 static void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
 													  int16 num_cols, Datum *compressed_datums,
@@ -932,8 +931,10 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	{
 		RowDecompressor decompressor = {
-			.per_compressed_cols =
-				create_per_compressed_column(in_desc, out_desc, compressed_data_type_oid),
+			.per_compressed_cols = create_per_compressed_column(in_desc,
+																out_desc,
+																out_table,
+																compressed_data_type_oid),
 			.num_compressed_columns = in_desc->natts,
 
 			.out_desc = out_desc,
@@ -982,12 +983,12 @@ decompress_chunk(Oid in_table, Oid out_table)
 }
 
 static PerCompressedColumn *
-create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid compressed_data_type_oid)
+create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_relid,
+							 Oid compressed_data_type_oid)
 {
 	PerCompressedColumn *per_compressed_cols =
 		palloc(sizeof(*per_compressed_cols) * in_desc->natts);
 
-	Assert(in_desc->natts >= out_desc->natts);
 	Assert(OidIsValid(compressed_data_type_oid));
 
 	for (int16 col = 0; col < in_desc->natts; col++)
@@ -997,13 +998,13 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid compress
 		int16 decompressed_column_offset;
 		PerCompressedColumn *per_compressed_col = &per_compressed_cols[col];
 		Form_pg_attribute compressed_attr = TupleDescAttr(in_desc, col);
+		char *col_name = NameStr(compressed_attr->attname);
 
 		/* find the mapping from compressed column to uncompressed column, setting
 		 * the index of columns that don't have an uncompressed version
 		 * (such as metadata) to -1
 		 */
-		Name col_name = &compressed_attr->attname;
-		AttrNumber decompressed_colnum = attno_find_by_attname(out_desc, col_name);
+		AttrNumber decompressed_colnum = get_attnum(out_relid, col_name);
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
 			*per_compressed_col = (PerCompressedColumn){
@@ -1025,7 +1026,7 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid compress
 				 "segment-by column \"%s\"",
 				 format_type_be(compressed_attr->atttypid),
 				 format_type_be(decompressed_type),
-				 NameStr(*col_name));
+				 col_name);
 
 		*per_compressed_col = (PerCompressedColumn){
 			.decompressed_column_offset = decompressed_column_offset,
