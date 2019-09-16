@@ -64,6 +64,16 @@ SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
 
+-- test system columns
+\set ON_ERROR_STOP 0
+SELECT tableoid FROM :TEST_TABLE ORDER BY time;
+SELECT xmin FROM :TEST_TABLE ORDER BY time;
+SELECT cmin FROM :TEST_TABLE ORDER BY time;
+SELECT xmax FROM :TEST_TABLE ORDER BY time;
+SELECT cmax FROM :TEST_TABLE ORDER BY time;
+SELECT ctid FROM :TEST_TABLE ORDER BY time;
+\set ON_ERROR_STOP 1
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- TODO this should change once we have a canonical way to create indexes on compressed tables
 CREATE INDEX c_index ON _timescaledb_internal._compressed_hypertable_3(device_id);

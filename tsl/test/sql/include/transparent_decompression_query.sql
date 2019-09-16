@@ -203,19 +203,27 @@ SET enable_seqscan TO false;
 
 SET enable_seqscan TO true;
 
--- test explicit self-join
--- XXX FIXME
--- :PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time ORDER BY m1.time;
+-- test view
+CREATE OR REPLACE ViEW compressed_view AS SELECT time, device_id, v1, v2 FROM :TEST_TABLE;
+:PREFIX SELECT * FROM compressed_view WHERE device_id = 1 ORDER BY time DESC LIMIT 10;
+DROP VIEW compressed_view;
+
+-- test INNER JOIN
+:PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time AND m1.device_id=m2.device_id ORDER BY m1.time, m1.device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time INNER JOIN :TEST_TABLE m3 ON m2.time = m3.time AND m1.device_id=m2.device_id AND m3.device_id = 3 ORDER BY m1.time, m1.device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time AND m1.device_id=1 AND m2.device_id=2 ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 100;
+:PREFIX SELECT * FROM metrics m1 INNER JOIN metrics_space m2 ON m1.time = m2.time AND m1.device_id=1 AND m2.device_id=2 ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 100;
+
+-- test OUTER JOIN
+:PREFIX SELECT * FROM :TEST_TABLE m1 LEFT OUTER JOIN :TEST_TABLE m2 ON m1.time = m2.time AND m1.device_id=m2.device_id ORDER BY m1.time, m1.device_id LIMIT 10;
+:PREFIX SELECT * FROM :TEST_TABLE m1 LEFT OUTER JOIN :TEST_TABLE m2 ON m1.time = m2.time AND m1.device_id=1 AND m2.device_id=2 ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 100;
+:PREFIX SELECT * FROM metrics m1 LEFT OUTER JOIN metrics_space m2 ON m1.time = m2.time AND m1.device_id=1 AND m2.device_id=2 ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 100;
 
 -- test implicit self-join
--- XXX FIXME
--- :PREFIX SELECT * FROM :TEST_TABLE m1, :TEST_TABLE m2 WHERE m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT * FROM :TEST_TABLE m1, :TEST_TABLE m2 WHERE m1.time = m2.time ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 20;
 
 -- test self-join with sub-query
--- XXX FIXME
--- :PREFIX SELECT * FROM (SELECT * FROM :TEST_TABLE m1) m1 INNER JOIN (SELECT * FROM :TEST_TABLE m2) m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT * FROM (SELECT * FROM :TEST_TABLE m1) m1 INNER JOIN (SELECT * FROM :TEST_TABLE m2) m2 ON m1.time = m2.time ORDER BY m1.time, m1.device_id, m2.device_id LIMIT 10;
 
--- test system columns
--- XXX FIXME
---SELECT xmin FROM :TEST_TABLE ORDER BY time;
+:PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
 
