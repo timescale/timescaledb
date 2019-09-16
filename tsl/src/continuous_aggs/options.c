@@ -55,6 +55,7 @@ parse_interval(char *value, Oid column_type, const char *option_name)
 			return ts_interval_value_to_internal(interval, INTERVALOID);
 		default:
 			elog(ERROR, "unknown time type when parsing timescaledb.%s", option_name);
+			pg_unreachable();
 	}
 }
 

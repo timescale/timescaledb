@@ -307,6 +307,7 @@ ts_internal_to_time_value(int64 value, Oid type)
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
 			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+			pg_unreachable();
 	}
 }
 
@@ -334,7 +335,8 @@ ts_internal_to_interval_value(int64 value, Oid type)
 		case INTERVALOID:
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_interval, Int64GetDatum(value));
 		default:
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+			elog(ERROR, "unknown time type OID %d in ts_internal_to_interval_value", type);
+			pg_unreachable();
 	}
 }
 
@@ -351,6 +353,7 @@ ts_integer_to_internal_value(int64 value, Oid type)
 			return Int64GetDatum(value);
 		default:
 			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+			pg_unreachable();
 	}
 }
 
@@ -358,7 +361,8 @@ ts_integer_to_internal_value(int64 value, Oid type)
 int64
 ts_get_interval_period_approx(Interval *interval)
 {
-	return interval->time + (((interval->month * DAYS_PER_MONTH) + interval->day) * USECS_PER_DAY);
+	return interval->time +
+		   ((((int64) interval->month * DAYS_PER_MONTH) + interval->day) * USECS_PER_DAY);
 }
 
 #define DAYS_PER_WEEK 7
@@ -511,6 +515,7 @@ get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
 		func_candidates = func_candidates->next;
 	}
 	elog(ERROR, "failed to find function %s in schema %s with %d args", name, schema_name, nargs);
+	pg_unreachable();
 }
 
 /*
