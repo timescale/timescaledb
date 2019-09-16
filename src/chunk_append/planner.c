@@ -257,8 +257,8 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 		Assert(list_length(chunk_ri_clauses) == list_length(chunk_rt_indexes));
 	}
 
-	if (capath->pushdown_limit && root->limit_tuples > 0 && root->limit_tuples <= PG_UINT32_MAX)
-		limit = root->limit_tuples;
+	if (capath->pushdown_limit && capath->limit_tuples > 0)
+		limit = capath->limit_tuples;
 
 	custom_private = list_make1(
 		list_make3_oid((Oid) capath->startup_exclusion, (Oid) capath->runtime_exclusion, limit));

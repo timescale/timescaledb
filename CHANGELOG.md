@@ -4,6 +4,11 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.5.0 (unreleased)
+
+**Bugfixes**
+* #1444 Prevent LIMIT pushdown in JOINs
+
 ## 1.4.2 (2019-09-11)
 
 This maintenance release contains bugfixes since the 1.4.1 release. We deem it medium

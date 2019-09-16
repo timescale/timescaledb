@@ -353,3 +353,24 @@ RESET timescaledb.enable_chunk_append;
 :PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
 :PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
 
+-- JOINs should prevent pushdown
+-- when LIMIT gets pushed to a Sort node it will switch to top-N heapsort
+-- if more tuples then LIMIT are requested this will trigger an error
+-- to trigger this we need a Sort node that is below ChunkAppend
+CREATE TABLE join_limit (time timestamptz, device_id int);
+SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
+CREATE INDEX ON join_limit(time,device_id);
+INSERT INTO join_limit SELECT time, device_id FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time), generate_series(1,10,1) g2(device_id);
+
+-- get 2nd chunk oid
+SELECT tableoid AS "CHUNK_OID" FROM join_limit WHERE time > '2000-01-07' ORDER BY time LIMIT 1
+\gset
+--get index name for 2nd chunk
+SELECT indexrelid::regclass AS "INDEX_NAME" FROM pg_index WHERE indrelid = :CHUNK_OID
+\gset
+DROP INDEX :INDEX_NAME;
+
+:PREFIX SELECT * FROM metrics_timestamptz m1 INNER JOIN join_limit m2 ON m1.time = m2.time AND m1.device_id=m2.device_id WHERE m1.time > '2000-01-07' ORDER BY m1.time, m1.device_id LIMIT 3;
+
+DROP TABLE join_limit;
+
