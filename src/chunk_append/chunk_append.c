@@ -30,6 +30,12 @@ static CustomPathMethods chunk_append_path_methods = {
 	.PlanCustomPath = chunk_append_plan_create,
 };
 
+static bool
+has_joins(FromExpr *jointree)
+{
+	return list_length(jointree->fromlist) != 1 || !IsA(linitial(jointree->fromlist), RangeTblRef);
+}
+
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
 							bool ordered, List *nested_oids)
@@ -37,7 +43,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	ChunkAppendPath *path;
 	ListCell *lc;
 	double rows = 0.0;
-	double limit_tuples;
 	Cost total_cost = 0.0;
 	List *children = NIL;
 
@@ -71,15 +76,16 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	 */
 	if (root->parse->groupClause || root->parse->groupingSets || root->parse->distinctClause ||
 		root->parse->hasAggs || root->parse->hasWindowFuncs || root->hasHavingQual ||
+		has_joins(root->parse->jointree) || root->limit_tuples > PG_INT32_MAX ||
 #if PG96
 		expression_returns_set((Node *) root->parse->targetList)
 #else
 		root->parse->hasTargetSRFs
 #endif
 	)
-		limit_tuples = -1.0;
+		path->limit_tuples = -1;
 	else
-		limit_tuples = root->limit_tuples;
+		path->limit_tuples = (int) root->limit_tuples;
 
 	/*
 	 * check if we should do startup and runtime exclusion
@@ -137,6 +143,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			 * we only push down LIMIT for ordered append
 			 */
 			path->pushdown_limit = true;
+
 			children = castNode(MergeAppendPath, subpath)->subpaths;
 			path->cpath.path.pathkeys = subpath->pathkeys;
 			break;
@@ -238,7 +245,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		 * We do this to prevent planner choosing parallel plan which might
 		 * otherwise look preferable cost wise.
 		 */
-		if (!path->pushdown_limit || limit_tuples == -1.0 || rows < limit_tuples)
+		if (!path->pushdown_limit || path->limit_tuples == -1 || rows < path->limit_tuples)
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;
