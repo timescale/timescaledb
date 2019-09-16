@@ -385,6 +385,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_List:
 		case T_Const:
 		case T_NullTest:
+		case T_Param:
 			break;
 		case T_Var:
 		{

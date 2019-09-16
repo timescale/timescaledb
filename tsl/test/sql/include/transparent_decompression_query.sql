@@ -243,3 +243,14 @@ DROP VIEW compressed_view;
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
 
+-- test prepared statement with params pushdown
+PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time AND device_id = $1 LIMIT 1) m1 ON true;
+
+:PREFIX EXECUTE param_prep(1);
+:PREFIX EXECUTE param_prep(2);
+EXECUTE param_prep(1);
+EXECUTE param_prep(2);
+EXECUTE param_prep(1);
+EXECUTE param_prep(2);
+EXECUTE param_prep(1);
+DEALLOCATE param_prep;

@@ -1813,8 +1813,8 @@ DROP VIEW compressed_view;
 (18 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    ->  Function Scan on generate_series g
    ->  Limit
@@ -1822,13 +1822,178 @@ DROP VIEW compressed_view;
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_3_13_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2
                      Index Cond: ("time" = g."time")
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_3_14_chunk
-(12 rows)
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+(14 rows)
 
+-- test prepared statement with params pushdown
+PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time AND device_id = $1 LIMIT 1) m1 ON true;
+:PREFIX EXECUTE param_prep(1);
+                                                                                                                                      QUERY PLAN                                                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics m1
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_3_13_chunk
+                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+               ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2
+                     Index Cond: ("time" = g."time")
+                     Filter: (device_id = 1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_3_14_chunk
+                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+(15 rows)
+
+:PREFIX EXECUTE param_prep(2);
+                                                                                                                                      QUERY PLAN                                                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics m1
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_3_13_chunk
+                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+               ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2
+                     Index Cond: ("time" = g."time")
+                     Filter: (device_id = 2)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_3_14_chunk
+                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+(15 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(2);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(2);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+DEALLOCATE param_prep;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -4398,8 +4563,8 @@ DROP VIEW compressed_view;
 (36 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
-                                                 QUERY PLAN                                                 
-------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    ->  Function Scan on generate_series g
    ->  Limit
@@ -4407,12 +4572,15 @@ DROP VIEW compressed_view;
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m1_1
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_4_15_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_2
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_4_16_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m1_3
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_4_17_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m1_4
                      Index Cond: ("time" = g."time")
                ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk m1_5
@@ -4422,13 +4590,176 @@ DROP VIEW compressed_view;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m1_7
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_4_18_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_8
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_4_19_chunk
+                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m1_9
                      Index Cond: ("time" = g."time")
-(27 rows)
+(32 rows)
 
+-- test prepared statement with params pushdown
+PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time AND device_id = $1 LIMIT 1) m1 ON true;
+:PREFIX EXECUTE param_prep(1);
+                                                                                                                                      QUERY PLAN                                                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_space m1
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m1_1
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_4_18_chunk
+                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m1_2
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_4_15_chunk
+                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+               ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m1_3
+                     Index Cond: ((device_id = 1) AND ("time" = g."time"))
+(14 rows)
+
+:PREFIX EXECUTE param_prep(2);
+                                                                                                                                      QUERY PLAN                                                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on generate_series g
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_space m1
+               ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m1_1
+                     Index Cond: ((device_id = 2) AND ("time" = g."time"))
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_2
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_4_19_chunk
+                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_3
+                     Filter: ("time" = g."time")
+                     ->  Seq Scan on compress_hyper_4_16_chunk
+                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+(14 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(2);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(2);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+EXECUTE param_prep(1);
+             time             |             time             
+------------------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | Sat Jan 01 00:00:00 2000 PST
+ Sun Jan 02 00:00:00 2000 PST | Sun Jan 02 00:00:00 2000 PST
+ Mon Jan 03 00:00:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+ Tue Jan 04 00:00:00 2000 PST | Tue Jan 04 00:00:00 2000 PST
+ Wed Jan 05 00:00:00 2000 PST | Wed Jan 05 00:00:00 2000 PST
+ Thu Jan 06 00:00:00 2000 PST | Thu Jan 06 00:00:00 2000 PST
+ Fri Jan 07 00:00:00 2000 PST | Fri Jan 07 00:00:00 2000 PST
+ Sat Jan 08 00:00:00 2000 PST | Sat Jan 08 00:00:00 2000 PST
+ Sun Jan 09 00:00:00 2000 PST | Sun Jan 09 00:00:00 2000 PST
+ Mon Jan 10 00:00:00 2000 PST | Mon Jan 10 00:00:00 2000 PST
+ Tue Jan 11 00:00:00 2000 PST | Tue Jan 11 00:00:00 2000 PST
+ Wed Jan 12 00:00:00 2000 PST | Wed Jan 12 00:00:00 2000 PST
+ Thu Jan 13 00:00:00 2000 PST | Thu Jan 13 00:00:00 2000 PST
+ Fri Jan 14 00:00:00 2000 PST | Fri Jan 14 00:00:00 2000 PST
+ Sat Jan 15 00:00:00 2000 PST | Sat Jan 15 00:00:00 2000 PST
+ Sun Jan 16 00:00:00 2000 PST | Sun Jan 16 00:00:00 2000 PST
+ Mon Jan 17 00:00:00 2000 PST | Mon Jan 17 00:00:00 2000 PST
+ Tue Jan 18 00:00:00 2000 PST | Tue Jan 18 00:00:00 2000 PST
+ Wed Jan 19 00:00:00 2000 PST | Wed Jan 19 00:00:00 2000 PST
+(19 rows)
+
+DEALLOCATE param_prep;
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
 SET max_parallel_workers_per_gather TO 4;

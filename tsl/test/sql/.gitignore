@@ -2,3 +2,4 @@
 /continuous_aggs_permissions-*.sql
 /plan_gapfill-*.sql
 /transparent_decompression-*.sql
+/compression_permissions-*.sql
