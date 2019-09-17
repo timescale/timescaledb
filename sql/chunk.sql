@@ -27,10 +27,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
 -- An example: SELECT * FROM hypertable WHERE _timescaledb_internal.chunks_in(hypertable, ARRAY[1,2]);
 --
 -- Use it with care as this function directly affects what chunks are being scanned for data.
--- Although this function is immutable (always returns true), we declare it here as volatile
--- so that the PostgreSQL optimizer does not try to evaluate/reduce it in the planner phase
+-- This is a marker function and should never be executed (we remove it from the plan)
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
-AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C STABLE STRICT PARALLEL SAFE;
 
 --given a chunk's relid, return the id. Error out if not a chunk relid.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_id_from_relid(relid OID) RETURNS INTEGER
