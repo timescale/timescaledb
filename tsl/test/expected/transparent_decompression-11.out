@@ -5385,6 +5385,130 @@ EXECUTE param_prep(1);
 (19 rows)
 
 DEALLOCATE param_prep;
+\ir include/transparent_decompression_ordered.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET work_mem TO '50MB';
+-- for ordered append tests on compressed chunks we need a hypertable with time as compress_orderby column
+CREATE TABLE metrics_ordered(time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int, v1 int, v2 float, v3 float);
+SELECT create_hypertable('metrics_ordered','time');
+      create_hypertable       
+------------------------------
+ (5,public,metrics_ordered,t)
+(1 row)
+
+ALTER TABLE metrics_ordered SET (timescaledb.compress, timescaledb.compress_orderby='time DESC',timescaledb.compress_segmentby='device_id,device_id_peer');
+INSERT INTO metrics_ordered SELECT * FROM metrics;
+CREATE INDEX ON metrics_ordered(device_id,device_id_peer,time);
+CREATE INDEX ON metrics_ordered(device_id,time);
+CREATE INDEX ON metrics_ordered(device_id_peer,time);
+SELECT compress_chunk('_timescaledb_internal._hyper_5_20_chunk');
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+SELECT compress_chunk('_timescaledb_internal._hyper_5_21_chunk');
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+SELECT compress_chunk('_timescaledb_internal._hyper_5_22_chunk');
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+-- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys
+:PREFIX SELECT * FROM metrics_ordered ORDER BY time DESC LIMIT 10;
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_5_22_chunk."time" DESC
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=27360 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=10080 loops=1)
+                     ->  Seq Scan on compress_hyper_6_25_chunk (actual rows=15 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=10080 loops=1)
+                     ->  Seq Scan on compress_hyper_6_24_chunk (actual rows=15 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=7200 loops=1)
+                     ->  Seq Scan on compress_hyper_6_23_chunk (actual rows=10 loops=1)
+(11 rows)
+
+-- should have ordered DecompressChunk path because segmentby columns have equality constraints
+:PREFIX SELECT * FROM metrics_ordered WHERE device_id = 1 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit (actual rows=0 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered (actual rows=0 loops=1)
+         Order: metrics_ordered."time" DESC
+         ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=0 loops=1)
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: compress_hyper_6_25_chunk._ts_meta_sequence_num
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_6_25_chunk (actual rows=0 loops=1)
+                           Filter: ((device_id = 1) AND (device_id_peer = 3))
+                           Rows Removed by Filter: 15
+         ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=0 loops=1)
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: compress_hyper_6_24_chunk._ts_meta_sequence_num
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_6_24_chunk (actual rows=0 loops=1)
+                           Filter: ((device_id = 1) AND (device_id_peer = 3))
+                           Rows Removed by Filter: 15
+         ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=0 loops=1)
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: compress_hyper_6_23_chunk._ts_meta_sequence_num
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_6_23_chunk (actual rows=0 loops=1)
+                           Filter: ((device_id = 1) AND (device_id_peer = 3))
+                           Rows Removed by Filter: 10
+(24 rows)
+
+:PREFIX SELECT DISTINCT ON (d.device_id) * FROM metrics_ordered d INNER JOIN LATERAL (SELECT * FROM metrics_ordered m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON true;
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=0 loops=1)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: d.device_id
+         Sort Method: quicksort 
+         ->  Nested Loop (actual rows=0 loops=1)
+               ->  Append (actual rows=27360 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk d (actual rows=7200 loops=1)
+                           ->  Seq Scan on compress_hyper_6_23_chunk (actual rows=10 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk d_1 (actual rows=10080 loops=1)
+                           ->  Seq Scan on compress_hyper_6_24_chunk (actual rows=15 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk d_2 (actual rows=10080 loops=1)
+                           ->  Seq Scan on compress_hyper_6_25_chunk (actual rows=15 loops=1)
+               ->  Limit (actual rows=0 loops=27360)
+                     ->  Custom Scan (ChunkAppend) on metrics_ordered m (actual rows=0 loops=27360)
+                           Order: m."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk m_1 (actual rows=0 loops=27360)
+                                 ->  Sort (actual rows=0 loops=27360)
+                                       Sort Key: compress_hyper_6_25_chunk_1._ts_meta_sequence_num
+                                       Sort Method: quicksort 
+                                       ->  Seq Scan on compress_hyper_6_25_chunk compress_hyper_6_25_chunk_1 (actual rows=0 loops=27360)
+                                             Filter: ((device_id = d.device_id) AND (device_id_peer = 3))
+                                             Rows Removed by Filter: 15
+                           ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk m_2 (actual rows=0 loops=27360)
+                                 ->  Sort (actual rows=0 loops=27360)
+                                       Sort Key: compress_hyper_6_24_chunk_1._ts_meta_sequence_num
+                                       Sort Method: quicksort 
+                                       ->  Seq Scan on compress_hyper_6_24_chunk compress_hyper_6_24_chunk_1 (actual rows=0 loops=27360)
+                                             Filter: ((device_id = d.device_id) AND (device_id_peer = 3))
+                                             Rows Removed by Filter: 15
+                           ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk m_3 (actual rows=0 loops=27360)
+                                 ->  Sort (actual rows=0 loops=27360)
+                                       Sort Key: compress_hyper_6_23_chunk_1._ts_meta_sequence_num
+                                       Sort Method: quicksort 
+                                       ->  Seq Scan on compress_hyper_6_23_chunk compress_hyper_6_23_chunk_1 (actual rows=0 loops=27360)
+                                             Filter: ((device_id = d.device_id) AND (device_id_peer = 3))
+                                             Rows Removed by Filter: 10
+(36 rows)
+
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
 SET max_parallel_workers_per_gather TO 4;
