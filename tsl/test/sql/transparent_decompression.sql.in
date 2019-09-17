@@ -126,6 +126,7 @@ SET max_parallel_workers_per_gather TO 0;
 \ir :TEST_QUERY_NAME
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
+\ir include/transparent_decompression_ordered.sql
 
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled

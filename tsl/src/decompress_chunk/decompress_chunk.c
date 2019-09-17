@@ -49,7 +49,8 @@ static Path *decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *in
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
 											 RelOptInfo *chunk_rel, bool needs_sequence_num);
 
-static bool can_order_by_pathkeys(CompressionInfo *info, List *pathkeys, bool *needs_sequence_num);
+static bool can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys,
+								  bool *needs_sequence_num);
 
 static DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
@@ -65,7 +66,6 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 {
 	ListCell *lc;
 	AppendRelInfo *appinfo;
-
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
 
 	info->chunk_rel = chunk_rel;
@@ -83,7 +83,12 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 		if (fd->orderby_column_index > 0)
 			info->num_orderby_columns++;
 		if (fd->segmentby_column_index > 0)
+		{
+			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, NameStr(fd->attname));
+			info->chunk_segmentby_attnos =
+				bms_add_member(info->chunk_segmentby_attnos, chunk_attno);
 			info->num_segmentby_columns++;
+		}
 	}
 
 	return info;
@@ -102,7 +107,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	bool try_order_by_compressed =
 		root->query_pathkeys &&
-		can_order_by_pathkeys(info, root->query_pathkeys, &needs_sequence_num);
+		can_order_by_pathkeys(chunk_rel, info, root->query_pathkeys, &needs_sequence_num);
 	/*
 	 * since we rely on parallel coordination from the scan below
 	 * this node it is probably not beneficial to have more
@@ -692,7 +697,8 @@ get_compressed_attno(CompressionInfo *info, AttrNumber ht_attno)
 }
 
 static bool
-can_order_by_pathkeys(CompressionInfo *info, List *pathkeys, bool *needs_sequence_num)
+can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys,
+					  bool *needs_sequence_num)
 {
 	int pk_index;
 	PathKey *pk;
@@ -706,6 +712,65 @@ can_order_by_pathkeys(CompressionInfo *info, List *pathkeys, bool *needs_sequenc
 	if (info->num_segmentby_columns > 0)
 	{
 		Bitmapset *segmentby_columns = NULL;
+
+		/*
+		 * if a segmentby column is not prefix of pathkeys we can still
+		 * generate ordered output if there is an equality constraint
+		 * on the segmentby column
+		 */
+		if (chunk_rel->baserestrictinfo != NIL)
+		{
+			ListCell *lc_ri;
+			foreach (lc_ri, chunk_rel->baserestrictinfo)
+			{
+				RestrictInfo *ri = lfirst(lc_ri);
+
+				if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
+				{
+					OpExpr *op = castNode(OpExpr, ri->clause);
+					Var *var;
+					Expr *other;
+
+					if (op->opretset)
+						continue;
+
+					if (IsA(linitial(op->args), Var))
+					{
+						var = castNode(Var, linitial(op->args));
+						other = lsecond(op->args);
+					}
+					else if (IsA(lsecond(op->args), Var))
+					{
+						var = castNode(Var, lsecond(op->args));
+						other = linitial(op->args);
+					}
+					else
+						continue;
+
+					if (var->varno != chunk_rel->relid)
+						continue;
+
+					if (IsA(other, Const) || IsA(other, Param))
+					{
+						TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
+
+						if (op->opno != tce->eq_opr)
+							continue;
+
+						if (bms_is_member(var->varattno, info->chunk_segmentby_attnos))
+						{
+							segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+							/*
+							 * remember segmentby attnos in baserestrictinfo because we need
+							 * them again when generating pathkeys for compressed scan
+							 */
+							info->chunk_segmentby_ri =
+								bms_add_member(info->chunk_segmentby_ri, var->varattno);
+						}
+					}
+				}
+			}
+		}
 
 		for (; lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
 			 lc = lnext(lc))

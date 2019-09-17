@@ -199,10 +199,13 @@ build_compressed_scan_pathkeys(PlannerInfo *root, DecompressChunkPath *path)
 	List *compressed_pathkeys = NIL;
 	PathKey *pk;
 
-	/* all segmentby columns need to be prefix of pathkeys */
+	/*
+	 * all segmentby columns need to be prefix of pathkeys
+	 * except those with equality constraint in baserestrictinfo
+	 */
 	if (path->info->num_segmentby_columns > 0)
 	{
-		Bitmapset *segmentby_columns = NULL;
+		Bitmapset *segmentby_columns = bms_copy(path->info->chunk_segmentby_ri);
 		ListCell *lc;
 		char *column_name;
 		FormData_hypertable_compression *ci;

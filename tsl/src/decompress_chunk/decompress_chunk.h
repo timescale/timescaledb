@@ -7,6 +7,7 @@
 #define TIMESCALEDB_DECOMPRESS_CHUNK_H
 
 #include <postgres.h>
+#include <nodes/bitmapset.h>
 #include <nodes/relation.h>
 #include <nodes/extensible.h>
 
@@ -26,6 +27,11 @@ typedef struct CompressionInfo
 
 	int num_orderby_columns;
 	int num_segmentby_columns;
+
+	/* chunk attribute numbers that are segmentby columns */
+	Bitmapset *chunk_segmentby_attnos;
+	/* chunk attribute numbers that have equality constraint in baserestrictinfo */
+	Bitmapset *chunk_segmentby_ri;
 
 } CompressionInfo;
 
