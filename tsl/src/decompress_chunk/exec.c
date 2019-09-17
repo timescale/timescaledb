@@ -72,6 +72,7 @@ typedef struct DecompressChunkState
 	int hypertable_id;
 	List *hypertable_compression_info;
 	int counter;
+	MemoryContext per_batch_context;
 } DecompressChunkState;
 
 static TupleTableSlot *decompress_chunk_exec(CustomScanState *node);
@@ -186,6 +187,10 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	initialize_column_state(state);
 
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
+
+	state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
+													 "DecompressChunk per_batch",
+													 ALLOCSET_DEFAULT_SIZES);
 }
 
 static void
@@ -194,6 +199,8 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 	Datum value;
 	bool isnull;
 	int i;
+	MemoryContext old_context = MemoryContextSwitchTo(state->per_batch_context);
+	MemoryContextReset(state->per_batch_context);
 
 	for (i = 0; i < state->num_columns; i++)
 	{
@@ -242,6 +249,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 		}
 	}
 	state->initialized = true;
+	MemoryContextSwitchTo(old_context);
 }
 
 static TupleTableSlot *
@@ -317,6 +325,7 @@ decompress_chunk_rescan(CustomScanState *node)
 static void
 decompress_chunk_end(CustomScanState *node)
 {
+	MemoryContextReset(((DecompressChunkState *) node)->per_batch_context);
 	ExecEndNode(linitial(node->custom_ps));
 }
 
