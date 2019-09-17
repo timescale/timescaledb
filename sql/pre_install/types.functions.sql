@@ -35,3 +35,26 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_recv(internal)
    RETURNS _timescaledb_internal.compressed_data
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_recv'
    LANGUAGE C IMMUTABLE STRICT;
+
+-- T-Digest Type Functions
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_in(cstring)
+RETURNS @extschema@.tdigest
+AS '@MODULE_PATHNAME@', 'ts_tdigest_in_sql'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_out(@extschema@.tdigest)
+RETURNS cstring
+AS '@MODULE_PATHNAME@', 'ts_tdigest_out_sql'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_send(@extschema@.tdigest)
+RETURNS bytea
+AS '@MODULE_PATHNAME@', 'ts_tdigest_send_sql'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_recv(internal)
+RETURNS @extschema@.tdigest
+AS '@MODULE_PATHNAME@', 'ts_tdigest_recv_sql'
+LANGUAGE C STRICT IMMUTABLE;
+

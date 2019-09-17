@@ -68,7 +68,8 @@ SELECT
     last(temperature, timec) as last_temp,
     last(highlow, timec) as last_hl,
     first(highlow, timec) as first_hl,
-    histogram(temperature, 0, 100, 5)
+    histogram(temperature, 0, 100, 5),
+    tdigest_create(temperature)
   FROM TABLE
   GROUP BY bucket, location
   HAVING min(location) >= 'NYC' and avg(temperature) > 20

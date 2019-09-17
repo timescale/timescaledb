@@ -17,6 +17,7 @@ set(PRE_INSTALL_SOURCE_FILES
 # after everything else is loaded.
 set(IMMUTABLE_API_SOURCE_FILES
   aggregates.sql
+  operator.sql
 )
 
 # The rest of the source files defining mostly functions
@@ -47,6 +48,7 @@ set(SOURCE_FILES
   maintenance_utils.sql
   partialize_finalize.sql
   restoring.sql
+  tdigest.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

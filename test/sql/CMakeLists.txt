@@ -39,6 +39,7 @@ set(TEST_FILES
   reloptions.sql
   size_utils.sql
   tablespace.sql
+  tdigest.sql
   timestamp.sql
   triggers.sql
   truncate.sql

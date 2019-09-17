@@ -57,3 +57,26 @@ CREATE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT,  inner_agg_co
     FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
     FINALFUNC_EXTRA
 );
+
+-- These aggregates create a T-Digest data structure from a dataset.
+-- The second version accepts a custom compression parameter.
+
+CREATE AGGREGATE tdigest_create(value float8) (
+  sfunc = _timescaledb_internal.tdigest_sfunc,
+  stype = internal,
+  serialfunc = _timescaledb_internal.tdigest_serializefunc,
+  deserialfunc = _timescaledb_internal.tdigest_deserializefunc,
+  combinefunc = _timescaledb_internal.tdigest_combinefunc,
+  finalfunc = _timescaledb_internal.tdigest_finalfunc,
+  parallel = safe
+);
+
+CREATE AGGREGATE tdigest_create(value float8, compression integer) (
+  sfunc = _timescaledb_internal.tdigest_sfunc,
+  stype = internal,
+  serialfunc = _timescaledb_internal.tdigest_serializefunc,
+  deserialfunc = _timescaledb_internal.tdigest_deserializefunc,
+  combinefunc = _timescaledb_internal.tdigest_combinefunc,
+  finalfunc = _timescaledb_internal.tdigest_finalfunc,
+  parallel = safe
+);

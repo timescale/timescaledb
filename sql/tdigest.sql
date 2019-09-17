@@ -1,142 +1,101 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
 /*
  * T-Digest aggregates and associated functionality
+ * 
+ * Originally from PipelineDB 1.0.0
+ * Original copyright (c) 2018, PipelineDB, Inc. and released under Apache License 2.0
+ * Modifications copyright by Timescale, Inc. per NOTICE
  */
 
--- We need to create the shell type first so that we can use tdigest in the support function signatures
-CREATE TYPE tdigest;
+-- T-Digest aggregate support functions
 
--- do we need to make this strict?
-CREATE FUNCTION tdigest_in(cstring)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'tdigest_in'
-LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_sfunc(internal, float8)
+RETURNS internal
+AS '@MODULE_PATHNAME@', 'ts_tdigest_sfunc_sql'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION tdigest_out(tdigest)
-RETURNS cstring
-AS 'MODULE_PATHNAME', 'tdigest_out'
-LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_sfunc(internal, float8, integer)
+RETURNS internal
+AS '@MODULE_PATHNAME@', 'ts_tdigest_sfunc_comp_sql'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION tdigest_send(tdigest)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_finalfunc(internal)
+RETURNS @extschema@.tdigest
+AS '@MODULE_PATHNAME@', 'ts_tdigest_finalfunc_sql'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_serializefunc(internal)
 RETURNS bytea
-AS 'MODULE_PATHNAME', 'tdigest_send'
+AS '@MODULE_PATHNAME@', 'ts_tdigest_serializefunc_sql'
 LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION tdigest_recv(internal)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'tdigest_recv'
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_deserializefunc(bytea, internal)
+RETURNS internal
+AS '@MODULE_PATHNAME@', 'ts_tdigest_deserializefunc_sql'
 LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
--- Now we can fill in the shell type created above
-CREATE TYPE tdigest (
-  input = tdigest_in,
-  output = tdigest_out,
-  receive = tdigest_recv,
-  send = tdigest_send,
-  alignment = int4,
-  storage = extended
-);
-
-CREATE FUNCTION tdigest_empty()
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'tdigest_empty'
-LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION tdigest_empty(integer)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'tdigest_emptyp'
-LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION tdigest_compress(tdigest)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'tdigest_compress'
-LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION dist_add(tdigest, float8)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'dist_add'
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_combinefunc(internal, internal)
+RETURNS internal
+AS '@MODULE_PATHNAME@', 'ts_tdigest_combinefunc_sql'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION dist_add(tdigest, float8, integer)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'dist_addn'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
+--- Public facing API
+-- percentile_approx and cdf_approx are intended to support sketch types 
+-- other than TDigest in the future
 
-CREATE FUNCTION dist_cdf(tdigest, float8)
+CREATE OR REPLACE FUNCTION percentile_approx(@extschema@.tdigest, float8)
 RETURNS float8
-AS 'MODULE_PATHNAME', 'dist_cdf'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
+AS '@MODULE_PATHNAME@', 'ts_tdigest_percentile_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION dist_quantile(tdigest, float8)
+CREATE OR REPLACE FUNCTION cdf_approx(@extschema@.tdigest, float8)
 RETURNS float8
-AS 'MODULE_PATHNAME', 'dist_quantile'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION dist_agg_trans(internal, float8)
-RETURNS internal
-AS 'MODULE_PATHNAME', 'dist_agg_trans'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION dist_agg_trans(internal, float8, integer)
-RETURNS internal
-AS 'MODULE_PATHNAME', 'dist_agg_transp'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION dist_combine(internal, internal)
-RETURNS internal
-AS 'MODULE_PATHNAME', 'dist_combine'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION dist_agg_final(internal)
-RETURNS tdigest
-AS 'MODULE_PATHNAME', 'dist_agg_final'
-LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION tdigest_serialize(internal)
-RETURNS bytea
-AS 'MODULE_PATHNAME', 'tdigest_serialize'
+AS '@MODULE_PATHNAME@', 'ts_tdigest_cdf_sql'
 LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION tdigest_deserialize(bytea, internal)
-RETURNS internal
-AS 'MODULE_PATHNAME', 'tdigest_deserialize'
+-- Exact count of number of data points added to the TDigest
+CREATE OR REPLACE FUNCTION tdigest_count(@extschema@.tdigest)
+RETURNS bigint
+AS '@MODULE_PATHNAME@', 'ts_tdigest_count_sql'
 LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE AGGREGATE dist_agg(float8) (
-  sfunc = dist_agg_trans,
-  stype = internal,
-  finalfunc = dist_agg_final,
-  serialfunc = tdigest_serialize,
-  deserialfunc = tdigest_deserialize,
-  combinefunc = dist_combine,
-  parallel = safe
-);
+-- User friendly output of key values in a T-Digest
+CREATE OR REPLACE FUNCTION tdigest_print(@extschema@.tdigest)
+RETURNS varchar
+AS '@MODULE_PATHNAME@', 'ts_tdigest_print_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE AGGREGATE dist_agg(float8, integer) (
-  sfunc = dist_agg_trans,
-  stype = internal,
-  finalfunc = dist_agg_final,
-  serialfunc = tdigest_serialize,
-  deserialfunc = tdigest_deserialize,
-  combinefunc = dist_combine,
-  parallel = safe
-);
+-- Comparison Functions
 
-CREATE AGGREGATE combine_dist_agg(internal) (
-  sfunc = dist_combine,
-  stype = internal,
-  finalfunc = dist_agg_final,
-  serialfunc = tdigest_serialize,
-  deserialfunc = tdigest_deserialize,
-  combinefunc = dist_combine,
-  parallel = safe
-);
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_cmp(tdigest, tdigest)
+RETURNS integer
+AS '@MODULE_PATHNAME@', 'ts_tdigest_cmp_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE AGGREGATE partial_combine_dist_agg(internal) (
-  sfunc = dist_combine,
-  stype = internal,
-  finalfunc = tdigest_serialize,
-  serialfunc = tdigest_serialize,
-  deserialfunc = tdigest_deserialize,
-  combinefunc = dist_combine,
-  parallel = safe
-);
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_equal(@extschema@.tdigest, @extschema@.tdigest)
+RETURNS boolean
+AS '@MODULE_PATHNAME@', 'ts_tdigest_equal_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_lt(@extschema@.tdigest, @extschema@.tdigest)
+RETURNS boolean
+AS '@MODULE_PATHNAME@', 'ts_tdigest_lt_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_gt(@extschema@.tdigest, @extschema@.tdigest)
+RETURNS boolean
+AS '@MODULE_PATHNAME@', 'ts_tdigest_gt_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_ge(@extschema@.tdigest, @extschema@.tdigest)
+RETURNS boolean
+AS '@MODULE_PATHNAME@', 'ts_tdigest_ge_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tdigest_le(@extschema@.tdigest, @extschema@.tdigest)
+RETURNS boolean
+AS '@MODULE_PATHNAME@', 'ts_tdigest_le_sql'
+LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;

@@ -53,6 +53,8 @@ set(SOURCES
   sort_transform.c
   subspace_store.c
   tablespace.c
+  tdigest.c
+  tdigest_api.c
   time_bucket.c
   custom_type_cache.c
   trigger.c

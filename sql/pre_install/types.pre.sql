@@ -20,3 +20,5 @@ CREATE TYPE _timescaledb_catalog.ts_interval AS (
 
 CREATE TYPE _timescaledb_internal.compressed_data;
 
+-- Create shell type for T-Digest
+CREATE TYPE @extschema@.tdigest;

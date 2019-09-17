@@ -14,3 +14,14 @@ CREATE TYPE _timescaledb_internal.compressed_data (
     RECEIVE = _timescaledb_internal.compressed_data_recv,
     SEND = _timescaledb_internal.compressed_data_send
 );
+
+-- Complete T-Digest type
+
+CREATE TYPE @extschema@.tdigest (
+  input = _timescaledb_internal.tdigest_in,
+  output = _timescaledb_internal.tdigest_out,
+  receive = _timescaledb_internal.tdigest_recv,
+  send = _timescaledb_internal.tdigest_send,
+  alignment = int4,
+  storage = extended
+);

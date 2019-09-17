@@ -29,16 +29,17 @@ SELECT * FROM test.show_indexes('regular_table');
 CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple');
 ALTER TYPE rainbow RENAME TO colors;
 \dT+
-                                           List of data types
- Schema |  Name  | Internal name | Size | Elements |       Owner       | Access privileges | Description 
---------+--------+---------------+------+----------+-------------------+-------------------+-------------
- public | colors | colors        | 4    | red     +| default_perm_user |                   | 
-        |        |               |      | orange  +|                   |                   | 
-        |        |               |      | yellow  +|                   |                   | 
-        |        |               |      | green   +|                   |                   | 
-        |        |               |      | blue    +|                   |                   | 
-        |        |               |      | purple   |                   |                   | 
-(1 row)
+                                            List of data types
+ Schema |  Name   | Internal name | Size | Elements |       Owner       | Access privileges | Description 
+--------+---------+---------------+------+----------+-------------------+-------------------+-------------
+ public | colors  | colors        | 4    | red     +| default_perm_user |                   | 
+        |         |               |      | orange  +|                   |                   | 
+        |         |               |      | yellow  +|                   |                   | 
+        |         |               |      | green   +|                   |                   | 
+        |         |               |      | blue    +|                   |                   | 
+        |         |               |      | purple   |                   |                   | 
+ public | tdigest | tdigest       | var  |          | super_user        |                   | 
+(2 rows)
 
 REINDEX TABLE regular_table;
 \c :TEST_DBNAME :ROLE_SUPERUSER
