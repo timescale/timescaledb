@@ -91,6 +91,10 @@ analyze_row_processor(int row, TsFdwAnalyzeState *astate)
 		{
 			/* Skip this tuple. */
 			pos = -1;
+
+			/* Since we generate tuples in analyze memory context we need to make sure to free
+			 * tuples we don't use to avoid running OOM */
+			heap_freetuple(remote_cursor_get_tuple(astate->cursor, row));
 		}
 
 		astate->rowstoskip -= 1;
