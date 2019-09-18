@@ -13,6 +13,8 @@
 typedef struct DatumSerializer DatumSerializer;
 DatumSerializer *create_datum_serializer(Oid type);
 
+bool datum_serializer_value_may_be_toasted(DatumSerializer *serializer);
+
 /* serialize to bytes in memory. */
 Size datum_get_bytes_size(DatumSerializer *serializer, Size start_offset, Datum val);
 char *datum_to_bytes_and_advance(DatumSerializer *serializer, char *start, Size *max_size,
@@ -27,7 +29,7 @@ typedef struct DatumDeserializer DatumDeserializer;
 DatumDeserializer *create_datum_deserializer(Oid type);
 
 /* deserialization from bytes in memory */
-Datum bytes_to_datum_and_advance(DatumDeserializer *deserializer, char **bytes);
+Datum bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **bytes);
 
 /* deserialization from binary strings (for recv functions) */
 Datum binary_string_to_datum(DatumDeserializer *deserializer, StringInfo data);

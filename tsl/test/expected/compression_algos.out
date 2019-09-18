@@ -740,7 +740,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-            8036
+            4289
 (1 row)
 
                                    ?column?                                    | count 
@@ -780,7 +780,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-             664
+             605
 (1 row)
 
                                    ?column?                                    | count 
@@ -813,7 +813,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 \set ECHO errors
  compressed size 
 -----------------
-              45
+              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -889,7 +889,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             240
+             187
 (1 row)
 
                                    ?column?                                    | count 
@@ -921,7 +921,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             232
+             179
 (1 row)
 
                                    ?column?                                    | count 
@@ -953,7 +953,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 \set ECHO errors
  compressed size 
 -----------------
-             232
+             178
 (1 row)
 
                                    ?column?                                    | count 
@@ -985,7 +985,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \set ECHO errors
  compressed size 
 -----------------
-             224
+             189
 (1 row)
 
                                    ?column?                                    | count 
@@ -1032,7 +1032,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-             840
+             356
 (1 row)
 
                                    ?column?                                    | count 
@@ -1071,7 +1071,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 \set ECHO errors
  compressed size 
 -----------------
-              45
+              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -1147,7 +1147,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             136
+              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1179,7 +1179,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             136
+              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1211,7 +1211,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 \set ECHO errors
  compressed size 
 -----------------
-             136
+              79
 (1 row)
 
                                    ?column?                                    | count 
@@ -1243,7 +1243,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \set ECHO errors
  compressed size 
 -----------------
-             109
+              74
 (1 row)
 
                                    ?column?                                    | count 

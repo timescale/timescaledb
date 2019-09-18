@@ -20,6 +20,7 @@
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 #include "compat.h"
+#include "datum_serialize.h"
 
 #include <adts/char_vec.h>
 
@@ -87,9 +88,7 @@ typedef struct ArrayCompressor
 	Simple8bRleCompressor sizes;
 	char_vec data;
 	Oid type;
-	int16 typlen;
-	bool typbyval;
-	char typalign;
+	DatumSerializer *serializer;
 	bool has_nulls;
 } ArrayCompressor;
 
@@ -108,9 +107,7 @@ typedef struct ArrayDecompressionIterator
 	const char *data;
 	uint32 num_data_bytes;
 	uint32 data_offset;
-	int16 typlen;
-	bool typbyval;
-	char typalign;
+	DatumDeserializer *deserializer;
 	bool has_nulls;
 } ArrayDecompressionIterator;
 
@@ -176,10 +173,7 @@ array_compressor_alloc(Oid type_to_compress)
 	char_vec_init(&compressor->data, CurrentMemoryContext, 0);
 
 	compressor->type = type_to_compress;
-	get_typlenbyvalalign(compressor->type,
-						 &compressor->typlen,
-						 &compressor->typbyval,
-						 &compressor->typalign);
+	compressor->serializer = create_datum_serializer(type_to_compress);
 	return compressor;
 }
 
@@ -190,40 +184,28 @@ array_compressor_append_null(ArrayCompressor *compressor)
 	simple8brle_compressor_append(&compressor->nulls, 1);
 }
 
-static void
-array_compressor_append_data(char_vec *data, Datum val, uint32 val_size_and_alignment, int16 typlen,
-							 bool typbyval)
-{
-	char *dest = char_vec_append_zeros(data, val_size_and_alignment);
-	/* based on ArrayCastAndSet */
-	if (typlen > 0 && typbyval)
-	{
-		Assert(val_size_and_alignment >= typlen);
-		store_att_byval(dest, val, typlen);
-	}
-	else
-	{
-		Assert(!typbyval);
-		Assert(val_size_and_alignment >= att_addlength_datum(0, typlen, val));
-		memmove(dest, DatumGetPointer(val), att_addlength_datum(0, typlen, val));
-	}
-}
-
 void
 array_compressor_append(ArrayCompressor *compressor, Datum val)
 {
-	uint32 datum_size_and_align;
+	Size datum_size_and_align;
+	char *start_ptr;
 	simple8brle_compressor_append(&compressor->nulls, 0);
-	if (compressor->typlen == -1)
-		val = PointerGetDatum(PG_DETOAST_DATUM(val));
-	datum_size_and_align = att_addlength_datum(0, compressor->typlen, val);
-	datum_size_and_align = att_align_nominal(datum_size_and_align, compressor->typalign);
+	if (datum_serializer_value_may_be_toasted(compressor->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
+	datum_size_and_align =
+		datum_get_bytes_size(compressor->serializer, compressor->data.num_elements, val) -
+		compressor->data.num_elements;
+
 	simple8brle_compressor_append(&compressor->sizes, datum_size_and_align);
-	array_compressor_append_data(&compressor->data,
-								 val,
-								 datum_size_and_align,
-								 compressor->typlen,
-								 compressor->typbyval);
+
+	/* datum_to_bytes_and_advance will zero any padding bytes, so we need not do so here */
+	char_vec_reserve(&compressor->data, datum_size_and_align);
+	start_ptr = compressor->data.data + compressor->data.num_elements;
+	compressor->data.num_elements += datum_size_and_align;
+
+	datum_to_bytes_and_advance(compressor->serializer, start_ptr, &datum_size_and_align, val);
+	Assert(datum_size_and_align == 0);
 }
 
 typedef struct ArrayCompressorSerializationInfo
@@ -376,11 +358,8 @@ array_decompression_iterator_alloc_forward(const char *serialized_data, Size dat
 	iterator->data = data.data;
 	iterator->num_data_bytes = data.data_len;
 	iterator->data_offset = 0;
+	iterator->deserializer = create_datum_deserializer(iterator->base.element_type);
 
-	get_typlenbyvalalign(iterator->base.element_type,
-						 &iterator->typlen,
-						 &iterator->typbyval,
-						 &iterator->typalign);
 	return &iterator->base;
 }
 
@@ -414,6 +393,7 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 	Simple8bRleDecompressResult datum_size;
 	ArrayDecompressionIterator *iter;
 	Datum val;
+	const char *start_pointer;
 
 	Assert(general_iter->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY &&
 		   general_iter->forward);
@@ -441,8 +421,11 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 		};
 
 	Assert(iter->data_offset + datum_size.val <= iter->num_data_bytes);
-	val = fetch_att(iter->data + iter->data_offset, iter->typbyval, iter->typlen);
+
+	start_pointer = iter->data + iter->data_offset;
+	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
 	iter->data_offset += datum_size.val;
+	Assert(iter->data + iter->data_offset == start_pointer);
 
 	return (DecompressResult){
 		.val = val,
@@ -491,11 +474,8 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->data = array_compressed_data.data;
 	iterator->num_data_bytes = array_compressed_data.data_len;
 	iterator->data_offset = iterator->num_data_bytes;
+	iterator->deserializer = create_datum_deserializer(iterator->base.element_type);
 
-	get_typlenbyvalalign(iterator->base.element_type,
-						 &iterator->typlen,
-						 &iterator->typbyval,
-						 &iterator->typalign);
 	return &iterator->base;
 }
 
@@ -505,6 +485,7 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 	Simple8bRleDecompressResult datum_size;
 	ArrayDecompressionIterator *iter;
 	Datum val;
+	const char *start_pointer;
 
 	Assert(base_iter->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY && !base_iter->forward);
 	iter = (ArrayDecompressionIterator *) base_iter;
@@ -531,8 +512,10 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 		};
 
 	Assert((int64) iter->data_offset - (int64) datum_size.val >= 0);
+
 	iter->data_offset -= datum_size.val;
-	val = fetch_att(iter->data + iter->data_offset, iter->typbyval, iter->typlen);
+	start_pointer = iter->data + iter->data_offset;
+	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
 
 	return (DecompressResult){
 		.val = val,

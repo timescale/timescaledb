@@ -62,6 +62,12 @@ create_datum_serializer(Oid type_oid)
 	return res;
 }
 
+bool
+datum_serializer_value_may_be_toasted(DatumSerializer *serializer)
+{
+	return serializer->type_len == -1;
+}
+
 static inline void
 load_send_fn(DatumSerializer *ser)
 {
@@ -282,7 +288,7 @@ load_recv_fn(DatumDeserializer *des, bool use_binary)
 
 /* Loosely based on `range_deserialize` in rangetypes.c */
 Datum
-bytes_to_datum_and_advance(DatumDeserializer *deserializer, char **ptr)
+bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 {
 	Datum res;
 

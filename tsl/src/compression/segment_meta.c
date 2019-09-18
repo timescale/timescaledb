@@ -194,7 +194,7 @@ static void
 segment_meta_min_max_get_deconstruct(SegmentMetaMinMax *meta, DatumDeserializer *deser, Datum *min,
 									 Datum *max)
 {
-	char *data = (char *) meta + sizeof(*meta);
+	const char *data = (char *) meta + sizeof(*meta);
 	/* skip the min */
 	*min = bytes_to_datum_and_advance(deser, &data);
 	*max = bytes_to_datum_and_advance(deser, &data);
