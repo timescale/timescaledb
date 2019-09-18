@@ -120,6 +120,11 @@ endif ()
 
 message(STATUS "Using compiler ${CMAKE_C_COMPILER_ID}")
 
+if (ENABLE_OPTIMIZER_DEBUG)
+  message(STATUS "Enabling OPTIMIZER_DEBUG. Make sure that ${PG_SOURCE_DIR} is installed and built with OPTIMIZER_DEBUG.")
+  add_definitions(-DOPTIMIZER_DEBUG)
+endif()
+
 # Search paths for Postgres binaries
 if(WIN32)
   find_path(PG_PATH
@@ -294,6 +299,7 @@ endif()
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry" ON)
 option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
+option(ENABLE_OPTIMIZER_DEBUG "Enable OPTIMIZER_DEBUG when building. Requires Postgres server to be built with OPTIMIZER_DEBUG." OFF)
 
 # Option to enable assertions. Note that if we include headers from a
 # PostgreSQL build that has assertions enabled, we might inherit that
