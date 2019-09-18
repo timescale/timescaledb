@@ -48,6 +48,7 @@ SELECT
   select item from base_ints order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_ints
 \set TYPE BIGINT
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
@@ -345,6 +346,7 @@ SELECT
   select item::bigint from base_ints order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_ints
 \set TYPE BIGINT
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item::bigint)
 \ir include/compression_test.sql
@@ -387,6 +389,7 @@ SELECT
   $$ AS "QUERY"
 \gset
 \set TYPE TIMESTAMPTZ
+\set TABLE_NAME base_time
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
@@ -431,6 +434,7 @@ SELECT
   select item from  base_doubles order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_doubles
 SELECT 'DOUBLE PRECISION' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_gorilla(item)
 SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_FORWARD_CMD" \gset
@@ -721,6 +725,7 @@ SELECT
   select item from  base_texts order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_texts
 SELECT 'TEXT' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_dictionary(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
@@ -735,7 +740,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-            4056
+            8036
 (1 row)
 
                                    ?column?                                    | count 
@@ -775,7 +780,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-             624
+             664
 (1 row)
 
                                    ?column?                                    | count 
@@ -808,7 +813,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 \set ECHO errors
  compressed size 
 -----------------
-              41
+              45
 (1 row)
 
                                    ?column?                                    | count 
@@ -851,7 +856,7 @@ SELECT pg_total_relation_size(reltoastrelid)
 \set ECHO errors
  compressed size 
 -----------------
-           10468
+         1100084
 (1 row)
 
                                    ?column?                                    | count 
@@ -884,7 +889,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             204
+             240
 (1 row)
 
                                    ?column?                                    | count 
@@ -916,7 +921,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-             196
+             232
 (1 row)
 
                                    ?column?                                    | count 
@@ -948,7 +953,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 \set ECHO errors
  compressed size 
 -----------------
-             196
+             232
 (1 row)
 
                                    ?column?                                    | count 
@@ -980,7 +985,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \set ECHO errors
  compressed size 
 -----------------
-             200
+             224
 (1 row)
 
                                    ?column?                                    | count 
@@ -1012,6 +1017,7 @@ SELECT
   select item from  base_texts order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_texts
 SELECT 'TEXT' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_array(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
@@ -1026,7 +1032,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 \set ECHO errors
  compressed size 
 -----------------
-             440
+             840
 (1 row)
 
                                    ?column?                                    | count 
@@ -1065,7 +1071,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 \set ECHO errors
  compressed size 
 -----------------
-              41
+              45
 (1 row)
 
                                    ?column?                                    | count 
@@ -1108,7 +1114,7 @@ SELECT pg_total_relation_size(reltoastrelid)
 \set ECHO errors
  compressed size 
 -----------------
-           10468
+         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1141,7 +1147,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-              97
+             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -1173,7 +1179,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 \set ECHO errors
  compressed size 
 -----------------
-              97
+             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -1205,7 +1211,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 \set ECHO errors
  compressed size 
 -----------------
-              97
+             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -1237,7 +1243,7 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \set ECHO errors
  compressed size 
 -----------------
-              85
+             109
 (1 row)
 
                                    ?column?                                    | count 
