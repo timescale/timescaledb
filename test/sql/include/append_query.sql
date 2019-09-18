@@ -350,8 +350,10 @@ RESET timescaledb.enable_chunk_append;
 :PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
 
 -- DISTINCT should prevent pushdown
+SET enable_hashagg TO false;
 :PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
 :PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
+RESET enable_hashagg;
 
 -- JOINs should prevent pushdown
 -- when LIMIT gets pushed to a Sort node it will switch to top-N heapsort
