@@ -440,8 +440,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
-	Oid server_id;
-	//	const ForeignServer *server;
 
 	if (host == NULL)
 		ereport(ERROR,
@@ -478,7 +476,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 	/* Try to create the foreign server, or get the existing one in case of
 	 * if_not_exists = true. */
-	if (create_foreign_server(node_name, host, port, dbname, if_not_exists, &server_id))
+	if (create_foreign_server(node_name, host, port, dbname, if_not_exists, NULL))
 	{
 		List *node_options;
 		TSConnection *conn;
