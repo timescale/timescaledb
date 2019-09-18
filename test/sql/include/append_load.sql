@@ -52,23 +52,27 @@ INSERT INTO join_test VALUES ('2017-01-22T09:18:22', 15.2, 1),
 -- create hypertable with DATE time dimension
 CREATE TABLE metrics_date(time DATE NOT NULL);
 SELECT create_hypertable('metrics_date','time');
-INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+ANALYZE metrics_date;
 
 -- create hypertable with TIMESTAMP time dimension
 CREATE TABLE metrics_timestamp(time TIMESTAMP NOT NULL);
 SELECT create_hypertable('metrics_timestamp','time');
-INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+ANALYZE metrics_timestamp;
 
 -- create hypertable with TIMESTAMPTZ time dimension
 CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL, device_id INT NOT NULL);
 CREATE INDEX ON metrics_timestamptz(device_id,time);
 SELECT create_hypertable('metrics_timestamptz','time');
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 3;
+ANALYZE metrics_timestamptz;
 
 -- create space partitioned hypertable
 CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
 SELECT create_hypertable('metrics_space','time','device_id',3);
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '1h'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+ANALYZE metrics_space;
 

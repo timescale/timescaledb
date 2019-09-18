@@ -80,7 +80,8 @@ SELECT create_hypertable('metrics_date','time');
  (3,public,metrics_date,t)
 (1 row)
 
-INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+ANALYZE metrics_date;
 -- create hypertable with TIMESTAMP time dimension
 CREATE TABLE metrics_timestamp(time TIMESTAMP NOT NULL);
 SELECT create_hypertable('metrics_timestamp','time');
@@ -89,7 +90,8 @@ SELECT create_hypertable('metrics_timestamp','time');
  (4,public,metrics_timestamp,t)
 (1 row)
 
-INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval);
+INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+ANALYZE metrics_timestamp;
 -- create hypertable with TIMESTAMPTZ time dimension
 CREATE TABLE metrics_timestamptz(time TIMESTAMPTZ NOT NULL, device_id INT NOT NULL);
 CREATE INDEX ON metrics_timestamptz(device_id,time);
@@ -99,9 +101,10 @@ SELECT create_hypertable('metrics_timestamptz','time');
  (5,public,metrics_timestamptz,t)
 (1 row)
 
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 1;
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 2;
-INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '1h'::interval), 3;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 1;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 2;
+INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 3;
+ANALYZE metrics_timestamptz;
 -- create space partitioned hypertable
 CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
 SELECT create_hypertable('metrics_space','time','device_id',3);
@@ -110,7 +113,8 @@ SELECT create_hypertable('metrics_space','time','device_id',3);
  (6,public,metrics_space,t)
 (1 row)
 
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '1h'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+ANALYZE metrics_space;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -1412,21 +1416,19 @@ ORDER BY time DESC, device_id;
 (14 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time) m ON true;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
- Merge Join
-   Merge Cond: (m."time" = g."time")
-   ->  Merge Append
-         Sort Key: m."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m_1
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m_2
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m_3
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_4
-   ->  Sort
-         Sort Key: g."time"
-         ->  Function Scan on generate_series g
-(12 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Hash Join
+   Hash Cond: (g."time" = m."time")
+   ->  Function Scan on generate_series g
+   ->  Hash
+         ->  Append
+               ->  Seq Scan on _hyper_5_17_chunk m
+               ->  Seq Scan on _hyper_5_18_chunk m_1
+               ->  Seq Scan on _hyper_5_19_chunk m_2
+               ->  Seq Scan on _hyper_5_20_chunk m_3
+               ->  Seq Scan on _hyper_5_21_chunk m_4
+(10 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time ORDER BY time) m ON true;
                                                 QUERY PLAN                                                 
@@ -2158,6 +2160,7 @@ RESET timescaledb.enable_chunk_append;
 (13 rows)
 
 -- DISTINCT should prevent pushdown
+SET enable_hashagg TO false;
 :PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
@@ -2190,13 +2193,14 @@ RESET timescaledb.enable_chunk_append;
                ->  Index Only Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk
 (13 rows)
 
+RESET enable_hashagg;
 -- JOINs should prevent pushdown
 -- when LIMIT gets pushed to a Sort node it will switch to top-N heapsort
 -- if more tuples then LIMIT are requested this will trigger an error
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:361: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_query.sql:363: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit
