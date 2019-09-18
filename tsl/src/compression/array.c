@@ -214,7 +214,7 @@ array_compressor_append(ArrayCompressor *compressor, Datum val)
 {
 	uint32 datum_size_and_align;
 	simple8brle_compressor_append(&compressor->nulls, 0);
-	if (compressor->typlen != -1 && !compressor->typbyval)
+	if (compressor->typlen == -1)
 		val = PointerGetDatum(PG_DETOAST_DATUM(val));
 	datum_size_and_align = att_addlength_datum(0, compressor->typlen, val);
 	datum_size_and_align = att_align_nominal(datum_size_and_align, compressor->typalign);

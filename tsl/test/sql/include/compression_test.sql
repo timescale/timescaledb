@@ -8,6 +8,11 @@ DROP TABLE IF EXISTS compressed;
 CREATE TABLE compressed AS SELECT :COMPRESSION_CMD AS c FROM (:QUERY) AS sub;
 SELECT pg_column_size(c) as "compressed size" FROM compressed;
 
+--rewrite table (needed to make sure the compressed data does not reference toast table of original)
+CREATE TABLE temp AS SELECT * FROM :TABLE_NAME;
+DROP TABLE :TABLE_NAME;
+ALTER TABLE temp RENAME TO :TABLE_NAME;
+
 --test that decompression gives same result in forward direction
 with original AS (
   SELECT row_number() OVER() row_number, * FROM (:QUERY) as q

@@ -25,6 +25,7 @@ SELECT
   select item from base_ints order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_ints
 \set TYPE BIGINT
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
@@ -98,6 +99,7 @@ SELECT
   select item::bigint from base_ints order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_ints
 \set TYPE BIGINT
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item::bigint)
 \ir include/compression_test.sql
@@ -112,6 +114,7 @@ SELECT
   $$ AS "QUERY"
 \gset
 \set TYPE TIMESTAMPTZ
+\set TABLE_NAME base_time
 \set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
 \set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
@@ -131,6 +134,7 @@ SELECT
   select item from  base_doubles order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_doubles
 SELECT 'DOUBLE PRECISION' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_gorilla(item)
 SELECT '_timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::DOUBLE PRECISION)' AS "DECOMPRESS_FORWARD_CMD" \gset
@@ -194,6 +198,7 @@ SELECT
   select item from  base_texts order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_texts
 SELECT 'TEXT' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_dictionary(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
@@ -257,6 +262,7 @@ SELECT
   select item from  base_texts order by rn
   $$ AS "QUERY"
 \gset
+\set TABLE_NAME base_texts
 SELECT 'TEXT' as "TYPE" \gset
 \set COMPRESSION_CMD _timescaledb_internal.compress_array(item)
 \set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TEXT)
