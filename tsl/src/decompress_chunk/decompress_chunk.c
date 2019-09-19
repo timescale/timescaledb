@@ -747,7 +747,7 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 					else
 						continue;
 
-					if (var->varno != chunk_rel->relid)
+					if (var->varno != chunk_rel->relid || var->varattno <= 0)
 						continue;
 
 					if (IsA(other, Const) || IsA(other, Param))
@@ -782,6 +782,10 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 				return false;
 
 			var = castNode(Var, expr);
+
+			if (var->varattno <= 0)
+				return false;
+
 			column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
 			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
 
@@ -818,6 +822,10 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 			return false;
 
 		var = castNode(Var, expr);
+
+		if (var->varattno <= 0)
+			return false;
+
 		column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
 		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
 

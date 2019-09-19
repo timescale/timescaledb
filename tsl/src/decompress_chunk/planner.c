@@ -144,9 +144,17 @@ build_scan_tlist(DecompressChunkPath *path)
 		scan_tlist = lappend(scan_tlist, tle);
 	}
 
+	/* check for system columns */
 	bit = bms_next_member(attrs_used, -1);
 	if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-		elog(ERROR, "transparent decompression does not support system attributes");
+	{
+		/* we support tableoid so skip that */
+		if (bit == TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber)
+			bit = bms_next_member(attrs_used, bit);
+
+		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
+			elog(ERROR, "transparent decompression only supports tableoid system column");
+	}
 
 	/* check for reference to whole row */
 	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs_used))
@@ -177,7 +185,8 @@ build_scan_tlist(DecompressChunkPath *path)
 		 * we need to include junk columns because they might be needed for
 		 * filtering or sorting
 		 */
-		for (bit = bms_next_member(attrs_used, -1); bit > 0; bit = bms_next_member(attrs_used, bit))
+		for (bit = bms_next_member(attrs_used, 0 - FirstLowInvalidHeapAttributeNumber); bit > 0;
+			 bit = bms_next_member(attrs_used, bit))
 		{
 			/* bits are offset by FirstLowInvalidHeapAttributeNumber */
 			AttrNumber ht_attno = bit + FirstLowInvalidHeapAttributeNumber;
@@ -283,6 +292,11 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 		Var *var = (Var *) node;
 		Var *new_var;
 		char *colname;
+
+		/* constify tableoid in quals */
+		if (var->varno == info->chunk_rel->relid && var->varattno == TableOidAttributeNumber)
+			return (Node *)
+				makeConst(OIDOID, -1, InvalidOid, 4, (Datum) info->chunk_rte->relid, false, true);
 
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
@@ -432,7 +446,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
-	settings = list_make2_int(dcpath->info->hypertable_id, dcpath->reverse);
+	settings = list_make2_int(dcpath->info->hypertable_id, dcpath->info->chunk_rte->relid);
 	cscan->custom_private = list_make2(settings, dcpath->varattno_map);
 
 	return &cscan->scan.plan;

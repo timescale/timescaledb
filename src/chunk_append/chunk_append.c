@@ -348,6 +348,10 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	else
 		return false;
 
+	/* ordered append won't work for system columns / whole row orderings */
+	if (sort_var->varattno <= 0)
+		return false;
+
 	sort_relid = sort_var->varno;
 	tce = lookup_type_cache(sort_var->vartype,
 							TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);

@@ -14,9 +14,13 @@ CREATE INDEX ON metrics_ordered(device_id,device_id_peer,time);
 CREATE INDEX ON metrics_ordered(device_id,time);
 CREATE INDEX ON metrics_ordered(device_id_peer,time);
 
-SELECT compress_chunk('_timescaledb_internal._hyper_5_20_chunk');
-SELECT compress_chunk('_timescaledb_internal._hyper_5_21_chunk');
-SELECT compress_chunk('_timescaledb_internal._hyper_5_22_chunk');
+-- compress all chunks
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'metrics_ordered'
+ORDER BY c.id;
 
 -- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys
 :PREFIX SELECT * FROM metrics_ordered ORDER BY time DESC LIMIT 10;

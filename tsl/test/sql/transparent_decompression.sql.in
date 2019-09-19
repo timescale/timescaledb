@@ -64,26 +64,27 @@ SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
 SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
 
--- test system columns
-\set ON_ERROR_STOP 0
-SELECT tableoid FROM :TEST_TABLE ORDER BY time;
-SELECT xmin FROM :TEST_TABLE ORDER BY time;
-SELECT cmin FROM :TEST_TABLE ORDER BY time;
-SELECT xmax FROM :TEST_TABLE ORDER BY time;
-SELECT cmax FROM :TEST_TABLE ORDER BY time;
-SELECT ctid FROM :TEST_TABLE ORDER BY time;
-\set ON_ERROR_STOP 1
+SELECT
+	ht.schema_name || '.' || ht.table_name AS "METRICS_COMPRESSED"
+FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name = 'metrics'
+\gset
+SELECT
+	ht.schema_name || '.' || ht.table_name AS "METRICS_SPACE_COMPRESSED"
+FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name = 'metrics_space'
+\gset
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- TODO this should change once we have a canonical way to create indexes on compressed tables
-CREATE INDEX c_index ON _timescaledb_internal._compressed_hypertable_3(device_id);
-CREATE INDEX c_space_index ON _timescaledb_internal._compressed_hypertable_4(device_id);
+CREATE INDEX c_index ON :METRICS_COMPRESSED(device_id);
+CREATE INDEX c_space_index ON :METRICS_SPACE_COMPRESSED(device_id);
 
-CREATE INDEX c_index_2 ON _timescaledb_internal._compressed_hypertable_3(device_id, _ts_meta_count);
-CREATE INDEX c_space_index_2 ON _timescaledb_internal._compressed_hypertable_4(device_id, _ts_meta_count);
+CREATE INDEX c_index_2 ON :METRICS_COMPRESSED(device_id, _ts_meta_count);
+CREATE INDEX c_space_index_2 ON :METRICS_SPACE_COMPRESSED(device_id, _ts_meta_count);
 
-CREATE INDEX ON _timescaledb_internal._compressed_hypertable_3(device_id_peer);
-CREATE INDEX ON _timescaledb_internal._compressed_hypertable_4(device_id_peer);
+CREATE INDEX ON :METRICS_COMPRESSED(device_id_peer);
+CREATE INDEX ON :METRICS_SPACE_COMPRESSED(device_id_peer);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE INDEX ON metrics_space(device_id,device_id_peer, v0, v1 desc, time);
@@ -127,6 +128,7 @@ SET max_parallel_workers_per_gather TO 0;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 \ir include/transparent_decompression_ordered.sql
+\ir include/transparent_decompression_systemcolumns.sql
 
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
