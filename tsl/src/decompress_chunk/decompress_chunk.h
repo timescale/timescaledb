@@ -46,7 +46,6 @@ typedef struct DecompressChunkPath
 	 * that do not have a representation in the uncompressed chunk
 	 */
 	List *varattno_map;
-	bool reverse;
 	bool needs_sequence_num;
 } DecompressChunkPath;
 

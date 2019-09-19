@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <miscadmin.h>
+#include <access/sysattr.h>
 #include <executor/executor.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -70,6 +71,7 @@ typedef struct DecompressChunkState
 	bool initialized;
 	bool reverse;
 	int hypertable_id;
+	Oid chunk_relid;
 	List *hypertable_compression_info;
 	int counter;
 	MemoryContext per_batch_context;
@@ -100,7 +102,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 
 	settings = linitial(cscan->custom_private);
 	state->hypertable_id = linitial_int(settings);
-	state->reverse = lsecond_int(settings);
+	state->chunk_relid = lsecond_int(settings);
 	state->varattno_map = lsecond(cscan->custom_private);
 
 	return (Node *) state;
@@ -165,6 +167,53 @@ initialize_column_state(DecompressChunkState *state)
 	}
 }
 
+typedef struct ConstifyTableOidContext
+{
+	Index chunk_index;
+	Oid chunk_relid;
+} ConstifyTableOidContext;
+
+static Node *
+constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Var))
+	{
+		Var *var = castNode(Var, node);
+
+		if (var->varno != ctx->chunk_index)
+			return node;
+
+		if (var->varattno == TableOidAttributeNumber)
+			return (
+				Node *) makeConst(OIDOID, -1, InvalidOid, 4, (Datum) ctx->chunk_relid, false, true);
+
+		/*
+		 * we doublecheck system columns here because projection will
+		 * segfault if any system columns get through
+		 */
+		if (var->varattno < 0)
+			elog(ERROR, "transparent decompression only supports tableoid system column");
+
+		return node;
+	}
+
+	return expression_tree_mutator(node, constify_tableoid_walker, (void *) ctx);
+}
+
+static List *
+constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
+{
+	ConstifyTableOidContext ctx = {
+		.chunk_index = chunk_index,
+		.chunk_relid = chunk_relid,
+	};
+
+	return (List *) constify_tableoid_walker((Node *) node, &ctx);
+}
+
 /*
  * Complete initialization of the supplied CustomScanState.
  *
@@ -179,8 +228,28 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
 
-	if (eflags & EXEC_FLAG_BACKWARD)
-		state->reverse = !state->reverse;
+	if (node->ss.ps.ps_ProjInfo)
+	{
+		/*
+		 * if we are projecting we need to constify tableoid references here
+		 * because decompressed tuple are virtual tuples and don't have
+		 * system columns.
+		 *
+		 * We do the constify in executor because even after plan creation
+		 * our targetlist might still get modified by parent nodes pushing
+		 * down targetlist.
+		 */
+		List *tlist = node->ss.ps.plan->targetlist;
+		PlanState *ps = &node->ss.ps;
+		tlist = constify_tableoid(tlist, cscan->scan.scanrelid, state->chunk_relid);
+
+		ps->ps_ProjInfo =
+			ExecBuildProjectionInfoCompat(tlist,
+										  ps->ps_ExprContext,
+										  ps->ps_ResultTupleSlot,
+										  ps,
+										  node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
+	}
 
 	state->hypertable_compression_info = ts_hypertable_compression_get(state->hypertable_id);
 

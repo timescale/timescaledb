@@ -254,3 +254,12 @@ EXECUTE param_prep(1);
 EXECUTE param_prep(2);
 EXECUTE param_prep(1);
 DEALLOCATE param_prep;
+
+-- test continuous aggs
+SET client_min_messages TO error;
+CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
+REFRESH MATERIALIZED VIEW cagg_test;
+SELECT time FROM cagg_test ORDER BY time LIMIT 1;
+DROP VIEW cagg_test CASCADE;
+RESET client_min_messages;
+
