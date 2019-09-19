@@ -22,6 +22,7 @@
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
+#include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -101,6 +102,9 @@ typedef struct PerColumn
 
 typedef struct RowCompressor
 {
+	/* memory context reset per-row is stored */
+	MemoryContext per_row_ctx;
+
 	/* the table we're writing the compressed data to */
 	Relation compressed_table;
 	BulkInsertState bistate;
@@ -439,6 +443,9 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
 
 	*row_compressor = (RowCompressor){
+		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+											 "compress chunk per-row",
+											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
 		.bistate = GetBulkInsertState(),
 		.n_input_columns = uncompressed_tuple_desc->natts,
@@ -520,6 +527,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	TupleTableSlot *slot = MakeTupleTableSlotCompat(sorted_desc);
 	bool got_tuple;
 	bool first_iteration = true;
+
 	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
 #if !PG96
@@ -537,7 +545,9 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 											NULL /*=abbrev*/))
 	{
 		bool changed_groups, compressed_row_is_full;
+		MemoryContext old_ctx;
 		slot_getallattrs(slot);
+		old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
 
 		/* first time through */
 		if (first_iteration)
@@ -558,6 +568,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 		}
 
 		row_compressor_append_row(row_compressor, slot);
+		MemoryContextSwitchTo(old_ctx);
 		ExecClearTuple(slot);
 	}
 
@@ -586,9 +597,11 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		Assert(column->compressor == NULL);
 
+		MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
 		// TODO we should just use array access here; everything is guaranteed to be fetched
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		segment_info_update(column->segment_info, val, is_null);
+		MemoryContextSwitchTo(row_compressor->per_row_ctx);
 	}
 }
 
@@ -769,6 +782,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	}
 
 	row_compressor->rows_compressed_into_current_value = 0;
+	MemoryContextReset(row_compressor->per_row_ctx);
 }
 
 static void
@@ -1098,6 +1112,7 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor)
 		 */
 		if (!is_done || !wrote_data)
 		{
+			// FIXME getting invalid bool here
 			HeapTuple decompressed_tuple = heap_form_tuple(row_decompressor->out_desc,
 														   row_decompressor->decompressed_datums,
 														   row_decompressor->decompressed_is_nulls);
