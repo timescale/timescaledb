@@ -252,7 +252,6 @@ async_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_pa
 	Plan *subplan;
 
 	cscan->methods = &async_append_plan_methods;
-	cscan->custom_plans = custom_plans;
 	/* output target list */
 	cscan->scan.plan.targetlist = tlist;
 	/* we don't scan a real relation here */
@@ -271,6 +270,7 @@ async_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_pa
 		custom_plans = list_make1(result->plan.lefttree);
 	}
 
+	cscan->custom_plans = custom_plans;
 	subplan = linitial(custom_plans);
 	if (!(IsA(subplan, MergeAppend) || IsA(subplan, Append)))
 		elog(ERROR, "unexpected child node of AsyncAppend");
