@@ -48,7 +48,7 @@ static Plan *
 adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
 				 AttrNumber *sortColIdx)
 {
-	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid);
+	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid, false);
 	int childSortCols;
 	Oid *sortOperators;
 	Oid *collations;
@@ -113,7 +113,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
 			{
 				/* if this is an append child we need to adjust targetlist references */
-				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child_path->parent->relid);
+				AppendRelInfo *appinfo =
+					ts_get_appendrelinfo(root, child_path->parent->relid, false);
 
 				child_plan->targetlist =
 					(List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
@@ -241,7 +242,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			{
 				List *chunk_clauses = NIL;
 				ListCell *lc;
-				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid);
+				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
 
 				foreach (lc, clauses)
 				{

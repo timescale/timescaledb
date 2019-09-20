@@ -447,7 +447,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 				List *chunk_clauses = NIL;
 				ListCell *lc;
 				Index scanrelid = ((Scan *) plan)->scanrelid;
-				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scanrelid);
+				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scanrelid, false);
 
 				foreach (lc, clauses)
 				{

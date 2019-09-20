@@ -312,40 +312,36 @@ get_parentoid(PlannerInfo *root, Index rti)
 	return 0;
 }
 
-static void
-timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+/* is this a hypertable's chunk involved in DML
+: used only for updates and deletes for compression now */
+static bool
+is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	Hypertable *ht;
-	Cache *hcache;
-	Oid ht_reloid = rte->relid;
+	if (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)
+	{
+		Oid parent_oid;
+		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, rti, true);
+		if (!appinfo)
+			return false;
+		parent_oid = appinfo->parent_reloid;
+		if (parent_oid != InvalidOid && rte->relid != parent_oid)
+		{
+			Cache *hcache = ts_hypertable_cache_pin();
+			Hypertable *parent_ht = ts_hypertable_cache_get_entry(hcache, parent_oid);
+			ts_cache_release(hcache);
+			if (parent_ht)
+				return true;
+		}
+	}
+	return false;
+}
 
-	if (prev_set_rel_pathlist_hook != NULL)
-		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
-
-	if (!ts_extension_is_loaded() || IS_DUMMY_REL(rel) || !OidIsValid(rte->relid))
-		return;
-
-	/* quick abort if only optimizing hypertables */
-	if (!ts_guc_optimize_non_hypertables &&
-		!(is_append_parent(rel, rte) || is_append_child(rel, rte)))
-		return;
-
-	hcache = ts_hypertable_cache_pin();
-
-	/*
-	 * if this is an append child we use the parent relid to
-	 * check if its a hypertable
-	 */
-	if (is_append_child(rel, rte))
-		ht_reloid = get_parentoid(root, rti);
-
-	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
-
-	if (ts_cm_functions->set_rel_pathlist_hook != NULL)
-		ts_cm_functions->set_rel_pathlist_hook(root, rel, rti, rte, ht);
-
+static void
+timescaledb_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti,
+								   RangeTblEntry *rte, Hypertable *ht)
+{
 	if (!should_optimize_query(ht))
-		goto out_release;
+		return;
 
 	if (ts_guc_optimize_non_hypertables)
 	{
@@ -423,8 +419,48 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			}
 		}
 	}
+	return;
+}
 
-out_release:
+static void
+timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+{
+	Hypertable *ht;
+	Cache *hcache;
+	Oid ht_reloid = rte->relid;
+	bool is_htdml;
+
+	if (prev_set_rel_pathlist_hook != NULL)
+		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+
+	if (!ts_extension_is_loaded() || IS_DUMMY_REL(rel) || !OidIsValid(rte->relid))
+		return;
+
+	/* do we have a DML transformation here */
+	is_htdml = is_hypertable_chunk_dml(root, rel, rti, rte);
+
+	/* quick abort if only optimizing hypertables */
+	if (!ts_guc_optimize_non_hypertables &&
+		!(is_append_parent(rel, rte) || is_append_child(rel, rte) || is_htdml))
+		return;
+
+	hcache = ts_hypertable_cache_pin();
+
+	/*
+	 * if this is an append child or DML we use the parent relid to
+	 * check if its a hypertable
+	 */
+	if (is_append_child(rel, rte) || is_htdml)
+		ht_reloid = get_parentoid(root, rti);
+
+	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
+
+	if (ts_cm_functions->set_rel_pathlist_hook != NULL)
+		ts_cm_functions->set_rel_pathlist_hook(root, rel, rti, rte, ht, is_htdml);
+	if (!is_htdml)
+	{
+		timescaledb_set_rel_pathlist_query(root, rel, rti, rte, ht);
+	}
 	ts_cache_release(hcache);
 }
 
