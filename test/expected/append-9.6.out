@@ -1372,6 +1372,27 @@ ORDER BY time DESC, device_id;
                      Index Cond: ("time" = m1."time")
 (20 rows)
 
+-- test runtime exclusion and startup exclusions
+:PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time AND m2.time < '2000-01-10'::text::timestamptz LIMIT 1) m2 ON true ORDER BY m1.time;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1
+         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2
+         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3
+         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4
+         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5
+   ->  Limit
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2
+               Chunks excluded during startup: 3
+               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1
+                     Index Cond: (("time" < ('2000-01-10'::cstring)::timestamp with time zone) AND ("time" = m1."time"))
+               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2
+                     Index Cond: (("time" < ('2000-01-10'::cstring)::timestamp with time zone) AND ("time" = m1."time"))
+(15 rows)
+
 -- test runtime exclusion does not activate for constraints on non-partitioning columns
 -- should not use runtime exclusion
 :PREFIX SELECT * FROM append_test a LEFT JOIN LATERAL(SELECT * FROM join_test j WHERE a.colorid = j.colorid ORDER BY time DESC LIMIT 1) j ON true ORDER BY a.time LIMIT 1;
@@ -2200,7 +2221,7 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:363: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_query.sql:366: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit

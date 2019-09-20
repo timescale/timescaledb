@@ -97,6 +97,10 @@ chunk_append_state_create(CustomScan *cscan)
 	state->current = INVALID_SUBPLAN_INDEX;
 	state->choose_next_subplan = choose_next_subplan_non_parallel;
 
+	state->exclusion_ctx = AllocSetContextCreate(CurrentMemoryContext,
+												 "ChunkApppend exclusion",
+												 ALLOCSET_DEFAULT_SIZES);
+
 	return (Node *) state;
 }
 
@@ -154,6 +158,21 @@ do_startup_exclusion(ChunkAppendState *state)
 
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
 				continue;
+
+			/*
+			 * if this node does runtime exclusion we keep the constified
+			 * expressions to save us some work during runtime exclusion
+			 */
+			if (state->runtime_exclusion)
+			{
+				List *const_ri_clauses = NIL;
+				foreach (lc, restrictinfos)
+				{
+					RestrictInfo *ri = lfirst(lc);
+					const_ri_clauses = lappend(const_ri_clauses, ri->clause);
+				}
+				ri_clauses = const_ri_clauses;
+			}
 		}
 
 		filtered_children = lappend(filtered_children, lfirst(lc_plan));
@@ -267,6 +286,9 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 		}
 		else
 		{
+			bool can_exclude;
+			MemoryContext old = MemoryContextSwitchTo(state->exclusion_ctx);
+
 			foreach (lc, lfirst(lc_clauses))
 			{
 				RestrictInfo *ri = makeNode(RestrictInfo);
@@ -275,7 +297,12 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 			}
 			restrictinfos = constify_restrictinfo_params(&root, ps->state, restrictinfos);
 
-			if (!can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
+			can_exclude = can_exclude_chunk(lfirst(lc_constraints), restrictinfos);
+
+			MemoryContextReset(state->exclusion_ctx);
+			MemoryContextSwitchTo(old);
+
+			if (!can_exclude)
 				state->valid_subplans = bms_add_member(state->valid_subplans, i);
 			else
 				state->runtime_number_exclusions++;
