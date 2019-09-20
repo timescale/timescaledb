@@ -71,7 +71,7 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 
-	appinfo = ts_get_appendrelinfo(root, chunk_rel->relid);
+	appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 	info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
 	info->hypertable_id = ht->fd.id;
 
@@ -115,7 +115,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 */
 	int parallel_workers = 1;
 
-	AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid);
+	AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 	Assert(chunk_info != NULL);
 	Assert(chunk_info->parent_reloid == ht->main_table_relid);
 	ht_index = chunk_info->parent_relid;

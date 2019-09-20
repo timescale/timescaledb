@@ -2417,7 +2417,7 @@ ts_chunk_dml_blocker(PG_FUNCTION_ARGS)
 		elog(ERROR, "dml_blocker: not called by trigger manager");
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("insert/update/delete not permitted on this chunk \"%s\"", relname),
+			 errmsg("insert/update/delete not permitted on chunk \"%s\"", relname),
 			 errhint("Make sure the chunk is not compressed.")));
 
 	PG_RETURN_NULL();

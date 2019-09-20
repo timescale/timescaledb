@@ -10,6 +10,7 @@ SET timescaledb.enable_transparent_decompression to OFF;
 --basic test with count
 create table foo (a integer, b integer, c integer, d integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
+create unique index foo_uniq ON foo (a, b);
 
 insert into foo values( 3 , 16 , 20, 11);
 insert into foo values( 10 , 10 , 20, 120);
@@ -48,7 +49,38 @@ insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
 delete from foo where a = 10;
 
---TEST2b decompress the chunk and try DML
+--TEST2b try complex DML on compressed chunk
+create table foo_join ( a integer, newval integer);
+select table_name from create_hypertable('foo_join', 'a', chunk_time_interval=> 10);
+insert into foo_join select generate_series(0,40, 10), 111;
+create table foo_join2 ( a integer, newval integer);
+select table_name from create_hypertable('foo_join2', 'a', chunk_time_interval=> 10);
+insert into foo_join select generate_series(0,40, 10), 222;
+update foo
+set b = newval
+from foo_join where foo.a = foo_join.a;
+update foo
+set b = newval
+from foo_join where foo.a = foo_join.a and foo_join.a > 10;
+--here the chunk gets excluded , so succeeds --
+update foo
+set b = newval
+from foo_join where foo.a = foo_join.a and foo.a > 20;
+update foo
+set b = (select f1.newval from foo_join f1 left join lateral (select newval as newval2 from  foo_join2 f2 where f1.a= f2.a ) subq on true limit 1);
+
+--upsert test --
+insert into foo values(10, 12, 12, 12)
+on conflict( a, b)
+do update set b = excluded.b;
+
+--TEST2c dml directly on the chunk NOTE update/deletes don't get blocked (TODO)
+insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
+update _timescaledb_internal._hyper_1_2_chunk
+set b = 12;
+delete from _timescaledb_internal._hyper_1_2_chunk;
+ 
+--TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;

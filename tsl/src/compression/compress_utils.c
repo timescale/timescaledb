@@ -124,7 +124,7 @@ chunk_dml_blocker_trigger_add(Oid relid)
 	Oid schemaid = get_rel_namespace(relid);
 	char *schema = get_namespace_name(schemaid);
 
-    /* stmt triggers are blocked on hypertable chunks */
+	/* stmt triggers are blocked on hypertable chunks */
 	CreateTrigStmt stmt = {
 		.type = T_CreateTrigStmt,
 		.row = true,

@@ -45,8 +45,8 @@ typedef struct CrossModuleFunctions
 	Datum (*remove_reorder_policy)(PG_FUNCTION_ARGS);
 	Datum (*remove_compress_chunks_policy)(PG_FUNCTION_ARGS);
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
-	void (*set_rel_pathlist_hook)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
-								  Hypertable *);
+	void (*set_rel_pathlist_hook)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *,
+								  bool isdml);
 	PGFunction gapfill_marker;
 	PGFunction gapfill_int16_time_bucket;
 	PGFunction gapfill_int32_time_bucket;

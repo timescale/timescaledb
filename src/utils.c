@@ -576,7 +576,7 @@ ts_get_cast_func(Oid source, Oid target)
 }
 
 AppendRelInfo *
-ts_get_appendrelinfo(PlannerInfo *root, Index rti)
+ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 {
 	ListCell *lc;
 #if PG11_GE
@@ -585,10 +585,11 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti)
 	{
 		if (root->append_rel_array[rti])
 			return root->append_rel_array[rti];
-		else
+		if (!missing_ok)
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no appendrelinfo found for index %d", rti)));
+		return NULL;
 	}
 #endif
 
@@ -598,9 +599,11 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti)
 		if (appinfo->child_relid == rti)
 			return appinfo;
 	}
-	ereport(ERROR,
-			(errcode(ERRCODE_INTERNAL_ERROR), errmsg("no appendrelinfo found for index %d", rti)));
-	pg_unreachable();
+	if (!missing_ok)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("no appendrelinfo found for index %d", rti)));
+	return NULL;
 }
 
 Expr *
