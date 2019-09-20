@@ -67,6 +67,8 @@ set(SOURCES
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   set(TS_DEBUG 1)
   set(DEBUG 1)
+  list(APPEND SOURCES
+    debug_guc.c)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 include(build-defs.cmake)

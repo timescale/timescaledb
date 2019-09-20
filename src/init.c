@@ -14,6 +14,7 @@
 #include "extension.h"
 #include "bgw/launcher_interface.h"
 #include "guc.h"
+#include "debug_guc.h"
 #include "catalog.h"
 #include "version.h"
 #include "compat.h"
@@ -89,6 +90,7 @@ _PG_init(void)
 #endif
 #ifdef TS_DEBUG
 	_conn_mock_init();
+	ts_debug_init();
 #endif
 }
 
