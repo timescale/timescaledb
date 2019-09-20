@@ -1,0 +1,111 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.debug_optimizer_flags = '';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ 
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=final';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=final
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=fin';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=fin
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=fin,win';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=fin,win
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=*,fin,win';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=*,fin,win
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=*';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=*
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=win:show_rel';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=win:show_rel
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = '"show_upper=win":show_rel';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ "show_upper=win":show_rel
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_upper=win : show_rel';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_upper=win : show_rel
+(1 row)
+
+SET timescaledb.debug_optimizer_flags = 'show_rel:show_upper=win';
+SHOW timescaledb.debug_optimizer_flags;
+ timescaledb.debug_optimizer_flags 
+-----------------------------------
+ show_rel:show_upper=win
+(1 row)
+
+-- These should all fail
+\set ON_ERROR_STOP 0
+SET timescaledb.debug_optimizer_flags = NULL;
+ERROR:  syntax error at or near "NULL" at character 41
+SET timescaledb.debug_optimizer_flags = 'invalid';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "invalid"
+SET timescaledb.debug_optimizer_flags = '"unmatched quote:';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": ""unmatched quote:"
+SET timescaledb.debug_optimizer_flags = 'space between';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "space between"
+SET timescaledb.debug_optimizer_flags = 'space between:';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "space between:"
+SET timescaledb.debug_optimizer_flags = 'show_rel:invalid';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "show_rel:invalid"
+SET timescaledb.debug_optimizer_flags = 'invalid:show_rel';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "invalid:show_rel"
+SET timescaledb.debug_optimizer_flags = 'show_upper=xxx';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=fin,xxx';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=xxx,fin';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=win,xxx,fin';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=xxx';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=*,xxx';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=xxx,*';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=xxx,*,yyy';
+ERROR:  unrecognized flag option "xxx"
+SET timescaledb.debug_optimizer_flags = 'show_upper=supercalifragilisticexpialidochious';
+ERROR:  unrecognized flag option "supercalifragili..."
+SET timescaledb.debug_optimizer_flags = 'show_upper=super,califragilisticexpialidochious';
+ERROR:  unrecognized flag option "super"
+\set ON_ERROR_STOP 1
