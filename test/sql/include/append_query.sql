@@ -253,6 +253,9 @@ ORDER BY time DESC, device_id;
 -- test runtime exclusion with LATERAL and 2 hypertables
 :PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
 
+-- test runtime exclusion and startup exclusions
+:PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time AND m2.time < '2000-01-10'::text::timestamptz LIMIT 1) m2 ON true ORDER BY m1.time;
+
 -- test runtime exclusion does not activate for constraints on non-partitioning columns
 -- should not use runtime exclusion
 :PREFIX SELECT * FROM append_test a LEFT JOIN LATERAL(SELECT * FROM join_test j WHERE a.colorid = j.colorid ORDER BY time DESC LIMIT 1) j ON true ORDER BY a.time LIMIT 1;

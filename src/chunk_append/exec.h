@@ -20,6 +20,9 @@ typedef struct ChunkAppendState
 {
 	CustomScanState csstate;
 	PlanState **subplanstates;
+
+	MemoryContext exclusion_ctx;
+
 	int num_subplans;
 	int current;
 
