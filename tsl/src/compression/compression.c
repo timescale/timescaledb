@@ -965,15 +965,22 @@ decompress_chunk(Oid in_table, Oid out_table)
 		bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * in_desc->natts);
 
 		HeapTuple compressed_tuple;
-		HeapScanDesc heapScan;
+		HeapScanDesc heapScan = heap_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+		MemoryContext per_compressed_row_ctx =
+			AllocSetContextCreate(CurrentMemoryContext,
+								  "decompress chunk per-compressed row",
+								  ALLOCSET_DEFAULT_SIZES);
 
-		heapScan = heap_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 		for (compressed_tuple = heap_getnext(heapScan, ForwardScanDirection);
 			 compressed_tuple != NULL;
 			 compressed_tuple = heap_getnext(heapScan, ForwardScanDirection))
 		{
+			MemoryContext old_ctx;
+
 			if (!HeapTupleIsValid(compressed_tuple))
 				continue;
+
+			old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
 
 			heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
 			populate_per_compressed_columns_from_data(decompressor.per_compressed_cols,
@@ -982,6 +989,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 													  compressed_is_nulls);
 
 			row_decompressor_decompress_row(&decompressor);
+			MemoryContextSwitchTo(old_ctx);
 		}
 
 		heap_endscan(heapScan);
@@ -1122,6 +1130,7 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor)
 						0 /*=options*/,
 						row_decompressor->bistate);
 
+			heap_freetuple(decompressed_tuple);
 			wrote_data = true;
 		}
 	} while (!is_done);
