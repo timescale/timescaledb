@@ -1682,7 +1682,7 @@ ORDER BY time DESC, device_id;
    Hash Cond: (g."time" = m."time")
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Hash (actual rows=26787 loops=1)
-         Buckets: 32768  Batches: 1  Memory Usage: 1303kB
+         Buckets: 32768  Batches: 1 
          ->  Append (actual rows=26787 loops=1)
                ->  Seq Scan on _hyper_5_17_chunk m (actual rows=4032 loops=1)
                ->  Seq Scan on _hyper_5_18_chunk m_1 (actual rows=6048 loops=1)
