@@ -194,9 +194,10 @@ dist_txn_xact_callback_abort()
 	testing_callback_call("pre-abort");
 	remote_txn_store_foreach(state.store, remote_txn)
 	{
-		if (!remote_txn_abort(remote_txn))
+		if (!remote_txn_is_ongoing(remote_txn) || !remote_txn_abort(remote_txn))
 		{
-			elog(WARNING, "failure aborting remote transaction during local abort");
+			if (remote_txn_is_ongoing(remote_txn))
+				elog(WARNING, "failure aborting remote transaction during local abort");
 			remote_txn_store_remove(state.store, remote_txn_get_connection_id(remote_txn));
 		}
 	}

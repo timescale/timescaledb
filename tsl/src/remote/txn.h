@@ -37,6 +37,7 @@ extern TSConnectionId remote_txn_get_connection_id(RemoteTxn *txn);
 extern bool remote_txn_is_still_in_progress(TransactionId frontend_xid);
 extern size_t remote_txn_size(void);
 extern bool remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel);
+extern bool remote_txn_is_ongoing(RemoteTxn *entry);
 
 /* Messages/communication */
 extern AsyncRequest *remote_txn_async_send_commit(RemoteTxn *entry);
