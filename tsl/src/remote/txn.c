@@ -358,6 +358,14 @@ remote_txn_abort(RemoteTxn *entry)
 	return true;
 }
 
+/* Check if there is ongoing transaction on the remote node */
+bool
+remote_txn_is_ongoing(RemoteTxn *entry)
+{
+	Assert(entry->xact_depth >= 0);
+	return entry->xact_depth != 0;
+}
+
 /*
  * If there were any errors in subtransactions, and we made prepared
  * statements, those prepared statements may not have been cleared
