@@ -56,6 +56,7 @@ create_datum_serializer(Oid type_oid)
 		.type_storage = type->typstorage,
 		.type_send = type->typsend,
 		.type_out = type->typoutput,
+		.use_binary_send = OidIsValid(type->typsend),
 	};
 
 	ReleaseSysCache(tup);
@@ -75,8 +76,6 @@ load_send_fn(DatumSerializer *ser)
 		return;
 
 	ser->send_info_set = true;
-
-	ser->use_binary_send = OidIsValid(ser->type_send);
 
 	if (ser->use_binary_send)
 		fmgr_info(ser->type_send, &ser->send_flinfo);
@@ -125,6 +124,12 @@ datum_get_bytes_size(DatumSerializer *serializer, Size start_offset, Datum val)
 	}
 
 	return data_length;
+}
+
+BinaryStringEncoding
+datum_serializer_binary_string_encoding(DatumSerializer *serializer)
+{
+	return (serializer->use_binary_send ? BINARY_ENCODING : TEXT_ENCODING);
 }
 
 static void
@@ -344,10 +349,16 @@ binary_string_get_type(StringInfo buffer)
 }
 
 void
-datum_append_to_binary_string(DatumSerializer *serializer, StringInfo buffer, Datum datum)
+datum_append_to_binary_string(DatumSerializer *serializer, BinaryStringEncoding encoding,
+							  StringInfo buffer, Datum datum)
 {
 	load_send_fn(serializer);
-	pq_sendbyte(buffer, serializer->use_binary_send);
+
+	if (encoding == MESSAGE_SPECIFIES_ENCODING)
+		pq_sendbyte(buffer, serializer->use_binary_send);
+	else if (encoding != datum_serializer_binary_string_encoding(serializer))
+		elog(ERROR, "incorrect encoding chosen in datum_append_to_binary_string");
+
 	if (serializer->use_binary_send)
 	{
 		bytea *output = SendFunctionCall(&serializer->send_flinfo, datum);
@@ -362,10 +373,25 @@ datum_append_to_binary_string(DatumSerializer *serializer, StringInfo buffer, Da
 }
 
 Datum
-binary_string_to_datum(DatumDeserializer *deserializer, StringInfo buffer)
+binary_string_to_datum(DatumDeserializer *deserializer, BinaryStringEncoding encoding,
+					   StringInfo buffer)
 {
-	bool use_binary_recv = pq_getmsgbyte(buffer) != 0;
 	Datum res;
+	bool use_binary_recv = false;
+
+	switch (encoding)
+	{
+		case BINARY_ENCODING:
+			use_binary_recv = true;
+			break;
+		case TEXT_ENCODING:
+			use_binary_recv = false;
+			break;
+		case MESSAGE_SPECIFIES_ENCODING:
+			use_binary_recv = pq_getmsgbyte(buffer) != 0;
+			break;
+	}
+
 	load_recv_fn(deserializer, use_binary_recv);
 
 	if (use_binary_recv)

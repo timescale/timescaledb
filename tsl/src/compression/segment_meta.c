@@ -214,8 +214,8 @@ segment_meta_min_max_to_binary_string(SegmentMetaMinMax *meta)
 	pq_sendbyte(&buf, meta->flags);
 	type_append_to_binary_string(meta->type, &buf);
 
-	datum_append_to_binary_string(ser, &buf, min);
-	datum_append_to_binary_string(ser, &buf, max);
+	datum_append_to_binary_string(ser, MESSAGE_SPECIFIES_ENCODING, &buf, min);
+	datum_append_to_binary_string(ser, MESSAGE_SPECIFIES_ENCODING, &buf, max);
 
 	return pq_endtypsend(&buf);
 }
@@ -237,8 +237,8 @@ segment_meta_min_max_from_binary_string(StringInfo buf)
 			.has_null = (flags & HAS_NULLS) != 0,
 			.type_by_val = type->typbyval,
 			.type_len = type->typlen,
-			.min = binary_string_to_datum(deser, buf),
-			.max = binary_string_to_datum(deser, buf),
+			.min = binary_string_to_datum(deser, MESSAGE_SPECIFIES_ENCODING, buf),
+			.max = binary_string_to_datum(deser, MESSAGE_SPECIFIES_ENCODING, buf),
 		};
 
 		return segment_meta_min_max_builder_finish(&builder);
