@@ -27,6 +27,7 @@
 #include "compression/simple8b_rle.h"
 #include "compression/array.h"
 #include "compression/dictionary_hash.h"
+#include "compression/datum_serialize.h"
 
 /*
  * A compression bitmap is stored as
@@ -563,9 +564,6 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
 	uint32 data_size;
 	uint32 size;
-	char *namespace_name;
-	Form_pg_type type_tuple;
-	HeapTuple tup;
 	const DictionaryCompressed *compressed_header;
 	const char *compressed_data;
 
@@ -581,16 +579,7 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 
 	pq_sendbyte(buffer, compressed_header->has_nulls == true);
 
-	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(compressed_header->element_type));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for type %u", compressed_header->element_type);
-
-	type_tuple = (Form_pg_type) GETSTRUCT(tup);
-
-	namespace_name = get_namespace_name(type_tuple->typnamespace);
-
-	pq_sendstring(buffer, namespace_name);
-	pq_sendstring(buffer, NameStr(type_tuple->typname));
+	type_append_to_binary_string(compressed_header->element_type, buffer);
 
 	size = simple8brle_serialized_total_size((void *) compressed_data);
 	simple8brle_serialized_send(buffer, (void *) compressed_data);
@@ -610,8 +599,6 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 							   data_size,
 							   compressed_header->element_type,
 							   false);
-
-	ReleaseSysCache(tup);
 }
 
 Datum
@@ -619,26 +606,13 @@ dictionary_compressed_recv(StringInfo buffer)
 {
 	DictionaryCompressorSerializationInfo data = { 0 };
 	uint8 has_nulls;
-	const char *element_type_namespace;
-	const char *element_type_name;
-	Oid namespace_oid;
 	Oid element_type;
 
 	has_nulls = pq_getmsgbyte(buffer);
 	if (has_nulls != 0 && has_nulls != 1)
 		elog(ERROR, "invalid recv in dict: bad bool");
 
-	element_type_namespace = pq_getmsgstring(buffer);
-	element_type_name = pq_getmsgstring(buffer);
-
-	namespace_oid = LookupExplicitNamespace(element_type_namespace, false);
-
-	element_type = GetSysCacheOid2(TYPENAMENSP,
-								   PointerGetDatum(element_type_name),
-								   ObjectIdGetDatum(namespace_oid));
-	if (!OidIsValid(element_type))
-		elog(ERROR, "could not find type %s.%s", element_type_namespace, element_type_name);
-
+	element_type = binary_string_get_type(buffer);
 	data.dictionary_compressed_indexes = simple8brle_serialized_recv(buffer);
 	data.bitmaps_size = simple8brle_serialized_total_size(data.dictionary_compressed_indexes);
 	data.total_size = MAXALIGN(sizeof(DictionaryCompressed)) + data.bitmaps_size;

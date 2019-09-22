@@ -532,17 +532,10 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 	ArrayCompressor *compressor = array_compressor_alloc(element_type);
 	Simple8bRleDecompressionIterator nulls;
 	uint8 has_nulls;
+	DatumDeserializer *deser = create_datum_deserializer(element_type);
 	bool use_binary_recv;
-	FmgrInfo recv_flinfo;
-	Oid typIOParam;
 	uint32 num_elements;
 	uint32 i;
-	Form_pg_type type_tuple;
-	HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(element_type));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for type %u", element_type);
-
-	type_tuple = (Form_pg_type) GETSTRUCT(tup);
 
 	has_nulls = pq_getmsgbyte(buffer) != 0;
 	if (has_nulls)
@@ -550,17 +543,6 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 														simple8brle_serialized_recv(buffer));
 
 	use_binary_recv = pq_getmsgbyte(buffer) != 0;
-	if (use_binary_recv && !OidIsValid(type_tuple->typreceive))
-		elog(ERROR, "could not find binary recv for type %s", NameStr(type_tuple->typname));
-
-	if (use_binary_recv)
-	{
-		fmgr_info(type_tuple->typreceive, &recv_flinfo);
-	}
-	else
-		fmgr_info(type_tuple->typinput, &recv_flinfo);
-
-	typIOParam = getTypeIOParam(tup);
 
 	/* This is actually the number of not-null elements */
 	num_elements = pq_getmsgint32(buffer);
@@ -584,28 +566,12 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 			}
 		}
 
-		if (use_binary_recv)
-		{
-			uint32 data_size = pq_getmsgint32(buffer);
-			const char *bytes = pq_getmsgbytes(buffer, data_size);
-			StringInfoData d = {
-				.data = (char *) bytes,
-				.len = data_size,
-				.maxlen = data_size,
-			};
-			val = ReceiveFunctionCall(&recv_flinfo, &d, typIOParam, type_tuple->typtypmod);
-		}
-		else
-		{
-			const char *string = pq_getmsgstring(buffer);
-			val =
-				InputFunctionCall(&recv_flinfo, (char *) string, typIOParam, type_tuple->typtypmod);
-		}
+		val = binary_string_to_datum(deser,
+									 use_binary_recv ? BINARY_ENCODING : TEXT_ENCODING,
+									 buffer);
 
 		array_compressor_append(compressor, val);
 	}
-
-	ReleaseSysCache(tup);
 
 	return array_compressor_get_serialization_info(compressor);
 }
@@ -617,13 +583,8 @@ array_compressed_data_send(StringInfo buffer, const char *serialized_data, Size 
 	ArrayCompressedData data;
 	DecompressionIterator *data_iter;
 	DecompressResult datum;
-	FmgrInfo send_flinfo;
-	bool use_binary_send;
-	Form_pg_type type_tuple;
-	HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(element_type));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for type %u", element_type);
-	type_tuple = (Form_pg_type) GETSTRUCT(tup);
+	DatumSerializer *serializer = create_datum_serializer(element_type);
+	BinaryStringEncoding encoding = datum_serializer_binary_string_encoding(serializer);
 
 	data = array_compressed_data_from_bytes(serialized_data, data_size, element_type, has_nulls);
 
@@ -631,13 +592,7 @@ array_compressed_data_send(StringInfo buffer, const char *serialized_data, Size 
 	if (data.nulls != NULL)
 		simple8brle_serialized_send(buffer, data.nulls);
 
-	use_binary_send = OidIsValid(type_tuple->typsend);
-	pq_sendbyte(buffer, use_binary_send == true);
-
-	if (use_binary_send)
-		fmgr_info(type_tuple->typsend, &send_flinfo);
-	else
-		fmgr_info(type_tuple->typoutput, &send_flinfo);
+	pq_sendbyte(buffer, encoding == BINARY_ENCODING);
 
 	/*
 	 * we do not send data.sizes because the sizes need not be the same once
@@ -656,20 +611,8 @@ array_compressed_data_send(StringInfo buffer, const char *serialized_data, Size 
 		if (datum.is_null)
 			continue;
 
-		if (use_binary_send)
-		{
-			bytea *output = SendFunctionCall(&send_flinfo, datum.val);
-			pq_sendint32(buffer, VARSIZE_ANY_EXHDR(output));
-			pq_sendbytes(buffer, VARDATA(output), VARSIZE_ANY_EXHDR(output));
-		}
-		else
-		{
-			char *output = OutputFunctionCall(&send_flinfo, datum.val);
-			pq_sendstring(buffer, output);
-		}
+		datum_append_to_binary_string(serializer, encoding, buffer, datum.val);
 	}
-
-	ReleaseSysCache(tup);
 }
 
 /********************
@@ -681,25 +624,13 @@ array_compressed_recv(StringInfo buffer)
 {
 	ArrayCompressorSerializationInfo *data;
 	uint8 has_nulls;
-	const char *element_type_namespace;
-	const char *element_type_name;
-	Oid namespace_oid;
 	Oid element_type;
 
 	has_nulls = pq_getmsgbyte(buffer);
 	if (has_nulls != 0 && has_nulls != 1)
 		elog(ERROR, "invalid recv in array: bad bool");
 
-	element_type_namespace = pq_getmsgstring(buffer);
-	element_type_name = pq_getmsgstring(buffer);
-
-	namespace_oid = LookupExplicitNamespace(element_type_namespace, false);
-
-	element_type = GetSysCacheOid2(TYPENAMENSP,
-								   PointerGetDatum(element_type_name),
-								   ObjectIdGetDatum(namespace_oid));
-	if (!OidIsValid(element_type))
-		elog(ERROR, "could not find type %s.%s", element_type_namespace, element_type_name);
+	element_type = binary_string_get_type(buffer);
 
 	data = array_compressed_data_recv(buffer, element_type);
 
@@ -711,9 +642,6 @@ array_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
 	const char *compressed_data = (char *) header;
 	uint32 data_size;
-	char *namespace_name;
-	Form_pg_type type_tuple;
-	HeapTuple tup;
 	ArrayCompressed *compressed_array_header;
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
@@ -726,23 +654,13 @@ array_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 
 	pq_sendbyte(buffer, compressed_array_header->has_nulls == true);
 
-	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(compressed_array_header->element_type));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for type %u", compressed_array_header->element_type);
-
-	type_tuple = (Form_pg_type) GETSTRUCT(tup);
-
-	namespace_name = get_namespace_name(type_tuple->typnamespace);
-
-	pq_sendstring(buffer, namespace_name);
-	pq_sendstring(buffer, NameStr(type_tuple->typname));
+	type_append_to_binary_string(compressed_array_header->element_type, buffer);
 
 	array_compressed_data_send(buffer,
 							   compressed_data,
 							   data_size,
 							   compressed_array_header->element_type,
 							   compressed_array_header->has_nulls);
-	ReleaseSysCache(tup);
 }
 
 extern Datum
