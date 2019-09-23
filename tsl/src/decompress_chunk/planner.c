@@ -217,7 +217,7 @@ build_compressed_scan_pathkeys(PlannerInfo *root, DecompressChunkPath *path)
 		Bitmapset *segmentby_columns = bms_copy(path->info->chunk_segmentby_ri);
 		ListCell *lc;
 		char *column_name;
-		FormData_hypertable_compression *ci;
+		PG_USED_FOR_ASSERTS_ONLY FormData_hypertable_compression *ci;
 		Oid sortop;
 
 		for (lc = list_head(chunk_pathkeys);
