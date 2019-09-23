@@ -248,6 +248,39 @@ add_license_info(JsonbParseState *state)
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 }
 
+static char *
+get_pgversion_string()
+{
+	StringInfo buf = makeStringInfo();
+	int major, minor, patch;
+
+	/*
+	 * We have to read the server version from GUC and not use any of
+	 * the macros. By using any of the macros we would get the version
+	 * the extension is compiled against instead of the version actually
+	 * running.
+	 */
+	char *server_version_num_guc = GetConfigOptionByName("server_version_num", NULL, false);
+	long server_version_num = strtol(server_version_num_guc, NULL, 10);
+
+	major = server_version_num / 10000;
+	minor = (server_version_num / 100) % 100;
+	patch = server_version_num % 100;
+
+	if (server_version_num < 100000)
+	{
+		Assert(major == 9 && minor == 6);
+		appendStringInfo(buf, "%d.%d.%d", major, minor, patch);
+	}
+	else
+	{
+		Assert(major >= 10 && minor == 0);
+		appendStringInfo(buf, "%d.%d", major, patch);
+	}
+
+	return buf->data;
+}
+
 static StringInfo
 build_version_body(void)
 {
@@ -288,11 +321,7 @@ build_version_body(void)
 	else
 		ts_jsonb_add_str(parseState, REQ_OS, "Unknown");
 
-	/*
-	 * PACKAGE_VERSION does not include extra details that some systems (e.g.,
-	 * Ubuntu) sometimes include in PG_VERSION
-	 */
-	ts_jsonb_add_str(parseState, REQ_PS_VERSION, PACKAGE_VERSION);
+	ts_jsonb_add_str(parseState, REQ_PS_VERSION, get_pgversion_string());
 	ts_jsonb_add_str(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
 	ts_jsonb_add_str(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
 	ts_jsonb_add_str(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
