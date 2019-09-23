@@ -16,6 +16,7 @@
 #include <utils/json.h>
 #include <utils/jsonb.h>
 #include <utils/jsonapi.h>
+#include <utils/memutils.h>
 #include <utils/datetime.h>
 
 #include <license_guc.h>
@@ -111,6 +112,8 @@ tsl_license_update_check(PG_FUNCTION_ARGS)
 static bool
 license_deserialize_enterprise(char *license_key, LicenseInfo *license_out)
 {
+	MemoryContext old_ctx;
+	MemoryContext deserialize_ctx;
 	LicenseInfo license_temp = { { 0 } };
 	const LicenseInfo *license_info = NULL;
 	size_t license_key_len = strlen(license_key);
@@ -138,8 +141,21 @@ license_deserialize_enterprise(char *license_key, LicenseInfo *license_out)
 			 */
 			if (license_key[1] != '1')
 				return false;
+
+			/* create a memory context so all temporary alloctions will be freed
+			 * when this is called during initialization, it will not happen
+			 * automatically
+			 */
+			deserialize_ctx = AllocSetContextCreate(CurrentMemoryContext,
+													"license deserialize",
+													ALLOCSET_SMALL_SIZES);
+			old_ctx = MemoryContextSwitchTo(deserialize_ctx);
 			if (license_info_init_from_base64(license_key + 2, &license_temp))
 				license_info = &license_temp;
+
+			MemoryContextSwitchTo(old_ctx);
+			MemoryContextDelete(deserialize_ctx);
+
 			break;
 		default:
 			return false;
