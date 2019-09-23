@@ -324,7 +324,7 @@ static bool
 test_job_dispatcher(BgwJob *job)
 {
 	ts_register_emit_log_hook();
-	ts_bgw_log_set_application_name(NameStr(job->fd.application_name));
+	ts_bgw_log_set_application_name(strdup(NameStr(job->fd.application_name)));
 
 	StartTransactionCommand();
 	ts_params_get();

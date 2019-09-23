@@ -125,13 +125,18 @@ ts_bgw_job_start(BgwJob *job, Oid user_uid)
 {
 	int32 job_id = Int32GetDatum(job->fd.id);
 	StringInfo si = makeStringInfo();
+	BackgroundWorkerHandle *bgw_handle;
 
 	/* Changing this requires changes to ts_bgw_job_entrypoint */
 	appendStringInfo(si, "%u %d", user_uid, job_id);
 
-	return ts_bgw_start_worker(job_entrypoint_function_name,
-							   NameStr(job->fd.application_name),
-							   si->data);
+	bgw_handle = ts_bgw_start_worker(job_entrypoint_function_name,
+									 NameStr(job->fd.application_name),
+									 si->data);
+
+	pfree(si->data);
+	pfree(si);
+	return bgw_handle;
 }
 
 static JobType
@@ -443,6 +448,7 @@ ts_bgw_job_execute(BgwJob *job)
 	{
 		case JOB_TYPE_VERSION_CHECK:
 		{
+			bool next_start_set;
 			/*
 			 * In the first 12 hours, we want telemetry to ping every
 			 * hour. After that initial period, we default to the
@@ -457,10 +463,12 @@ ts_bgw_job_execute(BgwJob *job)
 																	   Int32GetDatum(0),
 																	   Float8GetDatum(0)));
 
-			return ts_bgw_job_run_and_set_next_start(job,
-													 ts_telemetry_main_wrapper,
-													 TELEMETRY_INITIAL_NUM_RUNS,
-													 one_hour);
+			next_start_set = ts_bgw_job_run_and_set_next_start(job,
+															   ts_telemetry_main_wrapper,
+															   TELEMETRY_INITIAL_NUM_RUNS,
+															   one_hour);
+			pfree(one_hour);
+			return next_start_set;
 		}
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_DROP_CHUNKS:
@@ -601,6 +609,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			AbortCurrentTransaction();
 		StartTransactionCommand();
 
+		/* Free the old job if it exists, it's no longer needed, and since it's
+		 * in the TopMemoryContext it won't be freed otherwise.
+		 */
+
+		if (job != NULL)
+		{
+			pfree(job);
+			job = NULL;
+		}
+
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
 		 * job is launched. Try to get a lock on the job again. Because the error
@@ -613,7 +631,11 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 										TXN_LOCK,
 										/* block */ false);
 		if (job != NULL)
+		{
 			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
+			pfree(job);
+			job = NULL;
+		}
 		CommitTransactionCommand();
 
 		/*
@@ -635,6 +657,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 */
 	ts_bgw_job_stat_mark_end(job, res);
 	CommitTransactionCommand();
+
+	if (job != NULL)
+	{
+		pfree(job);
+		job = NULL;
+	}
 
 	elog(DEBUG1, "exiting job %d with %s", job_id, (res == JOB_SUCCESS ? "success" : "failure"));
 

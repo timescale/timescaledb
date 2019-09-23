@@ -397,6 +397,11 @@ send_ack(dsm_segment *seg, bool success)
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
 	}
+
+	/* we are responsible for pfree'ing the handle, the dsm infrastructure only
+	 * deals with the queue itself
+	 */
+	pfree(ack_queue_handle);
 	if (ack_res != SHM_MQ_SUCCESS)
 		return SEND_FAILURE;
 
