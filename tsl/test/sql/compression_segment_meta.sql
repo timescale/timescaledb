@@ -36,10 +36,7 @@ LANGUAGE internal IMMUTABLE STRICT;
 CREATE TYPE customtype_no_send_recv (
  INPUT = customtype_in,
  OUTPUT = customtype_out,
- INTERNALLENGTH = 8,
- PASSEDBYVALUE,
- ALIGNMENT = double,
- STORAGE = plain
+ LIKE = TIMESTAMPTZ
 );
 
 CREATE CAST (customtype_no_send_recv AS bigint)
