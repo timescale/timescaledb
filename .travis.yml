@@ -100,7 +100,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make -k installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -123,7 +123,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-10'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make -k installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-10'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -146,7 +146,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make -k installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -302,7 +302,7 @@ jobs:
         - bash ./scripts/docker-run-memory-test.sh
 
     # Sanitizer tests
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (type = pull_request) OR (branch = prerelease_test)
       stage: test
       name: "ASAN and UBSAN tests"
       before_install:

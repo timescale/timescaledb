@@ -42,12 +42,13 @@ cleanup() {
 
     if [[ $status -eq 0 ]]; then
         echo "All tests passed"
+        docker_exec timescaledb-san "find /tsdb_build/timescaledb/build -name postmaster.log -exec cat {} +"
         docker rm -vf timescaledb-san 2>/dev/null
     else
         # docker logs timescaledb-san
-        # only print respective postmaster.log when regression.diffs exists
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/test/regression.diffs && cat /tsdb_build/timescaledb/build/test/log/postmaster.log"
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/tsl/test/regression.diffs && cat /tsdb_build/timescaledb/build/tsl/test/log/postmaster.log"
+        docker_exec timescaledb-san "find /tsdb_build/timescaledb/build -name regression.diffs -exec cat {} +"
+        docker_exec timescaledb-san "find /tsdb_build/timescaledb/build -name postmaster.log -exec cat {} +"
+        docker rm -vf timescaledb-san 2>/dev/null
     fi
 
     echo "Exit status is $status"
