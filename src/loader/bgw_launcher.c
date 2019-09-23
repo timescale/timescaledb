@@ -391,6 +391,7 @@ static void
 scheduler_state_trans_disabled_to_enabled(DbHashEntry *entry)
 {
 	Assert(entry->state == DISABLED);
+	Assert(entry->db_scheduler_handle == NULL);
 	scheduler_modify_state(entry, ENABLED);
 }
 
@@ -398,6 +399,7 @@ static void
 scheduler_state_trans_enabled_to_allocated(DbHashEntry *entry)
 {
 	Assert(entry->state == ENABLED);
+	Assert(entry->db_scheduler_handle == NULL);
 	/* Reserve a spot for this scheduler with BGW counter */
 	if (!ts_bgw_total_workers_increment())
 	{
@@ -412,6 +414,11 @@ scheduler_state_trans_started_to_allocated(DbHashEntry *entry)
 {
 	Assert(entry->state == STARTED);
 	Assert(get_background_worker_pid(entry->db_scheduler_handle, NULL) == BGWH_STOPPED);
+	if (entry->db_scheduler_handle != NULL)
+	{
+		pfree(entry->db_scheduler_handle);
+		entry->db_scheduler_handle = NULL;
+	}
 	scheduler_modify_state(entry, ALLOCATED);
 }
 
@@ -422,9 +429,11 @@ scheduler_state_trans_allocated_to_started(DbHashEntry *entry)
 	bool worker_registered;
 
 	Assert(entry->state == ALLOCATED);
+	Assert(entry->db_scheduler_handle == NULL);
 
 	worker_registered =
 		register_entrypoint_for_db(entry->db_oid, entry->vxid, &entry->db_scheduler_handle);
+
 	if (!worker_registered)
 	{
 		report_error_on_worker_register_failure(entry);
@@ -439,6 +448,7 @@ static void
 scheduler_state_trans_enabled_to_disabled(DbHashEntry *entry)
 {
 	Assert(entry->state == ENABLED);
+	Assert(entry->db_scheduler_handle == NULL);
 	scheduler_modify_state(entry, DISABLED);
 }
 
@@ -446,6 +456,8 @@ static void
 scheduler_state_trans_allocated_to_disabled(DbHashEntry *entry)
 {
 	Assert(entry->state == ALLOCATED);
+	Assert(entry->db_scheduler_handle == NULL);
+
 	ts_bgw_total_workers_decrement();
 	scheduler_modify_state(entry, DISABLED);
 }
@@ -455,7 +467,13 @@ scheduler_state_trans_started_to_disabled(DbHashEntry *entry)
 {
 	Assert(entry->state == STARTED);
 	Assert(get_background_worker_pid(entry->db_scheduler_handle, NULL) == BGWH_STOPPED);
+
 	ts_bgw_total_workers_decrement();
+	if (entry->db_scheduler_handle != NULL)
+	{
+		pfree(entry->db_scheduler_handle);
+		entry->db_scheduler_handle = NULL;
+	}
 	scheduler_modify_state(entry, DISABLED);
 }
 
@@ -510,7 +528,13 @@ launcher_pre_shmem_cleanup(int code, Datum arg)
 		 * them anymore)
 		 */
 		while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
-			terminate_background_worker(current_entry->db_scheduler_handle);
+		{
+			if (current_entry->db_scheduler_handle != NULL)
+			{
+				terminate_background_worker(current_entry->db_scheduler_handle);
+				pfree(current_entry->db_scheduler_handle);
+			}
+		}
 
 		hash_destroy(db_htab);
 	}
