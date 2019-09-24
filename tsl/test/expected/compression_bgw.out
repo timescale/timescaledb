@@ -86,7 +86,7 @@ select test_compress_chunks_policy(:compressjob_id);
  
 (1 row)
 
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size order by chunk_name;
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats where compression_status like 'Compressed' order by chunk_name;
  hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
 -----------------+----------------------------------------+--------------------------+------------------------
  conditions      | _timescaledb_internal._hyper_1_1_chunk | 32 kB                    | 32 kB
@@ -176,8 +176,9 @@ select test_compress_chunks_policy(:compressjob_id);
  
 (1 row)
 
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size 
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats 
 where hypertable_name::text like 'test_table_int'
+and compression_status like 'Compressed'
 order by chunk_name;
  hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
 -----------------+----------------------------------------+--------------------------+------------------------
