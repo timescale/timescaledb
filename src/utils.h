@@ -68,10 +68,6 @@ extern int64 ts_get_interval_period_approx(Interval *interval);
 
 extern Oid ts_inheritance_parent_relid(Oid relid);
 
-extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
-
-extern Oid get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[]);
-
 extern TSDLLEXPORT regproc lookup_proc_filtered(const char *schema, const char *funcname,
 												Oid *rettype, proc_filter filter, void *filter_arg);
 extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
