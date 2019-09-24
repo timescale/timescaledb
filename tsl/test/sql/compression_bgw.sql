@@ -46,7 +46,7 @@ select generate_series(now()::timestamp, now()::timestamp+'1day', '1 min'), 'TOK
 -- TEST3 --
 --only the old chunks will get compressed when policy is executed--
 select test_compress_chunks_policy(:compressjob_id);
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size order by chunk_name;
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats where compression_status like 'Compressed' order by chunk_name;
 
 -- TEST 4 --
 --cannot set another policy
@@ -83,7 +83,8 @@ where hypertable_id = (Select id from _timescaledb_catalog.hypertable where tabl
 \gset
 select test_compress_chunks_policy(:compressjob_id);
 select test_compress_chunks_policy(:compressjob_id);
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size 
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats 
 where hypertable_name::text like 'test_table_int'
+and compression_status like 'Compressed'
 order by chunk_name;
 

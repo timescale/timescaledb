@@ -28,7 +28,8 @@ select tgname , tgtype, tgenabled , relname
 from pg_trigger t, pg_class rel 
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
 \x
-select * from timescaledb_information.compressed_chunk_size;
+select * from timescaledb_information.compressed_chunk_stats
+order by chunk_name limit 2;
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
 \x
@@ -148,10 +149,10 @@ SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
 SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 
 \x
-select * from timescaledb_information.compressed_chunk_size
+select * from timescaledb_information.compressed_chunk_stats
 where hypertable_name::text like 'conditions'
 order by hypertable_name, chunk_name;
-select * from timescaledb_information.compressed_hypertable_size
+select * from timescaledb_information.compressed_hypertable_stats
 order by hypertable_name;
 \x
 
@@ -165,8 +166,11 @@ SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 \set ON_ERROR_STOP 1
 
 --size information is gone too
-select count(*) from timescaledb_information.compressed_chunk_size
-where hypertable_name::text like 'conditions';
+select count(*) 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, 
+_timescaledb_catalog.compression_chunk_size map
+where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+and map.chunk_id = ch1.id;
 
 --make sure  compressed_chunk_id  is reset to NULL
 select ch1.compressed_chunk_id IS NULL

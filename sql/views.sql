@@ -138,10 +138,11 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold as ct
     ON ( cagg.mat_hypertable_id = ct.materialization_id);
 
-CREATE OR REPLACE VIEW  timescaledb_information.compressed_chunk_size
+CREATE OR REPLACE VIEW  timescaledb_information.compressed_chunk_stats
 AS
-  SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
-  format('%1$I.%2$I', srcch.schema_name, srcch.table_name)::regclass as chunk_name,
+WITH mapq as
+(select
+  chunk_id,
   pg_size_pretty(map.uncompressed_heap_size) as uncompressed_heap_bytes,
   pg_size_pretty(map.uncompressed_index_size) as uncompressed_index_bytes,
   pg_size_pretty(map.uncompressed_toast_size) as uncompressed_toast_bytes,
@@ -150,13 +151,28 @@ AS
   pg_size_pretty(map.compressed_index_size) as compressed_index_bytes,
   pg_size_pretty(map.compressed_toast_size) as compressed_toast_bytes,
   pg_size_pretty(map.compressed_heap_size + map.compressed_toast_size + map.compressed_index_size) as compressed_total_bytes
- FROM _timescaledb_catalog.chunk srcch, _timescaledb_catalog.compression_chunk_size map,
-      _timescaledb_catalog.hypertable srcht
- where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id;
+ FROM _timescaledb_catalog.compression_chunk_size map )
+  SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
+  format('%1$I.%2$I', srcch.schema_name, srcch.table_name)::regclass as chunk_name,
+  CASE WHEN srcch.compressed_chunk_id IS NULL THEN 'Uncompressed'::TEXT ELSE 'Compressed'::TEXT END as compression_status,
+  mapq.uncompressed_heap_bytes,
+  mapq.uncompressed_index_bytes,
+  mapq.uncompressed_toast_bytes,
+  mapq.uncompressed_total_bytes,
+  mapq.compressed_heap_bytes,
+  mapq.compressed_index_bytes,
+  mapq.compressed_toast_bytes,
+  mapq.compressed_total_bytes
+  FROM _timescaledb_catalog.hypertable as srcht JOIN _timescaledb_catalog.chunk as srcch
+  ON srcht.id = srcch.hypertable_id and srcht.compressed_hypertable_id IS NOT NULL
+  LEFT JOIN mapq
+  ON srcch.id = mapq.chunk_id ;
 
-CREATE OR REPLACE VIEW  timescaledb_information.compressed_hypertable_size
+CREATE OR REPLACE VIEW  timescaledb_information.compressed_hypertable_stats
 AS
   SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
+  ( select count(*) from _timescaledb_catalog.chunk where hypertable_id = srcht.id) as total_chunks, 
+  count(*) as number_compressed_chunks,
   pg_size_pretty(sum(map.uncompressed_heap_size)) as uncompressed_heap_bytes,
   pg_size_pretty(sum(map.uncompressed_index_size)) as uncompressed_index_bytes,
   pg_size_pretty(sum(map.uncompressed_toast_size)) as uncompressed_toast_bytes,

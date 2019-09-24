@@ -73,10 +73,24 @@ where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgnam
 (1 row)
 
 \x
-select * from timescaledb_information.compressed_chunk_size;
+select * from timescaledb_information.compressed_chunk_stats
+order by chunk_name limit 2;
 -[ RECORD 1 ]------------+---------------------------------------
 hypertable_name          | foo
+chunk_name               | _timescaledb_internal._hyper_1_1_chunk
+compression_status       | Uncompressed
+uncompressed_heap_bytes  | 
+uncompressed_index_bytes | 
+uncompressed_toast_bytes | 
+uncompressed_total_bytes | 
+compressed_heap_bytes    | 
+compressed_index_bytes   | 
+compressed_toast_bytes   | 
+compressed_total_bytes   | 
+-[ RECORD 2 ]------------+---------------------------------------
+hypertable_name          | foo
 chunk_name               | _timescaledb_internal._hyper_1_2_chunk
+compression_status       | Compressed
 uncompressed_heap_bytes  | 8192 bytes
 uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 0 bytes
@@ -324,12 +338,13 @@ SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 (2 rows)
 
 \x
-select * from timescaledb_information.compressed_chunk_size
+select * from timescaledb_information.compressed_chunk_stats
 where hypertable_name::text like 'conditions'
 order by hypertable_name, chunk_name;
 -[ RECORD 1 ]------------+----------------------------------------
 hypertable_name          | conditions
 chunk_name               | _timescaledb_internal._hyper_5_12_chunk
+compression_status       | Compressed
 uncompressed_heap_bytes  | 8192 bytes
 uncompressed_index_bytes | 16 kB
 uncompressed_toast_bytes | 8192 bytes
@@ -341,6 +356,7 @@ compressed_total_bytes   | 32 kB
 -[ RECORD 2 ]------------+----------------------------------------
 hypertable_name          | conditions
 chunk_name               | _timescaledb_internal._hyper_5_13_chunk
+compression_status       | Compressed
 uncompressed_heap_bytes  | 8192 bytes
 uncompressed_index_bytes | 16 kB
 uncompressed_toast_bytes | 8192 bytes
@@ -350,10 +366,12 @@ compressed_index_bytes   | 16 kB
 compressed_toast_bytes   | 8192 bytes
 compressed_total_bytes   | 32 kB
 
-select * from timescaledb_information.compressed_hypertable_size
+select * from timescaledb_information.compressed_hypertable_stats
 order by hypertable_name;
 -[ RECORD 1 ]------------+-----------
 hypertable_name          | foo
+total_chunks             | 4
+number_compressed_chunks | 1
 uncompressed_heap_bytes  | 8192 bytes
 uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 0 bytes
@@ -364,6 +382,8 @@ compressed_toast_bytes   | 8192 bytes
 compressed_total_bytes   | 48 kB
 -[ RECORD 2 ]------------+-----------
 hypertable_name          | conditions
+total_chunks             | 2
+number_compressed_chunks | 2
 uncompressed_heap_bytes  | 16 kB
 uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 16 kB
@@ -394,8 +414,11 @@ SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 ERROR:  relation "_timescaledb_internal.compress_hyper_6_14_chunk" does not exist at character 22
 \set ON_ERROR_STOP 1
 --size information is gone too
-select count(*) from timescaledb_information.compressed_chunk_size
-where hypertable_name::text like 'conditions';
+select count(*) 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, 
+_timescaledb_catalog.compression_chunk_size map
+where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
+and map.chunk_id = ch1.id;
  count 
 -------
      0
