@@ -48,6 +48,7 @@
 #include "optimizer/tlist.h"
 #include "parser/parsetree.h"
 #include "parser/parse_clause.h"
+#include "parser/parse_func.h"
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
@@ -149,7 +150,8 @@ static struct FuncStrategy last_func_strategy = { .func_oid = InvalidOid,
 static FuncStrategy *
 initialize_func_strategy(FuncStrategy *func_strategy, char *name, int nargs, Oid arg_types[])
 {
-	func_strategy->func_oid = get_function_oid(name, ts_extension_schema_name(), nargs, arg_types);
+	List *l = list_make2(makeString(ts_extension_schema_name()), makeString(name));
+	func_strategy->func_oid = LookupFuncName(l, nargs, arg_types, false);
 	return func_strategy;
 }
 

@@ -4,29 +4,30 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <parser/parsetree.h>
-#include <optimizer/clauses.h>
-#include <optimizer/var.h>
-#include <optimizer/restrictinfo.h>
-#include <nodes/plannodes.h>
-#include <optimizer/prep.h>
-#include <nodes/nodeFuncs.h>
-#include <nodes/makefuncs.h>
-#include <utils/date.h>
-
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_namespace.h>
+#include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <nodes/plannodes.h>
+#include <optimizer/clauses.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/prep.h>
+#include <optimizer/restrictinfo.h>
+#include <optimizer/tlist.h>
+#include <optimizer/var.h>
+#include <parser/parse_func.h>
+#include <parser/parsetree.h>
+#include <utils/date.h>
+#include <utils/errcodes.h>
+#include <utils/syscache.h>
+
 #include "compat.h"
 #if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
 #include <catalog/pg_inherits_fn.h>
 #endif
-#include <optimizer/pathnode.h>
-#include <optimizer/tlist.h>
-#include <catalog/pg_type.h>
-#include <utils/errcodes.h>
-#include <utils/syscache.h>
 #if PG11_GE
 #include <partitioning/partbounds.h>
 #include <optimizer/cost.h>
@@ -65,10 +66,11 @@ static void
 init_chunk_exclusion_func()
 {
 	if (chunk_exclusion_func == InvalidOid)
-		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME,
-												INTERNAL_SCHEMA_NAME,
-												lengthof(ts_chunks_arg_types),
-												ts_chunks_arg_types);
+	{
+		List *l = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNK_EXCL_FUNC_NAME));
+		chunk_exclusion_func =
+			LookupFuncName(l, lengthof(ts_chunks_arg_types), ts_chunks_arg_types, false);
+	}
 	Assert(chunk_exclusion_func != InvalidOid);
 }
 

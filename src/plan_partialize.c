@@ -7,7 +7,9 @@
 #include <catalog/pg_type.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/planner.h>
+#include <parser/parse_func.h>
 #include <utils/lsyscache.h>
+
 #include "plan_partialize.h"
 #include "extension_constants.h"
 #include "utils.h"
@@ -81,11 +83,12 @@ plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo
 	PartializeWalkerState state = { .found_partialize = false,
 									.looking_for_agg = false,
 									.fnoid = InvalidOid };
+	List *name = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(TS_PARTIALFN));
 	ListCell *lc;
 
 	if (CMD_SELECT != parse->commandType)
 		return;
-	partialfnoid = get_function_oid(TS_PARTIALFN, INTERNAL_SCHEMA_NAME, lengthof(argtyp), argtyp);
+	partialfnoid = LookupFuncName(name, lengthof(argtyp), argtyp, false);
 	Assert(partialfnoid != InvalidOid);
 
 	state.fnoid = partialfnoid;

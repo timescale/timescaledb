@@ -483,41 +483,6 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
 	return struct_ptr;
 }
 
-bool
-ts_function_types_equal(Oid left[], Oid right[], int nargs)
-{
-	int arg_index;
-
-	for (arg_index = 0; arg_index < nargs; arg_index++)
-	{
-		if (left[arg_index] != right[arg_index])
-			return false;
-	}
-	return true;
-}
-
-Oid
-get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
-{
-	FuncCandidateList func_candidates;
-
-	func_candidates = FuncnameGetCandidates(list_make2(makeString(schema_name), makeString(name)),
-											nargs,
-											NIL,
-											false,
-											false,
-											false);
-	while (func_candidates != NULL)
-	{
-		if (func_candidates->nargs == nargs &&
-			ts_function_types_equal(func_candidates->args, arg_types, nargs))
-			return func_candidates->oid;
-		func_candidates = func_candidates->next;
-	}
-	elog(ERROR, "failed to find function %s in schema %s with %d args", name, schema_name, nargs);
-	pg_unreachable();
-}
-
 /*
  * Find a partitioning function with a given schema and name.
  *
