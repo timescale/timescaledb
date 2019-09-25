@@ -288,9 +288,9 @@ SET max_parallel_workers_per_gather TO 2;
                      One-Time Filter: (length(version()) > 0)
                      ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=166667 loops=3)
                            Chunks excluded during startup: 0
-                           ->  Result (actual rows=500000 loops=1)
+                           ->  Result (actual rows=250000 loops=2)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
                                        Filter: (i >= 500000)
 (13 rows)
 
