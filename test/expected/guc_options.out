@@ -88,6 +88,8 @@ SET timescaledb.debug_optimizer_flags = 'show_rel:invalid';
 ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "show_rel:invalid"
 SET timescaledb.debug_optimizer_flags = 'invalid:show_rel';
 ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "invalid:show_rel"
+SET timescaledb.debug_optimizer_flags = 'show_upper:*';
+ERROR:  invalid value for parameter "timescaledb.debug_optimizer_flags": "show_upper:*"
 SET timescaledb.debug_optimizer_flags = 'show_upper=xxx';
 ERROR:  unrecognized flag option "xxx"
 SET timescaledb.debug_optimizer_flags = 'show_upper=fin,xxx';

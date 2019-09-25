@@ -16,13 +16,16 @@
 #include "hypertable.h"
 #include "hypertable_compression.h"
 #include "hypertable_cache.h"
+#include <optimizer/paths.h>
 #include "compat.h"
 #if PG_VERSION_SUPPORTS_MULTINODE
 #include "fdw/fdw.h"
 #include "fdw/data_node_scan_plan.h"
 #endif
 #include "guc.h"
+#include "debug_guc.h"
 #include "async_append.h"
+#include "debug.h"
 
 #include <math.h>
 
@@ -67,11 +70,8 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 
 	if (UPPERREL_GROUP_AGG == stage)
 		plan_add_gapfill(root, output_rel);
-	else if (UPPERREL_WINDOW == stage)
-	{
-		if (IsA(linitial(input_rel->pathlist), CustomPath))
-			gapfill_adjust_window_targetlist(root, input_rel, output_rel);
-	}
+	else if (UPPERREL_WINDOW == stage && IsA(linitial(input_rel->pathlist), CustomPath))
+		gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 #if PG_VERSION_SUPPORTS_MULTINODE
 	else if (ts_guc_enable_async_append && UPPERREL_FINAL == stage &&
 			 root->parse->resultRelation == 0 && is_dist_hypertable_involved(root))
@@ -131,6 +131,16 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 		fdw->GetForeignRelSize(root, rel, rte->relid);
 		fdw->GetForeignPaths(root, rel, rte->relid);
+
+#ifdef TS_DEBUG
+		if (ts_debug_optimizer_flags.show_rel)
+		{
+			StringInfoData buf;
+			initStringInfo(&buf);
+			tsl_debug_append_rel(&buf, root, rel);
+			ereport(DEBUG2, (errmsg_internal("In %s:\n%s", __func__, buf.data)));
+		}
+#endif
 	}
 
 	ts_cache_release(hcache);

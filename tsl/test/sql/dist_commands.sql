@@ -12,6 +12,13 @@
 \o
 \set ECHO all
 
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
+SET client_min_messages TO NOTICE;
+
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
