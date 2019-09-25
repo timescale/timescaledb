@@ -33,6 +33,7 @@ SET timescaledb.debug_optimizer_flags = 'space between';
 SET timescaledb.debug_optimizer_flags = 'space between:';
 SET timescaledb.debug_optimizer_flags = 'show_rel:invalid';
 SET timescaledb.debug_optimizer_flags = 'invalid:show_rel';
+SET timescaledb.debug_optimizer_flags = 'show_upper:*';
 SET timescaledb.debug_optimizer_flags = 'show_upper=xxx';
 SET timescaledb.debug_optimizer_flags = 'show_upper=fin,xxx';
 SET timescaledb.debug_optimizer_flags = 'show_upper=xxx,fin';

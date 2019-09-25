@@ -87,6 +87,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES_DEBUG
     data_node.sql
     data_node_bootstrap.sql
+    debug_notice.sql
     deparse.sql
     deparse_fail.sql
     dist_commands.sql

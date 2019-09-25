@@ -6,6 +6,12 @@
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
+SET client_min_messages TO NOTICE;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 

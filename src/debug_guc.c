@@ -128,6 +128,9 @@ set_debug_flag(const char *flag_string, size_t length, DebugOptimizerFlags *flag
 			switch (g_flag_names[i].flag)
 			{
 				case DEBUG_FLAG_UPPER:
+					/* show_upper was missing flags for the mask */
+					if (end == NULL)
+						return false;
 					flags->show_upper = get_show_upper_mask(end + 1, length - flag_length - 1);
 					return true;
 				case DEBUG_FLAG_REL:
@@ -143,6 +146,7 @@ parse_optimizer_flags(const char *string, DebugOptimizerFlags *flags)
 	char *rawname;
 	List *namelist;
 	ListCell *cell;
+	DebugOptimizerFlags local_flags = { 0 };
 
 	Assert(string && flags);
 
@@ -152,7 +156,7 @@ parse_optimizer_flags(const char *string, DebugOptimizerFlags *flags)
 	rawname = pstrdup(string);
 	if (!SplitIdentifierString(rawname, ':', &namelist))
 	{
-		GUC_check_errdetail("Invalid flag string syntax.");
+		GUC_check_errdetail("Invalid flag string syntax \"%s\".", rawname);
 		GUC_check_errhint("The flags string should be a list of colon-separated identifiers.");
 		pfree(rawname);
 		list_free(namelist);
@@ -162,7 +166,7 @@ parse_optimizer_flags(const char *string, DebugOptimizerFlags *flags)
 	foreach (cell, namelist)
 	{
 		char *flag_string = (char *) lfirst(cell);
-		if (!set_debug_flag(flag_string, strlen(flag_string), flags))
+		if (!set_debug_flag(flag_string, strlen(flag_string), &local_flags))
 		{
 			GUC_check_errdetail("Unrecognized flag setting \"%s\".", flag_string);
 			GUC_check_errhint("Allowed values are: show_upper_paths show_rel_pathlist");
@@ -171,6 +175,8 @@ parse_optimizer_flags(const char *string, DebugOptimizerFlags *flags)
 			return false;
 		}
 	}
+
+	*flags = local_flags;
 
 	pfree(rawname);
 	list_free(namelist);
@@ -192,7 +198,14 @@ debug_optimizer_flags_check(char **newval, void **extra, GucSource source)
 static void
 debug_optimizer_flags_assign(const char *newval, void *extra)
 {
-	if (newval && !parse_optimizer_flags(newval, &ts_debug_optimizer_flags))
+	if (newval == NULL)
+	{
+		ts_debug_optimizer_flags.show_rel = false;
+		ts_debug_optimizer_flags.show_upper = 0;
+		return;
+	}
+
+	if (!parse_optimizer_flags(newval, &ts_debug_optimizer_flags))
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("cannot parse \"%s\" as debug optimizer flags", newval)));

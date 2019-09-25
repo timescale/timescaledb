@@ -29,6 +29,8 @@
 #include "modify_exec.h"
 #include "data_node_scan_plan.h"
 #include "analyze.h"
+#include "debug_guc.h"
+#include "debug.h"
 
 /*
  * Parse options from foreign table and apply them to fpinfo.
@@ -398,15 +400,29 @@ get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *
 	 * partially grouped rels, so we cannot use if for server rels. See end of
 	 * PostgreSQL planner.c:create_partial_grouping_paths(). */
 	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
-		return data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
+		data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
+	else
+		fdw_create_upper_paths(fpinfo,
+							   root,
+							   stage,
+							   input_rel,
+							   output_rel,
+							   extra,
+							   (CreateUpperPathFunc) create_foreign_upper_path);
 
-	return fdw_create_upper_paths(fpinfo,
-								  root,
-								  stage,
-								  input_rel,
-								  output_rel,
-								  extra,
-								  (CreateUpperPathFunc) create_foreign_upper_path);
+#ifdef TS_DEBUG
+	if (ts_debug_optimizer_flags.show_upper & (1 << stage))
+	{
+		StringInfoData buf;
+		initStringInfo(&buf);
+		tsl_debug_append_rel(&buf, root, output_rel);
+		ereport(DEBUG2,
+				(errmsg_internal("Stage %s in %s:\n%s",
+								 upperrel_stage_name[stage],
+								 __func__,
+								 buf.data)));
+	}
+#endif
 }
 
 static FdwRoutine timescaledb_fdw_routine = {
