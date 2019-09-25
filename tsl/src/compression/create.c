@@ -9,7 +9,9 @@
 #include <access/tupdesc.h>
 #include <access/xact.h>
 #include <catalog/pg_type.h>
+#include <catalog/index.h>
 #include <catalog/toasting.h>
+#include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <miscadmin.h>
@@ -17,6 +19,7 @@
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
+#include <utils/syscache.h>
 
 #include "catalog.h"
 #include "create.h"
@@ -337,6 +340,60 @@ compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
 	heap_close(rel, NoLock); /*lock will be released at end of transaction only*/
 }
 
+static void
+create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compress_cols)
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, compresstable_relid);
+	IndexStmt stmt = {
+		.type = T_IndexStmt,
+		.accessMethod = DEFAULT_INDEX_TYPE,
+		.idxname = NULL,
+		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+		.tableSpace = get_tablespace_name(get_rel_tablespace(ht->main_table_relid)),
+	};
+	IndexElem sequence_num_elem = {
+		.type = T_IndexElem,
+		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+	};
+	int i;
+	for (i = 0; i < compress_cols->numcols; i++)
+	{
+		NameData index_name;
+		ObjectAddress index_addr;
+		HeapTuple index_tuple;
+		FormData_hypertable_compression *col = &compress_cols->col_meta[i];
+		IndexElem segment_elem = { .type = T_IndexElem, .name = NameStr(col->attname) };
+
+		if (col->segmentby_column_index <= 0)
+			continue;
+
+		stmt.indexParams = list_make2(&segment_elem, &sequence_num_elem);
+		index_addr = DefineIndexCompat(ht->main_table_relid,
+									   &stmt,
+									   InvalidOid,
+									   false,  /* is alter table */
+									   false,  /* check rights */
+									   false,  /* skip_build */
+									   false); /* quiet */
+		index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
+
+		if (!HeapTupleIsValid(index_tuple))
+			elog(ERROR, "cache lookup failed for index relid %d", index_addr.objectId);
+		index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
+		elog(NOTICE,
+			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
+			 NameStr(index_name),
+			 NameStr(ht->fd.schema_name),
+			 NameStr(ht->fd.table_name),
+			 NameStr(col->attname),
+			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+		ReleaseSysCache(index_tuple);
+	}
+
+	ts_cache_release(hcache);
+}
+
 static int32
 create_compression_table(Oid owner, CompressColInfo *compress_cols)
 {
@@ -379,6 +436,7 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	ts_catalog_restore_user(&sec_ctx);
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
+	create_compressed_table_indexes(compress_relid, compress_cols);
 	return compress_hypertable_id;
 }
 
@@ -566,6 +624,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);
 	ts_hypertable_set_compressed_id(ht, compress_htid);
+
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 	/* do not release any locks, will get released by xact end */
 	return true;

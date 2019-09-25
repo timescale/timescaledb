@@ -204,6 +204,7 @@ select create_hypertable( 'test4', 'timec', chunk_time_interval=> '1 year'::inte
 (1 row)
 
 alter table test4 set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+NOTICE:  adding index _compressed_hypertable_6_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(location, _ts_meta_sequence_num)
 insert into test4
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 insert into test4

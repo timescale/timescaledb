@@ -41,6 +41,7 @@ ERROR:  can add compress_chunks policy only on hypertables with compression enab
 -- TEST2 --
 --add a policy to compress chunks --
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+NOTICE:  adding index _compressed_hypertable_2_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 select add_compress_chunks_policy('conditions', '60d'::interval);
@@ -88,7 +89,7 @@ select test_compress_chunks_policy(:compressjob_id);
 select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_size order by chunk_name;
  hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
 -----------------+----------------------------------------+--------------------------+------------------------
- conditions      | _timescaledb_internal._hyper_1_1_chunk | 32 kB                    | 16 kB
+ conditions      | _timescaledb_internal._hyper_1_1_chunk | 32 kB                    | 32 kB
 (1 row)
 
 -- TEST 4 --

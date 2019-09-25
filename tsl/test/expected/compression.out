@@ -38,6 +38,8 @@ insert into foo values( 10 , 10 , 20, 120);
 insert into foo values( 20 , 11 , 20, 13);
 insert into foo values( 30 , 12 , 20, 14);
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
+NOTICE:  adding index _compressed_hypertable_2_a__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(a, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_2_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(b, _ts_meta_sequence_num)
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
@@ -80,9 +82,9 @@ uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 0 bytes
 uncompressed_total_bytes | 40 kB
 compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 0 bytes
+compressed_index_bytes   | 32 kB
 compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 16 kB
+compressed_total_bytes   | 48 kB
 
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
@@ -102,7 +104,7 @@ uncompressed_toast_size | 0
 uncompressed_index_size | 32768
 compressed_heap_size    | 8192
 compressed_toast_size   | 8192
-compressed_index_size   | 0
+compressed_index_size   | 32768
 -[ RECORD 2 ]-----------+------
 chunk_id                | 2
 compressed_chunk_id     | 5
@@ -111,7 +113,7 @@ uncompressed_toast_size | 0
 uncompressed_index_size | 32768
 compressed_heap_size    | 8192
 compressed_toast_size   | 8192
-compressed_index_size   | 0
+compressed_index_size   | 32768
 
 \x
 select  ch1.id, ch1.schema_name, ch1.table_name ,  ch2.table_name as compress_table
@@ -219,6 +221,7 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 (1 row)
 
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+NOTICE:  adding index _compressed_hypertable_6_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 insert into conditions
@@ -332,9 +335,9 @@ uncompressed_index_bytes | 16 kB
 uncompressed_toast_bytes | 8192 bytes
 uncompressed_total_bytes | 32 kB
 compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 0 bytes
+compressed_index_bytes   | 16 kB
 compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 16 kB
+compressed_total_bytes   | 32 kB
 -[ RECORD 2 ]------------+----------------------------------------
 hypertable_name          | conditions
 chunk_name               | _timescaledb_internal._hyper_5_13_chunk
@@ -343,9 +346,9 @@ uncompressed_index_bytes | 16 kB
 uncompressed_toast_bytes | 8192 bytes
 uncompressed_total_bytes | 32 kB
 compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 0 bytes
+compressed_index_bytes   | 16 kB
 compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 16 kB
+compressed_total_bytes   | 32 kB
 
 select * from timescaledb_information.compressed_hypertable_size
 order by hypertable_name;
@@ -356,9 +359,9 @@ uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 0 bytes
 uncompressed_total_bytes | 40 kB
 compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 0 bytes
+compressed_index_bytes   | 32 kB
 compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 16 kB
+compressed_total_bytes   | 48 kB
 -[ RECORD 2 ]------------+-----------
 hypertable_name          | conditions
 uncompressed_heap_bytes  | 16 kB
@@ -366,9 +369,9 @@ uncompressed_index_bytes | 32 kB
 uncompressed_toast_bytes | 16 kB
 uncompressed_total_bytes | 64 kB
 compressed_heap_bytes    | 16 kB
-compressed_index_bytes   | 0 bytes
+compressed_index_bytes   | 32 kB
 compressed_toast_bytes   | 16 kB
-compressed_total_bytes   | 32 kB
+compressed_total_bytes   | 64 kB
 
 \x
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
@@ -485,6 +488,8 @@ alter table test_collation set (timescaledb.compress, timescaledb.compress_segme
 ERROR:  unable to parse the compress_orderby option 'val_1 COLLATE "POSIX", val2, time'
 \set ON_ERROR_STOP 1
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1, val_2, time');
+NOTICE:  adding index _compressed_hypertable_10_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_10_device_id_2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id_2, _ts_meta_sequence_num)
 insert into test_collation
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', 'device_3', gen_rand_minstd(), gen_rand_minstd();
 insert into test_collation
