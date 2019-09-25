@@ -14,6 +14,8 @@
 typedef struct ParallelChunkAppendState
 {
 	int last_plan;
+	int workers_last_plan;
+	int workers_per_child;
 } ParallelChunkAppendState;
 
 typedef struct ChunkAppendState

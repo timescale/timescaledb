@@ -24,6 +24,8 @@
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
+#include <math.h>
+
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/exec.h"
 #include "chunk_append/explain.h"
@@ -442,8 +444,25 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 {
 	LWLockAcquire(state->lock, LW_EXCLUSIVE);
 
-	state->current = get_next_subplan(state, state->pstate->last_plan);
-	state->pstate->last_plan = state->current;
+	if (state->current < state->pstate->last_plan &&
+		state->pstate->workers_last_plan < state->pstate->workers_per_child)
+	{
+		/*
+		 * if we have more workers then children we will assign
+		 * multiple workers per child
+		 */
+		Assert(state->pstate->workers_per_child > 1);
+		Assert(state->pstate->workers_last_plan >= 1);
+
+		state->current = state->pstate->last_plan;
+		state->pstate->workers_last_plan++;
+	}
+	else
+	{
+		state->current = get_next_subplan(state, state->pstate->last_plan);
+		state->pstate->last_plan = state->current;
+		state->pstate->workers_last_plan = 1;
+	}
 
 	LWLockRelease(state->lock);
 }
@@ -527,6 +546,16 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 
 	state->lock = chunk_append_get_lock_pointer();
 	pstate->last_plan = INVALID_SUBPLAN_INDEX;
+	pstate->workers_last_plan = 0;
+
+	/*
+	 * if the number of workers is greater then the number of children
+	 * calculate how many workers each child should get
+	 */
+	if (state->num_subplans < pcxt->nworkers)
+		pstate->workers_per_child = ceil(pcxt->nworkers / (float) state->num_subplans);
+	else
+		pstate->workers_per_child = 1;
 
 	state->choose_next_subplan = choose_next_subplan_for_leader;
 	state->current = INVALID_SUBPLAN_INDEX;
@@ -550,6 +579,7 @@ chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
 
 	pstate->last_plan = INVALID_SUBPLAN_INDEX;
+	pstate->workers_last_plan = 0;
 }
 #endif
 
