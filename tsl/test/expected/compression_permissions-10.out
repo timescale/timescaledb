@@ -34,6 +34,7 @@ ERROR:  permission denied for relation conditions
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --now owner tries and succeeds --
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+NOTICE:  adding index _compressed_hypertable_2_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 --try modifying compress properties --

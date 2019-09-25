@@ -136,5 +136,14 @@ SET max_parallel_workers_per_gather TO 4;
 EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
 EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
 
+
+SET enable_seqscan TO false;
+-- should order compressed chunks using index
+-- (we only EXPLAIN here b/c the resulting order is too inconsistent)
+EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
+EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
+
+SET enable_seqscan TO true;
+
 -- diff compressed and uncompressed results
 :DIFF_CMD

@@ -33,7 +33,11 @@ ERROR:  must set the 'compress' boolean option when setting compression options
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ERROR:  cannot use the same column c in compress_orderby and compress_segmentby
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
+NOTICE:  adding index _compressed_hypertable_4_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(bacB toD, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_4_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(c, _ts_meta_sequence_num)
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
+NOTICE:  adding index _compressed_hypertable_5_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(bacB toD, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_5_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(c, _ts_meta_sequence_num)
 --note that the time column "a" should be added to the end of the orderby list
 select * from _timescaledb_catalog.hypertable_compression order by attname;
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -45,6 +49,8 @@ select * from _timescaledb_catalog.hypertable_compression order by attname;
 (4 rows)
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DeSc NullS lAsT');
+NOTICE:  adding index _compressed_hypertable_6_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(bacB toD, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_6_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(c, _ts_meta_sequence_num)
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
 ERROR:  need to specify both compress_orderby and compress_groupby if altering compression
@@ -144,6 +150,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ERROR:  chunk "_hyper_8_2_chunk" is not a compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
+NOTICE:  adding index _compressed_hypertable_10_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(b, _ts_meta_sequence_num)
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
 --should succeed
@@ -173,6 +180,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
+NOTICE:  adding index _compressed_hypertable_11_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_11 USING BTREE(b, _ts_meta_sequence_num)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
