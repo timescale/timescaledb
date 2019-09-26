@@ -181,7 +181,7 @@ where hypertable_name::text like 'test_table_int'
 order by chunk_name;
  hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
 -----------------+----------------------------------------+--------------------------+------------------------
- test_table_int  | _timescaledb_internal._hyper_3_5_chunk | 24 kB                    | 16 kB
  test_table_int  | _timescaledb_internal._hyper_3_6_chunk | 24 kB                    | 16 kB
+ test_table_int  | _timescaledb_internal._hyper_3_7_chunk | 24 kB                    | 16 kB
 (2 rows)
 
