@@ -14,11 +14,9 @@ INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_mins
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = '"Time" DESC');
 
---
--- DROP CHUNKS
---
+
 SELECT COUNT(*) AS count_compressed
-FROM 
+FROM
 (
 SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
@@ -28,6 +26,19 @@ WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL O
 AS sub;
 
 
+--make sure allowed ddl still work
+ALTER TABLE test1 CLUSTER ON "test1_Time_idx";
+ALTER TABLE test1 SET WITHOUT CLUSTER;
+CREATE INDEX new_index ON test1(b);
+DROP INDEX new_index;
+ALTER TABLE test1 SET (fillfactor=100);
+ALTER TABLE test1 RESET (fillfactor);
+ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+
+
+--
+-- DROP CHUNKS
+--
 SELECT count(*) as count_chunks_uncompressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)

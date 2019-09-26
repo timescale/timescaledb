@@ -74,6 +74,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
 static bool process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
+static bool process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -191,6 +192,59 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on materialization tables")));
+				break;
+		}
+	}
+}
+
+static void
+check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt *stmt)
+{
+	ListCell *lc;
+	if (ht->fd.compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+		return;
+
+	/* only allow if all commands are allowed */
+	foreach (lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			/*
+			 * ALLOWED:
+			 */
+			case AT_AddIndex:
+			case AT_ReAddIndex:
+			case AT_ResetRelOptions:
+			case AT_ReplaceRelOptions:
+			case AT_SetRelOptions:
+			case AT_ClusterOn:
+			case AT_DropCluster:
+			/* allow now, improve later */
+			case AT_SetStatistics: /* pass statistics down to compressed? */
+			case AT_SetTableSpace: /* pass down to compressed as well */
+				/* allowed on materialization tables */
+				continue;
+			/*
+			 * BLOCKED:
+			 */
+			/* should be implemented later */
+			case AT_ChangeOwner:
+			/* definitely block */
+			case AT_AddOids:
+			case AT_DropOids:
+			case AT_AddOidsRecurse:
+			case AT_EnableRowSecurity:
+			case AT_DisableRowSecurity:
+			case AT_ForceRowSecurity:
+			case AT_NoForceRowSecurity:
+			default:
+				/* blocked by default */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on hypertables that have compression "
+								"enabled")));
 				break;
 		}
 	}
@@ -2266,6 +2320,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	{
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 		check_continuous_agg_alter_table_allowed(ht, stmt);
+		check_alter_table_allowed_on_ht_with_compression(ht, stmt);
 		relation_not_only(stmt->relation);
 		process_add_hypertable(args, ht);
 	}
@@ -2362,7 +2417,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			}
-
+			case AT_ResetRelOptions:
+			case AT_ReplaceRelOptions:
+				process_altertable_reset_options(cmd, ht);
+				break;
 			default:
 				break;
 		}
@@ -2803,6 +2861,25 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 						"parameters for hypertable")));
 	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
 	return true;
+}
+
+static bool
+process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
+{
+	List *pg_options = NIL, *compress_options = NIL;
+	List *inpdef = NIL;
+	/* is this a compress table stmt */
+	Assert(IsA(cmd->def, List));
+	inpdef = (List *) cmd->def;
+	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	if (compress_options)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compression options cannot be reset")));
+	}
+	else
+		return false;
 }
 
 static bool
