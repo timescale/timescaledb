@@ -20,6 +20,7 @@
 #include "scan_exec.h"
 #include "utils.h"
 #include "remote/cursor.h"
+#include "guc.h"
 
 /*
  * Indexes of FDW-private information stored in fdw_private lists.
@@ -179,26 +180,14 @@ prepare_query_params(PlanState *node, List *fdw_exprs, int num_params, FmgrInfo 
 	*param_values = (const char **) palloc0(num_params * sizeof(char *));
 }
 
-void
-fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, List *fdw_private,
-			  List *fdw_exprs, int eflags)
+static TSConnection *
+get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *exprs)
 {
 	Scan *scan = (Scan *) ss->ps.plan;
 	EState *estate = ss->ps.state;
 	RangeTblEntry *rte;
 	TSConnectionId id;
 	int rtindex;
-	int num_params;
-
-	/*
-	 * Do nothing in EXPLAIN (no ANALYZE) case.  fdw_state stays NULL.
-	 */
-	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
-		return;
-
-	/*
-	 * We'll save private state in node->fdw_state.
-	 */
 
 	/*
 	 * Identify which user to do the remote access as.  This should match what
@@ -213,19 +202,30 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 
 	rte = rt_fetch(rtindex, estate->es_range_table);
 
-	/* Get info about foreign server. */
-	remote_connection_id_set(&id,
-							 intVal(list_nth(fdw_private, FdwScanPrivateServerId)),
-							 rte->checkAsUser ? rte->checkAsUser : GetUserId());
+	remote_connection_id_set(&id, server_id, rte->checkAsUser ? rte->checkAsUser : GetUserId());
+
+	return remote_dist_txn_get_connection(id,
+										  list_length(exprs) ? REMOTE_TXN_USE_PREP_STMT :
+															   REMOTE_TXN_NO_PREP_STMT);
+}
+
+void
+fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, List *fdw_private,
+			  List *fdw_exprs, int eflags)
+{
+	int num_params;
+
+	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) && !ts_guc_enable_remote_explain)
+		return;
 
 	/*
 	 * Get connection to the foreign server.  Connection manager will
 	 * establish new connection if necessary.
 	 */
-	fsstate->conn =
-		remote_dist_txn_get_connection(id,
-									   list_length(fdw_exprs) > 0 ? REMOTE_TXN_USE_PREP_STMT :
-																	REMOTE_TXN_NO_PREP_STMT);
+	fsstate->conn = get_connection(ss,
+								   intVal(list_nth(fdw_private, FdwScanPrivateServerId)),
+								   scanrelids,
+								   fdw_exprs);
 
 	/* Get private info created by planner functions. */
 	fsstate->query = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
@@ -319,10 +319,68 @@ fdw_scan_end(TsFdwScanState *fsstate)
 	/* MemoryContexts will be deleted automatically. */
 }
 
-void
-fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es)
+static char *
+get_data_node_explain(const char *sql, TSConnection *conn, ExplainState *es)
 {
-	const char *sql;
+	AsyncRequest *volatile req = NULL;
+	AsyncResponseResult *volatile res = NULL;
+	StringInfo explain_sql = makeStringInfo();
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(explain_sql, "%s", "EXPLAIN (VERBOSE ");
+	if (es->analyze)
+		appendStringInfo(explain_sql, "%s", ", ANALYZE");
+	if (!es->costs)
+		appendStringInfo(explain_sql, "%s", ", COSTS OFF");
+	if (es->buffers)
+		appendStringInfo(explain_sql, "%s", ", BUFFERS ON");
+	if (!es->timing)
+		appendStringInfo(explain_sql, "%s", ", TIMING OFF");
+	if (es->summary)
+		appendStringInfo(explain_sql, "%s", ", SUMMARY ON");
+	else
+		appendStringInfo(explain_sql, "%s", ", SUMMARY OFF");
+
+	appendStringInfoChar(explain_sql, ')');
+
+	appendStringInfo(explain_sql, " %s", sql);
+
+	PG_TRY();
+	{
+		PGresult *pg_res;
+		int i;
+
+		req = async_request_send(conn, explain_sql->data);
+		res = async_request_wait_ok_result(req);
+		pg_res = async_response_result_get_pg_result(res);
+		appendStringInfoChar(buf, '\n');
+
+		for (i = 0; i < PQntuples(pg_res); i++)
+		{
+			appendStringInfoSpaces(buf, (es->indent + 1) * 2);
+			appendStringInfo(buf, "%s\n", PQgetvalue(pg_res, i, 0));
+		}
+
+		pfree(req);
+		async_response_result_close(res);
+	}
+	PG_CATCH();
+	{
+		if (req != NULL)
+			pfree(req);
+		if (res != NULL)
+			async_response_result_close(res);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	return buf->data;
+}
+
+void
+fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanState *fsstate)
+{
 	const char *relations;
 
 	/*
@@ -365,7 +423,15 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es)
 			ExplainPropertyText("Chunks", chunk_names.data, es);
 		}
 
-		sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
-		ExplainPropertyText("Remote SQL", sql, es);
+		ExplainPropertyText("Remote SQL",
+							strVal(list_nth(fdw_private, FdwScanPrivateSelectSql)),
+							es);
+
+		if (ts_guc_enable_remote_explain)
+		{
+			const char *data_node_explain =
+				get_data_node_explain(fsstate->query, fsstate->conn, es);
+			ExplainPropertyText("Remote EXPLAIN", data_node_explain, es);
+		}
 	}
 }
