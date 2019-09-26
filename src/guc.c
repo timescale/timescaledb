@@ -61,6 +61,7 @@ TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
 TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
+TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -268,6 +269,17 @@ _guc_init(void)
 							 "across data nodes",
 							 &ts_guc_enable_async_append,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_remote_explain",
+							 "Show explain from remote nodes when using VERBOSE flag",
+							 "Enable getting and showing EXPLAIN output from remote nodes",
+							 &ts_guc_enable_remote_explain,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

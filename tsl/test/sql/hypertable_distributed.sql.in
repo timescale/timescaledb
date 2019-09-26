@@ -239,6 +239,24 @@ FROM disttable;
 SELECT device, temp, avg(temp) OVER (PARTITION BY device)
 FROM disttable;
 
+-- Test remote explain
+
+SET timescaledb.enable_remote_explain = ON;
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+
+-- Don't remote explain if there is no VERBOSE flag
+EXPLAIN (COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+
+-- Test additional EXPLAIN flags
+EXPLAIN (ANALYZE, VERBOSE, COSTS FALSE, BUFFERS ON, TIMING OFF, SUMMARY OFF)
+SELECT max(temp)
+FROM disttable;
+
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
 -- aren't enforced on a foreign table)

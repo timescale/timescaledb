@@ -23,6 +23,7 @@
 #include "data_node_scan_exec.h"
 #include "async_append.h"
 #include "remote/cursor.h"
+#include "guc.h"
 
 /*
  * The execution stage of a DataNodeScan.
@@ -50,7 +51,7 @@ data_node_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	List *recheck_quals = lsecond(cscan->custom_exprs);
 	List *fdw_private = list_nth(cscan->custom_private, 0);
 
-	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) && !ts_guc_enable_remote_explain)
 		return;
 
 	fdw_scan_init(&node->ss, &sss->fsstate, cscan->custom_relids, fdw_private, fdw_exprs, eflags);
@@ -138,7 +139,7 @@ data_node_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	CustomScan *scan = (CustomScan *) node->ss.ps.plan;
 	List *fdw_private = list_nth(scan->custom_private, 0);
 
-	fdw_scan_explain(&node->ss, fdw_private, es);
+	fdw_scan_explain(&node->ss, fdw_private, es, &((DataNodeScanState *) node)->fsstate);
 }
 
 static CustomExecMethods data_node_scan_state_methods = {

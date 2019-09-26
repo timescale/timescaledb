@@ -42,7 +42,8 @@ extern void fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *sca
 extern TupleTableSlot *fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate);
 extern void fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate);
 extern void fdw_scan_end(TsFdwScanState *fsstate);
-extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es);
+extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es,
+							 TsFdwScanState *fsstate);
 
 extern void create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block);
 

@@ -678,6 +678,175 @@ FROM disttable;
      90 |  2.7 |              2.7
 (9 rows)
 
+-- Test remote explain
+SET timescaledb.enable_remote_explain = ON;
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit
+           Output: disttable.temp
+           ->  Custom Scan (AsyncAppend)
+                 Output: disttable.temp
+                 ->  Merge Append
+                       Sort Key: disttable_1.temp DESC
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                             Output: disttable_1.temp
+                             Data node: data_node_1
+                             Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort
+                                 Output: _hyper_1_1_dist_chunk.temp
+                                 Sort Key: _hyper_1_1_dist_chunk.temp DESC
+                                 ->  Append
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_1_dist_chunk
+                                             Output: _hyper_1_1_dist_chunk.temp
+                                             Filter: (_hyper_1_1_dist_chunk.temp IS NOT NULL)
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_4_dist_chunk
+                                             Output: _hyper_1_4_dist_chunk.temp
+                                             Filter: (_hyper_1_4_dist_chunk.temp IS NOT NULL)
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                             Output: disttable_2.temp
+                             Data node: data_node_2
+                             Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort
+                                 Output: _hyper_1_3_dist_chunk.temp
+                                 Sort Key: _hyper_1_3_dist_chunk.temp DESC
+                                 ->  Append
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_3_dist_chunk
+                                             Output: _hyper_1_3_dist_chunk.temp
+                                             Filter: (_hyper_1_3_dist_chunk.temp IS NOT NULL)
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_5_dist_chunk
+                                             Output: _hyper_1_5_dist_chunk.temp
+                                             Filter: (_hyper_1_5_dist_chunk.temp IS NOT NULL)
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                             Output: disttable_3.temp
+                             Data node: data_node_3
+                             Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort
+                                 Output: _hyper_1_2_dist_chunk.temp
+                                 Sort Key: _hyper_1_2_dist_chunk.temp DESC
+                                 ->  Append
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_2_dist_chunk
+                                             Output: _hyper_1_2_dist_chunk.temp
+                                             Filter: (_hyper_1_2_dist_chunk.temp IS NOT NULL)
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_6_dist_chunk
+                                             Output: _hyper_1_6_dist_chunk.temp
+                                             Filter: (_hyper_1_6_dist_chunk.temp IS NOT NULL)
+ 
+(60 rows)
+
+-- Don't remote explain if there is no VERBOSE flag
+EXPLAIN (COSTS FALSE)
+SELECT max(temp)
+FROM disttable;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Result
+   InitPlan 1 (returns $0)
+     ->  Limit
+           ->  Custom Scan (AsyncAppend)
+                 ->  Merge Append
+                       Sort Key: disttable_1.temp DESC
+                       ->  Custom Scan (DataNodeScan) on disttable disttable_1
+                       ->  Custom Scan (DataNodeScan) on disttable disttable_2
+                       ->  Custom Scan (DataNodeScan) on disttable disttable_3
+(9 rows)
+
+-- Test additional EXPLAIN flags
+EXPLAIN (ANALYZE, VERBOSE, COSTS FALSE, BUFFERS ON, TIMING OFF, SUMMARY OFF)
+SELECT max(temp)
+FROM disttable;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=1 loops=1)
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           Output: disttable.temp
+           ->  Custom Scan (AsyncAppend) (actual rows=1 loops=1)
+                 Output: disttable.temp
+                 ->  Merge Append (actual rows=1 loops=1)
+                       Sort Key: disttable_1.temp DESC
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_1 (actual rows=1 loops=1)
+                             Output: disttable_1.temp
+                             Data node: data_node_1
+                             Chunks: _hyper_1_1_dist_chunk, _hyper_1_4_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort (actual rows=4 loops=1)
+                                 Output: _hyper_1_1_dist_chunk.temp
+                                 Sort Key: _hyper_1_1_dist_chunk.temp DESC
+                                 Sort Method: quicksort 
+                                 Buffers: shared hit=2
+                                 ->  Append (actual rows=4 loops=1)
+                                       Buffers: shared hit=2
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_1_dist_chunk (actual rows=3 loops=1)
+                                             Output: _hyper_1_1_dist_chunk.temp
+                                             Filter: (_hyper_1_1_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_4_dist_chunk (actual rows=1 loops=1)
+                                             Output: _hyper_1_4_dist_chunk.temp
+                                             Filter: (_hyper_1_4_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_2 (actual rows=1 loops=1)
+                             Output: disttable_2.temp
+                             Data node: data_node_2
+                             Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort (actual rows=2 loops=1)
+                                 Output: _hyper_1_3_dist_chunk.temp
+                                 Sort Key: _hyper_1_3_dist_chunk.temp DESC
+                                 Sort Method: quicksort 
+                                 Buffers: shared hit=2
+                                 ->  Append (actual rows=2 loops=1)
+                                       Buffers: shared hit=2
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_3_dist_chunk (actual rows=1 loops=1)
+                                             Output: _hyper_1_3_dist_chunk.temp
+                                             Filter: (_hyper_1_3_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_5_dist_chunk (actual rows=1 loops=1)
+                                             Output: _hyper_1_5_dist_chunk.temp
+                                             Filter: (_hyper_1_5_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_3 (actual rows=1 loops=1)
+                             Output: disttable_3.temp
+                             Data node: data_node_3
+                             Chunks: _hyper_1_2_dist_chunk, _hyper_1_6_dist_chunk
+                             Remote SQL: SELECT temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1, 2]) AND ((temp IS NOT NULL)) ORDER BY temp DESC NULLS FIRST
+                             Remote EXPLAIN: 
+                               Sort (actual rows=3 loops=1)
+                                 Output: _hyper_1_2_dist_chunk.temp
+                                 Sort Key: _hyper_1_2_dist_chunk.temp DESC
+                                 Sort Method: quicksort 
+                                 Buffers: shared hit=2
+                                 ->  Append (actual rows=3 loops=1)
+                                       Buffers: shared hit=2
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_2_dist_chunk (actual rows=1 loops=1)
+                                             Output: _hyper_1_2_dist_chunk.temp
+                                             Filter: (_hyper_1_2_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_6_dist_chunk (actual rows=2 loops=1)
+                                             Output: _hyper_1_6_dist_chunk.temp
+                                             Filter: (_hyper_1_6_dist_chunk.temp IS NOT NULL)
+                                             Buffers: shared hit=1
+ 
+(75 rows)
+
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
 -- aren't enforced on a foreign table)
