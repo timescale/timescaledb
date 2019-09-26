@@ -137,6 +137,17 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p'
 ERROR:  invalid order by column type: could not identify an less-than operator for type point
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
+--ddl on ht with compression
+ALTER TABLE foo ADD COLUMN new_column INT;
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo DROP COLUMN a;
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo DROP COLUMN t;
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo RESET (timescaledb.compress);
+ERROR:  compression options cannot be reset
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 

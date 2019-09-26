@@ -77,6 +77,14 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p'
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
+
+--ddl on ht with compression
+ALTER TABLE foo ADD COLUMN new_column INT;
+ALTER TABLE foo DROP COLUMN a;
+ALTER TABLE foo DROP COLUMN t;
+ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
+ALTER TABLE foo RESET (timescaledb.compress);
+
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
 
