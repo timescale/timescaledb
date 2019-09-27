@@ -597,6 +597,19 @@ relation_should_recurse(RangeVar *rv)
 #endif
 }
 
+/* handle forwading TRUNCATEs to the chunks of a hypertable */
+static void
+handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hypertable *ht)
+{
+	process_add_hypertable(args, ht);
+
+	/* Delete the metadata */
+	ts_chunk_delete_by_hypertable_id(ht->fd.id);
+
+	/* Drop the chunk tables */
+	foreach_chunk(ht, process_truncate_chunk, stmt);
+}
+
 /*
  * Truncate a hypertable.
  */
@@ -610,7 +623,9 @@ process_truncate(ProcessUtilityArgs *args)
 	/* Call standard process utility first to truncate all tables */
 	prev_ProcessUtility(args);
 
-	/* For all hypertables, we drop the now empty chunks */
+	/* For all hypertables, we drop the now empty chunks. We also propogate the
+	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
+	 */
 	foreach (cell, stmt->relations)
 	{
 		RangeVar *rv = lfirst(cell);
@@ -655,6 +670,7 @@ process_truncate(ProcessUtilityArgs *args)
 							 errhint("Do not specify the ONLY keyword, or use truncate"
 									 " only on the chunks directly.")));
 
+				handle_truncate_hypertable(args, stmt, ht);
 				process_add_hypertable(args, ht);
 
 				/* Delete the metadata */
@@ -662,6 +678,24 @@ process_truncate(ProcessUtilityArgs *args)
 
 				/* Drop the chunk tables */
 				foreach_chunk(ht, process_truncate_chunk, stmt);
+
+				/* propogate to the compressed hypertable */
+				if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+				{
+					Hypertable *compressed_ht =
+						ts_hypertable_cache_get_entry_by_id(hcache,
+															ht->fd.compressed_hypertable_id);
+					TruncateStmt compressed_stmt = *stmt;
+					compressed_stmt.relations =
+						list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
+												NameStr(compressed_ht->fd.table_name),
+												-1));
+
+					/* TRUNCATE the compressed hypertable */
+					ExecuteTruncate(&compressed_stmt);
+
+					handle_truncate_hypertable(args, stmt, compressed_ht);
+				}
 			}
 		}
 	}

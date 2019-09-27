@@ -154,7 +154,8 @@ CLUSTER htable USING htable_description_idx;
 NOTICE:  test_ddl_command_start: 1 hypertables, query: CLUSTER htable USING htable_description_idx;
 NOTICE:  test_ddl_command_start: public.htable
 TRUNCATE non_htable, htable;
-NOTICE:  test_ddl_command_start: 1 hypertables, query: TRUNCATE non_htable, htable;
+NOTICE:  test_ddl_command_start: 2 hypertables, query: TRUNCATE non_htable, htable;
+NOTICE:  test_ddl_command_start: public.htable
 NOTICE:  test_ddl_command_start: public.htable
 REINDEX TABLE htable;
 NOTICE:  test_ddl_command_start: 1 hypertables, query: REINDEX TABLE htable;

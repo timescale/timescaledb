@@ -27,6 +27,13 @@ SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 \set SEGMENT_META_COL _ts_meta_min_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
+TRUNCATE test1;
+/* should be no data in table */
+SELECT * FROM test1;
+/* nor compressed table */
+SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
+/* the compressed table should have not chunks */
+EXPLAIN (costs off) SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
@@ -126,3 +133,7 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \set ORDER_BY_COL_NAME device_id
 \set SEGMENT_META_COL _ts_meta_min_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
+
+TRUNCATE test5;
+
+SELECT * FROM test5;
