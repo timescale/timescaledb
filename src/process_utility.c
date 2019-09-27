@@ -213,6 +213,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 		{
 			/*
 			 * ALLOWED:
+			 *
+			 * This is a whitelist of allowed commands.
 			 */
 			case AT_AddIndex:
 			case AT_ReAddIndex:
@@ -221,19 +223,18 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetRelOptions:
 			case AT_ClusterOn:
 			case AT_DropCluster:
+			case AT_ChangeOwner:
+				/* this is passed down in `process_altertable_change_owner` */
 			case AT_SetTableSpace:
-			/* this is passed down in `process_altertable_set_tablespace_end` */
-
-			/* allow now, improve later */
-			case AT_SetStatistics: /* pass statistics down to compressed? */
-				/* allowed on compression tables */
+				/* this is passed down in `process_altertable_set_tablespace_end` */
+			case AT_SetStatistics: /* should this be pushed down in some way? */
 				continue;
 			/*
 			 * BLOCKED:
+			 *
+			 * List things that we want to explicitly block for documentation purposes
+			 * But also block everything else as well.
 			 */
-			/* should be implemented later */
-			case AT_ChangeOwner:
-			/* definitely block */
 			case AT_AddOids:
 			case AT_DropOids:
 			case AT_AddOidsRecurse:
@@ -242,7 +243,6 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ForceRowSecurity:
 			case AT_NoForceRowSecurity:
 			default:
-				/* blocked by default */
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on hypertables that have compression "
@@ -1413,6 +1413,14 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 	Assert(IsA(cmd->newowner, RoleSpec));
 
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
+
+	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+	{
+		Hypertable *compressed_hypertable =
+			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+		process_altertable_change_owner(compressed_hypertable, cmd);
+	}
 }
 
 static void

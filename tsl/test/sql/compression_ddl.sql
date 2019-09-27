@@ -262,6 +262,21 @@ DROP VIEW dependent_1;
 --SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
+\gset
+
+ALTER TABLE test1 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+--make sure new owner is propagated down
+SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = 'test1'::regclass;
+SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_HYPER_NAME'::regclass;
+SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_CHUNK_NAME'::regclass;
+
 DROP TABLE test1;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
