@@ -990,6 +990,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 			row_decompressor_decompress_row(&decompressor);
 			MemoryContextSwitchTo(old_ctx);
+			MemoryContextReset(per_compressed_row_ctx);
 		}
 
 		heap_endscan(heapScan);
