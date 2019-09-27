@@ -5,6 +5,16 @@
 \ir include/rand_generator.sql
 \c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/compression_utils.sql
+
+
+SET client_min_messages = ERROR;
+DROP TABLESPACE IF EXISTS tablespace1;
+DROP TABLESPACE IF EXISTS tablespace2;
+SET client_min_messages = NOTICE;
+--test hypertable with tables space
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
@@ -34,6 +44,29 @@ DROP INDEX new_index;
 ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+
+
+SELECT count(*) as "COUNT_CHUNKS_UNCOMPRESSED"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' \gset
+
+SELECT count(*) as "COUNT_CHUNKS_COMPRESSED"
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test1' \gset
+
+ALTER TABLE test1 SET TABLESPACE tablespace1;
+
+--all chunks + both the compressed and uncompressed hypertable moved to new tablespace
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+FROM pg_tables WHERE tablespace = 'tablespace1';
+
+ALTER TABLE test1 SET TABLESPACE tablespace2;
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+FROM pg_tables WHERE tablespace = 'tablespace2';
+
 
 
 --
@@ -227,3 +260,8 @@ DROP VIEW dependent_1;
 --DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
 --verify that there are no more hypertable remaining
 --SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE test1;
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;

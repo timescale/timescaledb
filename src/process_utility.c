@@ -221,10 +221,12 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetRelOptions:
 			case AT_ClusterOn:
 			case AT_DropCluster:
+			case AT_SetTableSpace:
+			/* this is passed down in `process_altertable_set_tablespace_end` */
+
 			/* allow now, improve later */
 			case AT_SetStatistics: /* pass statistics down to compressed? */
-			case AT_SetTableSpace: /* pass down to compressed as well */
-				/* allowed on materialization tables */
+				/* allowed on compression tables */
 				continue;
 			/*
 			 * BLOCKED:
@@ -2258,6 +2260,13 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
 	foreach_chunk(ht, process_altertable_chunk, cmd);
+	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+	{
+		Hypertable *compressed_hypertable =
+			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
+	}
 }
 
 static void
