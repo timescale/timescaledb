@@ -7,6 +7,10 @@
 \ir include/remote_exec.sql
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
+CREATE OR REPLACE FUNCTION test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'test_override_pushdown_timestamptz'
+LANGUAGE C VOLATILE STRICT;
+
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
@@ -644,6 +648,39 @@ WHERE (hyper.temp * random() <= 20)
 AND time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
+
+-- contains whitelisted time expressions
+SELECT test_override_pushdown_timestamptz('2018-06-01 00:00'::timestamptz);
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, device, avg(temp)
+FROM pg2dim
+WHERE time < Now( ) - INTERVAL '3 days'
+GROUP BY 1, 2
+LIMIT 1;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < Now( ) - INTERVAL '3 days'
+GROUP BY 1, 2
+LIMIT 1;
+
+-- Verify that repeated runs of the same plan will get different timestamps
+PREPARE timestamp_pushdown_test AS
+SELECT time, device, avg(temp)
+FROM hyper
+WHERE time < now() - INTERVAL '3 days'
+GROUP BY 1, 2
+LIMIT 1;
+
+EXPLAIN (VERBOSE, COSTS OFF)
+EXECUTE timestamp_pushdown_test;
+
+SELECT test_override_pushdown_timestamptz('2019-10-15 00:00'::timestamptz);
+
+EXPLAIN (VERBOSE, COSTS OFF)
+EXECUTE timestamp_pushdown_test;
 
 -- Test one-dimensional push down
 CREATE TABLE hyper1d (time timestamptz, device int, temp float);

@@ -340,6 +340,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	List *remote_exprs = NIL;
 	List *local_exprs = NIL;
 	List *params_list = NIL;
+	List *current_time_idx = NIL;
 	List *fdw_scan_tlist = NIL;
 	List *fdw_recheck_quals = NIL;
 	List *retrieved_attrs;
@@ -454,7 +455,8 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 							false,
 							&retrieved_attrs,
 							&params_list,
-							fpinfo->sca);
+							fpinfo->sca,
+							&current_time_idx);
 
 	/* Remember remote_exprs for possible use by PlanDirectModify */
 	fpinfo->final_remote_exprs = remote_exprs;
@@ -468,6 +470,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 							 makeInteger(fpinfo->fetch_size),
 							 makeInteger(fpinfo->server->serverid),
 							 (fpinfo->sca != NULL ? list_copy(fpinfo->sca->chunk_oids) : NIL));
+	fdw_private = lappend(fdw_private, current_time_idx);
 	Assert(!IS_JOIN_REL(rel));
 
 	if (IS_UPPER_REL(rel))

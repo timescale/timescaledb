@@ -153,7 +153,8 @@ get_remote_estimate(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds, 
 							false,
 							&retrieved_attrs,
 							NULL,
-							fpinfo->sca);
+							fpinfo->sca,
+							NULL);
 
 	/* Get the remote estimate */
 	conn = remote_dist_txn_get_connection(fpinfo->cid, REMOTE_TXN_NO_PREP_STMT);

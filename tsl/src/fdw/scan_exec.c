@@ -42,6 +42,8 @@ enum FdwScanPrivateIndex
 	FdwScanPrivateServerId,
 	/* OID list of chunk oids, used by EXPLAIN */
 	FdwScanPrivateChunkOids,
+	/* Places in the remote query that need to have the current timestamp inserted */
+	FdwScanCurrentTimeIndexes,
 	/*
 	 * String describing join i.e. names of relations being joined and types
 	 * of join, added when the scan is join
@@ -180,6 +182,54 @@ prepare_query_params(PlanState *node, List *fdw_exprs, int num_params, FmgrInfo 
 	*param_values = (const char **) palloc0(num_params * sizeof(char *));
 }
 
+#ifdef TS_DEBUG
+/* Allow tests to specify the time to push down in place of now() */
+TimestampTz ts_current_timestamp_override_value = -1;
+
+extern void
+fdw_scan_debug_override_pushdown_timestamp(TimestampTz time)
+{
+	ts_current_timestamp_override_value = time;
+}
+#endif
+
+/*
+ * This function takes a sql statement char string and list of indicies to occurrences of `now()`
+ * within that string and then returns a new string which will be the same sql statement, only with
+ * the now calls replaced with the current transaction timestamp.
+ */
+static char *
+generate_updated_sql_using_current_timestamp(const char *original_sql, List *now_indicies)
+{
+	static const char string_to_replace[] = "now()";
+	int replace_length = strlen(string_to_replace);
+	StringInfoData new_query;
+	ListCell *lc;
+	int curr_index = 0;
+	TimestampTz now;
+
+	initStringInfo(&new_query);
+	now = GetSQLCurrentTimestamp(-1);
+#ifdef TS_DEBUG
+	if (ts_current_timestamp_override_value >= 0)
+		now = ts_current_timestamp_override_value;
+#endif
+
+	foreach (lc, now_indicies)
+	{
+		int next_index = lfirst_int(lc);
+
+		Assert(next_index < strlen(original_sql) &&
+			   strncmp(string_to_replace, original_sql + next_index, replace_length) == 0);
+		appendBinaryStringInfo(&new_query, original_sql + curr_index, next_index - curr_index);
+		appendStringInfo(&new_query, "('%s'::timestamptz)", timestamptz_to_str(now));
+		curr_index = next_index + replace_length;
+	}
+
+	appendStringInfo(&new_query, "%s", original_sql + curr_index);
+	return new_query.data;
+}
+
 static TSConnection *
 get_connection(ScanState *ss, Oid const server_id, Bitmapset *scanrelids, List *exprs)
 {
@@ -228,7 +278,14 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 								   fdw_exprs);
 
 	/* Get private info created by planner functions. */
-	fsstate->query = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+	if (list_nth(fdw_private, FdwScanCurrentTimeIndexes) == NIL)
+		fsstate->query = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+	else
+		fsstate->query =
+			generate_updated_sql_using_current_timestamp(strVal(list_nth(fdw_private,
+																		 FdwScanPrivateSelectSql)),
+														 list_nth(fdw_private,
+																  FdwScanCurrentTimeIndexes));
 	fsstate->retrieved_attrs = (List *) list_nth(fdw_private, FdwScanPrivateRetrievedAttrs);
 	fsstate->fetch_size = intVal(list_nth(fdw_private, FdwScanPrivateFetchSize));
 
@@ -401,6 +458,7 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 		Oid server_id = intVal(list_nth(fdw_private, FdwScanPrivateServerId));
 		ForeignServer *server = GetForeignServer(server_id);
 		List *chunk_oids = (List *) list_nth(fdw_private, FdwScanPrivateChunkOids);
+		char *sql;
 
 		ExplainPropertyText("Data node", server->servername, es);
 
@@ -423,9 +481,17 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 			ExplainPropertyText("Chunks", chunk_names.data, es);
 		}
 
-		ExplainPropertyText("Remote SQL",
-							strVal(list_nth(fdw_private, FdwScanPrivateSelectSql)),
-							es);
+		if (list_nth(fdw_private, FdwScanCurrentTimeIndexes) != NIL)
+			sql =
+				generate_updated_sql_using_current_timestamp(strVal(
+																 list_nth(fdw_private,
+																		  FdwScanPrivateSelectSql)),
+															 list_nth(fdw_private,
+																	  FdwScanCurrentTimeIndexes));
+		else
+			sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+
+		ExplainPropertyText("Remote SQL", sql, es);
 
 		if (ts_guc_enable_remote_explain)
 		{
