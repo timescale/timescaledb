@@ -11,6 +11,7 @@
 #include <utils/palloc.h>
 #include <fmgr.h>
 #include <access/htup.h>
+#include <commands/explain.h>
 
 /*
  * Execution state of a foreign scan using timescaledb_fdw.
@@ -46,5 +47,10 @@ extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es,
 							 TsFdwScanState *fsstate);
 
 extern void create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block);
+
+#ifdef TS_DEBUG
+/* Allow tests to specify the time to push down in place of now() */
+extern void fdw_scan_debug_override_pushdown_timestamp(TimestampTz time);
+#endif
 
 #endif /* TIMESCALEDB_TSL_FDW_SCAN_EXEC_H */

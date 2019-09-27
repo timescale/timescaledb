@@ -10,6 +10,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_persistent_record.c
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_resolve.c
   ${CMAKE_CURRENT_SOURCE_DIR}/stmt_params.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/scan_exec_debug.c
 )
 
 target_sources(${TSL_TESTS_LIB_NAME} PRIVATE ${SOURCES})
