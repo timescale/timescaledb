@@ -22,7 +22,7 @@ CREATE TABLE conditions (
     );
 select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::interval);
 
---TEST 1-- 
+--TEST 1--
 --cannot set policy without enabling compression --
 \set ON_ERROR_STOP 0
 select add_compress_chunks_policy('conditions', '60d'::interval);
@@ -38,10 +38,10 @@ select add_compress_chunks_policy('conditions', '60d'::interval);
 select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks;
 \gset
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
-select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s'); 
+select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
 insert into conditions
-select generate_series(now()::timestamp, now()::timestamp+'1day', '1 min'), 'TOK', 'sony', 55, 75;
+select now()::timestamp, 'TOK', 'sony', 55, 75;
 
 -- TEST3 --
 --only the old chunks will get compressed when policy is executed--
@@ -67,7 +67,7 @@ select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_con
 select test_compress_chunks_policy(:compressjob_id);
 \set ON_ERROR_STOP 1
 
---TEST 7 
+--TEST 7
 --compress chunks policy for integer based partition hypertable
 CREATE TABLE test_table_int(time bigint, val int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
@@ -83,7 +83,7 @@ where hypertable_id = (Select id from _timescaledb_catalog.hypertable where tabl
 \gset
 select test_compress_chunks_policy(:compressjob_id);
 select test_compress_chunks_policy(:compressjob_id);
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats 
+select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats
 where hypertable_name::text like 'test_table_int'
 and compression_status like 'Compressed'
 order by chunk_name;
