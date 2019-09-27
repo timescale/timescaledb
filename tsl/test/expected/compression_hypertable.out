@@ -95,6 +95,27 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  t           | t           | t
 (1 row)
 
+TRUNCATE test1;
+/* should be no data in table */
+SELECT * FROM test1;
+ Time | i | b | t 
+------+---+---+---
+(0 rows)
+
+/* nor compressed table */
+SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
+ Time | i | b | t | _ts_meta_count | _ts_meta_sequence_num | _ts_meta_min_max_1 
+------+---+---+---+----------------+-----------------------+--------------------
+(0 rows)
+
+/* the compressed table should have not chunks */
+EXPLAIN (costs off) SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
+(2 rows)
+
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 day');
@@ -351,4 +372,10 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 -------------+-------------+------------------
  t           | t           | t
 (1 row)
+
+TRUNCATE test5;
+SELECT * FROM test5;
+ time | device_id | temperature 
+------+-----------+-------------
+(0 rows)
 
