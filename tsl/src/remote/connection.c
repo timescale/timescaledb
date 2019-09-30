@@ -892,7 +892,7 @@ remote_connection_check_extension(TSConnection *conn, const char **owner_name, O
 
 	/* extract owner */
 	if (owner_name != NULL)
-		*owner_name = PQgetvalue(res, 0, 0);
+		*owner_name = pstrdup(PQgetvalue(res, 0, 0));
 
 	if (owner_oid != NULL)
 		*owner_oid = pg_atoi(PQgetvalue(res, 0, 1), sizeof(int32), 0);

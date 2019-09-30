@@ -309,7 +309,7 @@ data_node_validate_extension(TSConnection *conn)
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 	const char *const port = PQport(remote_connection_get_pg_conn(conn));
 
-	const char *actual_username;
+	const char *actual_username = NULL;
 
 	if (!remote_connection_check_extension(conn, &actual_username, NULL))
 		ereport(ERROR,
