@@ -946,11 +946,9 @@ get_hypertable_data_node(Oid table_id, const char *node_name, bool ownercheck)
 }
 
 static Datum
-data_node_block_or_allow_new_chunks(PG_FUNCTION_ARGS, bool block_chunks)
+data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, bool force,
+									bool block_chunks)
 {
-	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
-	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
-	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	int affected = 0;
 	bool all_hypertables = table_id == InvalidOid ? true : false;
 	List *hypertable_data_nodes = NIL;
@@ -981,9 +979,22 @@ data_node_block_or_allow_new_chunks(PG_FUNCTION_ARGS, bool block_chunks)
 }
 
 Datum
-data_node_set_block_new_chunks(PG_FUNCTION_ARGS, bool block)
+data_node_allow_new_chunks(PG_FUNCTION_ARGS)
 {
-	return data_node_block_or_allow_new_chunks(fcinfo, block);
+	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+
+	return data_node_block_or_allow_new_chunks(node_name, table_id, false, false);
+}
+
+Datum
+data_node_block_new_chunks(PG_FUNCTION_ARGS)
+{
+	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+
+	return data_node_block_or_allow_new_chunks(node_name, table_id, force, true);
 }
 
 Datum
