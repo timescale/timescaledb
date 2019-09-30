@@ -343,15 +343,15 @@ timescaledb_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti
 	if (!should_optimize_query(ht))
 		return;
 
-	if (ts_guc_optimize_non_hypertables)
-	{
-		/* if optimizing all tables, apply optimization to any table */
+	/*
+	 * Since the sort optimization adds new paths to the rel it has
+	 * to happen before any optimizations that replace pathlist.
+	 */
+	if (ts_guc_optimize_non_hypertables || (ht != NULL && is_append_child(rel, rte)))
 		ts_sort_transform_optimization(root, rel);
-	}
-	else if (ht != NULL && is_append_child(rel, rte))
-	{
-		ts_sort_transform_optimization(root, rel);
-	}
+
+	if (ts_cm_functions->set_rel_pathlist_query != NULL)
+		ts_cm_functions->set_rel_pathlist_query(root, rel, rti, rte, ht);
 
 	if (
 		/*
@@ -455,12 +455,16 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
 
-	if (ts_cm_functions->set_rel_pathlist_hook != NULL)
-		ts_cm_functions->set_rel_pathlist_hook(root, rel, rti, rte, ht, is_htdml);
 	if (!is_htdml)
 	{
 		timescaledb_set_rel_pathlist_query(root, rel, rti, rte, ht);
 	}
+	else
+	{
+		if (ts_cm_functions->set_rel_pathlist_dml != NULL)
+			ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
+	}
+
 	ts_cache_release(hcache);
 }
 

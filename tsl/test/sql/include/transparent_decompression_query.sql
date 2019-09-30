@@ -98,6 +98,12 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 --functions not yet optimized
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
 
+-- test sort optimization interaction
+
+:PREFIX SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
+
 --
 -- test ordered path
 --

@@ -29,38 +29,37 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 }
 
 void
-tsl_set_rel_pathlist_hook(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
-						  Hypertable *ht, bool isdml)
+tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
+						   Hypertable *ht)
 {
-	if (isdml)
+	if (ts_guc_enable_transparent_decompression && ht != NULL &&
+		rel->reloptkind == RELOPT_OTHER_MEMBER_REL && ht->fd.compressed_hypertable_id > 0)
 	{
-		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ON(ht))
-		{
-			ListCell *lc;
-			/* is this a chunk under compressed hypertable ? */
-			AppendRelInfo *appinfo = ts_get_appendrelinfo(root, rti, false);
-			Oid parent_oid = appinfo->parent_reloid;
-			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
-			Assert(parent_oid == ht->main_table_relid && (parent_oid == chunk->hypertable_relid));
-			if (chunk->fd.compressed_chunk_id > 0)
-			{
-				foreach (lc, rel->pathlist)
-				{
-					Path **pathptr = (Path **) &lfirst(lc);
-					*pathptr = compress_chunk_dml_generate_paths(*pathptr, chunk);
-				}
-			}
-		}
-	}
-	else
-	{
-		if (ts_guc_enable_transparent_decompression && ht != NULL &&
-			rel->reloptkind == RELOPT_OTHER_MEMBER_REL && ht->fd.compressed_hypertable_id > 0)
-		{
-			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 
-			if (chunk->fd.compressed_chunk_id > 0)
-				ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+		if (chunk->fd.compressed_chunk_id > 0)
+			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+	}
+}
+void
+tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
+						 Hypertable *ht)
+{
+	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ON(ht))
+	{
+		ListCell *lc;
+		/* is this a chunk under compressed hypertable ? */
+		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, rti, false);
+		Oid parent_oid = appinfo->parent_reloid;
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
+		Assert(parent_oid == ht->main_table_relid && (parent_oid == chunk->hypertable_relid));
+		if (chunk->fd.compressed_chunk_id > 0)
+		{
+			foreach (lc, rel->pathlist)
+			{
+				Path **pathptr = (Path **) &lfirst(lc);
+				*pathptr = compress_chunk_dml_generate_paths(*pathptr, chunk);
+			}
 		}
 	}
 }

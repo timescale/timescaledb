@@ -43,10 +43,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- compress first and last chunk on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='v0, v1 desc, time', timescaledb.compress_segmentby='device_id,device_id_peer');
 NOTICE:  adding index _compressed_hypertable_5_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id, _ts_meta_sequence_num)
@@ -125,10 +125,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -871,6 +871,56 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
 (14 rows)
+
+-- test sort optimization interaction
+:PREFIX SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=10 loops=1)
+         Order: metrics."time" DESC
+         ->  Sort (actual rows=10 loops=1)
+               Sort Key: _hyper_1_3_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
+         ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
+               Heap Fetches: 0
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_1_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_5_15_chunk (never executed)
+(14 rows)
+
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device_id
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=27360 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=7200 loops=1)
+                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
+(10 rows)
+
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time" DESC
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=27360 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=7200 loops=1)
+                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
+(10 rows)
 
 --
 -- test ordered path
@@ -2226,8 +2276,8 @@ DEALLOCATE param_prep;
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
@@ -3362,6 +3412,128 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                            Filter: ("time" < now())
 (31 rows)
+
+-- test sort optimization interaction
+:PREFIX SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=10 loops=1)
+         Order: metrics_space."time" DESC
+         ->  Merge Append (actual rows=10 loops=1)
+               Sort Key: _hyper_2_12_chunk."time" DESC
+               ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=3 loops=1)
+                     Heap Fetches: 3
+               ->  Sort (actual rows=6 loops=1)
+                     Sort Key: _hyper_2_11_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Sort (actual rows=6048 loops=1)
+                           Sort Key: _hyper_2_11_chunk."time" DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
+                                 ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
+               ->  Sort (actual rows=3 loops=1)
+                     Sort Key: _hyper_2_10_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Sort (actual rows=2016 loops=1)
+                           Sort Key: _hyper_2_10_chunk."time" DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
+                                 ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_2_9_chunk."time" DESC
+               ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
+                     Heap Fetches: 0
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_2_6_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_2_6_chunk."time" DESC
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_2_6_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_6_19_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_2_5_chunk."time" DESC
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_2_5_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_6_18_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_2_4_chunk."time" DESC
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_2_4_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_6_17_chunk (never executed)
+(51 rows)
+
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_2_12_chunk."time" DESC, _hyper_2_12_chunk.device_id
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=27360 loops=1)
+               ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
+                     ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
+                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
+               ->  Seq Scan on _hyper_2_9_chunk (actual rows=2016 loops=1)
+               ->  Seq Scan on _hyper_2_8_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_2_7_chunk (actual rows=2016 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4320 loops=1)
+                     ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
+(19 rows)
+
+:PREFIX SELECT time,device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Merge Append (actual rows=10 loops=1)
+         Sort Key: _hyper_2_4_chunk.device_id, _hyper_2_4_chunk."time" DESC
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_2_4_chunk.device_id, _hyper_2_4_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_2_5_chunk.device_id, _hyper_2_5_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4320 loops=1)
+                     ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_2_6_chunk.device_id, _hyper_2_6_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1440 loops=1)
+                     ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
+         ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Sort (actual rows=10 loops=1)
+               Sort Key: _hyper_2_10_chunk.device_id, _hyper_2_10_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
+                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
+                     ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
+         ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+(36 rows)
 
 --
 -- test ordered path
@@ -5306,8 +5478,8 @@ DEALLOCATE param_prep;
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:261: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:261: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:267: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:267: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
