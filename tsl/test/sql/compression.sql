@@ -12,10 +12,11 @@ create table foo (a integer, b integer, c integer, d integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 create unique index foo_uniq ON foo (a, b);
 
-insert into foo values( 3 , 16 , 20, 11);
-insert into foo values( 10 , 10 , 20, 120);
-insert into foo values( 20 , 11 , 20, 13);
-insert into foo values( 30 , 12 , 20, 14);
+--note that the "d" order by column is all NULL
+insert into foo values( 3 , 16 , 20, NULL);
+insert into foo values( 10 , 10 , 20, NULL);
+insert into foo values( 20 , 11 , 20, NULL);
+insert into foo values( 30 , 12 , 20, NULL);
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
@@ -25,7 +26,7 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 select tgname , tgtype, tgenabled , relname
-from pg_trigger t, pg_class rel 
+from pg_trigger t, pg_class rel
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
 \x
 select * from timescaledb_information.compressed_chunk_stats
@@ -45,7 +46,7 @@ where ch1.compressed_chunk_id = ch2.id;
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
---TEST2a try DML on a compressed chunk 
+--TEST2a try DML on a compressed chunk
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
 delete from foo where a = 10;
@@ -80,7 +81,7 @@ insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
 delete from _timescaledb_internal._hyper_1_2_chunk;
- 
+
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 insert into foo values( 11 , 10 , 20, 120);
@@ -166,8 +167,8 @@ SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 \set ON_ERROR_STOP 1
 
 --size information is gone too
-select count(*) 
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, 
+select count(*)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht,
 _timescaledb_catalog.compression_chunk_size map
 where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
 and map.chunk_id = ch1.id;

@@ -350,41 +350,6 @@ continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **
 	error_no_default_fn_community();
 }
 
-static bytea *
-segment_meta_min_max_send_default(Datum arg1)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static Datum
-segment_meta_min_max_recv_default(StringInfo buf)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static Datum
-segment_meta_get_min_default(Datum meta, Oid type)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static Datum
-segment_meta_get_max_default(Datum meta, Oid type)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static bool
-segment_meta_has_null_default(Datum meta)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -437,12 +402,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.process_compress_table = process_compress_table_default,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
-	.segment_meta_min_max_send = segment_meta_min_max_send_default,
-	.segment_meta_min_max_recv = segment_meta_min_max_recv_default,
-	.segment_meta_get_min = segment_meta_get_min_default,
-	.segment_meta_get_max = segment_meta_get_max_default,
-	.segment_meta_has_null = segment_meta_has_null_default,
-
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,

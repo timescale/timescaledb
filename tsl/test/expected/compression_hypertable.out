@@ -79,7 +79,8 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 
 \set TYPE timestamptz
 \set ORDER_BY_COL_NAME Time
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -90,9 +91,9 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
                27
 (1 row)
 
- min_correct | max_correct | has_null_correct 
--------------+-------------+------------------
- t           | t           | t
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
 (1 row)
 
 TRUNCATE test1;
@@ -104,8 +105,8 @@ SELECT * FROM test1;
 
 /* nor compressed table */
 SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
- Time | i | b | t | _ts_meta_count | _ts_meta_sequence_num | _ts_meta_min_max_1 
-------+---+---+---+----------------+-----------------------+--------------------
+ Time | i | b | t | _ts_meta_count | _ts_meta_sequence_num | _ts_meta_min_1 | _ts_meta_max_1 
+------+---+---+---+----------------+-----------------------+----------------+----------------
 (0 rows)
 
 /* the compressed table should have not chunks */
@@ -175,7 +176,8 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 
 \set TYPE int
 \set ORDER_BY_COL_NAME c
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -186,14 +188,15 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
                 5
 (1 row)
 
- min_correct | max_correct | has_null_correct 
--------------+-------------+------------------
- t           | t           | t
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
 (1 row)
 
 \set TYPE timestamptz
 \set ORDER_BY_COL_NAME Time
-\set SEGMENT_META_COL _ts_meta_min_max_2
+\set SEGMENT_META_COL_MIN _ts_meta_min_2
+\set SEGMENT_META_COL_MAX _ts_meta_max_2
 \ir include/compression_test_hypertable_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -204,9 +207,9 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
                 0
 (1 row)
 
- min_correct | max_correct | has_null_correct 
--------------+-------------+------------------
- t           | t           | t
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
 (1 row)
 
 --TEST4 create segments with > 1000 rows.
@@ -284,7 +287,8 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 
 \set TYPE TIMESTAMPTZ
 \set ORDER_BY_COL_NAME timec
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -295,9 +299,9 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
                 1
 (1 row)
 
- min_correct | max_correct | has_null_correct 
--------------+-------------+------------------
- t           | t           | t
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
 (1 row)
 
 --add hypertable with order by a non by-val type with NULLs
@@ -357,7 +361,8 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 
 \set TYPE TEXT
 \set ORDER_BY_COL_NAME device_id
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -368,9 +373,9 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
                10
 (1 row)
 
- min_correct | max_correct | has_null_correct 
--------------+-------------+------------------
- t           | t           | t
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
 (1 row)
 
 TRUNCATE test5;

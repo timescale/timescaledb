@@ -24,7 +24,8 @@ SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
 \set TYPE timestamptz
 \set ORDER_BY_COL_NAME Time
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
 TRUNCATE test1;
@@ -63,12 +64,14 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 
 \set TYPE int
 \set ORDER_BY_COL_NAME c
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
 \set TYPE timestamptz
 \set ORDER_BY_COL_NAME Time
-\set SEGMENT_META_COL _ts_meta_min_max_2
+\set SEGMENT_META_COL_MIN _ts_meta_min_2
+\set SEGMENT_META_COL_MAX _ts_meta_max_2
 \ir include/compression_test_hypertable_segment_meta.sql
 
 --TEST4 create segments with > 1000 rows.
@@ -101,7 +104,8 @@ SELECT 'test4' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
 \set TYPE TIMESTAMPTZ
 \set ORDER_BY_COL_NAME timec
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
 
@@ -131,7 +135,8 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable.sql
 \set TYPE TEXT
 \set ORDER_BY_COL_NAME device_id
-\set SEGMENT_META_COL _ts_meta_min_max_1
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
 TRUNCATE test5;

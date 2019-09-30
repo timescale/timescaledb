@@ -577,20 +577,28 @@ tsl_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(builder);
 }
 
-TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish);
+TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish_max);
 Datum
-tsl_segment_meta_min_max_finish(PG_FUNCTION_ARGS)
+tsl_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
 {
 	SegmentMetaMinMaxBuilder *builder =
 		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
-	SegmentMetaMinMax *res;
 
-	if (builder == NULL)
+	if (builder == NULL || segment_meta_min_max_builder_empty(builder))
 		PG_RETURN_NULL();
 
-	res = segment_meta_min_max_builder_finish(builder);
-	if (res == NULL)
+	PG_RETURN_DATUM(segment_meta_min_max_builder_max(builder));
+}
+
+TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish_min);
+Datum
+tsl_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
+{
+	SegmentMetaMinMaxBuilder *builder =
+		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+
+	if (builder == NULL || segment_meta_min_max_builder_empty(builder))
 		PG_RETURN_NULL();
 
-	PG_RETURN_POINTER(res);
+	PG_RETURN_DATUM(segment_meta_min_max_builder_min(builder));
 }

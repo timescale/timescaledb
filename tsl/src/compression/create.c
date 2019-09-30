@@ -20,6 +20,7 @@
 #include <utils/builtins.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
+#include <utils/typcache.h>
 
 #include "catalog.h"
 #include "create.h"
@@ -91,12 +92,20 @@ get_default_algorithm_id(Oid typeoid)
 			return COMPRESSION_ALGORITHM_DICTIONARY;
 		}
 		default:
+		{
+			/* use dictitionary if possible, otherwise use array */
+			TypeCacheEntry *tentry =
+				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
+			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
+				return COMPRESSION_ALGORITHM_ARRAY;
 			return COMPRESSION_ALGORITHM_DICTIONARY;
+		}
 	}
 }
 
-char *
-compression_column_segment_min_max_name(const FormData_hypertable_compression *fd)
+static char *
+compression_column_segment_metadata_name(const FormData_hypertable_compression *fd,
+										 const char *type)
 {
 	char *buf = palloc(sizeof(char) * NAMEDATALEN);
 	int ret;
@@ -104,26 +113,36 @@ compression_column_segment_min_max_name(const FormData_hypertable_compression *f
 	Assert(fd->orderby_column_index > 0);
 	ret = snprintf(buf,
 				   NAMEDATALEN,
-				   COMPRESSION_COLUMN_METADATA_PREFIX "min_max_%d",
+				   COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d",
+				   type,
 				   fd->orderby_column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("bad segment metadata min max column name")));
+				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
 	}
 	return buf;
 }
 
+char *
+compression_column_segment_min_name(const FormData_hypertable_compression *fd)
+{
+	return compression_column_segment_metadata_name(fd, "min");
+}
+
+char *
+compression_column_segment_max_name(const FormData_hypertable_compression *fd)
+{
+	return compression_column_segment_metadata_name(fd, "max");
+}
+
 static void
-compresscolinfo_add_metadata_columns(CompressColInfo *cc)
+compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_rel)
 {
 	/* additional metadata columns.
 	 * these are not listed in hypertable_compression catalog table
 	 * and so only has a ColDef entry */
 	int colno;
-	Oid segment_meta_min_max_oid =
-		ts_custom_type_cache_get(CUSTOM_TYPE_SEGMENT_META_MIN_MAX)->type_oid;
 
 	/* count column */
 	cc->coldeflist = lappend(cc->coldeflist,
@@ -146,11 +165,30 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc)
 	{
 		if (cc->col_meta[colno].orderby_column_index > 0)
 		{
-			/* segment_meta_min_max columns */
+			FormData_hypertable_compression fd = cc->col_meta[colno];
+			AttrNumber col_attno = get_attnum(uncompressed_rel->rd_id, NameStr(fd.attname));
+			Form_pg_attribute attr = TupleDescAttr(RelationGetDescr(uncompressed_rel),
+												   AttrNumberGetAttrOffset(col_attno));
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+			if (!OidIsValid(type->lt_opr))
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_FUNCTION),
+						 errmsg("invalid order by column type: could not identify an less-than "
+								"operator for type %s",
+								format_type_be(attr->atttypid))));
+
+			/* segment_meta min and max columns */
 			cc->coldeflist =
 				lappend(cc->coldeflist,
-						makeColumnDef(compression_column_segment_min_max_name(&cc->col_meta[colno]),
-									  segment_meta_min_max_oid,
+						makeColumnDef(compression_column_segment_min_name(&cc->col_meta[colno]),
+									  attr->atttypid,
+									  -1 /* typemod */,
+									  0 /*collation*/));
+			cc->coldeflist =
+				lappend(cc->coldeflist,
+						makeColumnDef(compression_column_segment_max_name(&cc->col_meta[colno]),
+									  attr->atttypid,
 									  -1 /* typemod */,
 									  0 /*collation*/));
 		}
@@ -271,7 +309,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	}
 	cc->numcols = colno;
 
-	compresscolinfo_add_metadata_columns(cc);
+	compresscolinfo_add_metadata_columns(cc, rel);
 
 	relation_close(rel, AccessShareLock);
 }

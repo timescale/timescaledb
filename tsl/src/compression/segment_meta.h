@@ -10,36 +10,15 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 
-typedef struct SegmentMetaMinMax SegmentMetaMinMax;
 typedef struct SegmentMetaMinMaxBuilder SegmentMetaMinMaxBuilder;
-
-#define SEGMENT_META_ACCESSOR_MAX_SQL_FUNCTION "segment_meta_get_max"
-#define SEGMENT_META_ACCESSOR_MIN_SQL_FUNCTION "segment_meta_get_min"
 
 SegmentMetaMinMaxBuilder *segment_meta_min_max_builder_create(Oid type, Oid collation);
 void segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum val);
 void segment_meta_min_max_builder_update_null(SegmentMetaMinMaxBuilder *builder);
-SegmentMetaMinMax *segment_meta_min_max_builder_finish(SegmentMetaMinMaxBuilder *builder);
-SegmentMetaMinMax *segment_meta_min_max_builder_finish_and_reset(SegmentMetaMinMaxBuilder *builder);
 
-Datum tsl_segment_meta_get_min(Datum meta, Oid type);
-Datum tsl_segment_meta_get_max(Datum meta, Oid type);
-bool tsl_segment_meta_has_null(Datum meta);
+Datum segment_meta_min_max_builder_min(SegmentMetaMinMaxBuilder *builder);
+Datum segment_meta_min_max_builder_max(SegmentMetaMinMaxBuilder *builder);
+bool segment_meta_min_max_builder_empty(SegmentMetaMinMaxBuilder *builder);
 
-bytea *segment_meta_min_max_to_binary_string(SegmentMetaMinMax *meta);
-
-SegmentMetaMinMax *segment_meta_min_max_from_binary_string(StringInfo buf);
-
-static inline bytea *
-tsl_segment_meta_min_max_send(Datum arg1)
-{
-	SegmentMetaMinMax *meta = (SegmentMetaMinMax *) PG_DETOAST_DATUM(arg1);
-	return segment_meta_min_max_to_binary_string(meta);
-}
-
-static inline Datum
-tsl_segment_meta_min_max_recv(StringInfo buf)
-{
-	return PointerGetDatum(segment_meta_min_max_from_binary_string(buf));
-}
+void segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder);
 #endif

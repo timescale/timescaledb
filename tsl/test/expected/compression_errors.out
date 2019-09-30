@@ -67,7 +67,7 @@ NOTICE:  adding not-null constraint to column "a"
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 ERROR:  cannot compress tables with reserved column prefix '_ts_meta_'
 --basic test with count
-create table foo (a integer, b integer, c integer, t text);
+create table foo (a integer, b integer, c integer, t text, p point);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
  table_name 
@@ -133,6 +133,8 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c L
 ERROR:  unable to parse the compress_segmentby option 'c LIMIT 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
 ERROR:  unable to parse the compress_segmentby option 'c + b'
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
+ERROR:  invalid order by column type: could not identify an less-than operator for type point
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
@@ -142,8 +144,9 @@ select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _time
              8 | a       |                        4 |                        |                    1 | t           | f
              8 | b       |                        4 |                        |                    2 | t           | f
              8 | c       |                        4 |                        |                      |             | 
+             8 | p       |                        1 |                        |                      |             | 
              8 | t       |                        2 |                        |                      |             | 
-(4 rows)
+(5 rows)
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
@@ -187,8 +190,9 @@ select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _time
              8 | a       |                        4 |                        |                    1 | t           | f
              8 | b       |                        0 |                      1 |                      |             | 
              8 | c       |                        4 |                        |                      |             | 
+             8 | p       |                        1 |                        |                      |             | 
              8 | t       |                        2 |                        |                      |             | 
-(4 rows)
+(5 rows)
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable comp_hyper
