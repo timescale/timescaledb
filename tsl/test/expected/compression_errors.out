@@ -53,7 +53,7 @@ NOTICE:  adding index _compressed_hypertable_6_bacB toD__ts_meta_sequence_num_id
 NOTICE:  adding index _compressed_hypertable_6_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(c, _ts_meta_sequence_num)
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
-ERROR:  need to specify both compress_orderby and compress_groupby if altering compression
+ERROR:  need to specify both compress_orderby and compress_segmentby if altering compression
 ALTER TABLE foo2 set (timescaledb.compress='f');
 ERROR:  disabling compression is not yet supported
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
@@ -198,6 +198,77 @@ SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPE
 FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
-select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true)
+select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
 WARNING:  Timescale License expired
 ERROR:  cannot add drop chunks policy to hypertable "_compressed_hypertable_11" which contains compressed data
+--Constraint checking for compression
+create table fortable(col integer primary key);
+create table  table_constr( device_id integer,
+                   timec integer ,
+                   location integer , 
+                   c integer constraint valid_cval check (c > 20) , 
+                   d integer,
+                   primary key ( device_id, timec)
+);
+select table_name from create_hypertable('table_constr', 'timec', chunk_time_interval=> 10);
+  table_name  
+--------------
+ table_constr
+(1 row)
+
+ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+ERROR:  constraint table_constr_pkey requires column device_id to be a segment_by or order_by column for compression
+alter table table_constr add constraint table_constr_uk unique (location, timec, device_id);
+ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id');
+ERROR:  constraint table_constr_uk requires column location to be a segment_by or order_by column for compression
+alter table table_constr add constraint table_constr_fk FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
+ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location');
+ERROR:  constraint table_constr_fk requires column d to be a segment_by column for compression
+--exclusion constraints not allowed
+alter table table_constr add constraint table_constr_exclu exclude using btree (timec with = );
+ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
+ERROR:  constraint table_constr_exclu is not supported for compression
+alter table table_constr drop constraint table_constr_exclu ;
+--now it works
+ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
+NOTICE:  adding index _compressed_hypertable_13_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(device_id, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_13_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(location, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_13_d__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(d, _ts_meta_sequence_num)
+-- TEST fk cascade delete behavior on compressed chunk --
+insert into fortable values(1);
+insert into fortable values(10);
+--we want 2 chunks here --
+insert into table_constr values(1000, 1, 44, 44, 1);
+insert into table_constr values(1000, 10, 44, 44, 10);
+select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
+where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
+ORDER BY ch1.id limit 1 \gset
+-- we have 1 compressed and 1 uncompressed chunk after this.
+select compress_chunk(:'CHUNK_NAME');
+ compress_chunk 
+----------------
+ 
+(1 row)
+
+SELECT  hypertable_name , total_chunks , number_compressed_chunks 
+FROM timescaledb_information.compressed_hypertable_stats;
+ hypertable_name | total_chunks | number_compressed_chunks 
+-----------------+--------------+--------------------------
+ table_constr    |            2 |                        1
+(1 row)
+
+--delete from foreign table, should delete from hypertable too
+select device_id, d from table_constr order by device_id, d;
+ device_id | d  
+-----------+----
+      1000 |  1
+      1000 | 10
+(2 rows)
+
+delete from fortable where col = 1 or col = 10; 
+select device_id, d from table_constr order by device_id, d;
+ device_id | d 
+-----------+---
+(0 rows)
+

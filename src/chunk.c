@@ -442,8 +442,8 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 	chunk_scan_ctx_destroy(&scanctx);
 }
 
-static int
-chunk_add_constraints(Chunk *chunk)
+TSDLLEXPORT int
+ts_chunk_add_constraints(Chunk *chunk)
 {
 	int num_added;
 
@@ -676,7 +676,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
 	/* Add metadata for dimensional and inheritable constraints */
-	chunk_add_constraints(chunk);
+	ts_chunk_add_constraints(chunk);
 
 	/* Create the actual table relation for the chunk */
 	chunk->table_id = ts_chunk_create_table(chunk, ht);

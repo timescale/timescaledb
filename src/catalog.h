@@ -87,6 +87,7 @@ typedef struct TableIndexDef
 typedef enum InternalFunction
 {
 	DDL_ADD_CHUNK_CONSTRAINT,
+	DDL_ADD_HYPERTABLE_FK_CONSTRAINT,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 

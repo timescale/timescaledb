@@ -113,6 +113,8 @@ extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
 extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
 														int32 compressed_hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_is_compressed_internal(int32 compressed_hypertable_id);
+extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
+																	  List *constraint_list);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
