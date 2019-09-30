@@ -2157,6 +2157,26 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	return true;
 }
 
+TSDLLEXPORT void
+ts_hypertable_clone_constraints_to_compressed(Hypertable *user_ht, List *constraint_list)
+{
+	CatalogSecurityContext sec_ctx;
+
+	ListCell *lc;
+	Assert(user_ht->fd.compressed_hypertable_id != 0);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	foreach (lc, constraint_list)
+	{
+		NameData *conname = lfirst(lc);
+		CatalogInternalCall4(DDL_ADD_HYPERTABLE_FK_CONSTRAINT,
+							 NameGetDatum(conname),
+							 NameGetDatum(&user_ht->fd.schema_name),
+							 NameGetDatum(&user_ht->fd.table_name),
+							 Int32GetDatum(user_ht->fd.compressed_hypertable_id));
+	}
+	ts_catalog_restore_user(&sec_ctx);
+}
+
 /* is this a internal hypertable created for compression */
 TSDLLEXPORT bool
 ts_hypertable_is_compressed_internal(int32 compressed_hypertable_id)

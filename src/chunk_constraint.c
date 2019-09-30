@@ -325,7 +325,7 @@ chunk_constraint_create(ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id, Oid 
 /*
  * Create a set of constraints on a chunk table.
  */
-void
+TSDLLEXPORT void
 ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id,
 							Oid hypertable_oid, int32 hypertable_id)
 {
@@ -574,7 +574,7 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	return cube->num_slices;
 }
 
-int
+TSDLLEXPORT int
 ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
 												 Oid hypertable_oid)
 {

@@ -8,6 +8,11 @@
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
+#include <catalog/indexing.h>
+#if PG11_GE
+#include <catalog/pg_constraint_d.h>
+#endif
+#include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
 #include <catalog/index.h>
 #include <catalog/toasting.h>
@@ -17,6 +22,7 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
@@ -27,6 +33,7 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "continuous_agg.h"
+#include "compat.h"
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
@@ -210,7 +217,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	Relation rel;
 	TupleDesc tupdesc;
 	int i, colno, attno;
-	int32 *segorder_colindex;
+	int16 *segorder_colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -308,9 +315,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		colno++;
 	}
 	cc->numcols = colno;
-
 	compresscolinfo_add_metadata_columns(cc, rel);
-
+	pfree(segorder_colindex);
 	relation_close(rel, AccessShareLock);
 }
 
@@ -495,25 +501,34 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	compress_chunk->fd.hypertable_id = hs->hypertable_id;
 	compress_chunk->cube = src_chunk->cube;
 	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
+	compress_chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
 	snprintf(compress_chunk->fd.table_name.data,
 			 NAMEDATALEN,
 			 "compress%s_%d_chunk",
 			 NameStr(compress_ht->fd.associated_table_prefix),
 			 compress_chunk->fd.id);
-	compress_chunk->constraints = NULL;
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
+
+	/* only add inheritable constraints. no dimension constraints */
+	ts_chunk_constraints_add_inheritable_constraints(compress_chunk->constraints,
+													 compress_chunk->fd.id,
+													 compress_chunk->hypertable_relid);
+
 	/* Create the actual table relation for the chunk */
 	compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht);
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compress chunk table");
 
-	/* compressed chunk has no constraints. But inherits indexes and triggers
-	 * from the compressed hypertable
-	 */
+	/* Create the chunk's constraints*/
+	ts_chunk_constraints_create(compress_chunk->constraints,
+								compress_chunk->table_id,
+								compress_chunk->fd.id,
+								compress_chunk->hypertable_relid,
+								compress_chunk->fd.hypertable_id);
 
 	ts_trigger_create_all_on_chunk(compress_ht, compress_chunk);
 
@@ -566,6 +581,113 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 	return orderby_cols;
 }
 
+/* returns list of constraints that need to be cloned on the compressed hypertable
+ * This is limited to foreign key constraints now
+ */
+static List *
+validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
+{
+	Oid relid = ht->main_table_relid;
+	Relation pg_constr;
+	SysScanDesc scan;
+	ScanKeyData scankey;
+	HeapTuple tuple;
+	List *conlist = NIL;
+	ArrayType *arr;
+
+	pg_constr = heap_open(ConstraintRelationId, AccessShareLock);
+
+	ScanKeyInit(&scankey,
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	scan = systable_beginscan(pg_constr, ConstraintRelidTypidNameIndexId, true, NULL, 1, &scankey);
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
+
+		/* we check primary ,unique and exclusion constraints.
+		 * move foreign key constarints over to compression table
+		 * ignore triggers
+		 */
+		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
+			continue;
+		else if (form->contype == CONSTRAINT_EXCLUSION)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("constraint %s is not supported for compression",
+							NameStr(form->conname)),
+					 errhint("Exclusion constraints are not supported on hypertables that are "
+							 "compressed.")));
+		}
+		else
+		{
+			int j, numkeys;
+			int16 *attnums;
+			bool isNull;
+			/* Extract the conkey array, ie, attnums of PK's columns */
+			Datum adatum = heap_getattr(tuple,
+										Anum_pg_constraint_conkey,
+										RelationGetDescr(pg_constr),
+										&isNull);
+			if (isNull)
+				elog(ERROR, "null conkey for constraint %u", HeapTupleGetOid(tuple));
+			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
+			numkeys = ARR_DIMS(arr)[0];
+			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||
+				ARR_ELEMTYPE(arr) != INT2OID)
+				elog(ERROR, "conkey is not a 1-D smallint array");
+			attnums = (int16 *) ARR_DATA_PTR(arr);
+			for (j = 0; j < numkeys; j++)
+			{
+				int16 colno = attnums[j] - 1;
+				if (form->contype == CONSTRAINT_FOREIGN)
+				{
+					/* is this a segment-by column */
+					if (colinfo->col_meta[colno].segmentby_column_index < 1)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("constraint %s requires column %s to be a segment_by "
+										"column for compression",
+										NameStr(form->conname),
+										NameStr(colinfo->col_meta[colno].attname)),
+								 errhint("Only segment by columns can be used in foreign key"
+										 "constraints on hypertables that are compressed.")));
+					}
+					else
+					{
+						Name conname = palloc0(NAMEDATALEN);
+						namecpy(conname, &form->conname);
+						conlist = lappend(conlist, conname);
+					}
+				}
+				else
+				{
+					/* is colno  a segment-by or order_by column */
+					if (colinfo->col_meta[colno].segmentby_column_index < 1 &&
+						colinfo->col_meta[colno].orderby_column_index < 1)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("constraint %s requires column %s to be a segment_by or "
+										"order_by column for compression",
+										NameStr(form->conname),
+										NameStr(colinfo->col_meta[colno].attname)),
+								 errhint("Only segment by and order by columns can be used in "
+										 "constraints on hypertables that are compressed.")));
+				}
+			}
+		}
+	}
+
+	systable_endscan(scan);
+	heap_close(pg_constr, AccessShareLock);
+	return conlist;
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -585,6 +707,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	bool compression_already_enabled;
 	bool compressed_chunks_exist;
 	ContinuousAggHypertableStatus caggstat;
+	List *constraint_list = NIL;
 
 	/*check this is not a special internally created hypertable
 	 * continuous agg table
@@ -639,10 +762,12 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 										with_clause_options[CompressSegmentBy].is_default))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("need to specify both compress_orderby and compress_groupby if altering "
+				 errmsg("need to specify both compress_orderby and compress_segmentby if altering "
 						"compression")));
 
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
+	/* check if we can create a compressed hypertable with existing constraints */
+	constraint_list = validate_existing_constraints(ht, &compress_cols);
 
 	/* take explicit locks on catalog tables and keep them till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
@@ -664,6 +789,10 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	ts_hypertable_set_compressed_id(ht, compress_htid);
 
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
+	/*add the constraints to the new compressed hypertable */
+	ht = ts_hypertable_get_by_id(ht->fd.id); /*reload updated info*/
+	ts_hypertable_clone_constraints_to_compressed(ht, constraint_list);
+
 	/* do not release any locks, will get released by xact end */
 	return true;
 }

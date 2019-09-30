@@ -35,7 +35,7 @@ typedef struct DimensionSlice DimensionSlice;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkScanCtx ChunkScanCtx;
 
-extern ChunkConstraints *ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx);
+extern TSDLLEXPORT ChunkConstraints *ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx);
 extern ChunkConstraints *ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint,
 															  MemoryContext mctx);
 extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *constraints);
@@ -48,10 +48,12 @@ extern int ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_
 														  MemoryContext mctx);
 extern int ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
 														  Hypercube *cube);
-extern int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
-															Oid hypertable_oid);
-extern void ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id,
-										Oid hypertable_oid, int32 hypertable_id);
+extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs,
+																		int32 chunk_id,
+																		Oid hypertable_oid);
+extern TSDLLEXPORT void ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid,
+													int32 chunk_id, Oid hypertable_oid,
+													int32 hypertable_id);
 extern void ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid);
 extern int ts_chunk_constraint_delete_by_hypertable_constraint_name(
 	int32 chunk_id, char *hypertable_constraint_name, bool delete_metadata, bool drop_constraint);
