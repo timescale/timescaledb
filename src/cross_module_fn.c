@@ -158,13 +158,13 @@ ts_data_node_detach(PG_FUNCTION_ARGS)
 Datum
 ts_data_node_block_new_chunks(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->data_node_set_block_new_chunks(fcinfo, true));
+	PG_RETURN_DATUM(ts_cm_functions->data_node_block_new_chunks(fcinfo));
 }
 
 Datum
 ts_data_node_allow_new_chunks(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->data_node_set_block_new_chunks(fcinfo, false));
+	PG_RETURN_DATUM(ts_cm_functions->data_node_allow_new_chunks(fcinfo));
 }
 
 Datum
@@ -553,13 +553,6 @@ set_distributed_peer_id_default(Datum d)
 	error_no_default_fn_community();
 }
 
-static Datum
-data_node_set_block_new_chunks_default(PG_FUNCTION_ARGS, bool block)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 static void
 func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 {
@@ -634,7 +627,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.attach_data_node = error_no_default_fn_pg_community,
 	.data_node_ping = error_no_default_fn_pg_community,
 	.detach_data_node = error_no_default_fn_pg_community,
-	.data_node_set_block_new_chunks = data_node_set_block_new_chunks_default,
+	.data_node_allow_new_chunks = error_no_default_fn_pg_community,
+	.data_node_block_new_chunks = error_no_default_fn_pg_community,
 	.distributed_exec = error_no_default_fn_pg_community,
 	.set_chunk_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,

@@ -158,13 +158,6 @@ error_distributed_copy_not_supported(const CopyStmt *stmt, uint64 *processed,
 	pg_unreachable();
 }
 
-static Datum
-error_data_node_set_block_new_chunks_not_supported(PG_FUNCTION_ARGS, bool block)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
 static void
 error_func_call_on_data_nodes_not_supported(FunctionCallInfo fcinfo, List *data_nodes)
 {
@@ -242,7 +235,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.delete_data_node = error_not_supported_default_fn,
 	.attach_data_node = error_not_supported_default_fn,
 	.detach_data_node = error_not_supported_default_fn,
-	.data_node_set_block_new_chunks = error_data_node_set_block_new_chunks_not_supported,
+	.data_node_allow_new_chunks = error_not_supported_default_fn,
+	.data_node_block_new_chunks = error_not_supported_default_fn,
 	.set_chunk_default_data_node = error_not_supported_default_fn,
 	.show_chunk = error_not_supported_default_fn,
 	.create_chunk = error_not_supported_default_fn,
@@ -273,7 +267,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.attach_data_node = data_node_attach,
 	.data_node_ping = data_node_ping,
 	.detach_data_node = data_node_detach,
-	.data_node_set_block_new_chunks = data_node_set_block_new_chunks,
+	.data_node_allow_new_chunks = data_node_allow_new_chunks,
+	.data_node_block_new_chunks = data_node_block_new_chunks,
 	.set_chunk_default_data_node = chunk_set_default_data_node,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
