@@ -33,10 +33,11 @@ NOTICE:  adding not-null constraint to column "a"
 (1 row)
 
 create unique index foo_uniq ON foo (a, b);
-insert into foo values( 3 , 16 , 20, 11);
-insert into foo values( 10 , 10 , 20, 120);
-insert into foo values( 20 , 11 , 20, 13);
-insert into foo values( 30 , 12 , 20, 14);
+--note that the "d" order by column is all NULL
+insert into foo values( 3 , 16 , 20, NULL);
+insert into foo values( 10 , 10 , 20, NULL);
+insert into foo values( 20 , 11 , 20, NULL);
+insert into foo values( 30 , 12 , 20, NULL);
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 NOTICE:  adding index _compressed_hypertable_2_a__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(a, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_2_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(b, _ts_meta_sequence_num)
@@ -65,7 +66,7 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 (1 row)
 
 select tgname , tgtype, tgenabled , relname
-from pg_trigger t, pg_class rel 
+from pg_trigger t, pg_class rel
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
              tgname              | tgtype | tgenabled |     relname      
 ---------------------------------+--------+-----------+------------------
@@ -144,7 +145,7 @@ where ch1.compressed_chunk_id = ch2.id;
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 ERROR:  chunk is already compressed
---TEST2a try DML on a compressed chunk 
+--TEST2a try DML on a compressed chunk
 insert into foo values( 11 , 10 , 20, 120);
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
 update foo set b =20 where a = 10;
@@ -196,7 +197,6 @@ ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
 delete from _timescaledb_internal._hyper_1_2_chunk;
- 
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
  decompress_chunk 
@@ -209,7 +209,7 @@ update foo set b =20 where a = 10;
 select * from _timescaledb_internal._hyper_1_2_chunk order by a;
  a  | b  | c  |  d  
 ----+----+----+-----
- 10 | 20 | 20 | 120
+ 10 | 20 | 20 |    
  11 | 10 | 20 | 120
 (2 rows)
 
@@ -414,8 +414,8 @@ SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 ERROR:  relation "_timescaledb_internal.compress_hyper_6_14_chunk" does not exist at character 22
 \set ON_ERROR_STOP 1
 --size information is gone too
-select count(*) 
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, 
+select count(*)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht,
 _timescaledb_catalog.compression_chunk_size map
 where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
 and map.chunk_id = ch1.id;
@@ -595,17 +595,17 @@ ERROR:  could not determine which collation to use for string comparison
 --segment meta on order bys pushdown
 --should work
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
          Filter: (val_1 < 'a'::text)
          ->  Seq Scan on compress_hyper_10_29_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::text) < 'a'::text)
+               Filter: (_ts_meta_min_1 < 'a'::text)
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
          Filter: (val_1 < 'a'::text)
          ->  Seq Scan on compress_hyper_10_30_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::text) < 'a'::text)
+               Filter: (_ts_meta_min_1 < 'a'::text)
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (val_1 < 'a'::text)
    ->  Seq Scan on _hyper_9_22_chunk
@@ -625,17 +625,17 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
 (25 rows)
 
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
          Filter: (val_2 < 'a'::text)
          ->  Seq Scan on compress_hyper_10_29_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::text) < 'a'::text)
+               Filter: (_ts_meta_min_2 < 'a'::text)
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
          Filter: (val_2 < 'a'::text)
          ->  Seq Scan on compress_hyper_10_30_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::text) < 'a'::text)
+               Filter: (_ts_meta_min_2 < 'a'::text)
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (val_2 < 'a'::text)
    ->  Seq Scan on _hyper_9_22_chunk
@@ -655,17 +655,17 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
 (25 rows)
 
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
          ->  Seq Scan on compress_hyper_10_29_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::text) < 'a'::text COLLATE "C")
+               Filter: (_ts_meta_min_1 < 'a'::text COLLATE "C")
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
          ->  Seq Scan on compress_hyper_10_30_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::text) < 'a'::text COLLATE "C")
+               Filter: (_ts_meta_min_1 < 'a'::text COLLATE "C")
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (val_1 < 'a'::text COLLATE "C")
    ->  Seq Scan on _hyper_9_22_chunk
@@ -685,17 +685,17 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
 (25 rows)
 
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
          ->  Seq Scan on compress_hyper_10_29_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::text) < 'a'::text COLLATE "POSIX")
+               Filter: (_ts_meta_min_2 < 'a'::text COLLATE "POSIX")
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
          ->  Seq Scan on compress_hyper_10_30_chunk
-               Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::text) < 'a'::text COLLATE "POSIX")
+               Filter: (_ts_meta_min_2 < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (val_2 < 'a'::text COLLATE "POSIX")
    ->  Seq Scan on _hyper_9_22_chunk

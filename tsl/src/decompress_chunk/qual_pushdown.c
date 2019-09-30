@@ -109,75 +109,43 @@ get_compression_info_from_var(QualPushdownContext *context, Var *var)
 	return get_column_compressioninfo(context->compression_info, column_name);
 }
 
-static FuncExpr *
-make_segment_meta_accessor_funcexpr(int strategy, Index compressed_rel_index,
-									AttrNumber meta_column_attno, Oid uncompressed_type_oid,
-									Oid result_collation)
-{
-	List *func_name;
-	Oid segment_meta_type = ts_custom_type_cache_get(CUSTOM_TYPE_SEGMENT_META_MIN_MAX)->type_oid;
-	Oid accessor_function_oid;
-	Oid argtypes[] = { segment_meta_type, ANYELEMENTOID };
-	Var *meta_var;
-	Const *null_const;
-
-	switch (strategy)
-	{
-		case BTGreaterStrategyNumber:
-		case BTGreaterEqualStrategyNumber:
-			/* var > expr  implies max > expr */
-			func_name = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								   makeString(SEGMENT_META_ACCESSOR_MAX_SQL_FUNCTION));
-			break;
-		case BTLessStrategyNumber:
-		case BTLessEqualStrategyNumber:
-			/* var < expr  implies min < expr */
-			func_name = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								   makeString(SEGMENT_META_ACCESSOR_MIN_SQL_FUNCTION));
-			break;
-		default:
-			elog(ERROR, "invalid strategy");
-			break;
-	}
-
-	accessor_function_oid = LookupFuncName(func_name, lengthof(argtypes), argtypes, false);
-
-	meta_var =
-		makeVar(compressed_rel_index, meta_column_attno, segment_meta_type, -1, InvalidOid, 0);
-	null_const = makeNullConst(uncompressed_type_oid, -1, InvalidOid);
-
-	return makeFuncExpr(accessor_function_oid,
-						uncompressed_type_oid,
-						list_make2(meta_var, null_const),
-						result_collation,
-						InvalidOid,
-						0);
-}
-
 static OpExpr *
 make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta_column_attno,
 						 Var *uncompressed_var, Expr *compare_to_expr, StrategyNumber strategy)
 {
-	FuncExpr *func = make_segment_meta_accessor_funcexpr(strategy,
-														 context->compressed_rel->relid,
-														 meta_column_attno,
-														 uncompressed_var->vartype,
-														 uncompressed_var->varcollid);
+	Var *meta_var = makeVar(context->compressed_rel->relid,
+							meta_column_attno,
+							uncompressed_var->vartype,
+							-1,
+							InvalidOid,
+							0);
 
 	return (OpExpr *) make_opclause(opno,
 									BOOLOID,
 									false,
-									(Expr *) func,
+									(Expr *) meta_var,
 									copyObject(compare_to_expr),
 									InvalidOid,
 									uncompressed_var->varcollid);
 }
 
 static AttrNumber
-get_segment_meta_attr_number(FormData_hypertable_compression *compression_info,
-							 Oid compressed_relid)
+get_segment_meta_min_attr_number(FormData_hypertable_compression *compression_info,
+								 Oid compressed_relid)
 {
-	char *meta_col_name = compression_column_segment_min_max_name(compression_info);
+	char *meta_col_name = compression_column_segment_min_name(compression_info);
+
+	if (meta_col_name == NULL)
+		elog(ERROR, "could not find meta column");
+
+	return get_attnum(compressed_relid, meta_col_name);
+}
+
+static AttrNumber
+get_segment_meta_max_attr_number(FormData_hypertable_compression *compression_info,
+								 Oid compressed_relid)
+{
+	char *meta_col_name = compression_column_segment_max_name(compression_info);
 
 	if (meta_col_name == NULL)
 		elog(ERROR, "could not find meta column");
@@ -282,8 +250,6 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		case BTEqualStrategyNumber:
 		{
 			/* var = expr implies min < expr and max > expr */
-			AttrNumber meta_attno =
-				get_segment_meta_attr_number(compression_info, context->compressed_rte->relid);
 			Oid opno_le = get_opfamily_member(tce->btree_opf,
 											  tce->type_id,
 											  tce->type_id,
@@ -296,39 +262,67 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
 				return NULL;
 
-			return make_andclause(
-				list_make2(make_segment_meta_opexpr(context,
-													opno_le,
-													meta_attno,
-													var_with_segment_meta,
-													expr,
-													BTLessEqualStrategyNumber),
-						   make_segment_meta_opexpr(context,
-													opno_ge,
-													meta_attno,
-													var_with_segment_meta,
-													expr,
-													BTGreaterEqualStrategyNumber)));
+			return make_andclause(list_make2(
+				make_segment_meta_opexpr(context,
+										 opno_le,
+										 get_segment_meta_min_attr_number(compression_info,
+																		  context->compressed_rte
+																			  ->relid),
+										 var_with_segment_meta,
+										 expr,
+										 BTLessEqualStrategyNumber),
+				make_segment_meta_opexpr(context,
+										 opno_ge,
+										 get_segment_meta_max_attr_number(compression_info,
+																		  context->compressed_rte
+																			  ->relid),
+										 var_with_segment_meta,
+										 expr,
+										 BTGreaterEqualStrategyNumber)));
 		}
 		case BTLessStrategyNumber:
 		case BTLessEqualStrategyNumber:
+			/* var < expr  implies min < expr */
+			{
+				Oid opno =
+					get_opfamily_member(tce->btree_opf, tce->type_id, tce->type_id, strategy);
+
+				if (!OidIsValid(opno))
+					return NULL;
+
+				return (Expr *)
+					make_segment_meta_opexpr(context,
+											 opno,
+											 get_segment_meta_min_attr_number(compression_info,
+																			  context
+																				  ->compressed_rte
+																				  ->relid),
+											 var_with_segment_meta,
+											 expr,
+											 strategy);
+			}
+
 		case BTGreaterStrategyNumber:
 		case BTGreaterEqualStrategyNumber:
-		{
-			AttrNumber meta_attno =
-				get_segment_meta_attr_number(compression_info, context->compressed_rte->relid);
-			Oid opno = get_opfamily_member(tce->btree_opf, tce->type_id, tce->type_id, strategy);
+			/* var > expr  implies max > expr */
+			{
+				Oid opno =
+					get_opfamily_member(tce->btree_opf, tce->type_id, tce->type_id, strategy);
 
-			if (!OidIsValid(opno))
-				return NULL;
+				if (!OidIsValid(opno))
+					return NULL;
 
-			return (Expr *) make_segment_meta_opexpr(context,
-													 opno,
-													 meta_attno,
-													 var_with_segment_meta,
-													 expr,
-													 strategy);
-		}
+				return (Expr *)
+					make_segment_meta_opexpr(context,
+											 opno,
+											 get_segment_meta_max_attr_number(compression_info,
+																			  context
+																				  ->compressed_rte
+																				  ->relid),
+											 var_with_segment_meta,
+											 expr,
+											 strategy);
+			}
 		default:
 			return NULL;
 	}

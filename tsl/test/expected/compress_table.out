@@ -51,8 +51,10 @@ CREATE TABLE uncompressed(
 CREATE TABLE compressed(
     _ts_meta_count int,
     _ts_meta_sequence_num int,
-     _ts_meta_min_max_1 _timescaledb_internal.segment_meta_min_max,
-     _ts_meta_min_max_2 _timescaledb_internal.segment_meta_min_max,
+     _ts_meta_min_1 int,
+     _ts_meta_max_1 int,
+     _ts_meta_min_2 int,
+     _ts_meta_max_2 int,
     time   _timescaledb_internal.compressed_data,
     device INT,
     data   _timescaledb_internal.compressed_data,
@@ -398,7 +400,8 @@ CREATE TABLE uncompressed(
 CREATE TABLE compressed(
     _ts_meta_count int,
     _ts_meta_sequence_num int,
-     _ts_meta_min_max_1 _timescaledb_internal.segment_meta_min_max,
+     _ts_meta_min_1 smallint,
+     _ts_meta_max_1 smallint,
     b _timescaledb_internal.compressed_data,
     device _timescaledb_internal.compressed_data,
     time _timescaledb_internal.compressed_data);

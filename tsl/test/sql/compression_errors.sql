@@ -36,7 +36,7 @@ select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_ti
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 
 --basic test with count
-create table foo (a integer, b integer, c integer, t text);
+create table foo (a integer, b integer, c integer, t text, p point);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 
 insert into foo values( 3 , 16 , 20);
@@ -73,6 +73,7 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c +
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'random()');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c LIMIT 1');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');

@@ -80,12 +80,6 @@ typedef struct CrossModuleFunctions
 								   WithClauseResult *with_clause_options);
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
-	bytea *(*segment_meta_min_max_send)(Datum);
-	Datum (*segment_meta_min_max_recv)(StringInfo buf);
-	Datum (*segment_meta_get_min)(Datum, Oid type);
-	Datum (*segment_meta_get_max)(Datum, Oid type);
-	bool (*segment_meta_has_null)(Datum);
-
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql

@@ -19,7 +19,6 @@ set(SOURCES
   copy.c
   compression_chunk_size.c
   compression_with_clause.c
-  compression_segment_meta_min_max.c
   dimension.c
   dimension_slice.c
   dimension_vector.c

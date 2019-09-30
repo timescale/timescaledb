@@ -268,13 +268,17 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 
 			compressed_reltarget_add_var_for_column(compressed_rel, compressed_relid, column_name);
 
-			/* if the column is an orderby, add it's metadata column too */
+			/* if the column is an orderby, add it's metadata columns too */
 			if (column_info->orderby_column_index > 0)
 			{
-				column_name = compression_column_segment_min_max_name(column_info);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_name);
+														compression_column_segment_min_name(
+															column_info));
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														compression_column_segment_max_name(
+															column_info));
 			}
 		}
 	}

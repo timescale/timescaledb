@@ -21,7 +21,6 @@ set(IMMUTABLE_API_SOURCE_FILES
 set(SOURCE_FILES
   hypertable.sql
   chunk.sql
-  compression.sql
   ddl_internal.sql
   edition.sql
   util_time.sql

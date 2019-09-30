@@ -571,8 +571,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 --
 -- order by column and const
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time = '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                                                                                                            QUERY PLAN                                                                                                                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Sort (actual rows=5 loops=1)
          Sort Key: _hyper_1_1_chunk.device_id
@@ -582,13 +582,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 4995
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
                            Rows Removed by Filter: 5
 (11 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time < '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -598,13 +598,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 4940
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5
 (11 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time <= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -614,13 +614,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 4935
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5
 (11 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time >= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -630,18 +630,18 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 60
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
 (16 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -651,18 +651,18 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 65
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
 (16 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE '2000-01-01 1:00:00+0' < time ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -672,19 +672,19 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      Rows Removed by Filter: 65
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
 (16 rows)
 
 --pushdowns between order by and segment by columns
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < 1 ORDER BY time, device_id LIMIT 10;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -693,7 +693,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 10
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2016 loops=1)
                      Filter: (v0 < 1)
@@ -701,13 +701,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 15
 (18 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -716,20 +716,20 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 10
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=10080 loops=1)
                      Filter: (v0 < device_id)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 15
 (17 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id < v0 ORDER BY time, device_id LIMIT 10;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -738,20 +738,20 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=7200 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=10 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
                      Filter: (device_id < v0)
                      Rows Removed by Filter: 10080
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                            Rows Removed by Filter: 15
 (17 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v1 = device_id ORDER BY time, device_id LIMIT 10;
-                                                                                                            QUERY PLAN                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
@@ -760,7 +760,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
                      Filter: (v1 = device_id)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=0 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::integer) <= device_id) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_2, NULL::integer) >= device_id))
+                           Filter: ((_ts_meta_min_2 <= device_id) AND (_ts_meta_max_2 >= device_id))
                            Rows Removed by Filter: 10
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
                      Filter: (v1 = device_id)
@@ -768,7 +768,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=1)
                      Filter: (v1 = device_id)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=0 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_2, NULL::integer) <= device_id) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_2, NULL::integer) >= device_id))
+                           Filter: ((_ts_meta_min_2 <= device_id) AND (_ts_meta_max_2 >= device_id))
                            Rows Removed by Filter: 15
 (18 rows)
 
@@ -815,7 +815,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Rows Removed by Filter: 13
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=2 loops=1)
                            Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3
-                           Filter: ((compress_hyper_5_15_chunk.device_id = 1) AND (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_15_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((compress_hyper_5_15_chunk._ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_5_15_chunk.device_id = 1))
                            Rows Removed by Filter: 8
          ->  Index Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _timescaledb_internal._hyper_1_2_chunk (never executed)
                Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.device_id_peer, _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
@@ -829,7 +829,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: (_hyper_1_3_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (never executed)
                            Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                           Filter: ((compress_hyper_5_16_chunk.device_id = 1) AND (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((compress_hyper_5_16_chunk._ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_5_16_chunk.device_id = 1))
 (32 rows)
 
 --pushdown of quals on order by and segment by cols or together (not pushed down)
@@ -943,7 +943,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_1_3_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
 -- should produce ordered path
@@ -969,7 +969,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (20 rows)
 
 -- test order by columns not in targetlist
@@ -997,14 +997,14 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                            Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (22 rows)
 
 -- test ordering only by segmentby columns
 -- should produce ordered path and not have sequence number in targetlist of compressed scan
 :PREFIX_VERBOSE SELECT device_id, device_id_peer FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer LIMIT 100;
-                                                                                                       QUERY PLAN                                                                                                        
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    Output: _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.device_id_peer
    ->  Merge Append (actual rows=100 loops=1)
@@ -1026,7 +1026,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                            Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (22 rows)
 
 -- should produce ordered path
@@ -1053,7 +1053,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (20 rows)
 
 -- should produce ordered path
@@ -1080,7 +1080,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (20 rows)
 
 -- should not produce ordered path
@@ -1101,7 +1101,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_1_3_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
 -- should produce ordered path
@@ -1128,7 +1128,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (20 rows)
 
 -- should not produce ordered path
@@ -1149,7 +1149,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_1_3_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_5_16_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (15 rows)
 
 --
@@ -1158,8 +1158,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test plan time exclusion
 -- first chunk should be excluded
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY time, device_id;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Sort (actual rows=16795 loops=1)
    Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id
    Sort Method: quicksort 
@@ -1170,7 +1170,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=10080 loops=1)
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=15 loops=1)
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (11 rows)
 
 -- test runtime exclusion
@@ -2163,8 +2163,8 @@ DROP VIEW compressed_view;
 (34 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
-                                                                                                                            QUERY PLAN                                                                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -2174,7 +2174,7 @@ DROP VIEW compressed_view;
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
                      Index Cond: ("time" = g."time")
@@ -2183,15 +2183,15 @@ DROP VIEW compressed_view;
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
 (20 rows)
 
 -- test prepared statement with params pushdown
 PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time AND device_id = $1 LIMIT 1) m1 ON true;
 :PREFIX EXECUTE param_prep(1);
-                                                                                                                                      QUERY PLAN                                                                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -2201,7 +2201,7 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
                      Index Cond: ("time" = g."time")
@@ -2211,13 +2211,13 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
 (21 rows)
 
 :PREFIX EXECUTE param_prep(2);
-                                                                                                                                      QUERY PLAN                                                                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -2227,7 +2227,7 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 2
                ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
                      Index Cond: ("time" = g."time")
@@ -2237,7 +2237,7 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 4
 (21 rows)
 
@@ -2973,8 +2973,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 --
 -- order by column and const
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time = '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                                                                                                            QUERY PLAN                                                                                                                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Sort (actual rows=5 loops=1)
          Sort Key: _hyper_2_4_chunk.device_id
@@ -2984,25 +2984,25 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 999
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
                            Rows Removed by Filter: 1
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=3 loops=1)
                      Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 2997
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
                            Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1 loops=1)
                      Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 999
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=1 loops=1)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
                            Rows Removed by Filter: 1
 (23 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time < '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3012,25 +3012,25 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 988
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 1
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=36 loops=1)
                      Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 2964
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=12 loops=1)
                      Filter: ("time" < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 988
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=1 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 < 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 1
 (23 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time <= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3040,25 +3040,25 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 987
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 1
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=39 loops=1)
                      Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 2961
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=13 loops=1)
                      Filter: ("time" <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 987
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=1 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                            Rows Removed by Filter: 1
 (23 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time >= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3068,17 +3068,17 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 12
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4284 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 36
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1428 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 12
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=2016 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_8_chunk (actual rows=6048 loops=1)
@@ -3088,18 +3088,18 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                      Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
 (36 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3109,17 +3109,17 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 13
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4281 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 39
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1427 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      Rows Removed by Filter: 13
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=2016 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_8_chunk (actual rows=6048 loops=1)
@@ -3129,18 +3129,18 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                      Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
 (36 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE '2000-01-01 1:00:00+0' < time ORDER BY time, device_id LIMIT 10;
-                                                                                          QUERY PLAN                                                                                           
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3150,17 +3150,17 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      Rows Removed by Filter: 13
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4281 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      Rows Removed by Filter: 39
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1427 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      Rows Removed by Filter: 13
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=2016 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                ->  Seq Scan on _hyper_2_8_chunk (actual rows=6048 loops=1)
@@ -3170,11 +3170,11 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                      Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
 (36 rows)
@@ -3191,17 +3191,17 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 2
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 6
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 2
                ->  Index Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_7_chunk (actual rows=0 loops=1)
                      Index Cond: (v0 < 1)
@@ -3212,20 +3212,20 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=0 loops=1)
                      Filter: (v0 < 1)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < 1)
+                           Filter: (_ts_meta_min_1 < 1)
                            Rows Removed by Filter: 9
                ->  Index Scan using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_12_chunk (actual rows=0 loops=1)
                      Index Cond: (v0 < 1)
 (38 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3234,17 +3234,17 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 2
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 6
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 2
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
@@ -3258,12 +3258,12 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=0 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_1, NULL::integer) < device_id)
+                           Filter: (_ts_meta_min_1 < device_id)
                            Rows Removed by Filter: 9
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
                      Filter: (v0 < device_id)
@@ -3271,8 +3271,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 (42 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id < v0 ORDER BY time, device_id LIMIT 10;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Sort (actual rows=10 loops=1)
          Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
@@ -3281,15 +3281,15 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1440 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4320 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=6 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1440 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=2 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=2016 loops=1)
                      Filter: (device_id < v0)
                ->  Seq Scan on _hyper_2_8_chunk (actual rows=6048 loops=1)
@@ -3299,11 +3299,11 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
                      Filter: (device_id < v0)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
-                           Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_1, NULL::integer) > device_id)
+                           Filter: (_ts_meta_max_1 > device_id)
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                      Filter: (device_id < v0)
 (33 rows)
@@ -3414,7 +3414,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Rows Removed by Filter: 13
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=2 loops=1)
                            Output: compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk."time", compress_hyper_6_17_chunk.device_id, compress_hyper_6_17_chunk.device_id_peer, compress_hyper_6_17_chunk.v0, compress_hyper_6_17_chunk.v1, compress_hyper_6_17_chunk.v2, compress_hyper_6_17_chunk.v3
-                           Filter: ((compress_hyper_6_17_chunk.device_id = 1) AND (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_17_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((compress_hyper_6_17_chunk._ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_6_17_chunk.device_id = 1))
          ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_2_7_chunk (never executed)
                Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
                Index Cond: (_hyper_2_7_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -3427,7 +3427,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Filter: (_hyper_2_10_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (never executed)
                            Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                           Filter: ((compress_hyper_6_20_chunk.device_id = 1) AND (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+                           Filter: ((compress_hyper_6_20_chunk._ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_6_20_chunk.device_id = 1))
 (31 rows)
 
 --pushdown of quals on order by and segment by cols or together (not pushed down)
@@ -3653,13 +3653,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
                Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=2016 loops=1)
                Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
                Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3686,7 +3686,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
          Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
          Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3696,7 +3696,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
          Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
          Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3730,7 +3730,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                            Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1 loops=1)
                Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk."time"
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3740,7 +3740,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                            Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx on _timescaledb_internal._hyper_2_9_chunk (actual rows=1 loops=1)
                Output: _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk."time"
                Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3754,8 +3754,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test ordering only by segmentby columns
 -- should produce ordered path and not have sequence number in targetlist of compressed scan
 :PREFIX_VERBOSE SELECT device_id, device_id_peer FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY device_id,device_id_peer LIMIT 100;
-                                                                                                       QUERY PLAN                                                                                                        
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    Output: _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer
    ->  Merge Append (actual rows=100 loops=1)
@@ -3777,7 +3777,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                            Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1 loops=1)
                Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3787,7 +3787,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                            Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer
-                           Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_9_chunk (actual rows=1 loops=1)
                Output: _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer
                Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3822,7 +3822,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
          Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0
          Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3832,7 +3832,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Only Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
          Output: _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0
          Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3867,7 +3867,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
          Output: _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1
          Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3877,7 +3877,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Only Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
          Output: _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1
          Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3908,13 +3908,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
                Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
                Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
                Filter: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3947,7 +3947,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
          Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
          Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3957,7 +3957,7 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
          Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
          Index Cond: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -3986,13 +3986,13 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
                Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                      Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_20_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_20_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
                Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
                Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
-                     Filter: (_timescaledb_internal.segment_meta_get_max(compress_hyper_6_21_chunk._ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (compress_hyper_6_21_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=1343 loops=1)
                Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
                Filter: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
@@ -4009,8 +4009,8 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
 -- test plan time exclusion
 -- first chunk should be excluded
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-08' ORDER BY time, device_id;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=16795 loops=1)
    Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
    Sort Method: quicksort 
@@ -4026,11 +4026,11 @@ FROM :TEST_TABLE WHERE device_id IN (1,2) ORDER BY time, device_id;
          ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=3 loops=1)
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=9 loops=1)
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Seq Scan on _hyper_2_12_chunk (actual rows=2016 loops=1)
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (22 rows)
@@ -5360,8 +5360,8 @@ DROP VIEW compressed_view;
 (38 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time LIMIT 1) m1 ON true;
-                                                                                                                            QUERY PLAN                                                                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -5371,16 +5371,16 @@ DROP VIEW compressed_view;
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=2)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_2 (never executed)
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_6_18_chunk (never executed)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m1_3 (never executed)
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_6_19_chunk (never executed)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m1_4 (actual rows=1 loops=7)
                      Index Cond: ("time" = g."time")
                      Heap Fetches: 7
@@ -5394,12 +5394,12 @@ DROP VIEW compressed_view;
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=2)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_8 (never executed)
                      Filter: ("time" = g."time")
                      ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
-                           Filter: ((_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m1_9 (never executed)
                      Index Cond: ("time" = g."time")
                      Heap Fetches: 0
@@ -5408,8 +5408,8 @@ DROP VIEW compressed_view;
 -- test prepared statement with params pushdown
 PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) g(time) INNER JOIN LATERAL(SELECT time FROM :TEST_TABLE m1 WHERE m1.time = g.time AND device_id = $1 LIMIT 1) m1 ON true;
 :PREFIX EXECUTE param_prep(1);
-                                                                                                                                      QUERY PLAN                                                                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -5419,13 +5419,13 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m1_2 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 1) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m1_3 (actual rows=1 loops=7)
                      Index Cond: ((device_id = 1) AND ("time" = g."time"))
@@ -5433,8 +5433,8 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
 (20 rows)
 
 :PREFIX EXECUTE param_prep(2);
-                                                                                                                                      QUERY PLAN                                                                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=19 loops=1)
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Limit (actual rows=1 loops=32)
@@ -5447,13 +5447,13 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 260
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_3 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
                      Rows Removed by Filter: 249
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=2)
-                           Filter: ((device_id = 2) AND (_timescaledb_internal.segment_meta_get_min(_ts_meta_min_max_3, NULL::timestamp with time zone) <= g."time") AND (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) >= g."time"))
+                           Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 0
 (20 rows)
 
@@ -5866,8 +5866,8 @@ SET enable_seqscan TO false;
 -- should order compressed chunks using index
 -- (we only EXPLAIN here b/c the resulting order is too inconsistent)
 EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_2_chunk.device_id
    ->  Append
@@ -5876,12 +5876,12 @@ EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY dev
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on compress_hyper_5_16_chunk
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (9 rows)
 
 EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _hyper_2_8_chunk.device_id
    ->  Index Scan Backward using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk
@@ -5893,13 +5893,13 @@ EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER 
          ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on compress_hyper_6_20_chunk
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Sort
          Sort Key: _hyper_2_11_chunk.device_id
          ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
                Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on compress_hyper_6_21_chunk
-                     Filter: (_timescaledb_internal.segment_meta_get_max(_ts_meta_min_max_3, NULL::timestamp with time zone) > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_9_chunk
          Index Cond: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_7_chunk
