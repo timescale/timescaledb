@@ -75,8 +75,12 @@ echo "copying back"
 
 for name in ${FILE_NAMES}
 do
-    sed -e 's/PG_FUNCTION_ARGS fake_var_for_clang/PG_FUNCTION_ARGS/' ${TEMP_DIR}/${name} > ${TEMP_DIR}/replace_file && \
-        mv ${TEMP_DIR}/replace_file ${BASE_DIR}/${name}
+    if sed -e 's/PG_FUNCTION_ARGS fake_var_for_clang/PG_FUNCTION_ARGS/' ${TEMP_DIR}/${name} > ${TEMP_DIR}/replace_file; then
+	if ! cmp -s ${TEMP_DIR}/replace_file ${BASE_DIR}/${name}; then
+	    echo "Updating ${BASE_DIR}/${name}"
+            mv ${TEMP_DIR}/replace_file ${BASE_DIR}/${name}
+	fi
+    fi
 done
 
 exit 0;
