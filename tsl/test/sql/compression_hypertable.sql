@@ -28,6 +28,19 @@ SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 \set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
+-- check stats
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+ WHERE attrelid = '_timescaledb_internal._compressed_hypertable_2'::REGCLASS
+   AND attnum > 0
+ ORDER BY attname;
+
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_2'))
+    AND attnum > 0
+  ORDER BY attname;
+
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;
@@ -108,6 +121,18 @@ SELECT 'test4' AS "HYPERTABLE_NAME" \gset
 \set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
 
+-- check stats with segmentby
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+ WHERE attrelid = '_timescaledb_internal._compressed_hypertable_6'::REGCLASS
+   AND attnum > 0
+ ORDER BY attname;
+
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_6'))
+    AND attnum > 0
+  ORDER BY attname;
 
 --add hypertable with order by a non by-val type with NULLs
 

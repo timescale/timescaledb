@@ -96,6 +96,41 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
  t           | t
 (1 row)
 
+-- check stats
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+ WHERE attrelid = '_timescaledb_internal._compressed_hypertable_2'::REGCLASS
+   AND attnum > 0
+ ORDER BY attname;
+        attname        | attstattarget 
+-----------------------+---------------
+ Time                  |             0
+ _ts_meta_count        |          1000
+ _ts_meta_max_1        |          1000
+ _ts_meta_min_1        |          1000
+ _ts_meta_sequence_num |          1000
+ b                     |             0
+ i                     |             0
+ t                     |             0
+(8 rows)
+
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_2'))
+    AND attnum > 0
+  ORDER BY attname;
+        attname        | attstattarget 
+-----------------------+---------------
+ Time                  |             0
+ _ts_meta_count        |          1000
+ _ts_meta_max_1        |          1000
+ _ts_meta_min_1        |          1000
+ _ts_meta_sequence_num |          1000
+ b                     |             0
+ i                     |             0
+ t                     |             0
+(8 rows)
+
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;
@@ -303,6 +338,43 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 -------------+-------------
  t           | t
 (1 row)
+
+-- check stats with segmentby
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+ WHERE attrelid = '_timescaledb_internal._compressed_hypertable_6'::REGCLASS
+   AND attnum > 0
+ ORDER BY attname;
+        attname        | attstattarget 
+-----------------------+---------------
+ _ts_meta_count        |          1000
+ _ts_meta_max_1        |          1000
+ _ts_meta_min_1        |          1000
+ _ts_meta_sequence_num |          1000
+ humidity              |             0
+ location              |          1000
+ location2             |             0
+ temperature           |             0
+ timec                 |             0
+(9 rows)
+
+SELECT DISTINCT attname, attstattarget
+  FROM pg_attribute
+  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_6'))
+    AND attnum > 0
+  ORDER BY attname;
+        attname        | attstattarget 
+-----------------------+---------------
+ _ts_meta_count        |          1000
+ _ts_meta_max_1        |          1000
+ _ts_meta_min_1        |          1000
+ _ts_meta_sequence_num |          1000
+ humidity              |             0
+ location              |          1000
+ location2             |             0
+ temperature           |             0
+ timec                 |             0
+(9 rows)
 
 --add hypertable with order by a non by-val type with NULLs
 CREATE TABLE test5 (

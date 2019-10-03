@@ -15,7 +15,9 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
 #include <catalog/index.h>
+#include <catalog/indexing.h>
 #include <catalog/toasting.h>
+#include <catalog/objectaccess.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
@@ -438,6 +440,54 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 	ts_cache_release(hcache);
 }
 
+static void
+set_statistics_on_compressed_table(Oid compressed_table_id)
+{
+	Relation table_rel = relation_open(compressed_table_id, ShareUpdateExclusiveLock);
+	Relation attrelation = relation_open(AttributeRelationId, RowExclusiveLock);
+	TupleDesc table_desc = RelationGetDescr(table_rel);
+	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	for (int i = 0; i < table_desc->natts; i++)
+	{
+		Form_pg_attribute attrtuple;
+		HeapTuple tuple;
+		Form_pg_attribute col_attr = TupleDescAttr(table_desc, i);
+
+		/* skip system columns */
+		if (col_attr->attnum <= 0)
+			continue;
+
+		tuple = SearchSysCacheCopyAttName(compressed_table_id, NameStr(col_attr->attname));
+
+		if (!HeapTupleIsValid(tuple))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" of compressed table \"%s\" does not exist",
+							NameStr(col_attr->attname),
+							RelationGetRelationName(table_rel))));
+
+		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
+
+		/* the planner should never look at compressed column statistics because
+		 * it will not understand them. Statistics on the other columns,
+		 * segmentbys and metadata, are very important, so we increase their
+		 * target.
+		 */
+		if (col_attr->atttypid == compressed_data_type)
+			attrtuple->attstattarget = 0;
+		else
+			attrtuple->attstattarget = 1000;
+
+		CatalogTupleUpdate(attrelation, &tuple->t_self, tuple);
+
+		InvokeObjectPostAlterHook(RelationRelationId, compressed_table_id, attrtuple->attnum);
+		heap_freetuple(tuple);
+	}
+
+	RelationClose(attrelation);
+	RelationClose(table_rel);
+}
+
 static int32
 create_compression_table(Oid owner, CompressColInfo *compress_cols)
 {
@@ -480,6 +530,9 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	ts_catalog_restore_user(&sec_ctx);
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
+
+	set_statistics_on_compressed_table(compress_relid);
+
 	create_compressed_table_indexes(compress_relid, compress_cols);
 	return compress_hypertable_id;
 }
