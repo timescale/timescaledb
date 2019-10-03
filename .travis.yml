@@ -131,7 +131,7 @@ jobs:
       stage: test
       name: "Regression 11.0 ARM processors"
       env:
-        - PG_VERSION=11.0-libpq CODECOV_FLAGS="-F arm"
+        - PG_VERSION="11.0-libpq" CODECOV_FLAGS="-F arm"
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
