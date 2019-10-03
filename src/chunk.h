@@ -95,7 +95,7 @@ extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 													   bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock);
 
-extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht);
+extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht, char *tablespacename);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints,
 											 bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints,

@@ -562,6 +562,8 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 			 NameStr(compress_ht->fd.associated_table_prefix),
 			 compress_chunk->fd.id);
 
+	;
+
 	/* Insert chunk */
 	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
 
@@ -570,8 +572,15 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 													 compress_chunk->fd.id,
 													 compress_chunk->hypertable_relid);
 
-	/* Create the actual table relation for the chunk */
-	compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht);
+	/* Create the actual table relation for the chunk
+	 * Note that we have to pick the tablespace here as the compressed ht doesn't have dimensions
+	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
+	 * for now.
+	 */
+	compress_chunk->table_id =
+		ts_chunk_create_table(compress_chunk,
+							  compress_ht,
+							  get_tablespace_name(get_rel_tablespace(src_chunk->table_id)));
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compress chunk table");
