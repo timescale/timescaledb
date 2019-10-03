@@ -580,7 +580,7 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
  * instead needs the proper permissions on the database to create the schema.
  */
 Oid
-ts_chunk_create_table(Chunk *chunk, Hypertable *ht)
+ts_chunk_create_table(Chunk *chunk, Hypertable *ht, char *tablespacename)
 {
 	Relation rel;
 	ObjectAddress objaddr;
@@ -590,7 +590,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht)
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.inhRelations =
 			list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
-		.tablespacename = ts_hypertable_select_tablespace_name(ht, chunk),
+		.tablespacename = tablespacename,
 		.options = get_reloptions(ht->main_table_relid),
 	};
 	Oid uid, saved_uid;
@@ -679,7 +679,8 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	ts_chunk_add_constraints(chunk);
 
 	/* Create the actual table relation for the chunk */
-	chunk->table_id = ts_chunk_create_table(chunk, ht);
+	chunk->table_id =
+		ts_chunk_create_table(chunk, ht, ts_hypertable_select_tablespace_name(ht, chunk));
 
 	if (!OidIsValid(chunk->table_id))
 		elog(ERROR, "could not create chunk table");

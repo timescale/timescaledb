@@ -174,6 +174,11 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
 
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"%s\" is a compressed chunk", get_rel_name(chunk_id))));
+
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid);
 	if (NULL == ht)
