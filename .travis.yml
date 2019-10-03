@@ -127,7 +127,7 @@ jobs:
       after_script:
         - docker rm -f docker_arm_emulator
 
-    - if: (type = pull-request) OR (branch = prerelease_test)
+    - if: (type = pull_request) OR (branch = prerelease_test)
       stage: test
       name: "Regression 11.0 ARM processors"
       env:
