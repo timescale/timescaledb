@@ -103,6 +103,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	settings = linitial(cscan->custom_private);
 	state->hypertable_id = linitial_int(settings);
 	state->chunk_relid = lsecond_int(settings);
+	state->reverse = lthird_int(settings);
 	state->varattno_map = lsecond(cscan->custom_private);
 
 	return (Node *) state;
@@ -388,6 +389,7 @@ decompress_chunk_exec(CustomScanState *node)
 static void
 decompress_chunk_rescan(CustomScanState *node)
 {
+	((DecompressChunkState *) node)->initialized = false;
 	ExecReScan(linitial(node->custom_ps));
 }
 

@@ -199,85 +199,6 @@ build_scan_tlist(DecompressChunkPath *path)
 	return scan_tlist;
 }
 
-static List *
-build_compressed_scan_pathkeys(PlannerInfo *root, DecompressChunkPath *path)
-{
-	Var *var;
-	int varattno;
-	List *chunk_pathkeys = path->cpath.path.pathkeys;
-	List *compressed_pathkeys = NIL;
-	PathKey *pk;
-
-	/*
-	 * all segmentby columns need to be prefix of pathkeys
-	 * except those with equality constraint in baserestrictinfo
-	 */
-	if (path->info->num_segmentby_columns > 0)
-	{
-		Bitmapset *segmentby_columns = bms_copy(path->info->chunk_segmentby_ri);
-		ListCell *lc;
-		char *column_name;
-		PG_USED_FOR_ASSERTS_ONLY FormData_hypertable_compression *ci;
-		Oid sortop;
-
-		for (lc = list_head(chunk_pathkeys);
-			 lc != NULL && bms_num_members(segmentby_columns) < path->info->num_segmentby_columns;
-			 lc = lnext(lc))
-		{
-			PathKey *pk = lfirst(lc);
-			var = (Var *) ts_find_em_expr_for_rel(pk->pk_eclass, path->info->chunk_rel);
-
-			if (var == NULL || !IsA(var, Var))
-				/* this should not happen because we validated the pathkeys when creating the path
-				 */
-				elog(ERROR, "Invalid pathkey for compressed scan");
-
-			column_name = get_attname_compat(path->info->chunk_rte->relid, var->varattno, false);
-			ci = get_column_compressioninfo(path->info->hypertable_compression_info, column_name);
-
-			Assert(ci->segmentby_column_index > 0);
-			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
-			varattno = get_attnum(path->info->compressed_rte->relid, column_name);
-			var = makeVar(path->info->compressed_rel->relid,
-						  varattno,
-						  var->vartype,
-						  var->vartypmod,
-						  var->varcollid,
-						  0);
-
-			sortop =
-				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
-			pk = ts_make_pathkey_from_sortop(root,
-											 (Expr *) var,
-											 NULL,
-											 sortop,
-											 pk->pk_nulls_first,
-											 0,
-											 true);
-			compressed_pathkeys = lappend(compressed_pathkeys, pk);
-		}
-
-		/* we validated this when we created the Path so only asserting here */
-		Assert(bms_num_members(segmentby_columns) == path->info->num_segmentby_columns);
-	}
-
-	/*
-	 * If pathkeys contains non-segmentby columns the rest of the ordering
-	 * requirements will be satisfied by ordering by sequence_num
-	 */
-	if (list_length(chunk_pathkeys) > list_length(compressed_pathkeys))
-	{
-		Assert(path->needs_sequence_num);
-		varattno = get_attnum(path->info->compressed_rte->relid,
-							  COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-		var = makeVar(path->info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
-		pk =
-			ts_make_pathkey_from_sortop(root, (Expr *) var, NULL, Int4LessOperator, false, 0, true);
-		compressed_pathkeys = lappend(compressed_pathkeys, pk);
-	}
-	return compressed_pathkeys;
-}
-
 /* replace vars that reference the compressed table with ones that reference the
  * uncompressed one. Based on replace_nestloop_params
  */
@@ -435,7 +356,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	compressed_scan->plan.targetlist = build_scan_tlist(dcpath);
 	if (path->path.pathkeys)
 	{
-		List *compressed_pks = build_compressed_scan_pathkeys(root, dcpath);
+		List *compressed_pks = dcpath->compressed_pathkeys;
 		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan, compressed_pks, NULL);
 		cscan->custom_plans = list_make1(sort);
 	}
@@ -446,7 +367,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
-	settings = list_make2_int(dcpath->info->hypertable_id, dcpath->info->chunk_rte->relid);
+	settings = list_make3_int(dcpath->info->hypertable_id,
+							  dcpath->info->chunk_rte->relid,
+							  dcpath->reverse);
 	cscan->custom_private = list_make2(settings, dcpath->varattno_map);
 
 	return &cscan->scan.plan;

@@ -39,9 +39,24 @@ static CustomPathMethods decompress_chunk_path_methods = {
 	.PlanCustomPath = decompress_chunk_plan_create,
 };
 
+enum SeqNumOrderBy
+{
+	SEQNUM_ORDERBY_NOMATCH = 1,
+	SEQNUM_ORDERBY_SAME = 2,
+	SEQNUM_ORDERBY_REVERSE = 3
+};
+typedef struct OrderByInfo
+{
+	enum SeqNumOrderBy sequence_num_orderby_stat;
+	List *compressed_pathkeys;
+	bool needs_sequence_num;
+	bool try_order_by_compressed;
+} OrderByInfo;
+
 static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
-										 int parallel_workers);
+										 int parallel_workers, CompressionInfo *info,
+										 OrderByInfo *seqnum_info);
 
 static Path *decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info,
 										  int parallel_workers, Path *compressed_path);
@@ -50,7 +65,99 @@ static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo 
 											 RelOptInfo *chunk_rel, bool needs_sequence_num);
 
 static bool can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys,
-								  bool *needs_sequence_num);
+								  OrderByInfo *ret);
+
+static void
+build_compressed_scan_pathkeys(OrderByInfo *seqnum_info, PlannerInfo *root, List *chunk_pathkeys,
+							   CompressionInfo *info)
+{
+	Var *var;
+	int varattno;
+	List *compressed_pathkeys = NIL;
+	PathKey *pk;
+
+	/*
+	 * all segmentby columns need to be prefix of pathkeys
+	 * except those with equality constraint in baserestrictinfo
+	 */
+	if (info->num_segmentby_columns > 0)
+	{
+		Bitmapset *segmentby_columns = bms_copy(info->chunk_segmentby_ri);
+		ListCell *lc;
+		char *column_name;
+		PG_USED_FOR_ASSERTS_ONLY FormData_hypertable_compression *ci;
+		Oid sortop;
+
+		for (lc = list_head(chunk_pathkeys);
+			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
+			 lc = lnext(lc))
+		{
+			PathKey *pk = lfirst(lc);
+			var = (Var *) ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+
+			if (var == NULL || !IsA(var, Var))
+				/* this should not happen because we validated the pathkeys when creating the path
+				 */
+				elog(ERROR, "Invalid pathkey for compressed scan");
+
+			column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
+			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+
+			Assert(ci->segmentby_column_index > 0);
+			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+			varattno = get_attnum(info->compressed_rte->relid, column_name);
+			var = makeVar(info->compressed_rel->relid,
+						  varattno,
+						  var->vartype,
+						  var->vartypmod,
+						  var->varcollid,
+						  0);
+
+			sortop =
+				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_strategy);
+			pk = ts_make_pathkey_from_sortop(root,
+											 (Expr *) var,
+											 NULL,
+											 sortop,
+											 pk->pk_nulls_first,
+											 0,
+											 true);
+			compressed_pathkeys = lappend(compressed_pathkeys, pk);
+		}
+
+		/* we validated this when we created the Path so only asserting here */
+		Assert(bms_num_members(segmentby_columns) == info->num_segmentby_columns);
+	}
+
+	/*
+	 * If pathkeys contains non-segmentby columns the rest of the ordering
+	 * requirements will be satisfied by ordering by sequence_num
+	 */
+	if (list_length(chunk_pathkeys) > list_length(compressed_pathkeys))
+	{
+		bool nulls_first;
+		Oid sortop;
+		varattno =
+			get_attnum(info->compressed_rte->relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+		var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
+		/*sequence_num is ordered as ASC nulls last by default */
+		if (seqnum_info->sequence_num_orderby_stat == SEQNUM_ORDERBY_REVERSE)
+		{
+			sortop = get_commutator(Int4LessOperator);
+			nulls_first = true;
+		}
+		else // NOMATCH or SAME use the default with which seqnum is stored
+		{
+			sortop = Int4LessOperator;
+			nulls_first = false;
+		}
+		/* Find Int4LessOperator used to sort seq num */
+		pk = ts_make_pathkey_from_sortop(root, (Expr *) var, NULL, sortop, nulls_first, 0, true);
+
+		compressed_pathkeys = lappend(compressed_pathkeys, pk);
+	}
+	seqnum_info->compressed_pathkeys = compressed_pathkeys;
+}
 
 static DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
@@ -100,16 +207,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 {
 	RelOptInfo *compressed_rel;
 	RelOptInfo *hypertable_rel;
-	bool needs_sequence_num = false;
 	ListCell *lc;
 	double new_row_estimate;
 
 	CompressionInfo *info = build_compressioninfo(root, ht, chunk_rel);
 	Index ht_index;
+	OrderByInfo seqnum_info = { 0 };
 
 	bool try_order_by_compressed =
 		root->query_pathkeys &&
-		can_order_by_pathkeys(chunk_rel, info, root->query_pathkeys, &needs_sequence_num);
+		can_order_by_pathkeys(chunk_rel, info, root->query_pathkeys, &seqnum_info);
 	/*
 	 * since we rely on parallel coordination from the scan below
 	 * this node it is probably not beneficial to have more
@@ -142,7 +249,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->rows = new_row_estimate;
 	create_compressed_scan_paths(root,
 								 compressed_rel,
-								 compressed_rel->consider_parallel ? parallel_workers : 0);
+								 compressed_rel->consider_parallel ? parallel_workers : 0,
+								 info,
+								 &seqnum_info);
 
 	/* create non-parallel paths */
 	foreach (lc, compressed_rel->pathlist)
@@ -166,12 +275,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		if (try_order_by_compressed)
 		{
 			DecompressChunkPath *dcpath = copy_decompress_chunk_path((DecompressChunkPath *) path);
-			dcpath->needs_sequence_num = needs_sequence_num;
+			dcpath->needs_sequence_num = seqnum_info.needs_sequence_num;
+			dcpath->reverse =
+				(seqnum_info.sequence_num_orderby_stat == SEQNUM_ORDERBY_REVERSE) ? true : false;
+			dcpath->compressed_pathkeys = seqnum_info.compressed_pathkeys;
 			Assert(dcpath->cpath.path.pathkeys == NIL);
 			dcpath->cpath.path.pathkeys = root->query_pathkeys;
 			add_path(chunk_rel, (Path *) dcpath);
 		}
-
 		/* this has to go after the path is copied for the ordered path since path can get freed in
 		 * add_path */
 		add_path(chunk_rel, path);
@@ -305,9 +416,11 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 
 	/* add the segment order column if we may try to order by it */
 	if (needs_sequence_num)
+	{
 		compressed_reltarget_add_var_for_column(compressed_rel,
 												compressed_relid,
 												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+	}
 }
 
 typedef struct EMCreationContext
@@ -512,7 +625,6 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
-
 		add_segmentby_to_equivalence_class(cur_ec, info, &context);
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
@@ -587,16 +699,19 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->cpath.path.parallel_workers = parallel_workers;
 
 	path->cpath.custom_paths = list_make1(compressed_path);
-
+	path->reverse = false;
+	path->compressed_pathkeys = NIL;
 	cost_decompress_chunk(&path->cpath.path, compressed_path);
 
 	return &path->cpath.path;
 }
 
 static void
-create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int parallel_workers)
+create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int parallel_workers,
+							 CompressionInfo *info, OrderByInfo *seqnum_info)
 {
 	Path *compressed_path;
+	List *orig_pathkeys;
 
 	/* create non parallel scan path */
 	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
@@ -609,9 +724,16 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 		Assert(compressed_path->parallel_aware);
 		add_partial_path(compressed_rel, compressed_path);
 	}
-
+	if (seqnum_info && seqnum_info->try_order_by_compressed)
+	{
+		orig_pathkeys = root->query_pathkeys;
+		build_compressed_scan_pathkeys(seqnum_info, root, root->query_pathkeys, info);
+		root->query_pathkeys = seqnum_info->compressed_pathkeys;
+	}
 	check_index_predicates(root, compressed_rel);
 	create_index_paths(root, compressed_rel);
+	if (seqnum_info && seqnum_info->try_order_by_compressed)
+		root->query_pathkeys = orig_pathkeys;
 }
 
 /*
@@ -711,7 +833,7 @@ get_compressed_attno(CompressionInfo *info, AttrNumber ht_attno)
 
 static bool
 can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys,
-					  bool *needs_sequence_num)
+					  OrderByInfo *ret)
 {
 	int pk_index;
 	PathKey *pk;
@@ -720,6 +842,12 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 	char *column_name;
 	FormData_hypertable_compression *ci;
 	ListCell *lc = list_head(pathkeys);
+	bool found_first_orderby = false;
+	enum SeqNumOrderBy sequence_num_orderby_stat = SEQNUM_ORDERBY_NOMATCH;
+
+	ret->try_order_by_compressed = false;
+	ret->needs_sequence_num = false;
+	ret->sequence_num_orderby_stat = true;
 
 	/* all segmentby columns need to be prefix of pathkeys */
 	if (info->num_segmentby_columns > 0)
@@ -792,27 +920,24 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 			expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 			if (expr == NULL || !IsA(expr, Var))
-				return false;
-
+				break;
 			var = castNode(Var, expr);
 
 			if (var->varattno <= 0)
-				return false;
+				break;
 
 			column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
 			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
 
-			if (ci->segmentby_column_index > 0)
-			{
-				segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
-				continue;
-			}
-
+			if (ci->segmentby_column_index <= 0)
+				break;
+			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+		}
+		/*pathkeys that are not segment by columns are present */
+		if (bms_num_members(segmentby_columns) != info->num_segmentby_columns)
+		{
 			return false;
 		}
-
-		if (bms_num_members(segmentby_columns) != info->num_segmentby_columns)
-			return false;
 	}
 
 	/*
@@ -820,14 +945,17 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 	 * we need sequence_num in the targetlist for ordering
 	 */
 	if (lc != NULL)
-		*needs_sequence_num = true;
+		ret->needs_sequence_num = true;
 
 	/*
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
+	found_first_orderby = false;
+	sequence_num_orderby_stat = SEQNUM_ORDERBY_NOMATCH;
 	for (pk_index = 1; lc != NULL; lc = lnext(lc), pk_index++)
 	{
+		enum SeqNumOrderBy stat;
 		pk = lfirst(lc);
 		expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
@@ -845,17 +973,39 @@ can_order_by_pathkeys(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathke
 		if (ci->orderby_column_index != pk_index)
 			return false;
 
-		if (ci->orderby_nullsfirst != pk->pk_nulls_first)
-			return false;
-
 		/*
 		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
 		 * BTGreaterStrategyNumber (for DESC)
 		 */
-		if ((pk->pk_strategy == BTLessStrategyNumber && !ci->orderby_asc) ||
-			(pk->pk_strategy == BTGreaterStrategyNumber && ci->orderby_asc))
+		stat = SEQNUM_ORDERBY_NOMATCH;
+		if (pk->pk_strategy == BTLessStrategyNumber)
+		{
+			if (ci->orderby_asc && (ci->orderby_nullsfirst == pk->pk_nulls_first))
+				stat = SEQNUM_ORDERBY_SAME;
+			else if (!ci->orderby_asc && (ci->orderby_nullsfirst != pk->pk_nulls_first))
+				stat = SEQNUM_ORDERBY_REVERSE;
+		}
+		else if (pk->pk_strategy == BTGreaterStrategyNumber)
+		{
+			if (ci->orderby_asc == false && (ci->orderby_nullsfirst == pk->pk_nulls_first))
+				stat = SEQNUM_ORDERBY_SAME;
+			else if (ci->orderby_asc && (ci->orderby_nullsfirst != pk->pk_nulls_first))
+				stat = SEQNUM_ORDERBY_REVERSE;
+		}
+		if (stat == SEQNUM_ORDERBY_NOMATCH) /*we cannot match order by requested by pathkey */
 			return false;
+		if (!found_first_orderby)
+		{
+			found_first_orderby = true;
+			sequence_num_orderby_stat = stat;
+		}
+		else
+		{
+			if (sequence_num_orderby_stat != stat)
+				return false;
+		}
 	}
-
+	ret->try_order_by_compressed = true;
+	ret->sequence_num_orderby_stat = sequence_num_orderby_stat;
 	return true;
 }

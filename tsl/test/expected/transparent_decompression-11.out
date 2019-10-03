@@ -5,9 +5,13 @@
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
        format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED",
-       format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED"
+       format('%s/results/%s_results_uncompressed_idx.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED_IDX",
+       format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED",
+       format('%s/results/%s_results_compressed_idx.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED_IDX"
 \gset
 SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED_IDX', :'TEST_RESULTS_COMPRESSED_IDX') as "DIFF_CMD_IDX"
 \gset
 SET work_mem TO '50MB';
 CREATE TABLE metrics(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int, v1 int, v2 float, v3 float);
@@ -2173,8 +2177,8 @@ DROP VIEW compressed_view;
                Chunks excluded during runtime: 2
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
@@ -2182,8 +2186,8 @@ DROP VIEW compressed_view;
                      Heap Fetches: 7
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
 (20 rows)
@@ -2200,8 +2204,8 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                Chunks excluded during runtime: 2
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
@@ -2210,8 +2214,8 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Rows Removed by Filter: 4
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
 (21 rows)
@@ -2226,8 +2230,8 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                Chunks excluded during runtime: 2
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 2
                ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m1_2 (actual rows=1 loops=7)
@@ -2236,10 +2240,10 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Rows Removed by Filter: 3
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
-                           Rows Removed by Filter: 4
+                           Rows Removed by Filter: 3
 (21 rows)
 
 EXECUTE param_prep(1);
@@ -5370,8 +5374,8 @@ DROP VIEW compressed_view;
                Chunks excluded during runtime: 7
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m1_1 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_2 (never executed)
@@ -5393,8 +5397,8 @@ DROP VIEW compressed_view;
                      Heap Fetches: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m1_7 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time"))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_8 (never executed)
@@ -5418,14 +5422,14 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                Chunks excluded during runtime: 2
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m1_1 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m1_2 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 1))
                            Rows Removed by Filter: 0
                ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m1_3 (actual rows=1 loops=7)
@@ -5446,14 +5450,14 @@ PREPARE param_prep(int) AS SELECT * FROM generate_series('2000-01-01'::timestamp
                      Heap Fetches: 7
                ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_2 (actual rows=1 loops=7)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 260
-                     ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 531
+                     ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=1 loops=7)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 0
                ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m1_3 (actual rows=1 loops=5)
                      Filter: ("time" = g."time")
-                     Rows Removed by Filter: 249
-                     ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=2)
+                     Rows Removed by Filter: 472
+                     ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=5)
                            Filter: ((_ts_meta_min_3 <= g."time") AND (_ts_meta_max_3 >= g."time") AND (device_id = 2))
                            Rows Removed by Filter: 0
 (20 rows)
@@ -5974,3 +5978,296 @@ EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER 
 SET enable_seqscan TO true;
 -- diff compressed and uncompressed results
 :DIFF_CMD
+-- Testing Index Scan backwards ----
+--want more than 1 segment in atleast 1 of the chunks
+CREATE TABLE metrics_ordered_idx(time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int);
+SELECT create_hypertable('metrics_ordered_idx','time', chunk_time_interval=>'2days'::interval);
+         create_hypertable         
+-----------------------------------
+ (15,public,metrics_ordered_idx,t)
+(1 row)
+
+ALTER TABLE metrics_ordered_idx SET (timescaledb.compress, timescaledb.compress_orderby='time ASC',timescaledb.compress_segmentby='device_id,device_id_peer');
+NOTICE:  adding index _compressed_hypertable_16_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_16 USING BTREE(device_id, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_16_device_id_peer__ts_meta_sequence__idx ON _timescaledb_internal._compressed_hypertable_16 USING BTREE(device_id_peer, _ts_meta_sequence_num)
+INSERT INTO metrics_ordered_idx(time,device_id,device_id_peer,v0) SELECT time, device_id, 0, device_id FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-15 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_ordered_idx(time,device_id,device_id_peer,v0) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) ;
+-- run queries on uncompressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+--compress all chunks for metrics_ordered_idx table --
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'metrics_ordered_idx'
+ORDER BY c.id;
+               compress_chunk               
+--------------------------------------------
+ _timescaledb_internal._hyper_15_1438_chunk
+ _timescaledb_internal._hyper_15_1439_chunk
+ _timescaledb_internal._hyper_15_1440_chunk
+(3 rows)
+
+-- run queries on compressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+-- diff compressed and uncompressed results
+:DIFF_CMD_IDX
+-- look at postgres version to decide whether we run with analyze or without
+SELECT
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
+    ELSE 'EXPLAIN (costs off)'
+  END AS "PREFIX",
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+    ELSE 'EXPLAIN (costs off, verbose)'
+  END AS "PREFIX_VERBOSE"
+\gset
+-- we disable parallelism here otherwise EXPLAIN ANALYZE output
+-- will be not stable and differ depending on worker assignment
+SET max_parallel_workers_per_gather TO 0;
+set enable_seqscan = false;
+-- get explain for queries on hypertable with compression
+\ir include/transparent_decompression_ordered_indexplan.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- tests for explain plan only --
+---check index backward scans instead of seq scans ------------
+CREATE TABLE metrics_ordered_idx2(time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int, v1 int);
+SELECT create_hypertable('metrics_ordered_idx2','time', chunk_time_interval=>'2days'::interval);
+         create_hypertable          
+------------------------------------
+ (17,public,metrics_ordered_idx2,t)
+(1 row)
+
+ALTER TABLE metrics_ordered_idx2 SET (timescaledb.compress, timescaledb.compress_orderby='time ASC, v0 desc',timescaledb.compress_segmentby='device_id,device_id_peer');
+psql:include/transparent_decompression_ordered_indexplan.sql:10: NOTICE:  adding index _compressed_hypertable_18_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_18 USING BTREE(device_id, _ts_meta_sequence_num)
+psql:include/transparent_decompression_ordered_indexplan.sql:10: NOTICE:  adding index _compressed_hypertable_18_device_id_peer__ts_meta_sequence__idx ON _timescaledb_internal._compressed_hypertable_18 USING BTREE(device_id_peer, _ts_meta_sequence_num)
+INSERT INTO metrics_ordered_idx2(time,device_id,device_id_peer,v0, v1) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) , generate_series(555,559,1);
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'metrics_ordered_idx2'
+ORDER BY c.id;
+               compress_chunk               
+--------------------------------------------
+ _timescaledb_internal._hyper_17_1444_chunk
+(1 row)
+
+--all queries have only prefix of compress_orderby in ORDER BY clause
+-- should have ordered DecompressChunk path because segmentby columns have equality constraints
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 (actual rows=10 loops=1)
+         Order: metrics_ordered_idx2."time" DESC
+         ->  Custom Scan (DecompressChunk) on _hyper_17_1444_chunk (actual rows=10 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_18_1445_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Index Scan Backward using compress_hyper_18_1445_chunk__compressed_hypertable_18_device_i on compress_hyper_18_1445_chunk (actual rows=5 loops=1)
+                           Index Cond: (device_id = 3)
+                           Filter: (device_id_peer = 3)
+(10 rows)
+
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 asc LIMIT 10;
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 (actual rows=10 loops=1)
+         Order: metrics_ordered_idx2."time" DESC, metrics_ordered_idx2.v0
+         ->  Custom Scan (DecompressChunk) on _hyper_17_1444_chunk (actual rows=10 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_18_1445_chunk._ts_meta_sequence_num DESC
+                     Sort Method: quicksort 
+                     ->  Index Scan Backward using compress_hyper_18_1445_chunk__compressed_hypertable_18_device_i on compress_hyper_18_1445_chunk (actual rows=5 loops=1)
+                           Index Cond: (device_id = 3)
+                           Filter: (device_id_peer = 3)
+(10 rows)
+
+:PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 desc LIMIT 10;
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Sort (actual rows=10 loops=1)
+         Sort Key: _hyper_17_1444_chunk."time" DESC, _hyper_17_1444_chunk.v0 DESC
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=4291 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_17_1444_chunk (actual rows=4291 loops=1)
+                     ->  Index Scan using compress_hyper_18_1445_chunk__compressed_hypertable_18_device_1 on compress_hyper_18_1445_chunk (actual rows=5 loops=1)
+                           Index Cond: (device_id_peer = 3)
+                           Filter: (device_id = 3)
+(9 rows)
+
+:PREFIX SELECT d.device_id, m.time,  m.time
+ FROM metrics_ordered_idx2 d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx2 m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
+                                                                                                       QUERY PLAN                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=4291 loops=1)
+   ->  Append (actual rows=4291 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_17_1444_chunk d (actual rows=4291 loops=1)
+               ->  Index Scan using compress_hyper_18_1445_chunk__compressed_hypertable_18_device_1 on compress_hyper_18_1445_chunk (actual rows=5 loops=1)
+   ->  Subquery Scan on m (actual rows=1 loops=4291)
+         Filter: (d.device_id_peer = m.device_id_peer)
+         ->  Limit (actual rows=1 loops=4291)
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 m_1 (actual rows=1 loops=4291)
+                     Order: m_1."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_17_1444_chunk m_2 (actual rows=1 loops=4291)
+                           ->  Sort (actual rows=1 loops=4291)
+                                 Sort Key: compress_hyper_18_1445_chunk_1._ts_meta_sequence_num DESC
+                                 Sort Method: quicksort 
+                                 ->  Index Scan Backward using compress_hyper_18_1445_chunk__compressed_hypertable_18_device_1 on compress_hyper_18_1445_chunk compress_hyper_18_1445_chunk_1 (actual rows=5 loops=4291)
+                                       Index Cond: (device_id_peer = 3)
+                                       Filter: (device_id = d.device_id)
+(16 rows)
+
+set enable_seqscan = false;
+\ir include/transparent_decompression_ordered_index.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET work_mem TO '50MB';
+---Lets test for index backward scans instead of seq scans ------------
+-- for ordered append tests on compressed chunks we need a hypertable with time as compress_orderby column
+-- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys
+:PREFIX select * from ( SELECT * FROM metrics_ordered_idx ORDER BY time DESC LIMIT 10 ) as q  order by 1,2,3,4;
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: _hyper_15_1440_chunk."time", _hyper_15_1440_chunk.device_id, _hyper_15_1440_chunk.device_id_peer, _hyper_15_1440_chunk.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Sort (actual rows=10 loops=1)
+               Sort Key: _hyper_15_1440_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Append (actual rows=8611 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk (actual rows=4291 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk (actual rows=2880 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1442_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk (actual rows=1440 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1441_chunk (actual rows=5 loops=1)
+(14 rows)
+
+-- should have ordered DecompressChunk path because segmentby columns have equality constraints
+:PREFIX select * from (SELECT * FROM metrics_ordered_idx WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10) as q order by 1, 2, 3, 4;
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=10 loops=1)
+   Sort Key: metrics_ordered_idx."time", metrics_ordered_idx.device_id, metrics_ordered_idx.device_id_peer, metrics_ordered_idx.v0
+   Sort Method: quicksort 
+   ->  Limit (actual rows=10 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10 loops=1)
+               Order: metrics_ordered_idx."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk (actual rows=10 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: compress_hyper_16_1443_chunk._ts_meta_sequence_num DESC
+                           Sort Method: quicksort 
+                           ->  Index Scan Backward using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+                                 Index Cond: (device_id = 3)
+                                 Filter: (device_id_peer = 3)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_16_1442_chunk._ts_meta_sequence_num DESC
+                           ->  Index Scan Backward using compress_hyper_16_1442_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1442_chunk (never executed)
+                                 Index Cond: (device_id = 3)
+                                 Filter: (device_id_peer = 3)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_16_1441_chunk._ts_meta_sequence_num DESC
+                           ->  Index Scan Backward using compress_hyper_16_1441_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1441_chunk (never executed)
+                                 Index Cond: (device_id = 3)
+                                 Filter: (device_id_peer = 3)
+(25 rows)
+
+:PREFIX SELECT DISTINCT ON (d.device_id) * FROM metrics_ordered_idx d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
+                                                                                                             QUERY PLAN                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=1 loops=1)
+   ->  Sort (actual rows=4291 loops=1)
+         Sort Key: d.device_id
+         Sort Method: quicksort 
+         ->  Nested Loop (actual rows=4291 loops=1)
+               ->  Append (actual rows=8611 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk d (actual rows=1440 loops=1)
+                           ->  Index Scan using compress_hyper_16_1441_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1441_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk d_1 (actual rows=2880 loops=1)
+                           ->  Index Scan using compress_hyper_16_1442_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1442_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk d_2 (actual rows=4291 loops=1)
+                           ->  Index Scan using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+               ->  Subquery Scan on m (actual rows=0 loops=8611)
+                     Filter: (d.device_id_peer = m.device_id_peer)
+                     Rows Removed by Filter: 0
+                     ->  Limit (actual rows=1 loops=8611)
+                           ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=1 loops=8611)
+                                 Order: m_1."time" DESC
+                                 ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk m_2 (actual rows=1 loops=8611)
+                                       ->  Sort (actual rows=1 loops=8611)
+                                             Sort Key: compress_hyper_16_1443_chunk_1._ts_meta_sequence_num DESC
+                                             Sort Method: quicksort 
+                                             ->  Index Scan Backward using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1443_chunk compress_hyper_16_1443_chunk_1 (actual rows=3 loops=8611)
+                                                   Index Cond: (device_id_peer = 3)
+                                                   Filter: (device_id = d.device_id)
+                                                   Rows Removed by Filter: 2
+                                 ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk m_3 (actual rows=0 loops=3456)
+                                       ->  Sort (actual rows=0 loops=3456)
+                                             Sort Key: compress_hyper_16_1442_chunk_1._ts_meta_sequence_num DESC
+                                             ->  Index Scan Backward using compress_hyper_16_1442_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1442_chunk compress_hyper_16_1442_chunk_1 (actual rows=0 loops=3456)
+                                                   Index Cond: (device_id_peer = 3)
+                                                   Filter: (device_id = d.device_id)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk m_4 (actual rows=0 loops=3456)
+                                       ->  Sort (actual rows=0 loops=3456)
+                                             Sort Key: compress_hyper_16_1441_chunk_1._ts_meta_sequence_num DESC
+                                             ->  Index Scan Backward using compress_hyper_16_1441_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1441_chunk compress_hyper_16_1441_chunk_1 (actual rows=0 loops=3456)
+                                                   Index Cond: (device_id_peer = 3)
+                                                   Filter: (device_id = d.device_id)
+(38 rows)
+
+:PREFIX SELECT d.device_id, m.time,  m.time
+FROM metrics_ordered_idx d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
+                                                                                                       QUERY PLAN                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=4291 loops=1)
+   ->  Append (actual rows=8611 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk d (actual rows=1440 loops=1)
+               ->  Index Scan using compress_hyper_16_1441_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1441_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk d_1 (actual rows=2880 loops=1)
+               ->  Index Scan using compress_hyper_16_1442_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1442_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk d_2 (actual rows=4291 loops=1)
+               ->  Index Scan using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+   ->  Subquery Scan on m (actual rows=0 loops=8611)
+         Filter: (d.device_id_peer = m.device_id_peer)
+         Rows Removed by Filter: 0
+         ->  Limit (actual rows=1 loops=8611)
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx m_1 (actual rows=1 loops=8611)
+                     Order: m_1."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk m_2 (actual rows=1 loops=8611)
+                           ->  Sort (actual rows=1 loops=8611)
+                                 Sort Key: compress_hyper_16_1443_chunk_1._ts_meta_sequence_num DESC
+                                 Sort Method: quicksort 
+                                 ->  Index Scan Backward using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1443_chunk compress_hyper_16_1443_chunk_1 (actual rows=3 loops=8611)
+                                       Index Cond: (device_id_peer = 3)
+                                       Filter: (device_id = d.device_id)
+                                       Rows Removed by Filter: 2
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk m_3 (actual rows=0 loops=3456)
+                           ->  Sort (actual rows=0 loops=3456)
+                                 Sort Key: compress_hyper_16_1442_chunk_1._ts_meta_sequence_num DESC
+                                 ->  Index Scan Backward using compress_hyper_16_1442_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1442_chunk compress_hyper_16_1442_chunk_1 (actual rows=0 loops=3456)
+                                       Index Cond: (device_id_peer = 3)
+                                       Filter: (device_id = d.device_id)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk m_4 (actual rows=0 loops=3456)
+                           ->  Sort (actual rows=0 loops=3456)
+                                 Sort Key: compress_hyper_16_1441_chunk_1._ts_meta_sequence_num DESC
+                                 ->  Index Scan Backward using compress_hyper_16_1441_chunk__compressed_hypertable_16_device_1 on compress_hyper_16_1441_chunk compress_hyper_16_1441_chunk_1 (actual rows=0 loops=3456)
+                                       Index Cond: (device_id_peer = 3)
+                                       Filter: (device_id = d.device_id)
+(34 rows)
+
+set enable_seqscan = true;

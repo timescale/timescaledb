@@ -6,9 +6,13 @@
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
        format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED",
-       format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED"
+       format('%s/results/%s_results_uncompressed_idx.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED_IDX",
+       format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED",
+       format('%s/results/%s_results_compressed_idx.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED_IDX"
 \gset
 SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED_IDX', :'TEST_RESULTS_COMPRESSED_IDX') as "DIFF_CMD_IDX"
 \gset
 
 SET work_mem TO '50MB';
@@ -92,6 +96,7 @@ CREATE INDEX ON metrics_space(device_id,device_id_peer DESC, v0, v1 desc, time);
 CREATE INDEX ON metrics_space(device_id DESC, device_id_peer DESC, v0, v1 desc, time);
 ANALYZE metrics_space;
 
+
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
@@ -133,3 +138,69 @@ SET max_parallel_workers_per_gather TO 0;
 
 -- diff compressed and uncompressed results
 :DIFF_CMD
+
+-- Testing Index Scan backwards ----
+--want more than 1 segment in atleast 1 of the chunks
+CREATE TABLE metrics_ordered_idx(time timestamptz NOT NULL, device_id int, device_id_peer int, v0 int);
+SELECT create_hypertable('metrics_ordered_idx','time', chunk_time_interval=>'2days'::interval);
+ALTER TABLE metrics_ordered_idx SET (timescaledb.compress, timescaledb.compress_orderby='time ASC',timescaledb.compress_segmentby='device_id,device_id_peer');
+INSERT INTO metrics_ordered_idx(time,device_id,device_id_peer,v0) SELECT time, device_id, 0, device_id FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-15 23:55:00+0','5m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_ordered_idx(time,device_id,device_id_peer,v0) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) ;
+
+-- run queries on uncompressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+SET client_min_messages TO error;
+\o :TEST_RESULTS_UNCOMPRESSED_IDX
+\ir include/transparent_decompression_ordered_index.sql
+\o
+RESET client_min_messages;
+\set ECHO all
+
+--compress all chunks for metrics_ordered_idx table --
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'metrics_ordered_idx'
+ORDER BY c.id;
+
+-- run queries on compressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+SET client_min_messages TO error;
+set enable_seqscan = false;
+\o :TEST_RESULTS_COMPRESSED_IDX
+\ir include/transparent_decompression_ordered_index.sql
+set enable_seqscan = true;
+\o
+RESET client_min_messages;
+\set ECHO all
+
+-- diff compressed and uncompressed results
+:DIFF_CMD_IDX
+
+
+-- look at postgres version to decide whether we run with analyze or without
+SELECT
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
+    ELSE 'EXPLAIN (costs off)'
+  END AS "PREFIX",
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+    ELSE 'EXPLAIN (costs off, verbose)'
+  END AS "PREFIX_VERBOSE"
+\gset
+
+-- we disable parallelism here otherwise EXPLAIN ANALYZE output
+-- will be not stable and differ depending on worker assignment
+SET max_parallel_workers_per_gather TO 0;
+set enable_seqscan = false;
+-- get explain for queries on hypertable with compression
+\ir include/transparent_decompression_ordered_indexplan.sql
+set enable_seqscan = false;
+\ir include/transparent_decompression_ordered_index.sql
+set enable_seqscan = true;
