@@ -46,7 +46,9 @@ typedef struct DecompressChunkPath
 	 * that do not have a representation in the uncompressed chunk
 	 */
 	List *varattno_map;
+	List *compressed_pathkeys;
 	bool needs_sequence_num;
+	bool reverse;
 } DecompressChunkPath;
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
