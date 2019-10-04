@@ -13,6 +13,8 @@
 #include <access/htup.h>
 #include <commands/explain.h>
 
+#include "remote/data_fetcher.h"
+
 /*
  * Execution state of a foreign scan using timescaledb_fdw.
  */
@@ -28,13 +30,13 @@ typedef struct TsFdwScanState
 	List *retrieved_attrs; /* list of retrieved attribute numbers */
 
 	/* for remote query execution */
-	struct TSConnection *conn; /* connection for the scan */
-	struct Cursor *cursor;
-	int num_params;			   /* number of parameters passed to query */
-	FmgrInfo *param_flinfo;	/* output conversion functions for them */
-	List *param_exprs;		   /* executable expressions for param values */
-	const char **param_values; /* textual values of query parameters */
-	int fetch_size;			   /* number of tuples per fetch */
+	struct TSConnection *conn;   /* connection for the scan */
+	struct DataFetcher *fetcher; /* fetches tuples from data node */
+	int num_params;				 /* number of parameters passed to query */
+	FmgrInfo *param_flinfo;		 /* output conversion functions for them */
+	List *param_exprs;			 /* executable expressions for param values */
+	const char **param_values;   /* textual values of query parameters */
+	int fetch_size;				 /* number of tuples per fetch */
 	int row_counter;
 } TsFdwScanState;
 
@@ -46,7 +48,7 @@ extern void fdw_scan_end(TsFdwScanState *fsstate);
 extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es,
 							 TsFdwScanState *fsstate);
 
-extern void create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block);
+extern DataFetcher *create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode);
 
 #ifdef TS_DEBUG
 /* Allow tests to specify the time to push down in place of now() */

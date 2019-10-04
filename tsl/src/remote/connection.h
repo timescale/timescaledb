@@ -69,6 +69,7 @@ extern void remote_connection_set_processing(TSConnection *conn, bool processing
 extern bool remote_connection_configure_if_changed(TSConnection *conn);
 extern void remote_connection_elog(TSConnection *conn, int elevel);
 extern const char *remote_connection_node_name(TSConnection *conn);
+extern bool remote_connection_set_single_row_mode(TSConnection *conn);
 
 /* Functions operating on PGresult objects */
 extern void remote_result_cmd_ok(PGresult *res);

@@ -18,11 +18,12 @@ typedef struct AsyncRequest AsyncRequest;
 
 typedef struct TSConnection TSConnection;
 
-/* responses can be of three types. Each corresponding to a different struct below. */
-typedef enum
+typedef enum AsyncResponseType
 {
-	/* We got a result */
+	/* We got an entire result */
 	RESPONSE_RESULT = 0,
+	/* We got one row */
+	RESPONSE_ROW,
 	/* There was some kind of communication error */
 	RESPONSE_COMMUNICATION_ERROR,
 	/* Timeout while waiting for response */
@@ -94,6 +95,7 @@ extern AsyncRequest *async_request_send_prepared_stmt_with_params(PreparedStmt *
 																  int res_format);
 
 extern void async_request_attach_user_data(AsyncRequest *req, void *user_data);
+extern bool async_request_set_single_row_mode(AsyncRequest *req);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
 

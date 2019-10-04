@@ -601,7 +601,7 @@ fetch_remote_chunk_relstats(Hypertable *ht, FunctionCallInfo fcinfo)
 			float num_tuples;
 			int32 num_allvisible;
 
-			tuple = tuplefactory_make_tuple(tf, res, row);
+			tuple = tuplefactory_make_tuple(tf, res, row, PQbinaryTuples(res));
 			heap_deform_tuple(tuple, tupdesc, values, nulls);
 			chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_chunk_id)]);
 			cdn = ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(chunk_id,

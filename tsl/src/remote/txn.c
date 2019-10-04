@@ -239,6 +239,13 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 			else
 				success = true;
 			break;
+		case RESPONSE_ROW:
+			elog(DEBUG3,
+				 "abort processing: unexpected response type %d while executing %s",
+				 async_response_get_type(response),
+				 query);
+			success = false;
+			break;
 	}
 
 	if (success)

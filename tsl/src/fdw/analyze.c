@@ -18,9 +18,9 @@
 #include <funcapi.h>
 #include <miscadmin.h>
 
-#include <remote/dist_txn.h>
-#include <remote/async.h>
-#include <remote/cursor.h>
+#include "remote/dist_txn.h"
+#include "remote/async.h"
+#include "remote/data_fetcher.h"
 
 #include "utils.h"
 #include "analyze.h"
@@ -31,9 +31,9 @@
  */
 typedef struct TsFdwAnalyzeState
 {
-	Relation rel; /* relcache entry for the foreign table */
-	Cursor *cursor;
+	Relation rel;		   /* relcache entry for the foreign table */
 	List *retrieved_attrs; /* attr numbers retrieved by query */
+	DataFetcher *fetcher;
 
 	/* collected sample rows */
 	HeapTuple *rows; /* array of size targrows */
@@ -56,6 +56,7 @@ analyze_row_processor(int row, TsFdwAnalyzeState *astate)
 {
 	int targrows = astate->targrows;
 	int pos; /* array index to store tuple in */
+	DataFetcher *fetcher = astate->fetcher;
 
 	/* Always increment sample row counter. */
 	astate->samplerows += 1;
@@ -94,14 +95,14 @@ analyze_row_processor(int row, TsFdwAnalyzeState *astate)
 
 			/* Since we generate tuples in analyze memory context we need to make sure to free
 			 * tuples we don't use to avoid running OOM */
-			heap_freetuple(remote_cursor_get_tuple(astate->cursor, row));
+			heap_freetuple(fetcher->funcs->get_tuple(fetcher, row));
 		}
 
 		astate->rowstoskip -= 1;
 	}
 
 	if (pos >= 0)
-		astate->rows[pos] = remote_cursor_get_tuple(astate->cursor, row);
+		astate->rows[pos] = fetcher->funcs->get_tuple(fetcher, row);
 }
 
 /*
@@ -125,13 +126,14 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 						HeapTuple *rows, int targrows, double *totalrows, double *totaldeadrows)
 {
 	TsFdwAnalyzeState astate;
+	DataFetcher *fetcher;
 	TSConnection *conn;
 	TSConnectionId id = remote_connection_id(serverid, relation->rd_rel->relowner);
 	StringInfoData sql;
 
 	/* Initialize workspace state */
 	astate.rel = relation;
-	astate.cursor = NULL;
+	astate.fetcher = NULL;
 	astate.rows = rows;
 	astate.targrows = targrows;
 	astate.numrows = 0;
@@ -146,19 +148,19 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 	conn = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 
 	/*
-	 * Construct cursor that retrieves whole rows from remote.
+	 * Construct fetcher that retrieves rows from data node.
 	 */
 
 	initStringInfo(&sql);
 	deparseAnalyzeSql(&sql, relation, &astate.retrieved_attrs);
-	astate.cursor =
-		remote_cursor_create_for_rel(conn, relation, astate.retrieved_attrs, sql.data, NULL);
+	fetcher = data_fetcher_create_for_rel(conn, relation, astate.retrieved_attrs, sql.data, NULL);
+	astate.fetcher = fetcher;
 
-	remote_cursor_set_fetch_size(astate.cursor, fetch_size);
+	fetcher->funcs->set_fetch_size(fetcher, fetch_size);
 
 	/* Make sure tuples are stored in the caller's memory context (anl_cxt)
 	 * and not the batch context of cursor. */
-	remote_cursor_set_tuple_memcontext(astate.cursor, CurrentMemoryContext);
+	fetcher->funcs->set_tuple_mctx(fetcher, CurrentMemoryContext);
 
 	/* Retrieve and process rows a batch at a time. */
 	for (;;)
@@ -176,7 +178,7 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 		 */
 
 		/* Fetch some rows. Tuples have to be stored in anl_cxt */
-		numrows = remote_cursor_fetch_data(astate.cursor);
+		numrows = fetcher->funcs->fetch_data(fetcher);
 
 		/* Process whatever we got. */
 		for (i = 0; i < numrows; i++)
@@ -188,7 +190,7 @@ fdw_acquire_sample_rows(Relation relation, Oid serverid, int fetch_size, int ele
 	}
 
 	/* Close the cursor, just to be tidy. */
-	remote_cursor_close(astate.cursor);
+	fetcher->funcs->close(fetcher);
 
 	/* We assume that we have no dead tuple. */
 	*totaldeadrows = 0.0;

@@ -23,7 +23,6 @@
 #include "cache.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "remote/cursor.h"
 
 /*
  * AsyncAppend provides an asynchronous API during query execution to create cursors and

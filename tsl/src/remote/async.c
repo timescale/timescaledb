@@ -100,16 +100,14 @@ async_request_create(TSConnection *conn, const char *sql, const char *stmt_name,
 		elog(ERROR, "can't create AsyncRequest with NULL connection");
 
 	req = palloc0(sizeof(AsyncRequest));
+	*req = (AsyncRequest){ .conn = conn,
+						   .state = DEFERRED,
+						   .sql = pstrdup(sql),
+						   .stmt_name = stmt_name,
+						   .params = stmt_params,
+						   .prep_stmt_params = prep_stmt_params,
+						   .res_format = res_format };
 
-	*req = (AsyncRequest){
-		.conn = conn,
-		.state = DEFERRED,
-		.sql = pstrdup(sql),
-		.stmt_name = stmt_name,
-		.params = stmt_params,
-		.prep_stmt_params = prep_stmt_params,
-		.res_format = res_format,
-	};
 	return req;
 }
 
@@ -270,10 +268,16 @@ async_request_attach_user_data(AsyncRequest *req, void *user_data)
 static AsyncResponseResult *
 async_response_result_create(AsyncRequest *req, PGresult *res)
 {
-	AsyncResponseResult *ares = palloc0(sizeof(AsyncResponseResult));
+	AsyncResponseResult *ares;
+	AsyncResponseType type = RESPONSE_RESULT;
+
+	if (PQresultStatus(res) == PGRES_SINGLE_TUPLE)
+		type = RESPONSE_ROW;
+
+	ares = palloc0(sizeof(AsyncResponseResult));
 
 	*ares = (AsyncResponseResult){
-		.base = { .type = RESPONSE_RESULT },
+		.base = { .type = type },
 		.request = req,
 		.result = res,
 	};
@@ -353,12 +357,19 @@ async_response_result_get_request(AsyncResponseResult *res)
 	return res->request;
 }
 
+bool
+async_request_set_single_row_mode(AsyncRequest *req)
+{
+	return remote_connection_set_single_row_mode(req->conn);
+}
+
 void
 async_response_report_error(AsyncResponse *res, int elevel)
 {
 	switch (res->type)
 	{
 		case RESPONSE_RESULT:
+		case RESPONSE_ROW:
 			remote_result_elog(((AsyncResponseResult *) res)->result, elevel);
 			break;
 		case RESPONSE_COMMUNICATION_ERROR:
@@ -388,8 +399,8 @@ async_request_wait_any_result(AsyncRequest *req)
 	if (NULL == result)
 		elog(ERROR, "remote request failed");
 
-	/* Make sure to drain the connection */
-	if (NULL != async_request_set_wait_any_result(&set))
+	/* Make sure to drain the connection only if we've retrieved complete result set */
+	if (result->base.type == RESPONSE_RESULT && async_request_set_wait_any_result(&set) != NULL)
 		elog(ERROR, "request must be for one sql statement");
 
 	return result;
@@ -625,11 +636,8 @@ async_request_set_wait_any_result(AsyncRequestSet *set)
 	if (res == NULL)
 		return NULL;
 
-	if (RESPONSE_RESULT != res->type)
-	{
+	if (!(RESPONSE_RESULT == res->type || RESPONSE_ROW == res->type))
 		async_response_report_error(res, ERROR);
-		Assert(false);
-	}
 
 	return (AsyncResponseResult *) res;
 }
@@ -668,12 +676,17 @@ async_request_set_wait_all_ok_commands(AsyncRequestSet *set)
 void
 async_request_discard_response(AsyncRequest *req)
 {
-	AsyncResponseResult *result;
-	if (NULL == req)
-		return;
-	result = async_request_wait_any_result(req);
-	if (result != NULL)
-		async_response_result_close(result);
+	AsyncResponseResult *result = NULL;
+
+	Assert(req != NULL);
+
+	do
+	{
+		/* for row-by-row fetching we need to loop until we consume the whole response */
+		result = async_request_wait_any_result(req);
+		if (result != NULL)
+			async_response_result_close(result);
+	} while (result != NULL && req->state != COMPLETED);
 }
 
 void
