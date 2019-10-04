@@ -37,6 +37,7 @@ ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 
 --basic test with count
 create table foo (a integer, b integer, c integer, t text, p point);
+ALTER TABLE foo ADD CONSTRAINT chk_existing CHECK(b > 0);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 
 insert into foo values( 3 , 16 , 20);
@@ -84,6 +85,9 @@ ALTER TABLE foo DROP COLUMN a;
 ALTER TABLE foo DROP COLUMN t;
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ALTER TABLE foo RESET (timescaledb.compress);
+ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
+ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
+ALTER TABLE foo DROP CONSTRAINT chk_existing;
 
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
@@ -129,8 +133,8 @@ select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', tru
 create table fortable(col integer primary key);
 create table  table_constr( device_id integer,
                    timec integer ,
-                   location integer , 
-                   c integer constraint valid_cval check (c > 20) , 
+                   location integer ,
+                   c integer constraint valid_cval check (c > 20) ,
                    d integer,
                    primary key ( device_id, timec)
 
@@ -147,6 +151,8 @@ ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby
 alter table table_constr drop constraint table_constr_exclu ;
 --now it works
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
+--can't add fks after compression enabled
+alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 
 -- TEST fk cascade delete behavior on compressed chunk --
 insert into fortable values(1);
@@ -156,17 +162,17 @@ insert into table_constr values(1000, 1, 44, 44, 1);
 insert into table_constr values(1000, 10, 44, 44, 10);
 
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
 ORDER BY ch1.id limit 1 \gset
 
 -- we have 1 compressed and 1 uncompressed chunk after this.
 select compress_chunk(:'CHUNK_NAME');
 
-SELECT  hypertable_name , total_chunks , number_compressed_chunks 
+SELECT  hypertable_name , total_chunks , number_compressed_chunks
 FROM timescaledb_information.compressed_hypertable_stats;
 --delete from foreign table, should delete from hypertable too
 select device_id, d from table_constr order by device_id, d;
-delete from fortable where col = 1 or col = 10; 
+delete from fortable where col = 1 or col = 10;
 select device_id, d from table_constr order by device_id, d;
 
