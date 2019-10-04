@@ -495,6 +495,26 @@ set_statistics_on_compressed_table(Oid compressed_table_id)
 	RelationClose(table_rel);
 }
 
+#if !PG96 && !PG10
+static void
+set_toast_tuple_target_on_compressed(Oid compressed_table_id)
+{
+	DefElem def_elem = {
+		.type = T_DefElem,
+		.defname = "toast_tuple_target",
+		.arg = (Node *) makeInteger(128),
+		.defaction = DEFELEM_SET,
+		.location = -1,
+	};
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_SetRelOptions,
+		.def = (Node *) list_make1(&def_elem),
+	};
+	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
+}
+#endif
+
 static int32
 create_compression_table(Oid owner, CompressColInfo *compress_cols)
 {
@@ -539,6 +559,10 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
 
 	set_statistics_on_compressed_table(compress_relid);
+
+#if !PG96 && !PG10
+	set_toast_tuple_target_on_compressed(compress_relid);
+#endif
 
 	create_compressed_table_indexes(compress_relid, compress_cols);
 	return compress_hypertable_id;
