@@ -156,7 +156,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 		path = decompress_chunk_path_create(root, info, 0, child_path);
 
-		add_path(chunk_rel, path);
 		/* create ordered path if compressed order is compatible with query order */
 		if (try_order_by_compressed)
 		{
@@ -166,7 +165,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			dcpath->cpath.path.pathkeys = root->query_pathkeys;
 			add_path(chunk_rel, (Path *) dcpath);
 		}
+
+		/* this has to go after the path is copied for the ordered path since path can get freed in
+		 * add_path */
+		add_path(chunk_rel, path);
 	}
+	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
+	 * if it's planned */
+	compressed_rel->pathlist = NIL;
 
 	/* create parallel paths */
 	if (compressed_rel->consider_parallel)
@@ -182,6 +188,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			path = decompress_chunk_path_create(root, info, parallel_workers, child_path);
 			add_partial_path(chunk_rel, path);
 		}
+		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
+		 * freed if it's planned */
+		compressed_rel->partial_pathlist = NIL;
 	}
 }
 
