@@ -1,0 +1,60 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set TEST_BASE_NAME data_fetcher
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_cursor.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_CURSOR",
+       format('%s/results/%s_results_row_by_row.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_ROW_BY_ROW"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_CURSOR', :'TEST_RESULTS_ROW_BY_ROW') as "DIFF_CMD"
+\gset
+SET client_min_messages TO warning;
+\ir :TEST_LOAD_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+-- cleanup from previous tests
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
+                            database => 'data_node_3');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+(1 row)
+
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | disttable  | t
+(1 row)
+
+SELECT setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+INSERT INTO disttable
+SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random() * 10
+FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 second') as t;
+\set ECHO errors

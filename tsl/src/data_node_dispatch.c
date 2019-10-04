@@ -358,7 +358,7 @@ store_returning_result(DataNodeDispatchState *sds, int row, TupleTableSlot *slot
 {
 	PG_TRY();
 	{
-		HeapTuple newtup = tuplefactory_make_tuple(sds->tupfactory, res, row);
+		HeapTuple newtup = tuplefactory_make_tuple(sds->tupfactory, res, row, PQbinaryTuples(res));
 
 		/* We need to force the tuple into the slot since it is not of the
 		 * right type (conversion to the right type will happen if

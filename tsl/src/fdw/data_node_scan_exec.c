@@ -22,7 +22,7 @@
 #include "scan_exec.h"
 #include "data_node_scan_exec.h"
 #include "async_append.h"
-#include "remote/cursor.h"
+#include "remote/data_fetcher.h"
 #include "guc.h"
 
 /*
@@ -152,17 +152,18 @@ static CustomExecMethods data_node_scan_state_methods = {
 };
 
 static void
-send_create_cursor_req(AsyncScanState *ass)
+create_fetcher(AsyncScanState *ass)
 {
 	DataNodeScanState *dnss = (DataNodeScanState *) ass;
-	create_cursor(&dnss->async_state.css.ss, &dnss->fsstate, false);
+	create_data_fetcher(&dnss->async_state.css.ss, &dnss->fsstate, FETCH_ASYNC);
 }
 
 static void
-complete_create_cursor(AsyncScanState *ass)
+fetch_data(AsyncScanState *ass)
 {
 	DataNodeScanState *dnss = (DataNodeScanState *) ass;
-	remote_cursor_wait_until_open(dnss->fsstate.cursor);
+	DataFetcher *fetcher = dnss->fsstate.fetcher;
+	fetcher->funcs->fetch_data_start(fetcher);
 }
 
 Node *
@@ -173,7 +174,7 @@ data_node_scan_state_create(CustomScan *cscan)
 
 	dnss->async_state.css.methods = &data_node_scan_state_methods;
 	dnss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
-	dnss->async_state.init = send_create_cursor_req;
-	dnss->async_state.fetch_tuples = complete_create_cursor;
+	dnss->async_state.init = create_fetcher;
+	dnss->async_state.fetch_tuples = fetch_data;
 	return (Node *) dnss;
 }

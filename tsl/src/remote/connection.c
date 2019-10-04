@@ -1508,6 +1508,12 @@ remote_connection_subxact_end(SubXactEvent event, SubTransactionId subtxid,
 	}
 }
 
+bool
+remote_connection_set_single_row_mode(TSConnection *conn)
+{
+	return PQsetSingleRowMode(conn->pg_conn);
+}
+
 #if TS_DEBUG
 /*
  * Reset the current connection stats.

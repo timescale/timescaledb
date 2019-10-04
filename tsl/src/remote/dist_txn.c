@@ -337,6 +337,7 @@ dist_txn_send_commit_transaction()
 		switch (async_response_get_type(res))
 		{
 			case RESPONSE_COMMUNICATION_ERROR:
+			case RESPONSE_ROW:
 			case RESPONSE_TIMEOUT:
 				elog(WARNING, "error while performing second phase of 2-pc");
 				continue;

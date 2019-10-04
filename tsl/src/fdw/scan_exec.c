@@ -19,7 +19,7 @@
 
 #include "scan_exec.h"
 #include "utils.h"
-#include "remote/cursor.h"
+#include "remote/data_fetcher.h"
 #include "guc.h"
 
 /*
@@ -94,17 +94,18 @@ fill_query_params_array(ExprContext *econtext, FmgrInfo *param_flinfo, List *par
  * Operation can be blocking or non-blocking, depending on the bool arg.
  * In non blocking case we just dispatch async request to create cursor
  */
-void
-create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block)
+DataFetcher *
+create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode)
 {
 	ExprContext *econtext = ss->ps.ps_ExprContext;
 	int num_params = fsstate->num_params;
 	const char **values = fsstate->param_values;
 	MemoryContext oldcontext;
 	StmtParams *params = NULL;
+	DataFetcher *fetcher = NULL;
 
-	if (NULL != fsstate->cursor)
-		return;
+	if (NULL != fsstate->fetcher)
+		return fsstate->fetcher;
 
 	/*
 	 * Construct array of query parameter values in text format.  We do the
@@ -130,15 +131,18 @@ create_cursor(ScanState *ss, TsFdwScanState *fsstate, bool block)
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 
-	fsstate->cursor = remote_cursor_create_for_scan(fsstate->conn,
-													ss,
-													fsstate->retrieved_attrs,
-													fsstate->query,
-													params,
-													block);
+	fetcher = data_fetcher_create_for_scan(fsstate->conn,
+										   ss,
+										   fsstate->retrieved_attrs,
+										   fsstate->query,
+										   params,
+										   mode);
+	fsstate->fetcher = fetcher;
 	MemoryContextSwitchTo(oldcontext);
 
-	remote_cursor_set_fetch_size(fsstate->cursor, fsstate->fetch_size);
+	fetcher->funcs->set_fetch_size(fetcher, fsstate->fetch_size);
+
+	return fetcher;
 }
 
 /*
@@ -303,7 +307,7 @@ fdw_scan_init(ScanState *ss, TsFdwScanState *fsstate, Bitmapset *scanrelids, Lis
 							 &fsstate->param_exprs,
 							 &fsstate->param_values);
 
-	fsstate->cursor = NULL;
+	fsstate->fetcher = NULL;
 }
 
 TupleTableSlot *
@@ -311,19 +315,15 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 {
 	TupleTableSlot *slot = ss->ss_ScanTupleSlot;
 	HeapTuple tuple;
+	DataFetcher *fetcher = fsstate->fetcher;
 
-	if (NULL == fsstate->cursor)
-		create_cursor(ss, fsstate, true);
+	if (NULL == fetcher)
+		fetcher = create_data_fetcher(ss, fsstate, FETCH_NOASYNC);
 
-	tuple = remote_cursor_get_next_tuple(fsstate->cursor);
+	tuple = fetcher->funcs->get_next_tuple(fetcher);
 
 	if (NULL == tuple)
-	{
-		/* no need to drain the connection since at this point we should have completed any ongoing
-		 * data fetch request */
-		remote_cursor_set_should_drain(fsstate->cursor, false);
 		return ExecClearTuple(slot);
-	}
 
 	/*
 	 * Return the next tuple. Must force the tuple into the slot since
@@ -338,8 +338,10 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 void
 fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 {
+	DataFetcher *fetcher = fsstate->fetcher;
+
 	/* If we haven't created the cursor yet, nothing to do. */
-	if (NULL == fsstate->cursor)
+	if (NULL == fsstate->fetcher)
 		return;
 	/*
 	 * If any internal parameters affecting this node have changed, we'd
@@ -349,11 +351,11 @@ fdw_scan_rescan(ScanState *ss, TsFdwScanState *fsstate)
 	 */
 	if (ss->ps.chgParam != NULL)
 	{
-		remote_cursor_close(fsstate->cursor);
-		fsstate->cursor = NULL;
+		data_fetcher_free(fsstate->fetcher);
+		fsstate->fetcher = NULL;
 	}
 	else
-		remote_cursor_rewind(fsstate->cursor);
+		fetcher->funcs->rewind(fsstate->fetcher);
 }
 
 void
@@ -364,10 +366,10 @@ fdw_scan_end(TsFdwScanState *fsstate)
 		return;
 
 	/* Close the cursor if open, to prevent accumulation of cursors */
-	if (NULL != fsstate->cursor)
+	if (NULL != fsstate->fetcher)
 	{
-		remote_cursor_close(fsstate->cursor);
-		fsstate->cursor = NULL;
+		data_fetcher_free(fsstate->fetcher);
+		fsstate->fetcher = NULL;
 	}
 
 	/* Release remote connection */

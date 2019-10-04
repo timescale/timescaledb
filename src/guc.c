@@ -34,6 +34,10 @@ static const struct config_enum_entry telemetry_level_options[] = {
 	{ "off", TELEMETRY_OFF, false }, { "basic", TELEMETRY_BASIC, false }, { NULL, 0, false }
 };
 
+static const struct config_enum_entry remote_data_fetchers[] = {
+	{ "rowbyrow", RowByRowFetcherType, false }, { "cursor", CursorFetcherType, false }
+};
+
 bool ts_guc_disable_optimizations = false;
 bool ts_guc_optimize_non_hypertables = false;
 bool ts_guc_restoring = false;
@@ -62,6 +66,7 @@ TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
+TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = RowByRowFetcherType;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -280,6 +285,19 @@ _guc_init(void)
 							 "Enable getting and showing EXPLAIN output from remote nodes",
 							 &ts_guc_enable_remote_explain,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable("timescaledb.remote_data_fetcher",
+							 "Set remote data fetcher type",
+							 "Pick data fetcher type based on type of queries you plan to run "
+							 "(rowbyrow or cursor)",
+							 (int *) &ts_guc_remote_data_fetcher,
+							 RowByRowFetcherType,
+							 remote_data_fetchers,
 							 PGC_USERSET,
 							 0,
 							 NULL,

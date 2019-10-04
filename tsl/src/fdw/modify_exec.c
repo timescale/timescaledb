@@ -349,7 +349,8 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 {
 	PG_TRY();
 	{
-		HeapTuple newtup = tuplefactory_make_tuple(fmstate->tupfactory, res, 0);
+		HeapTuple newtup =
+			tuplefactory_make_tuple(fmstate->tupfactory, res, 0, PQbinaryTuples(res));
 
 		/* tuple will be deleted when it is cleared from the slot */
 		ExecStoreHeapTupleCompat(newtup, slot, true);
