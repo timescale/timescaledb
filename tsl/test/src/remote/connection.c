@@ -216,10 +216,14 @@ tsl_test_get_connection_stats(PG_FUNCTION_ARGS)
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
-	values[Anum_connection_stats_connections_created - 1] = stats->connections_created;
-	values[Anum_connection_stats_connections_closed - 1] = stats->connections_closed;
-	values[Anum_connection_stats_results_created - 1] = stats->results_created;
-	values[Anum_connection_stats_results_cleared - 1] = stats->results_cleared;
+	values[Anum_connection_stats_connections_created - 1] =
+		Int64GetDatum((int64) stats->connections_created);
+	values[Anum_connection_stats_connections_closed - 1] =
+		Int64GetDatum((int64) stats->connections_closed);
+	values[Anum_connection_stats_results_created - 1] =
+		Int64GetDatum((int64) stats->results_created);
+	values[Anum_connection_stats_results_cleared - 1] =
+		Int64GetDatum((int64) stats->results_cleared);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
