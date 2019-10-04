@@ -68,6 +68,7 @@ ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 ERROR:  cannot compress tables with reserved column prefix '_ts_meta_'
 --basic test with count
 create table foo (a integer, b integer, c integer, t text, p point);
+ALTER TABLE foo ADD CONSTRAINT chk_existing CHECK(b > 0);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
  table_name 
@@ -148,6 +149,12 @@ ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
+ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
+ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo DROP CONSTRAINT chk_existing;
+ERROR:  operation not supported on hypertables that have compression enabled
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -216,8 +223,8 @@ ERROR:  cannot add drop chunks policy to hypertable "_compressed_hypertable_11" 
 create table fortable(col integer primary key);
 create table  table_constr( device_id integer,
                    timec integer ,
-                   location integer , 
-                   c integer constraint valid_cval check (c > 20) , 
+                   location integer ,
+                   c integer constraint valid_cval check (c > 20) ,
                    d integer,
                    primary key ( device_id, timec)
 );
@@ -245,6 +252,9 @@ ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby
 NOTICE:  adding index _compressed_hypertable_13_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(device_id, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_13_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(location, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_13_d__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(d, _ts_meta_sequence_num)
+--can't add fks after compression enabled
+alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
+ERROR:  operation not supported on hypertables that have compression enabled
 -- TEST fk cascade delete behavior on compressed chunk --
 insert into fortable values(1);
 insert into fortable values(10);
@@ -252,7 +262,7 @@ insert into fortable values(10);
 insert into table_constr values(1000, 1, 44, 44, 1);
 insert into table_constr values(1000, 10, 44, 44, 10);
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
 ORDER BY ch1.id limit 1 \gset
 -- we have 1 compressed and 1 uncompressed chunk after this.
@@ -262,7 +272,7 @@ select compress_chunk(:'CHUNK_NAME');
  
 (1 row)
 
-SELECT  hypertable_name , total_chunks , number_compressed_chunks 
+SELECT  hypertable_name , total_chunks , number_compressed_chunks
 FROM timescaledb_information.compressed_hypertable_stats;
  hypertable_name | total_chunks | number_compressed_chunks 
 -----------------+--------------+--------------------------
@@ -277,7 +287,7 @@ select device_id, d from table_constr order by device_id, d;
       1000 | 10
 (2 rows)
 
-delete from fortable where col = 1 or col = 10; 
+delete from fortable where col = 1 or col = 10;
 select device_id, d from table_constr order by device_id, d;
  device_id | d 
 -----------+---

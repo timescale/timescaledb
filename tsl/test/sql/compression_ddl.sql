@@ -48,7 +48,7 @@ ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 -- TABLESPACES
 -- For tablepaces with compressed chunks the semantics are the following:
 --  - compressed chunks get put into the same tablespace as the
---    uncommpressed chunk on compression.
+--    uncompressed chunk on compression.
 -- - set tablespace on uncompressed hypertable cascades to compressed hypertable+chunks
 -- - set tablespace on all chunks is blocked (same as w/o compression)
 -- - move chunks on a uncompressed chunk errors
