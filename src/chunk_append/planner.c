@@ -53,6 +53,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 	Oid *sortOperators;
 	Oid *collations;
 	bool *nullsFirst;
+	AttrNumber *childColIdx;
 
 	/* push down targetlist to children */
 	plan->targetlist = (List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
@@ -64,7 +65,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 										 sortColIdx,
 										 true,
 										 &childSortCols,
-										 &sortColIdx,
+										 &childColIdx,
 										 &sortOperators,
 										 &collations,
 										 &nullsFirst);
@@ -73,7 +74,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
 	{
 		plan = (Plan *)
-			make_sort(plan, childSortCols, sortColIdx, sortOperators, collations, nullsFirst);
+			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
 	}
 	return plan;
 }
@@ -186,17 +187,17 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
 				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
 
-				/* Compute sort column info, and adjust MergeAppend's tlist as needed */
-				ts_prepare_sort_from_pathkeys((Plan *) merge_plan,
-											  pathkeys,
-											  merge_path->path.parent->relids,
-											  NULL,
-											  true,
-											  &numCols,
-											  &sortColIdx,
-											  &sortOperators,
-											  &collations,
-											  &nullsFirst);
+				/*
+				 * Since for space partitioning the MergeAppend below ChunkAppend
+				 * still has the hypertable as rel we can copy sort properties and
+				 * target list from toplevel ChunkAppend.
+				 */
+				merge_plan->plan.targetlist = cscan->scan.plan.targetlist;
+				merge_plan->sortColIdx = sortColIdx;
+				merge_plan->sortOperators = sortOperators;
+				merge_plan->collations = collations;
+				merge_plan->nullsFirst = nullsFirst;
+
 				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
 				{
 					lfirst(lc_childplan) = adjust_childscan(root,
