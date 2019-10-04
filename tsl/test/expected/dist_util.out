@@ -122,13 +122,17 @@ SELECT * FROM delete_data_node('data_node_2');
  t
 (1 row)
 
--- dist_uuid should be removed from the metadata on the data node
+-- dist_uuid should not be removed from the metadata on the data node,
+-- so we need to delete it manually before adding it to another
+-- backend.
 \c backend_x_2 :ROLE_CLUSTER_SUPERUSER
-SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
- key | value 
------+-------
-(0 rows)
+SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
+    key    
+-----------
+ dist_uuid
+(1 row)
 
+DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 -- Add the data node to the second frontend without bootstrapping
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);

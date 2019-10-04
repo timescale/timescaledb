@@ -59,7 +59,6 @@ TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 TS_FUNCTION_INFO_V1(ts_remote_txn_heal_data_node);
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
-TS_FUNCTION_INFO_V1(ts_dist_remove_id);
 TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
 TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
@@ -207,12 +206,6 @@ Datum
 ts_dist_set_id(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions->set_distributed_id(PG_GETARG_DATUM(0)));
-}
-
-Datum
-ts_dist_remove_id(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_BOOL(ts_cm_functions->remove_from_distributed_db());
 }
 
 Datum

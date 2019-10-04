@@ -715,44 +715,11 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time');
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  no data nodes can be assigned to "disttable"
 \set ON_ERROR_STOP 1
-DROP DATABASE IF EXISTS data_node_3;
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
-(1 row)
-
 -- These data nodes have been deleted, so safe to remove their databases.
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
+DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
--- data node 3 is not yet deleted. Drop the database to mimic a failed node
-DROP DATABASE IF EXISTS data_node_3;
--- Return false if data node is down
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_3');
- ping_data_node 
-----------------
- f
-(1 row)
-
-\set ON_ERROR_STOP 0
-\set VERBOSITY default
--- deleting a failed data node without force => true should fail
-SELECT delete_data_node('data_node_3');
-ERROR:  could not connect to data node "data_node_3"
-DETAIL:  FATAL:  database "data_node_3" does not exist
-HINT:  Use the force option to delete the data node anyway.
-\set VERBOSITY terse
-\set ON_ERROR_STOP 1
--- Should work with force option
-SELECT delete_data_node('data_node_3', force => true);
-WARNING:  could not connect to data node "data_node_3"
- delete_data_node 
-------------------
- t
-(1 row)
-
 -- there should be no data nodes
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
  node_name | options 
