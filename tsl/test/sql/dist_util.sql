@@ -79,9 +79,12 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 \c frontend_1 :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM delete_data_node('data_node_2');
 
--- dist_uuid should be removed from the metadata on the data node
+-- dist_uuid should not be removed from the metadata on the data node,
+-- so we need to delete it manually before adding it to another
+-- backend.
 \c backend_x_2 :ROLE_CLUSTER_SUPERUSER
-SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
+SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
+DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 
 -- Add the data node to the second frontend without bootstrapping
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER

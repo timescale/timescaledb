@@ -47,18 +47,36 @@ SELECT * FROM show_data_nodes();
 SELECT * FROM delete_data_node('bootstrap_test');
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
-SELECT extname, usename AS owner
-FROM pg_extension e, pg_user u, pg_namespace n
-WHERE e.extowner = u.usesysid
-AND e.extnamespace = n.oid
-AND e.extname = 'timescaledb';
+-- This should show dist_uuid row on the deleted node since that is
+-- not removed by delete_data_node.
+SELECT key FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 
--- This should not show any rows since delete_data_node clear the
--- dist_uuid.
-SELECT key, value FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
+-- Delete the dist_uuid so that we can try to re-add it without
+-- bootstrapping.
+DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
+
+SELECT * FROM delete_data_node('bootstrap_test');
+DROP DATABASE bootstrap_test;
+
+----------------------------------------------------------------------
+-- Do a manual bootstrap of the data node and check that it can be
+-- added.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
 
 SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
@@ -95,29 +113,6 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
-
-----------------------------------------------------------------------
--- Bootstrap the database and set the distributed UUID to something.
---
--- Check that the adding the data node will fail.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
-SELECT * FROM delete_data_node('bootstrap_test');
-
-\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
-SELECT key, value FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
-UPDATE _timescaledb_catalog.metadata
-   SET value = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
- WHERE key = 'dist_uuid';
-SELECT key, value FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
-
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-\set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
-\set ON_ERROR_STOP 1
-
-SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
 
 ----------------------------------------------------------------------

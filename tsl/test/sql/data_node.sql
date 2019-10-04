@@ -351,29 +351,11 @@ SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM create_distributed_hypertable('disttable', 'time');
 \set ON_ERROR_STOP 1
 
-DROP DATABASE IF EXISTS data_node_3;
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-
 -- These data nodes have been deleted, so safe to remove their databases.
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
+DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
-
--- data node 3 is not yet deleted. Drop the database to mimic a failed node
-DROP DATABASE IF EXISTS data_node_3;
--- Return false if data node is down
-SELECT * FROM _timescaledb_internal.ping_data_node('data_node_3');
-
-\set ON_ERROR_STOP 0
-\set VERBOSITY default
--- deleting a failed data node without force => true should fail
-SELECT delete_data_node('data_node_3');
-\set VERBOSITY terse
-\set ON_ERROR_STOP 1
-
--- Should work with force option
-SELECT delete_data_node('data_node_3', force => true);
 
 -- there should be no data nodes
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
