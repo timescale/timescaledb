@@ -1281,6 +1281,69 @@ ORDER BY time DESC;
                Heap Fetches: 6720
 (38 rows)
 
+-- expressions in ORDER BY clause
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM space
+ORDER BY 1 LIMIT 10;
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on space (actual rows=10 loops=1)
+         Order: time_bucket('@ 1 hour'::interval, space."time")
+         ->  Merge Append (actual rows=10 loops=1)
+               Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_7_24_chunk."time"))
+               ->  Index Only Scan Backward using _hyper_7_24_chunk_space_time_idx on _hyper_7_24_chunk (actual rows=10 loops=1)
+                     Heap Fetches: 10
+               ->  Index Only Scan Backward using _hyper_7_26_chunk_space_time_idx on _hyper_7_26_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan Backward using _hyper_7_28_chunk_space_time_idx on _hyper_7_28_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan Backward using _hyper_7_30_chunk_space_time_idx on _hyper_7_30_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+         ->  Merge Append (never executed)
+               Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_7_23_chunk."time"))
+               ->  Index Only Scan Backward using _hyper_7_23_chunk_space_time_idx on _hyper_7_23_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_7_25_chunk_space_time_idx on _hyper_7_25_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_7_27_chunk_space_time_idx on _hyper_7_27_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_7_29_chunk_space_time_idx on _hyper_7_29_chunk (never executed)
+                     Heap Fetches: 0
+(23 rows)
+
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM space
+ORDER BY 1 DESC LIMIT 10;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10 loops=1)
+   ->  Custom Scan (ChunkAppend) on space (actual rows=10 loops=1)
+         Order: time_bucket('@ 1 hour'::interval, space."time") DESC
+         ->  Merge Append (actual rows=10 loops=1)
+               Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_7_29_chunk."time")) DESC
+               ->  Index Only Scan using _hyper_7_29_chunk_space_time_idx on _hyper_7_29_chunk (actual rows=3 loops=1)
+                     Heap Fetches: 3
+               ->  Index Only Scan using _hyper_7_27_chunk_space_time_idx on _hyper_7_27_chunk (actual rows=2 loops=1)
+                     Heap Fetches: 2
+               ->  Index Only Scan using _hyper_7_25_chunk_space_time_idx on _hyper_7_25_chunk (actual rows=6 loops=1)
+                     Heap Fetches: 6
+               ->  Index Only Scan using _hyper_7_23_chunk_space_time_idx on _hyper_7_23_chunk (actual rows=2 loops=1)
+                     Heap Fetches: 2
+         ->  Merge Append (never executed)
+               Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_7_30_chunk."time")) DESC
+               ->  Index Only Scan using _hyper_7_30_chunk_space_time_idx on _hyper_7_30_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_7_28_chunk_space_time_idx on _hyper_7_28_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_7_26_chunk_space_time_idx on _hyper_7_26_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_7_24_chunk_space_time_idx on _hyper_7_24_chunk (never executed)
+                     Heap Fetches: 0
+(23 rows)
+
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX SELECT *

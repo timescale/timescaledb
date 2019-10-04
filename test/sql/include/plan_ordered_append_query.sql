@@ -315,6 +315,17 @@ ORDER BY time DESC;
 FROM space3
 ORDER BY time DESC;
 
+-- expressions in ORDER BY clause
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM space
+ORDER BY 1 LIMIT 10;
+
+:PREFIX SELECT
+  time_bucket('1h',time)
+FROM space
+ORDER BY 1 DESC LIMIT 10;
+
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX SELECT *
