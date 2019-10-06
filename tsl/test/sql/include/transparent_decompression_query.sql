@@ -202,6 +202,13 @@ SET enable_seqscan TO false;
 
 :PREFIX_VERBOSE SELECT count(*) FROM :TEST_TABLE WHERE device_id = 1;
 
+-- should be able to order using an index
+CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
+
+:PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE ORDER BY device_id;
+
+DROP INDEX tmp_idx CASCADE;
+
 --use the peer index
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer, time;
 
