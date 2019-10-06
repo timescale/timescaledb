@@ -49,6 +49,10 @@ extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr 
 														bool nulls_first, Index sortref,
 														bool create_it);
 
+extern TSDLLEXPORT PathKey *
+ts_make_pathkey_from_sortinfo(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid opfamily,
+							  Oid opcintype, Oid collation, bool reverse_sort, bool nulls_first,
+							  Index sortref, Relids rel, bool create_it);
 extern List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 
 extern void ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);

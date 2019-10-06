@@ -616,7 +616,7 @@ find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
  * needed to represent the sort key.  If it's false, we return NULL if the
  * sort key isn't already present in any EquivalenceClass.
  */
-static PathKey *
+PathKey *
 ts_make_pathkey_from_sortinfo(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid opfamily,
 							  Oid opcintype, Oid collation, bool reverse_sort, bool nulls_first,
 							  Index sortref, Relids rel, bool create_it)

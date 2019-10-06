@@ -354,10 +354,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		(List *) replace_compressed_vars((Node *) cscan->scan.plan.qual, dcpath->info);
 
 	compressed_scan->plan.targetlist = build_scan_tlist(dcpath);
-	if (path->path.pathkeys)
+	if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
 	{
 		List *compressed_pks = dcpath->compressed_pathkeys;
-		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan, compressed_pks, NULL);
+		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
+												compressed_pks,
+												bms_make_singleton(compressed_scan->scanrelid));
 		cscan->custom_plans = list_make1(sort);
 	}
 	else
