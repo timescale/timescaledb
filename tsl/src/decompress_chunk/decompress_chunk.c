@@ -99,8 +99,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 								   Chunk *chunk)
 {
 	RelOptInfo *compressed_rel;
+	RelOptInfo *hypertable_rel;
 	bool needs_sequence_num = false;
 	ListCell *lc;
+	double new_row_estimate;
 
 	CompressionInfo *info = build_compressioninfo(root, ht, chunk_rel);
 	Index ht_index;
@@ -119,6 +121,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	Assert(chunk_info != NULL);
 	Assert(chunk_info->parent_reloid == ht->main_table_relid);
 	ht_index = chunk_info->parent_relid;
+	hypertable_rel = root->simple_rel_array[ht_index];
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
 
@@ -133,7 +136,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	pushdown_quals(root, chunk_rel, compressed_rel, info->hypertable_compression_info);
 	set_baserel_size_estimates(root, compressed_rel);
-	chunk_rel->rows = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	/* adjust the parent's estimate by the diff of new and old estimate */
+	hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
+	chunk_rel->rows = new_row_estimate;
 	create_compressed_scan_paths(root,
 								 compressed_rel,
 								 compressed_rel->consider_parallel ? parallel_workers : 0);

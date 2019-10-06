@@ -1631,39 +1631,45 @@ DROP VIEW compressed_view;
 (18 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time INNER JOIN :TEST_TABLE m3 ON m2.time = m3.time AND m1.device_id=m2.device_id AND m3.device_id = 3 ORDER BY m1.time, m1.device_id LIMIT 10;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Limit
-   ->  Sort
-         Sort Key: m1."time", m1.device_id
-         ->  Hash Join
-               Hash Cond: ((m2."time" = m1."time") AND (m2.device_id = m1.device_id))
-               ->  Append
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2
-                           ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1
-                     ->  Seq Scan on _hyper_1_2_chunk m2_1
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m2_2
-                           ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_1
-               ->  Hash
-                     ->  Hash Join
-                           Hash Cond: (m1."time" = m3."time")
-                           ->  Append
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1
-                                       ->  Seq Scan on compress_hyper_5_15_chunk
-                                 ->  Seq Scan on _hyper_1_2_chunk m1_1
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_2
-                                       ->  Seq Scan on compress_hyper_5_16_chunk
-                           ->  Hash
-                                 ->  Append
-                                       ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m3
-                                             ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_2
-                                                   Filter: (device_id = 3)
-                                       ->  Seq Scan on _hyper_1_2_chunk m3_1
-                                             Filter: (device_id = 3)
-                                       ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m3_2
-                                             ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_2
-                                                   Filter: (device_id = 3)
-(30 rows)
+   ->  Merge Join
+         Merge Cond: (m1."time" = m3."time")
+         ->  Merge Join
+               Merge Cond: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+               ->  Sort
+                     Sort Key: m1."time", m1.device_id
+                     ->  Append
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1
+                                 ->  Seq Scan on compress_hyper_5_15_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk m1_1
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_2
+                                 ->  Seq Scan on compress_hyper_5_16_chunk
+               ->  Sort
+                     Sort Key: m2."time", m2.device_id
+                     ->  Append
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2
+                                 ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1
+                           ->  Seq Scan on _hyper_1_2_chunk m2_1
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m2_2
+                                 ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_1
+         ->  Materialize
+               ->  Merge Append
+                     Sort Key: m3."time"
+                     ->  Sort
+                           Sort Key: m3."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m3
+                                 ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_2
+                                       Filter: (device_id = 3)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m3_1
+                           Filter: (device_id = 3)
+                     ->  Sort
+                           Sort Key: m3_2."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m3_2
+                                 ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_2
+                                       Filter: (device_id = 3)
+(36 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE m1 INNER JOIN :TEST_TABLE m2 ON m1.time = m2.time AND m1.device_id=1 AND m2.device_id=2 ORDER BY m1.time, m1.device_id, m2.time, m2.device_id LIMIT 100;
                                                   QUERY PLAN                                                  
@@ -5164,41 +5170,65 @@ DEALLOCATE tableoid_prep;
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
 SET max_parallel_workers_per_gather TO 4;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
 EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
-   ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_5_15_chunk
-         ->  Seq Scan on _hyper_1_2_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-               ->  Seq Scan on compress_hyper_5_16_chunk
-(8 rows)
+   ->  Gather
+         Workers Planned: 1
+         ->  Append
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on compress_hyper_5_15_chunk
+               ->  Parallel Seq Scan on _hyper_1_2_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                     ->  Parallel Seq Scan on compress_hyper_5_16_chunk
+(10 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: (time_bucket('@ 10 mins'::interval, _hyper_1_1_chunk."time"))
+   ->  Gather
+         Workers Planned: 1
+         ->  Result
+               ->  Append
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           ->  Parallel Seq Scan on compress_hyper_5_15_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                           ->  Parallel Seq Scan on compress_hyper_5_16_chunk
+(11 rows)
 
 EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
-   ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk
-               ->  Seq Scan on compress_hyper_6_17_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
-               ->  Seq Scan on compress_hyper_6_18_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk
-               ->  Seq Scan on compress_hyper_6_19_chunk
-         ->  Seq Scan on _hyper_2_7_chunk
-         ->  Seq Scan on _hyper_2_8_chunk
-         ->  Seq Scan on _hyper_2_9_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
-               ->  Seq Scan on compress_hyper_6_20_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
-               ->  Seq Scan on compress_hyper_6_21_chunk
-         ->  Seq Scan on _hyper_2_12_chunk
-(17 rows)
+   ->  Gather
+         Workers Planned: 1
+         ->  Append
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_17_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_18_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_19_chunk
+               ->  Parallel Seq Scan on _hyper_2_7_chunk
+               ->  Parallel Seq Scan on _hyper_2_8_chunk
+               ->  Parallel Seq Scan on _hyper_2_9_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_20_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_21_chunk
+               ->  Parallel Seq Scan on _hyper_2_12_chunk
+(19 rows)
 
+RESET parallel_setup_cost; 
+RESET parallel_tuple_cost; 
 SET enable_seqscan TO false;
 -- should order compressed chunks using index
 -- (we only EXPLAIN here b/c the resulting order is too inconsistent)
