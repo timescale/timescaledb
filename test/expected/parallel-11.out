@@ -8,7 +8,8 @@ SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
     THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
     ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX"
+  END AS "PREFIX",
+  'EXPLAIN (costs off)' AS "PREFIX_NO_ANALYZE"
 \gset
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
@@ -82,35 +83,34 @@ LIMIT 5;
 (12 rows)
 
 -- test single copy parallel plan with parallel chunk append
-:PREFIX SELECT time_bucket('1 second', ts) sec, last(i, j)
+-- output with analyze is not stable because it depends on worker assignment
+:PREFIX_NO_ANALYZE SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 WHERE length(version()) > 0
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Gather (actual rows=5 loops=1)
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Gather
    Workers Planned: 1
-   Workers Launched: 1
    Single Copy: true
-   ->  Limit (actual rows=5 loops=1)
-         ->  Sort (actual rows=5 loops=1)
+   ->  Limit
+         ->  Sort
                Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
-               Worker 0:  Sort Method: top-N heapsort 
-               ->  HashAggregate (actual rows=1000 loops=1)
+               ->  HashAggregate
                      Group Key: time_bucket('@ 1 sec'::interval, test.ts)
-                     ->  Result (actual rows=1000000 loops=1)
+                     ->  Result
                            One-Time Filter: (length(version()) > 0)
-                           ->  Custom Scan (ChunkAppend) on test (actual rows=1000000 loops=1)
+                           ->  Custom Scan (ChunkAppend) on test
                                  Chunks excluded during startup: 0
-                                 ->  Result (actual rows=500000 loops=1)
+                                 ->  Result
                                        One-Time Filter: (length(version()) > 0)
-                                       ->  Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
-                                 ->  Result (actual rows=500000 loops=1)
+                                       ->  Seq Scan on _hyper_1_1_chunk
+                                 ->  Result
                                        One-Time Filter: (length(version()) > 0)
-                                       ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
-(20 rows)
+                                       ->  Seq Scan on _hyper_1_2_chunk
+(18 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
@@ -219,31 +219,67 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
                      ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
 (14 rows)
 
--- test ChunkAppend with parallel aggregation
-:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+-- test worker assignment
+-- first chunk should have 1 worker and second chunk should have 2
+SET max_parallel_workers_per_gather TO 2;
+:PREFIX SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
    ->  Gather (actual rows=3 loops=1)
          Workers Planned: 2
          Workers Launched: 2
          ->  Partial Aggregate (actual rows=1 loops=3)
-               ->  Result (actual rows=333333 loops=3)
+               ->  Result (actual rows=200000 loops=3)
                      One-Time Filter: (length(version()) > 0)
-                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=333333 loops=3)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=200000 loops=3)
                            Chunks excluded during startup: 0
-                           ->  Result (actual rows=500000 loops=1)
+                           ->  Result (actual rows=100000 loops=1)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
-                           ->  Result (actual rows=500000 loops=1)
+                                 ->  Parallel Index Only Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk (actual rows=100000 loops=1)
+                                       Index Cond: (i >= 400000)
+                                       Heap Fetches: 100000
+                           ->  Result (actual rows=250000 loops=2)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
-(15 rows)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
+                                       Filter: (i >= 400000)
+(18 rows)
 
-SELECT count(*) FROM "test" WHERE length(version()) > 0;
-  count  
----------
- 1000000
+SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
+ count  
+--------
+ 600000
+(1 row)
+
+-- test worker assignment
+-- first chunk should have 2 worker and second chunk should have 1
+:PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=200000 loops=3)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=200000 loops=3)
+                           Chunks excluded during startup: 0
+                           ->  Result (actual rows=100000 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Index Only Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk (actual rows=100000 loops=1)
+                                       Index Cond: (i < 600000)
+                                       Heap Fetches: 100000
+                           ->  Result (actual rows=250000 loops=2)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=250000 loops=2)
+                                       Filter: (i < 600000)
+(18 rows)
+
+SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+ count  
+--------
+ 600000
 (1 row)
 
 -- test ChunkAppend with # workers < # childs

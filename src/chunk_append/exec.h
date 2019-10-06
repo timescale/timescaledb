@@ -13,9 +13,8 @@
 
 typedef struct ParallelChunkAppendState
 {
-	int last_plan;
-	int workers_last_plan;
-	int workers_per_child;
+	int next_plan;
+	bool finished[FLEXIBLE_ARRAY_MEMBER];
 } ParallelChunkAppendState;
 
 typedef struct ChunkAppendState

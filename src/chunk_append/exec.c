@@ -442,27 +442,62 @@ choose_next_subplan_for_leader(ChunkAppendState *state)
 static void
 choose_next_subplan_for_worker(ChunkAppendState *state)
 {
+	ParallelChunkAppendState *pstate = state->pstate;
+	int next_plan;
+	int start;
+
 	LWLockAcquire(state->lock, LW_EXCLUSIVE);
 
-	if (state->current < state->pstate->last_plan &&
-		state->pstate->workers_last_plan < state->pstate->workers_per_child)
-	{
-		/*
-		 * if we have more workers then children we will assign
-		 * multiple workers per child
-		 */
-		Assert(state->pstate->workers_per_child > 1);
-		Assert(state->pstate->workers_last_plan >= 1);
+	/* mark just completed subplan as finished */
+	if (state->current >= 0)
+		pstate->finished[state->current] = true;
 
-		state->current = state->pstate->last_plan;
-		state->pstate->workers_last_plan++;
-	}
-	else
+	if (pstate->next_plan == NO_MATCHING_SUBPLANS)
 	{
-		state->current = get_next_subplan(state, state->pstate->last_plan);
-		state->pstate->last_plan = state->current;
-		state->pstate->workers_last_plan = 1;
+		/* all subplans are finished */
+		state->current = NO_MATCHING_SUBPLANS;
+		LWLockRelease(state->lock);
+		return;
 	}
+
+	if (pstate->next_plan == INVALID_SUBPLAN_INDEX)
+		next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+	else
+		next_plan = pstate->next_plan;
+
+	start = next_plan;
+
+	/* skip finished subplans */
+	while (pstate->finished[next_plan])
+	{
+		next_plan = get_next_subplan(state, next_plan);
+
+		/* wrap around if we reach end of subplan list */
+		if (next_plan < 0)
+			next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+
+		if (next_plan == start)
+		{
+			/* back at start of search so all subplans are finished */
+			pstate->next_plan = NO_MATCHING_SUBPLANS;
+			state->current = NO_MATCHING_SUBPLANS;
+			LWLockRelease(state->lock);
+			return;
+		}
+	}
+
+	Assert(next_plan >= 0 && next_plan < state->num_subplans);
+	state->current = next_plan;
+
+	/* advance next_plan for next worker */
+	pstate->next_plan = get_next_subplan(state, state->current);
+	/*
+	 * if we reach the end of the list of subplans we set next_plan
+	 * to INVALID_SUBPLAN_INDEX to allow rechecking unfinished subplans
+	 * on next call
+	 */
+	if (pstate->next_plan < 0)
+		pstate->next_plan = INVALID_SUBPLAN_INDEX;
 
 	LWLockRelease(state->lock);
 }
@@ -525,7 +560,9 @@ chunk_append_rescan(CustomScanState *node)
 static Size
 chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
 {
-	return sizeof(ParallelChunkAppendState);
+	ChunkAppendState *state = (ChunkAppendState *) node;
+	return add_size(offsetof(ParallelChunkAppendState, finished),
+					sizeof(bool) * state->num_subplans);
 }
 
 /*
@@ -545,17 +582,7 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 	memset(pstate, 0, node->pscan_len);
 
 	state->lock = chunk_append_get_lock_pointer();
-	pstate->last_plan = INVALID_SUBPLAN_INDEX;
-	pstate->workers_last_plan = 0;
-
-	/*
-	 * if the number of workers is greater then the number of children
-	 * calculate how many workers each child should get
-	 */
-	if (state->num_subplans < pcxt->nworkers)
-		pstate->workers_per_child = ceil(pcxt->nworkers / (float) state->num_subplans);
-	else
-		pstate->workers_per_child = 1;
+	pstate->next_plan = INVALID_SUBPLAN_INDEX;
 
 	state->choose_next_subplan = choose_next_subplan_for_leader;
 	state->current = INVALID_SUBPLAN_INDEX;
@@ -576,10 +603,11 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 static void
 chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
+	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
 
-	pstate->last_plan = INVALID_SUBPLAN_INDEX;
-	pstate->workers_last_plan = 0;
+	pstate->next_plan = INVALID_SUBPLAN_INDEX;
+	memset(pstate->finished, 0, sizeof(bool) * state->num_subplans);
 }
 #endif
 

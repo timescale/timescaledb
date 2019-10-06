@@ -216,6 +216,14 @@ should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered
 			{
 				ListCell *lc;
 
+#if PG11_GE
+				AppendPath *append = castNode(AppendPath, path);
+
+				/* ChunkAppend doesnt support mixing partial and non-partial paths */
+				if (append->path.parallel_aware && append->first_partial_path > 0)
+					return false;
+#endif
+
 				foreach (lc, rel->baserestrictinfo)
 				{
 					RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
