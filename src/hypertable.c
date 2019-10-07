@@ -1827,7 +1827,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	bool replication_factor_is_null = PG_ARGISNULL(14);
 	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
 	int16 replication_factor;
-	ArrayType *data_nodes = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
 		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
@@ -1840,6 +1840,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	Datum retval;
 	bool created;
 	uint32 flags = 0;
+	List *data_nodes = NIL;
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
@@ -1851,7 +1852,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_column_name: cannot be NULL")));
 
-	if (NULL != data_nodes && ARR_NDIM(data_nodes) > 1)
+	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid data nodes format"),
@@ -1865,6 +1866,11 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 													 replication_factor_is_null,
 													 is_dist_call);
 
+	/* Validate data nodes and check permissions on them if this is a
+	 * distributed hypertable */
+	if (replication_factor > 0)
+		data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
+
 	if (NULL != space_dim_name)
 	{
 		int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
@@ -1873,22 +1879,9 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		 * to the number of data nodes */
 		if (num_partitions < 1 && replication_factor > 0)
 		{
-			int num_nodes;
-
-			if (NULL == data_nodes)
-				num_nodes = list_length(ts_cm_functions->get_data_node_list());
-			else
-				num_nodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+			int num_nodes = list_length(data_nodes);
 
 			Assert(num_nodes >= 0);
-
-			if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("max number of data nodes exceeded"),
-						 errhint("The number of data nodes cannot exceed %d.",
-								 MAX_NUM_HYPERTABLE_DATA_NODES)));
-
 			num_partitions = num_nodes & 0xFFFF;
 		}
 
@@ -1955,7 +1948,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
 							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
-							   ArrayType *data_nodes)
+							   List *data_node_names)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -2201,8 +2194,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		ts_indexing_create_default_indexes(ht);
 
 	if (replication_factor > 0)
-		ts_cm_functions->hypertable_make_distributed(ht, data_nodes);
-	else if (data_nodes != NULL && ARR_DIMS(data_nodes)[0] > 0)
+		ts_cm_functions->hypertable_make_distributed(ht, data_node_names);
+	else if (list_length(data_node_names) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid replication_factor for non-empty data node list"),

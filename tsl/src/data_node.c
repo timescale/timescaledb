@@ -81,12 +81,19 @@ get_database_info(Oid dbid, const char **encoding, const char **chartype, const 
 }
 
 /*
- * Verify that server is TimescaleDB server and perform optional ACL check
+ * Verify that server is TimescaleDB data node and perform optional ACL check.
+ *
+ * The function returns true iif the server is valid TimescaleDB data node and
+ * the ACL check succeeds. Otherwise, false is returned, or, an error is thrown
+ * if fail_on_aclcheck is set to true.
  */
-static void
-validate_foreign_server(const ForeignServer *server, AclMode const mode)
+static bool
+validate_foreign_server(const ForeignServer *server, AclMode const mode, bool fail_on_aclcheck)
 {
 	Oid const fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
+	Oid curuserid = GetUserId();
+	AclResult aclresult;
+	bool valid;
 
 	Assert(NULL != server);
 	if (server->fdwid != fdwid)
@@ -94,26 +101,29 @@ validate_foreign_server(const ForeignServer *server, AclMode const mode)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("data node \"%s\" is not a TimescaleDB server", server->servername)));
 
-	if (mode != ACL_NO_CHECK)
-	{
-		AclResult aclresult;
-		Oid curuserid = GetUserId();
+	if (mode == ACL_NO_CHECK)
+		return true;
 
-		/* Must have permissions on the server object */
-		aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+	/* Must have permissions on the server object */
+	aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
 
-		if (aclresult != ACLCHECK_OK)
-			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
-	}
+	valid = (aclresult == ACLCHECK_OK);
+
+	if (!valid && fail_on_aclcheck)
+		aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
+
+	return valid;
 }
 
 /*
  * Lookup the foreign server by name
  */
 ForeignServer *
-data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_ok)
+data_node_get_foreign_server(const char *node_name, AclMode mode, bool fail_on_aclcheck,
+							 bool missing_ok)
 {
 	ForeignServer *server;
+	bool valid;
 
 	if (node_name == NULL)
 		ereport(ERROR,
@@ -124,7 +134,10 @@ data_node_get_foreign_server(const char *node_name, AclMode mode, bool missing_o
 	if (NULL == server)
 		return NULL;
 
-	validate_foreign_server(server, mode);
+	valid = validate_foreign_server(server, mode, fail_on_aclcheck);
+
+	if (mode != ACL_NO_CHECK && !valid)
+		return NULL;
 
 	return server;
 }
@@ -133,9 +146,11 @@ ForeignServer *
 data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
 {
 	ForeignServer *server = GetForeignServer(server_oid);
-	validate_foreign_server(server, mode);
+	bool valid = validate_foreign_server(server, mode, true);
+	Assert(valid); /* Sould always be valid since we should see error otherwise */
 	return server;
 }
+
 /*
  * Create a foreign server.
  *
@@ -167,7 +182,7 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 
 	if (if_not_exists)
 	{
-		server = data_node_get_foreign_server(node_name, ACL_USAGE, true);
+		server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, true);
 
 		if (NULL != server)
 		{
@@ -189,7 +204,7 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 	{
 		Assert(if_not_exists);
 
-		server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+		server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
 		if (oid != NULL)
 			*oid = server->serverid;
@@ -212,7 +227,7 @@ data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption co
 	Cache *conn_cache;
 
 	Assert(data_node != NULL);
-	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false);
+	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false, false);
 	id = remote_connection_id(server->serverid, GetUserId());
 
 	if (transactional)
@@ -687,7 +702,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 	/* Must have owner permissions on the hypertable to attach a new data
 	   node. Must also have USAGE on the foreign server.  */
 	ts_hypertable_permissions_check(table_id, GetUserId());
-	fserver = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	fserver = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
 	Assert(NULL != fserver);
 
@@ -1037,7 +1052,7 @@ data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, b
 	int affected = 0;
 	bool all_hypertables = table_id == InvalidOid ? true : false;
 	List *hypertable_data_nodes = NIL;
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
 	Assert(NULL != server);
 
@@ -1091,7 +1106,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 	bool force = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
 	Assert(NULL != server);
 
@@ -1141,7 +1156,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 
 	/* Need USAGE to detach. Further owner check done when executing the DROP
 	 * statement. */
-	server = data_node_get_foreign_server(node_name, ACL_USAGE, if_exists);
+	server = data_node_get_foreign_server(node_name, ACL_USAGE, true, if_exists);
 
 	Assert(server == NULL ? if_exists : true);
 
@@ -1213,7 +1228,7 @@ data_node_delete(PG_FUNCTION_ARGS)
  * Get server list, performing an ACL check on each of them in the process.
  */
 List *
-data_node_get_node_name_list_with_aclcheck(AclMode mode)
+data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_on_aclcheck)
 {
 	HeapTuple tuple;
 	ScanKeyData scankey[1];
@@ -1235,11 +1250,13 @@ data_node_get_node_name_list_with_aclcheck(AclMode mode)
 	while (HeapTupleIsValid(tuple = systable_getnext(scandesc)))
 	{
 		Form_pg_foreign_server form = (Form_pg_foreign_server) GETSTRUCT(tuple);
+		ForeignServer *server;
 
-		if (mode != ACL_NO_CHECK)
-			data_node_get_foreign_server(NameStr(form->srvname), mode, false);
+		server =
+			data_node_get_foreign_server(NameStr(form->srvname), mode, fail_on_aclcheck, false);
 
-		nodes = lappend(nodes, pstrdup(NameStr(form->srvname)));
+		if (server != NULL)
+			nodes = lappend(nodes, pstrdup(NameStr(form->srvname)));
 	}
 
 	systable_endscan(scandesc);
@@ -1249,24 +1266,18 @@ data_node_get_node_name_list_with_aclcheck(AclMode mode)
 }
 
 /*
- * Get server list without an ACL check.
- */
-List *
-data_node_get_node_name_list(void)
-{
-	return data_node_get_node_name_list_with_aclcheck(ACL_NO_CHECK);
-}
-
-/*
- * Turn an array of data nodes into a list of names.
+ * Get server list with optional ACL check.
  *
- * The function will verify that all the servers in the list belong to the
- * TimescaleDB foreign data wrapper. Optionally, perform ACL check on each
- * data node's foreign server. Checks are skipped when specificing
- * ACL_NO_CHECK.
+ * Returns:
+ *
+ * If nodearr is NULL, returns all system-configured data nodes that fulfill
+ * the ACL check.
+ *
+ * If nodearr is non-NULL, returns all the data nodes in the specified array
+ * subject to ACL checks.
  */
 List *
-data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode)
+data_node_get_filtered_node_name_list(ArrayType *nodearr, AclMode mode, bool fail_on_aclcheck)
 {
 	ArrayIterator it;
 	Datum node_datum;
@@ -1274,9 +1285,7 @@ data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode
 	List *nodes = NIL;
 
 	if (NULL == nodearr)
-		return NIL;
-
-	Assert(ARR_NDIM(nodearr) <= 1);
+		return data_node_get_node_name_list_with_aclcheck(mode, fail_on_aclcheck);
 
 	it = array_create_iterator(nodearr, 0, NULL);
 
@@ -1285,9 +1294,11 @@ data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode
 		if (!isnull)
 		{
 			const char *node_name = DatumGetCString(node_datum);
-			ForeignServer *server = data_node_get_foreign_server(node_name, mode, false);
+			ForeignServer *server =
+				data_node_get_foreign_server(node_name, mode, fail_on_aclcheck, false);
 
-			nodes = lappend(nodes, server->servername);
+			if (NULL != server)
+				nodes = lappend(nodes, server->servername);
 		}
 	}
 
@@ -1297,16 +1308,46 @@ data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode
 }
 
 List *
+data_node_get_node_name_list(void)
+{
+	return data_node_get_node_name_list_with_aclcheck(ACL_NO_CHECK, false);
+}
+
+/*
+ * Turn an array of data nodes into a list of names.
+ *
+ * The function will verify that all the servers in the list belong to the
+ * TimescaleDB foreign data wrapper. Optionally, perform ACL check on each
+ * data node's foreign server. Checks are skipped when specificing
+ * ACL_NO_CHECK. If fail_on_aclcheck is false, then no errors will be thrown
+ * on ACL check failures. Instead, data nodes that fail ACL checks will simply
+ * be filtered.
+ */
+List *
+data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode,
+												bool fail_on_aclcheck)
+{
+	if (NULL == nodearr)
+		return NIL;
+
+	Assert(ARR_NDIM(nodearr) <= 1);
+
+	return data_node_get_filtered_node_name_list(nodearr, mode, fail_on_aclcheck);
+}
+
+List *
 data_node_array_to_node_name_list(ArrayType *nodearr)
 {
-	return data_node_array_to_node_name_list_with_aclcheck(nodearr, ACL_NO_CHECK);
+	return data_node_array_to_node_name_list_with_aclcheck(nodearr, ACL_NO_CHECK, false);
 }
 
 Datum
 data_node_ping(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	/* Allow anyone to ping a data node. Otherwise the
+	 * timescaledb_information.data_node view won't work for those users. */
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
 	bool success;
 
 	Assert(NULL != server);

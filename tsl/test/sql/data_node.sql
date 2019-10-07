@@ -96,9 +96,12 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost',
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
 
--- We need to allow anybody to create distributed tables on these.
+-- Allow ROLE_1 to create distributed tables on these data nodes.
+-- We'll test that data_node_3 is properly filtered when ROLE_1
+-- creates a distributed hypertable without explicitly specifying
+-- data_node_2.
 GRANT USAGE
-   ON FOREIGN SERVER data_node_1, data_node_2, data_node_3
+   ON FOREIGN SERVER data_node_1, data_node_2
    TO :ROLE_1;
 
 SELECT node_name, "options"
@@ -126,17 +129,35 @@ SELECT column_name, num_slices
 FROM _timescaledb_catalog.dimension
 WHERE column_name = 'device';
 
--- All data nodes should be added.
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+-- All data nodes with USAGE should be added.
+SELECT hdn.node_name
+FROM _timescaledb_catalog.hypertable_data_node hdn, _timescaledb_catalog.hypertable h
+WHERE h.table_name = 'disttable' AND hdn.hypertable_id = h.id;
 
 ROLLBACK;
+
+-- There should be an ERROR if we explicitly try to use a data node we
+-- don't have permission to use.
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device',
+                                            data_nodes => '{ data_node_1, data_node_2, data_node_3 }');
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+-- Now let ROLE_1 use data_node_3
+GRANT USAGE
+   ON FOREIGN SERVER data_node_3
+   TO :ROLE_1;
+SET ROLE :ROLE_1;
 
 -- Now specify less slices than there are data nodes to generate a
 -- warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 
 -- All data nodes should be added.
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT hdn.node_name
+FROM _timescaledb_catalog.hypertable_data_node hdn, _timescaledb_catalog.hypertable h
+WHERE h.table_name = 'disttable' AND hdn.hypertable_id = h.id;
 
 -- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
 SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable';
@@ -203,17 +224,17 @@ _timescaledb_catalog.chunk_data_node cdn
 WHERE c.id = cdn.chunk_id;
 
 -- Setting the same data node should do nothing and return false
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_3');
 
 -- Should update the default data node and return true
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_2');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_2');
 
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 
 -- Reset the default data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_3');
 
 \set ON_ERROR_STOP 0
 -- Will fail because data_node_2 contains chunks
@@ -222,9 +243,9 @@ SELECT * FROM delete_data_node('data_node_2');
 -- non-existing chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_0000');
 -- data node exists but does not store the chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_1');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_1');
 -- NULL try
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_3');
 \set ON_ERROR_STOP 1
@@ -572,26 +593,26 @@ CREATE SCHEMA _timescaledb_internal;
 GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
 
 CREATE FUNCTION _timescaledb_internal.set_dist_id(uuid UUID)
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 
 CREATE FUNCTION _timescaledb_internal.set_peer_dist_id(uuid UUID)
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 
 CREATE FUNCTION _timescaledb_internal.validate_as_data_node()
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 

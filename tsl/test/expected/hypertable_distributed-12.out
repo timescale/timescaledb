@@ -1780,6 +1780,7 @@ SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'ti
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
 data_nodes => '{ "data_node_3" }');
+WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
  hypertable_id |  schema_name  | table_name  | created 
 ---------------+---------------+-------------+---------
@@ -2011,6 +2012,7 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
 SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
+WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
@@ -2777,6 +2779,7 @@ CREATE TABLE "disttable'quote"(time timestamptz, "device'quote" int, val float, 
 SELECT public.create_distributed_hypertable(
     'disttable''quote', 'time', 'device''quote', data_nodes => '{ "data_node_1" }'
 );
+WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
     create_distributed_hypertable    
 -------------------------------------

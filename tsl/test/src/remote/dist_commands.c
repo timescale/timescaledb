@@ -24,7 +24,7 @@ TS_FUNCTION_INFO_V1(tsl_invoke_faulty_distributed_command);
 Datum
 tsl_invoke_distributed_commands(PG_FUNCTION_ARGS)
 {
-	List *data_nodes = data_node_get_node_name_list_with_aclcheck(ACL_USAGE);
+	List *data_nodes = data_node_get_node_name_list_with_aclcheck(ACL_USAGE, true);
 	List *subset_nodes;
 	DistCmdResult *results;
 	PreparedDistCmd *prepped_cmd;
