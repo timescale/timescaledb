@@ -264,13 +264,21 @@ COMMIT;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10010;
 SELECT count(*) FROM pg_prepared_xacts;
 
---below will fail the abort and thus ROLLBACK TRANSACTION will never be called leaving
---a prepared_xact that should be rolled back by heal server
+-- Below will fail the abort and thus ROLLBACK TRANSACTION will never
+-- be called leaving a prepared_xact that should be rolled back by
+-- heal server.
+--
+-- We set min message level to "error" since different warnings can be
+-- generated due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('pre-abort', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
+RESET client_min_messages;
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
@@ -291,7 +299,12 @@ COMMIT;
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10011;
 SELECT count(*) FROM pg_prepared_xacts;
 
---test comm error in subtrans abort
+-- Test comm error in subtrans abort
+--
+-- We set min message level to "error" since different warnings can be
+-- generated due to timing issues but check that the transaction was
+-- rolled back after the commit.
+SET client_min_messages TO error;
 BEGIN;
     SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
@@ -302,6 +315,7 @@ BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
+RESET client_min_messages;
 
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10016;
 SELECT count(*) FROM pg_prepared_xacts;
