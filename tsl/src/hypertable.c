@@ -27,7 +27,6 @@
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
-#include "hypertable_data_node.h"
 #include "fdw/fdw.h"
 #include "data_node.h"
 #include "deparse.h"
@@ -52,7 +51,7 @@ static List *
 data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 				 int32 node_hypertable_id, bool block_chunks)
 {
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false);
+	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, true, false);
 	HypertableDataNode *hdn = palloc0(sizeof(HypertableDataNode));
 
 	hdn->fd.hypertable_id = hypertable_id;
@@ -127,30 +126,75 @@ hypertable_assign_data_nodes(int32 hypertable_id, List *nodes)
 	return assigned_nodes;
 }
 
-void
-hypertable_make_distributed(Hypertable *ht, ArrayType *data_nodes)
+/*
+ * Validate data nodes when creating a new hypertable.
+ *
+ * The function is passed the explicit array of data nodes given by the user,
+ * if any.
+ *
+ * If the data node array is NULL (no data nodes specified), we return all
+ * data nodes that the user is allowed to use.
+ *
+ */
+List *
+hypertable_get_and_validate_data_nodes(ArrayType *nodearr)
 {
-	List *nodelist;
-	int num_nodes;
+	bool fail_on_aclcheck = nodearr != NULL;
+	List *data_nodes;
+	int num_data_nodes;
 
-	/* Get the list of servers to attach to the distributed hypertable. We
-	 * require USAGE on the servers to be able to attach them to the
-	 * hypertable. */
-	if (NULL == data_nodes)
-		nodelist = data_node_get_node_name_list_with_aclcheck(ACL_USAGE);
-	else
-		nodelist = data_node_array_to_node_name_list_with_aclcheck(data_nodes, ACL_USAGE);
+	/* If the user explicitly specified a set of data nodes (data_node_arr is
+	 * non-NULL), we validate the given array and fail if the user doesn't
+	 * have USAGE on all of them. Otherwise, we get a list of all
+	 * database-configured data nodes that the user has USAGE on. */
+	data_nodes = data_node_get_filtered_node_name_list(nodearr, ACL_USAGE, fail_on_aclcheck);
+	num_data_nodes = list_length(data_nodes);
 
-	num_nodes = list_length(nodelist);
+	if (NULL == nodearr)
+	{
+		/* No explicit set of data nodes given. Check if there are any data
+		 * nodes that the user cannot use due to lack of permissions and
+		 * raise a NOTICE if some of them cannot be used. */
+		List *all_data_nodes = data_node_get_node_name_list();
+		int num_nodes_not_used = list_length(all_data_nodes) - list_length(data_nodes);
 
-	if (num_nodes == 0)
+		if (num_nodes_not_used > 0)
+			ereport(NOTICE,
+					(errmsg("%d of %d data nodes not used by this hypertable due to lack of "
+							"permissions",
+							num_nodes_not_used,
+							list_length(all_data_nodes)),
+					 errhint("Grant USAGE on data nodes to attach them to a hypertable.")));
+	}
+
+	if (num_data_nodes == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_NO_DATA_NODES),
-				 errmsg("no data nodes can be assigned to \"%s\"",
-						get_rel_name(ht->main_table_relid)),
+				 errmsg("no data nodes can be assigned to the hypertable"),
 				 errhint("Add data nodes using the add_data_node() function.")));
 
-	hypertable_assign_data_nodes(ht->fd.id, nodelist);
+	if (num_data_nodes == 1)
+		ereport(WARNING,
+				(errmsg("only one data node was assigned to the hypertable"),
+				 errdetail("A distributed hypertable should have at least two data nodes for best "
+						   "performance."),
+				 errhint(
+					 "Make sure the user has USAGE on enough data nodes or add additional ones.")));
+
+	if (num_data_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("max number of data nodes exceeded"),
+				 errhint("The number of data nodes cannot exceed %d.",
+						 MAX_NUM_HYPERTABLE_DATA_NODES)));
+
+	return data_nodes;
+}
+
+void
+hypertable_make_distributed(Hypertable *ht, List *data_node_names)
+{
+	hypertable_assign_data_nodes(ht->fd.id, data_node_names);
 }
 
 #endif /* PG_VERSION_SUPPORTS_MULTINODE */

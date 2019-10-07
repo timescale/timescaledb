@@ -122,8 +122,8 @@ typedef struct CrossModuleFunctions
 	Datum (*set_chunk_default_data_node)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
-	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *data_nodes);
-	List *(*get_data_node_list)(void);
+	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
+	void (*hypertable_make_distributed)(Hypertable *ht, List *data_node_names);
 	Datum (*timescaledb_fdw_handler)(PG_FUNCTION_ARGS);
 	Datum (*timescaledb_fdw_validator)(PG_FUNCTION_ARGS);
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);

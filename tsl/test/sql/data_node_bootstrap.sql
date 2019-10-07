@@ -103,6 +103,20 @@ DROP DATABASE bootstrap_test;
 -- encoding, ctype, or collation will be caught.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
+-- Pick an alternative locale for testing from the list of installed
+-- collations. This locale needs to be differnt from the current
+-- database's locale. We pick it from the list of collations in a
+-- platform agnostic way since, e.g., Linux and Windows have very
+-- different locale names.
+SELECT QUOTE_LITERAL(c.collctype) AS other_locale
+  FROM pg_collation c, pg_database d
+  WHERE c.collencoding = d.encoding
+  AND d.datctype != c.collctype
+  AND d.datname = current_database()
+  ORDER BY c.oid DESC
+  LIMIT 1
+ \gset
+
 CREATE DATABASE bootstrap_test
    ENCODING SQL_ASCII
  LC_COLLATE 'C'
@@ -126,7 +140,7 @@ DROP DATABASE bootstrap_test;
 
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
- LC_COLLATE 'C.UTF-8'
+ LC_COLLATE :other_locale
    LC_CTYPE :ctype
    TEMPLATE template0
       OWNER :ROLE_CLUSTER_SUPERUSER;
@@ -148,7 +162,7 @@ DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
  LC_COLLATE :coll
-   LC_CTYPE 'C.UTF-8'
+   LC_CTYPE :other_locale
    TEMPLATE template0
       OWNER :ROLE_CLUSTER_SUPERUSER;
 

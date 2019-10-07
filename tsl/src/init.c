@@ -122,14 +122,14 @@ error_not_supported_default_fn(PG_FUNCTION_ARGS)
 }
 
 static void
-error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *data_nodes)
+error_hypertable_make_distributed_not_supported(Hypertable *ht, List *data_node_names)
 {
 	error_not_supported();
 	pg_unreachable();
 }
 
 static List *
-error_get_data_node_list_not_supported(void)
+error_get_and_validate_data_node_list_not_supported(ArrayType *nodearr)
 {
 	error_not_supported();
 	pg_unreachable();
@@ -242,7 +242,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = error_not_supported_default_fn,
 	.create_chunk_on_data_nodes = error_create_chunk_on_data_nodes_not_supported,
 	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
-	.get_data_node_list = error_get_data_node_list_not_supported,
+	.get_and_validate_data_node_list = error_get_and_validate_data_node_list_not_supported,
 	.timescaledb_fdw_handler = error_not_supported_default_fn,
 	.timescaledb_fdw_validator = empty_fn,
 	.remote_txn_id_in = error_not_supported_default_fn,
@@ -275,7 +275,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.hypertable_make_distributed = hypertable_make_distributed,
-	.get_data_node_list = data_node_get_node_name_list,
+	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.remote_txn_id_in = remote_txn_id_in_pg,

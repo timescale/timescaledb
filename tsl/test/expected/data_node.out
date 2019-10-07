@@ -166,9 +166,12 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
  data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
 (1 row)
 
--- We need to allow anybody to create distributed tables on these.
+-- Allow ROLE_1 to create distributed tables on these data nodes.
+-- We'll test that data_node_3 is properly filtered when ROLE_1
+-- creates a distributed hypertable without explicitly specifying
+-- data_node_2.
 GRANT USAGE
-   ON FOREIGN SERVER data_node_1, data_node_2, data_node_3
+   ON FOREIGN SERVER data_node_1, data_node_2
    TO :ROLE_1;
 SELECT node_name, "options"
   FROM timescaledb_information.data_node
@@ -190,7 +193,7 @@ ORDER BY object_name, object_type;
 -----------------+----------------------+---------------
  data_node_1     | FOREIGN SERVER       | {USAGE,USAGE}
  data_node_2     | FOREIGN SERVER       | {USAGE,USAGE}
- data_node_3     | FOREIGN SERVER       | {USAGE,USAGE}
+ data_node_3     | FOREIGN SERVER       | {USAGE}
  timescaledb_fdw | FOREIGN DATA WRAPPER | {USAGE,USAGE}
 (4 rows)
 
@@ -201,6 +204,7 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 -- slices in the device dimension equals the number of data nodes.
 BEGIN;
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+NOTICE:  1 of 3 data nodes not used by this hypertable due to lack of permissions
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -212,19 +216,33 @@ FROM _timescaledb_catalog.dimension
 WHERE column_name = 'device';
  column_name | num_slices 
 -------------+------------
- device      |          3
+ device      |          2
 (1 row)
 
--- All data nodes should be added.
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
-  node_name  |                    options                     
--------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
-(3 rows)
+-- All data nodes with USAGE should be added.
+SELECT hdn.node_name
+FROM _timescaledb_catalog.hypertable_data_node hdn, _timescaledb_catalog.hypertable h
+WHERE h.table_name = 'disttable' AND hdn.hypertable_id = h.id;
+  node_name  
+-------------
+ data_node_1
+ data_node_2
+(2 rows)
 
 ROLLBACK;
+-- There should be an ERROR if we explicitly try to use a data node we
+-- don't have permission to use.
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device',
+                                            data_nodes => '{ data_node_1, data_node_2, data_node_3 }');
+ERROR:  permission denied for foreign server data_node_3
+\set ON_ERROR_STOP 1
+RESET ROLE;
+-- Now let ROLE_1 use data_node_3
+GRANT USAGE
+   ON FOREIGN SERVER data_node_3
+   TO :ROLE_1;
+SET ROLE :ROLE_1;
 -- Now specify less slices than there are data nodes to generate a
 -- warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
@@ -236,12 +254,14 @@ WARNING:  the number of partitions in dimension "device" is too low to make use 
 (1 row)
 
 -- All data nodes should be added.
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
-  node_name  |                    options                     
--------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+SELECT hdn.node_name
+FROM _timescaledb_catalog.hypertable_data_node hdn, _timescaledb_catalog.hypertable h
+WHERE h.table_name = 'disttable' AND hdn.hypertable_id = h.id;
+  node_name  
+-------------
+ data_node_1
+ data_node_2
+ data_node_3
 (3 rows)
 
 -- Ensure that replication factor allows to distinguish data node hypertables from regular hypertables
@@ -326,7 +346,6 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', repli
 ERROR:  invalid replication_factor
 -- Non-existing data node
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_4" }');
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  server "data_node_4" does not exist
 \set ON_ERROR_STOP 1
 -- Use a subset of data nodes and a replication factor of two so that
@@ -337,7 +356,7 @@ NOTICE:  adding not-null constraint to column "time"
 WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             4 | public      | disttable  | t
+             3 | public      | disttable  | t
 (1 row)
 
 -- Create some chunks
@@ -348,24 +367,24 @@ INSERT INTO disttable VALUES
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_2_dist_chunk | 
- _timescaledb_internal._hyper_4_3_dist_chunk | 
- _timescaledb_internal._hyper_4_4_dist_chunk | 
+ _timescaledb_internal._hyper_3_2_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+-----------------------+---------------------+---------
-  2 |             4 | _timescaledb_internal | _hyper_4_2_dist_chunk |                     | f
-  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk |                     | f
-  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk |                     | f
+  2 |             3 | _timescaledb_internal | _hyper_3_2_dist_chunk |                     | f
+  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk |                     | f
+  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk |                     | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             4 |                  3 | data_node_2 | f
-             4 |                  3 | data_node_3 | f
+             3 |                  3 | data_node_2 | f
+             3 |                  2 | data_node_3 | f
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -383,14 +402,14 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
                  drop_chunks                 
 ---------------------------------------------
- _timescaledb_internal._hyper_4_2_dist_chunk
+ _timescaledb_internal._hyper_3_2_dist_chunk
 (1 row)
 
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_3_dist_chunk | 
- _timescaledb_internal._hyper_4_4_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
 (2 rows)
 
 SELECT foreign_table_name, foreign_server_name
@@ -398,8 +417,8 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_4_3_dist_chunk | data_node_2
- _hyper_4_4_dist_chunk | data_node_2
+ _hyper_3_3_dist_chunk | data_node_2
+ _hyper_3_4_dist_chunk | data_node_2
 (2 rows)
 
 SELECT table_name, node_name
@@ -408,21 +427,21 @@ _timescaledb_catalog.chunk_data_node cdn
 WHERE c.id = cdn.chunk_id;
       table_name       |  node_name  
 -----------------------+-------------
- _hyper_4_3_dist_chunk | data_node_2
- _hyper_4_3_dist_chunk | data_node_3
- _hyper_4_4_dist_chunk | data_node_2
- _hyper_4_4_dist_chunk | data_node_3
+ _hyper_3_3_dist_chunk | data_node_2
+ _hyper_3_3_dist_chunk | data_node_3
+ _hyper_3_4_dist_chunk | data_node_2
+ _hyper_3_4_dist_chunk | data_node_3
 (4 rows)
 
 -- Setting the same data node should do nothing and return false
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_3');
  set_chunk_default_data_node 
 -----------------------------
  t
 (1 row)
 
 -- Should update the default data node and return true
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_2');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_2');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -433,12 +452,12 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_4_3_dist_chunk | data_node_2
- _hyper_4_4_dist_chunk | data_node_2
+ _hyper_3_3_dist_chunk | data_node_2
+ _hyper_3_4_dist_chunk | data_node_2
 (2 rows)
 
 -- Reset the default data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_3');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -453,11 +472,11 @@ ERROR:  deleting data node "data_node_2" failed because it contains chunks for h
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
 ERROR:  relation "x_chunk" does not exist at character 65
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_0000');
 ERROR:  server "data_node_0000" does not exist
 -- data node exists but does not store the chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_4_3_dist_chunk', 'data_node_1');
-ERROR:  chunk "_hyper_4_3_dist_chunk" does not exist on server "data_node_1"
+SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._hyper_3_3_dist_chunk', 'data_node_1');
+ERROR:  chunk "_hyper_3_3_dist_chunk" does not exist on server "data_node_1"
 -- NULL try
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_3');
 ERROR:  invalid chunk: cannot be NULL
@@ -479,8 +498,8 @@ WARNING:  new data for hypertable "disttable" will be under-replicated due to de
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_4_3_dist_chunk | 
- _timescaledb_internal._hyper_4_4_dist_chunk | 
+ _timescaledb_internal._hyper_3_3_dist_chunk | 
+ _timescaledb_internal._hyper_3_4_dist_chunk | 
 (2 rows)
 
 SELECT foreign_table_name, foreign_server_name
@@ -488,21 +507,21 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
   foreign_table_name   | foreign_server_name 
 -----------------------+---------------------
- _hyper_4_3_dist_chunk | data_node_3
- _hyper_4_4_dist_chunk | data_node_3
+ _hyper_3_3_dist_chunk | data_node_3
+ _hyper_3_4_dist_chunk | data_node_3
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+-----------------------+---------------------+---------
-  3 |             4 | _timescaledb_internal | _hyper_4_3_dist_chunk |                     | f
-  4 |             4 | _timescaledb_internal | _hyper_4_4_dist_chunk |                     | f
+  3 |             3 | _timescaledb_internal | _hyper_3_3_dist_chunk |                     | f
+  4 |             3 | _timescaledb_internal | _hyper_3_4_dist_chunk |                     | f
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             4 |                  3 | data_node_3 | f
+             3 |                  2 | data_node_3 | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -552,13 +571,13 @@ SET client_min_messages TO NOTICE;
 SELECT * FROM attach_data_node('data_node_1', 'disttable');
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
-             4 |                  3 | data_node_1
+             3 |                  3 | data_node_1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             4 |                  3 | data_node_1 | f
+             3 |                  3 | data_node_1 | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -582,7 +601,7 @@ SELECT * FROM create_hypertable('standalone','time');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             5 | public      | standalone | t
+             4 | public      | standalone | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -619,7 +638,7 @@ SELECT * FROM attach_data_node('data_node_1', 'disttable', true);
 NOTICE:  data node "data_node_1" is already attached to hypertable "disttable", skipping
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
-             4 |                  3 | data_node_1
+             3 |                  3 | data_node_1
 (1 row)
 
 -- Should repartition too. First show existing number of slices in
@@ -645,7 +664,7 @@ SELECT * FROM attach_data_node('data_node_4', 'disttable');
 NOTICE:  the number of partitions in dimension "device" was increased to 2
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
-             4 |                  1 | data_node_4
+             3 |                  1 | data_node_4
 (1 row)
 
 -- Show updated number of slices in 'device' dimension.
@@ -672,8 +691,7 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Creating a distributed hypertable without any data nodes should fail
 SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '{ }');
-NOTICE:  adding not-null constraint to column "time"
-ERROR:  no data nodes can be assigned to "disttable"
+ERROR:  no data nodes can be assigned to the hypertable
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
@@ -710,8 +728,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 \set ON_ERROR_STOP 0
 -- No data nodes remain, so should fail
 SELECT * FROM create_distributed_hypertable('disttable', 'time');
-NOTICE:  adding not-null constraint to column "time"
-ERROR:  no data nodes can be assigned to "disttable"
+ERROR:  no data nodes can be assigned to the hypertable
 \set ON_ERROR_STOP 1
 -- These data nodes have been deleted, so safe to remove their databases.
 DROP DATABASE data_node_1;
@@ -757,7 +774,7 @@ NOTICE:  adding not-null constraint to column "time"
 WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             8 | public      | disttable  | t
+             5 | public      | disttable  | t
 (1 row)
 
 -- Create some chunks on all the data_nodes
@@ -768,25 +785,25 @@ INSERT INTO disttable VALUES
 SELECT * FROM test.show_subtables('disttable');
                     Child                    | Tablespace 
 ---------------------------------------------+------------
- _timescaledb_internal._hyper_8_5_dist_chunk | 
- _timescaledb_internal._hyper_8_6_dist_chunk | 
- _timescaledb_internal._hyper_8_7_dist_chunk | 
+ _timescaledb_internal._hyper_5_5_dist_chunk | 
+ _timescaledb_internal._hyper_5_6_dist_chunk | 
+ _timescaledb_internal._hyper_5_7_dist_chunk | 
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+-----------------------+---------------------+---------
-  5 |             8 | _timescaledb_internal | _hyper_8_5_dist_chunk |                     | f
-  6 |             8 | _timescaledb_internal | _hyper_8_6_dist_chunk |                     | f
-  7 |             8 | _timescaledb_internal | _hyper_8_7_dist_chunk |                     | f
+  5 |             5 | _timescaledb_internal | _hyper_5_5_dist_chunk |                     | f
+  6 |             5 | _timescaledb_internal | _hyper_5_6_dist_chunk |                     | f
+  7 |             5 | _timescaledb_internal | _hyper_5_7_dist_chunk |                     | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             8 |                  1 | data_node_1 | f
-             8 |                  1 | data_node_2 | f
-             8 |                  1 | data_node_3 | f
+             5 |                  1 | data_node_1 | f
+             5 |                  1 | data_node_2 | f
+             5 |                  1 | data_node_3 | f
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -807,19 +824,19 @@ NOTICE:  adding not-null constraint to column "time"
 WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-             9 | public      | disttable_2 | t
+             6 | public      | disttable_2 | t
 (1 row)
 
 CREATE TABLE devices(device int, name text);
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             8 |                  1 | data_node_1 | f
-             8 |                  1 | data_node_2 | f
-             8 |                  1 | data_node_3 | f
-             9 |                  2 | data_node_1 | f
-             9 |                  2 | data_node_2 | f
-             9 |                  2 | data_node_3 | f
+             5 |                  1 | data_node_1 | f
+             5 |                  1 | data_node_2 | f
+             5 |                  1 | data_node_3 | f
+             6 |                  2 | data_node_1 | f
+             6 |                  2 | data_node_2 | f
+             6 |                  2 | data_node_3 | f
 (6 rows)
 
 -- Block one data node for specific hypertable
@@ -840,12 +857,12 @@ NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "d
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             8 |                  1 | data_node_2 | f
-             8 |                  1 | data_node_3 | f
-             9 |                  2 | data_node_2 | f
-             9 |                  2 | data_node_3 | f
-             8 |                  1 | data_node_1 | t
-             9 |                  2 | data_node_1 | t
+             5 |                  1 | data_node_2 | f
+             5 |                  1 | data_node_3 | f
+             6 |                  2 | data_node_2 | f
+             6 |                  2 | data_node_3 | f
+             5 |                  1 | data_node_1 | t
+             6 |                  2 | data_node_1 | t
 (6 rows)
 
 -- insert more data
@@ -921,12 +938,12 @@ WARNING:  new data for hypertable "disttable_2" will be under-replicated due to 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
-             8 |                  1 | data_node_1 | t
-             9 |                  2 | data_node_1 | t
-             8 |                  1 | data_node_2 | t
-             9 |                  2 | data_node_2 | t
-             8 |                  1 | data_node_3 | t
-             9 |                  2 | data_node_3 | t
+             5 |                  1 | data_node_1 | t
+             6 |                  2 | data_node_1 | t
+             5 |                  1 | data_node_2 | t
+             6 |                  2 | data_node_2 | t
+             5 |                  1 | data_node_3 | t
+             6 |                  2 | data_node_3 | t
 (6 rows)
 
 \set ON_ERROR_STOP 0
@@ -1009,12 +1026,12 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
    foreign_table_name   | foreign_server_name 
 ------------------------+---------------------
- _hyper_8_10_dist_chunk | data_node_2
- _hyper_8_5_dist_chunk  | data_node_1
- _hyper_8_6_dist_chunk  | data_node_2
- _hyper_8_7_dist_chunk  | data_node_1
- _hyper_8_8_dist_chunk  | data_node_2
- _hyper_8_9_dist_chunk  | data_node_3
+ _hyper_5_10_dist_chunk | data_node_2
+ _hyper_5_5_dist_chunk  | data_node_1
+ _hyper_5_6_dist_chunk  | data_node_2
+ _hyper_5_7_dist_chunk  | data_node_1
+ _hyper_5_8_dist_chunk  | data_node_2
+ _hyper_5_9_dist_chunk  | data_node_3
 (6 rows)
 
 -- force detach data node with data
@@ -1057,12 +1074,12 @@ FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
    foreign_table_name   | foreign_server_name 
 ------------------------+---------------------
- _hyper_8_10_dist_chunk | data_node_2
- _hyper_8_5_dist_chunk  | data_node_1
- _hyper_8_6_dist_chunk  | data_node_2
- _hyper_8_7_dist_chunk  | data_node_1
- _hyper_8_8_dist_chunk  | data_node_2
- _hyper_8_9_dist_chunk  | data_node_2
+ _hyper_5_10_dist_chunk | data_node_2
+ _hyper_5_5_dist_chunk  | data_node_1
+ _hyper_5_6_dist_chunk  | data_node_2
+ _hyper_5_7_dist_chunk  | data_node_1
+ _hyper_5_8_dist_chunk  | data_node_2
+ _hyper_5_9_dist_chunk  | data_node_2
 (6 rows)
 
 \set ON_ERROR_STOP 0
@@ -1074,12 +1091,12 @@ ERROR:  server "server_2" does not exist
 SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
                  drop_chunks                  
 ----------------------------------------------
- _timescaledb_internal._hyper_8_5_dist_chunk
- _timescaledb_internal._hyper_8_6_dist_chunk
- _timescaledb_internal._hyper_8_7_dist_chunk
- _timescaledb_internal._hyper_8_8_dist_chunk
- _timescaledb_internal._hyper_8_9_dist_chunk
- _timescaledb_internal._hyper_8_10_dist_chunk
+ _timescaledb_internal._hyper_5_5_dist_chunk
+ _timescaledb_internal._hyper_5_6_dist_chunk
+ _timescaledb_internal._hyper_5_7_dist_chunk
+ _timescaledb_internal._hyper_5_8_dist_chunk
+ _timescaledb_internal._hyper_5_9_dist_chunk
+ _timescaledb_internal._hyper_5_10_dist_chunk
 (6 rows)
 
 SELECT foreign_table_name, foreign_server_name
@@ -1118,7 +1135,7 @@ SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_f
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-            10 | public      | disttable_3 | t
+             7 | public      | disttable_3 | t
 (1 row)
 
 SET ROLE :ROLE_1;
@@ -1127,7 +1144,7 @@ SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_f
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
-            11 | public      | disttable_4 | t
+             8 | public      | disttable_4 | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -1213,24 +1230,24 @@ CREATE DATABASE data_node_1 OWNER :ROLE_1;
 CREATE SCHEMA _timescaledb_internal;
 GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
 CREATE FUNCTION _timescaledb_internal.set_dist_id(uuid UUID)
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 CREATE FUNCTION _timescaledb_internal.set_peer_dist_id(uuid UUID)
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 CREATE FUNCTION _timescaledb_internal.validate_as_data_node()
-	RETURNS BOOL LANGUAGE PLPGSQL AS
+    RETURNS BOOL LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-	RETURN true;
+    RETURN true;
 END
 $BODY$;
 CREATE EXTENSION timescaledb VERSION '0.0.0';
@@ -1249,6 +1266,7 @@ SET ROLE :ROLE_1;
 CREATE TABLE test_disttable(time timestamptz);
 \set ON_ERROR_STOP 0
 SELECT * FROM create_distributed_hypertable('test_disttable', 'time');
+WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
 WARNING:  data node "data_node_1" has an outdated timescaledb extension version
 ERROR:  [data_node_1]: function public.create_hypertable(unknown, time_column_name => unknown, associated_schema_name => unknown, associated_table_prefix => unknown, chunk_time_interval => bigint, chunk_sizing_func => unknown, chunk_target_size => unknown, if_not_exists => boolean, migrate_data => boolean, create_default_indexes => boolean, replication_factor => integer) does not exist

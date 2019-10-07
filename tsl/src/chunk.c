@@ -169,7 +169,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
-	server = data_node_get_foreign_server(node_name, ACL_USAGE, false);
+	server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 
 	Assert(NULL != server);
 
