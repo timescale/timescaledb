@@ -25,6 +25,8 @@ typedef struct ChunkAppendState
 	MemoryContext exclusion_ctx;
 
 	int num_subplans;
+	int first_partial_plan;
+	int filtered_first_partial_plan;
 	int current;
 
 	Oid ht_reloid;

@@ -11,6 +11,8 @@ SELECT
   END AS "PREFIX",
   'EXPLAIN (costs off)' AS "PREFIX_NO_ANALYZE"
 \gset
+\set CHUNK1 _timescaledb_internal._hyper_1_1_chunk
+\set CHUNK2 _timescaledb_internal._hyper_1_2_chunk
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 NOTICE:  adding not-null constraint to column "i"
@@ -337,6 +339,60 @@ SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
 (1 row)
 
 RESET max_parallel_workers_per_gather;
+-- test partial and non-partial plans
+-- these will not be parallel on PG < 11
+ALTER TABLE :CHUNK1 SET (parallel_workers=0);
+ALTER TABLE :CHUNK2 SET (parallel_workers=2);
+:PREFIX SELECT count(*) FROM "test" WHERE i > 400000 AND length(version()) > 0;
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=200000 loops=3)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=200000 loops=3)
+                           Chunks excluded during startup: 0
+                           ->  Result (actual rows=99999 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Index Only Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk (actual rows=99999 loops=1)
+                                       Index Cond: (i > 400000)
+                                       Heap Fetches: 99999
+                           ->  Result (actual rows=250000 loops=2)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
+                                       Filter: (i > 400000)
+(18 rows)
+
+ALTER TABLE :CHUNK1 SET (parallel_workers=2);
+ALTER TABLE :CHUNK2 SET (parallel_workers=0);
+:PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=200000 loops=3)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test (actual rows=200000 loops=3)
+                           Chunks excluded during startup: 0
+                           ->  Result (actual rows=100000 loops=1)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Index Only Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk (actual rows=100000 loops=1)
+                                       Index Cond: (i < 600000)
+                                       Heap Fetches: 100000
+                           ->  Result (actual rows=250000 loops=2)
+                                 One-Time Filter: (length(version()) > 0)
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=250000 loops=2)
+                                       Filter: (i < 600000)
+(18 rows)
+
+ALTER TABLE :CHUNK1 RESET (parallel_workers);
+ALTER TABLE :CHUNK2 RESET (parallel_workers);
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and
 -- transaction_timestamp() are marked parallel safe

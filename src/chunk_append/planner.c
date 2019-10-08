@@ -261,8 +261,10 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 	if (capath->pushdown_limit && capath->limit_tuples > 0)
 		limit = capath->limit_tuples;
 
-	custom_private = list_make1(
-		list_make3_oid((Oid) capath->startup_exclusion, (Oid) capath->runtime_exclusion, limit));
+	custom_private = list_make1(list_make4_int(capath->startup_exclusion,
+											   capath->runtime_exclusion,
+											   limit,
+											   capath->first_partial_path));
 	custom_private = lappend(custom_private, chunk_ri_clauses);
 	custom_private = lappend(custom_private, chunk_rt_indexes);
 	custom_private = lappend(custom_private, sort_options);

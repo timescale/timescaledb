@@ -14,6 +14,9 @@ SELECT
   'EXPLAIN (costs off)' AS "PREFIX_NO_ANALYZE"
 \gset
 
+\set CHUNK1 _timescaledb_internal._hyper_1_1_chunk
+\set CHUNK2 _timescaledb_internal._hyper_1_2_chunk
+
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 --has to be big enough to force at least 2 workers below.
@@ -90,6 +93,19 @@ SET max_parallel_workers_per_gather TO 2;
 SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
 
 RESET max_parallel_workers_per_gather;
+
+-- test partial and non-partial plans
+-- these will not be parallel on PG < 11
+ALTER TABLE :CHUNK1 SET (parallel_workers=0);
+ALTER TABLE :CHUNK2 SET (parallel_workers=2);
+:PREFIX SELECT count(*) FROM "test" WHERE i > 400000 AND length(version()) > 0;
+
+ALTER TABLE :CHUNK1 SET (parallel_workers=2);
+ALTER TABLE :CHUNK2 SET (parallel_workers=0);
+:PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+
+ALTER TABLE :CHUNK1 RESET (parallel_workers);
+ALTER TABLE :CHUNK2 RESET (parallel_workers);
 
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and

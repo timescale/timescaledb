@@ -80,6 +80,7 @@ Node *
 chunk_append_state_create(CustomScan *cscan)
 {
 	ChunkAppendState *state;
+	List *settings = linitial(cscan->custom_private);
 
 	state = (ChunkAppendState *) newNode(sizeof(ChunkAppendState), T_CustomScanState);
 
@@ -89,12 +90,14 @@ chunk_append_state_create(CustomScan *cscan)
 	state->initial_ri_clauses = lsecond(cscan->custom_private);
 	state->sort_options = lfourth(cscan->custom_private);
 
-	state->startup_exclusion = (bool) linitial_oid(linitial(cscan->custom_private));
-	state->runtime_exclusion = (bool) lsecond_oid(linitial(cscan->custom_private));
-	state->limit = lthird_oid(linitial(cscan->custom_private));
+	state->startup_exclusion = (bool) linitial_int(settings);
+	state->runtime_exclusion = (bool) lsecond_int(settings);
+	state->limit = lthird_int(settings);
+	state->first_partial_plan = lfourth_int(settings);
 
 	state->filtered_subplans = state->initial_subplans;
 	state->filtered_ri_clauses = state->initial_ri_clauses;
+	state->filtered_first_partial_plan = state->first_partial_plan;
 
 	state->current = INVALID_SUBPLAN_INDEX;
 	state->choose_next_subplan = choose_next_subplan_non_parallel;
@@ -115,6 +118,8 @@ do_startup_exclusion(ChunkAppendState *state)
 	ListCell *lc_plan;
 	ListCell *lc_clauses;
 	ListCell *lc_constraints;
+	int i = -1;
+	int filtered_first_partial_plan = state->first_partial_plan;
 
 	/*
 	 * create skeleton plannerinfo for estimate_expression_value
@@ -144,6 +149,8 @@ do_startup_exclusion(ChunkAppendState *state)
 		ListCell *lc;
 		Scan *scan = chunk_append_get_scan_plan(lfirst(lc_plan));
 
+		i++;
+
 		/*
 		 * If this is a base rel (chunk), check if it can be
 		 * excluded from the scan. Otherwise, fall through.
@@ -159,7 +166,12 @@ do_startup_exclusion(ChunkAppendState *state)
 			restrictinfos = constify_restrictinfos(&root, restrictinfos);
 
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
+			{
+				if (i < state->first_partial_plan)
+					filtered_first_partial_plan--;
+
 				continue;
+			}
 
 			/*
 			 * if this node does runtime exclusion we keep the constified
@@ -185,6 +197,7 @@ do_startup_exclusion(ChunkAppendState *state)
 	state->filtered_subplans = filtered_children;
 	state->filtered_ri_clauses = filtered_ri_clauses;
 	state->filtered_constraints = filtered_constraints;
+	state->filtered_first_partial_plan = filtered_first_partial_plan;
 }
 
 /*
@@ -488,6 +501,13 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 
 	Assert(next_plan >= 0 && next_plan < state->num_subplans);
 	state->current = next_plan;
+
+	/*
+	 * if this is not a partial plan we mark it as finished
+	 * immediately so it does not get assigned another worker
+	 */
+	if (next_plan < state->filtered_first_partial_plan)
+		pstate->finished[next_plan] = true;
 
 	/* advance next_plan for next worker */
 	pstate->next_plan = get_next_subplan(state, state->current);
