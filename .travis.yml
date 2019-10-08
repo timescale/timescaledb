@@ -60,7 +60,7 @@ jobs:
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg${PG_VERSION} /bin/sleep infinity
       install:
         - docker exec pgbuild /bin/bash -c "mkdir /tsdb_build && chown postgres /tsdb_build"
-        - docker exec pgbuild /bin/bash -c "cd /tsdb_build && cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=/usr/src/postgresql/ -DUSE_DEFAULT_VISIBILITY=1 && make"
+        - docker exec --env ASAN_OPTIONS="${ASAN_OPTIONS}" pgbuild /bin/bash -c "cd /tsdb_build && cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=/usr/src/postgresql/ -DUSE_DEFAULT_VISIBILITY=1 && make"
       after_failure:
       after_success:
       script:
