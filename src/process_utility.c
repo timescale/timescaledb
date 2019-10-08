@@ -139,6 +139,9 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 			{
 				case AT_SetOptions:
 				case AT_ResetOptions:
+				case AT_SetRelOptions:
+				case AT_ResetRelOptions:
+				case AT_ReplaceRelOptions:
 				case AT_SetStatistics:
 				case AT_SetStorage:
 				case AT_DropCluster:
