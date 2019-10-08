@@ -52,15 +52,15 @@ ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='v0,
 NOTICE:  adding index _compressed_hypertable_5_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_5_device_id_peer__ts_meta_sequence_n_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id_peer, _ts_meta_sequence_num)
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
 (1 row)
 
 -- compress some chunks on space partitioned hypertable
@@ -69,33 +69,33 @@ ALTER TABLE metrics_space SET (timescaledb.compress, timescaledb.compress_orderb
 NOTICE:  adding index _compressed_hypertable_6_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(device_id, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_6_device_id_peer__ts_meta_sequence_n_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(device_id_peer, _ts_meta_sequence_num)
 SELECT compress_chunk('_timescaledb_internal._hyper_2_4_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_4_chunk
 (1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_2_5_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_5_chunk
 (1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_2_6_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_6_chunk
 (1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_2_10_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_2_10_chunk
 (1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_2_11_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_2_11_chunk
 (1 row)
 
 SELECT
@@ -5522,11 +5522,11 @@ FROM _timescaledb_catalog.chunk c
   INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
 WHERE ht.table_name = 'metrics_ordered'
 ORDER BY c.id;
- compress_chunk 
-----------------
- 
- 
- 
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_26_chunk
+ _timescaledb_internal._hyper_11_27_chunk
+ _timescaledb_internal._hyper_11_28_chunk
 (3 rows)
 
 -- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys

@@ -193,21 +193,37 @@ select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _time
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
-ERROR:  chunk "_hyper_12_2_chunk" is not a compressed
+ERROR:  chunk "_hyper_12_2_chunk" is not compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 NOTICE:  adding index _compressed_hypertable_14_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_14 USING BTREE(b, _ts_meta_sequence_num)
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
+select decompress_chunk(:'CHUNK_NAME');
+ERROR:  chunk "_hyper_12_2_chunk" is not compressed
+select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
+NOTICE:  chunk "_hyper_12_2_chunk" is not compressed
+ decompress_chunk 
+------------------
+ 
+(1 row)
+
 --should succeed
 select compress_chunk(:'CHUNK_NAME');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_12_2_chunk
+(1 row)
+
+select compress_chunk(:'CHUNK_NAME');
+ERROR:  chunk "_hyper_12_2_chunk" is already compressed
+select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
+NOTICE:  chunk "_hyper_12_2_chunk" is already compressed
  compress_chunk 
 ----------------
  
 (1 row)
 
-select compress_chunk(:'CHUNK_NAME');
-ERROR:  chunk is already compressed
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
 ERROR:  chunks can be compressed only if compression property is set on the hypertable
@@ -219,9 +235,9 @@ ERROR:  missing compressed hypertable
 --should succeed
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' and ch1.compressed_chunk_id IS NOT NULL;
- decompress_chunk 
-------------------
- 
+            decompress_chunk             
+-----------------------------------------
+ _timescaledb_internal._hyper_12_2_chunk
 (1 row)
 
 --should succeed
@@ -292,9 +308,9 @@ where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
 ORDER BY ch1.id limit 1 \gset
 -- we have 1 compressed and 1 uncompressed chunk after this.
 select compress_chunk(:'CHUNK_NAME');
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_16_7_chunk
 (1 row)
 
 SELECT  hypertable_name , total_chunks , number_compressed_chunks
