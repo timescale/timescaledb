@@ -172,7 +172,7 @@ jobs:
       name: "Regression 10.9"
       env: PG_VERSION=10.9 CODECOV_FLAGS="-F cron -F pr"
 
-    - if: (type = cron) OR NOT (branch = master)
+    - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 11.0"
       env: PG_VERSION=11.0
