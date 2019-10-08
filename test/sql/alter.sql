@@ -81,6 +81,13 @@ ORDER BY c.relname, a.attnum;
 
 SELECT * FROM alter_after;
 
+-- test setting reloptions
+ALTER TABLE  _timescaledb_internal._hyper_2_3_chunk SET (parallel_workers=2);
+ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk SET (parallel_workers=4);
+ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk RESET (parallel_workers);
+
+SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_hyper_2_4_chunk');
+
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
