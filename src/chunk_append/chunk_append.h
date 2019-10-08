@@ -19,6 +19,7 @@ typedef struct ChunkAppendPath
 	bool runtime_exclusion;
 	bool pushdown_limit;
 	int limit_tuples;
+	int first_partial_path;
 } ChunkAppendPath;
 
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,

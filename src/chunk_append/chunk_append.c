@@ -130,8 +130,16 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	switch (nodeTag(subpath))
 	{
 		case T_AppendPath:
-			children = castNode(AppendPath, subpath)->subpaths;
+		{
+			AppendPath *append = castNode(AppendPath, subpath);
+
+#if PG11_GE
+			if (append->path.parallel_aware && append->first_partial_path > 0)
+				path->first_partial_path = append->first_partial_path;
+#endif
+			children = append->subpaths;
 			break;
+		}
 		case T_MergeAppendPath:
 			/*
 			 * check if ordered append is applicable, only assert ordered here
