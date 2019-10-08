@@ -629,3 +629,22 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
+
+bool
+ts_has_row_security(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class classform;
+	bool relrowsecurity;
+	bool relforcerowsecurity;
+
+	/* Fetch relation's relrowsecurity and relforcerowsecurity flags */
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relid %d", relid);
+	classform = (Form_pg_class) GETSTRUCT(tuple);
+	relrowsecurity = classform->relrowsecurity;
+	relforcerowsecurity = classform->relforcerowsecurity;
+	ReleaseSysCache(tuple);
+	return (relrowsecurity || relforcerowsecurity);
+}

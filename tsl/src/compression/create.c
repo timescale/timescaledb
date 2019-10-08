@@ -43,6 +43,7 @@
 #include "custom_type_cache.h"
 #include "license.h"
 #include "trigger.h"
+#include "utils.h"
 
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
@@ -229,6 +230,12 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	segorder_colindex = palloc0(sizeof(int32) * (rel->rd_att->natts));
 	tupdesc = rel->rd_att;
 	i = 1;
+
+	if (rel->rd_rel->relhasoids)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compression cannot be used on table with OIDs")));
+
 	foreach (lc, segmentby_cols)
 	{
 		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
@@ -818,14 +825,34 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 				 errmsg("cannot change compression options as compressed chunks already exist for "
 						"this table")));
 
-	/* Require both order by and segment by when altering because otherwise it's not clear what
-	 * the default value means: does it mean leave as-is or is it an empty list. */
-	if (compression_already_enabled && (with_clause_options[CompressOrderBy].is_default ||
-										with_clause_options[CompressSegmentBy].is_default))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("need to specify both compress_orderby and compress_segmentby if altering "
-						"compression")));
+	/* Require both order by and segment by when altering if they were previously set because
+	 * otherwise it's not clear what the default value means: does it mean leave as-is or is it an
+	 * empty list. */
+	if (compression_already_enabled)
+	{
+		List *info = ts_hypertable_compression_get(ht->fd.id);
+		ListCell *lc;
+		bool segment_by_set = false;
+		bool order_by_set = false;
+
+		foreach (lc, info)
+		{
+			FormData_hypertable_compression *fd = lfirst(lc);
+			if (fd->segmentby_column_index > 0)
+				segment_by_set = true;
+			if (fd->orderby_column_index > 0)
+				order_by_set = true;
+		}
+		if (with_clause_options[CompressOrderBy].is_default && order_by_set)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("need to specify compress_orderby if it was previously set")));
+
+		if (with_clause_options[CompressSegmentBy].is_default && segment_by_set)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("need to specify compress_segmentby if it was previously set")));
+	}
 
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 	/* check if we can create a compressed hypertable with existing constraints */
@@ -835,6 +862,12 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
 					RowExclusiveLock);
+
+	/*check row security settings for the table */
+	if (ts_has_row_security(ht->main_table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compression cannot be used on table with row security")));
 
 	if (compression_already_enabled)
 	{

@@ -61,6 +61,7 @@
 #include "dimension.h"
 #include "continuous_agg.h"
 #include "options.h"
+#include "utils.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -719,25 +720,6 @@ cagg_agg_validate(Node *node, void *context)
 	return expression_tree_walker(node, cagg_agg_validate, context);
 }
 
-static bool
-has_row_security(Oid relid)
-{
-	HeapTuple tuple;
-	Form_pg_class classform;
-	bool relrowsecurity;
-	bool relforcerowsecurity;
-
-	/* Fetch relation's relrowsecurity and relforcerowsecurity flags */
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relid %d", relid);
-	classform = (Form_pg_class) GETSTRUCT(tuple);
-	relrowsecurity = classform->relrowsecurity;
-	relforcerowsecurity = classform->relforcerowsecurity;
-	ReleaseSysCache(tuple);
-	return (relrowsecurity || relforcerowsecurity);
-}
-
 static CAggTimebucketInfo
 cagg_validate_query(Query *query)
 {
@@ -833,7 +815,7 @@ cagg_validate_query(Query *query)
 	}
 
 	/*check row security settings for the table */
-	if (has_row_security(rte->relid))
+	if (ts_has_row_security(rte->relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

@@ -82,6 +82,8 @@ extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index 
 
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
+extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
+
 #define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type)                                         \
 	(to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
 

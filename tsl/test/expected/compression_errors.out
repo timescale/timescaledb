@@ -38,6 +38,27 @@ NOTICE:  adding index _compressed_hypertable_4_c__ts_meta_sequence_num_idx ON _t
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
 NOTICE:  adding index _compressed_hypertable_5_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(bacB toD, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_5_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(c, _ts_meta_sequence_num)
+create table with_oids (a integer, b integer) WITH OIDS;
+select table_name from create_hypertable('with_oids', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ with_oids
+(1 row)
+
+ALTER TABLE with_oids set (timescaledb.compress, timescaledb.compress_orderby='a');
+ERROR:  compression cannot be used on table with OIDs
+create table with_rls (a integer, b integer);
+ALTER TABLE with_rls ENABLE ROW LEVEL SECURITY;
+select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ with_rls
+(1 row)
+
+ALTER TABLE with_rls set (timescaledb.compress, timescaledb.compress_orderby='a');
+ERROR:  compression cannot be used on table with row security
 --note that the time column "a" should be added to the end of the orderby list
 select * from _timescaledb_catalog.hypertable_compression order by attname;
  hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -48,12 +69,16 @@ select * from _timescaledb_catalog.hypertable_compression order by attname;
              1 | d        |                        4 |                        |                    1 | t           | f
 (4 rows)
 
-ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DeSc NullS lAsT');
-NOTICE:  adding index _compressed_hypertable_6_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(bacB toD, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_6_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(c, _ts_meta_sequence_num)
+ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
+--shold allow alter since segment by was empty
+ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d Asc NullS lAsT');
+--this is ok too
+ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c', timescaledb.compress_orderby = 'd DeSc NullS lAsT');
+NOTICE:  adding index _compressed_hypertable_10_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(bacB toD, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_10_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(c, _ts_meta_sequence_num)
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
-ERROR:  need to specify both compress_orderby and compress_segmentby if altering compression
+ERROR:  need to specify compress_orderby if it was previously set
 ALTER TABLE foo2 set (timescaledb.compress='f');
 ERROR:  disabling compression is not yet supported
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
@@ -159,19 +184,19 @@ ERROR:  operation not supported on hypertables that have compression enabled
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-             8 | a       |                        4 |                        |                    1 | t           | f
-             8 | b       |                        4 |                        |                    2 | t           | f
-             8 | c       |                        4 |                        |                      |             | 
-             8 | p       |                        1 |                        |                      |             | 
-             8 | t       |                        2 |                        |                      |             | 
+            12 | a       |                        4 |                        |                    1 | t           | f
+            12 | b       |                        4 |                        |                    2 | t           | f
+            12 | c       |                        4 |                        |                      |             | 
+            12 | p       |                        1 |                        |                      |             | 
+            12 | t       |                        2 |                        |                      |             | 
 (5 rows)
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
-ERROR:  chunk "_hyper_8_2_chunk" is not a compressed
+ERROR:  chunk "_hyper_12_2_chunk" is not a compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
-NOTICE:  adding index _compressed_hypertable_10_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(b, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_14_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_14 USING BTREE(b, _ts_meta_sequence_num)
 select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
 --should succeed
@@ -201,15 +226,15 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
-NOTICE:  adding index _compressed_hypertable_11_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_11 USING BTREE(b, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_15_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_15 USING BTREE(b, _ts_meta_sequence_num)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-             8 | a       |                        4 |                        |                    1 | t           | f
-             8 | b       |                        0 |                      1 |                      |             | 
-             8 | c       |                        4 |                        |                      |             | 
-             8 | p       |                        1 |                        |                      |             | 
-             8 | t       |                        2 |                        |                      |             | 
+            12 | a       |                        4 |                        |                    1 | t           | f
+            12 | b       |                        0 |                      1 |                      |             | 
+            12 | c       |                        4 |                        |                      |             | 
+            12 | p       |                        1 |                        |                      |             | 
+            12 | t       |                        2 |                        |                      |             | 
 (5 rows)
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
@@ -218,7 +243,7 @@ INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = unco
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
 WARNING:  Timescale License expired
-ERROR:  cannot add drop chunks policy to hypertable "_compressed_hypertable_11" which contains compressed data
+ERROR:  cannot add drop chunks policy to hypertable "_compressed_hypertable_15" which contains compressed data
 --Constraint checking for compression
 create table fortable(col integer primary key);
 create table  table_constr( device_id integer,
@@ -249,9 +274,9 @@ ERROR:  constraint table_constr_exclu is not supported for compression
 alter table table_constr drop constraint table_constr_exclu ;
 --now it works
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
-NOTICE:  adding index _compressed_hypertable_13_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(device_id, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_13_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(location, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_13_d__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_13 USING BTREE(d, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_17_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_17 USING BTREE(device_id, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_17_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_17 USING BTREE(location, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_17_d__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_17 USING BTREE(d, _ts_meta_sequence_num)
 --can't add fks after compression enabled
 alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 ERROR:  operation not supported on hypertables that have compression enabled
