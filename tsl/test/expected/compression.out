@@ -60,9 +60,9 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
 
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
 (1 row)
 
 select tgname , tgtype, tgenabled , relname
@@ -103,9 +103,9 @@ compressed_total_bytes   | 48 kB
 
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
 \x
@@ -144,7 +144,7 @@ where ch1.compressed_chunk_id = ch2.id;
 \set ON_ERROR_STOP 0
 --cannot recompress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
-ERROR:  chunk is already compressed
+ERROR:  chunk "_hyper_1_2_chunk" is already compressed
 --TEST2a try DML on a compressed chunk
 insert into foo values( 11 , 10 , 20, 120);
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
@@ -199,9 +199,9 @@ set b = 12;
 delete from _timescaledb_internal._hyper_1_2_chunk;
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
- decompress_chunk 
-------------------
- 
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
 (1 row)
 
 insert into foo values( 11 , 10 , 20, 120);
@@ -284,9 +284,9 @@ select tableoid::regclass, count(*) from conditions group by tableoid order by t
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' ORDER BY ch1.id limit 1;
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_12_chunk
 (1 row)
 
 --test that only one chunk was affected
@@ -299,9 +299,9 @@ select tableoid::regclass, count(*) from conditions group by tableoid order by t
 
 select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
 (1 row)
 
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
@@ -396,10 +396,10 @@ compressed_total_bytes   | 64 kB
 \x
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
- decompress_chunk 
-------------------
- 
- 
+            decompress_chunk             
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_12_chunk
 (2 rows)
 
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
@@ -470,9 +470,9 @@ EXECUTE prep_plan;
 SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
 \gset
 SELECT compress_chunk(:'CHUNK_NAME');
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_16_chunk
 (1 row)
 
 EXECUTE prep_plan;
@@ -523,10 +523,10 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
 and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
- compress_chunk 
-----------------
- 
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_19_chunk
+ _timescaledb_internal._hyper_9_20_chunk
 (2 rows)
 
 --segment bys are pushed down correctly

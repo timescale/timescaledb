@@ -139,9 +139,9 @@ FROM pg_tables WHERE tablespace = 'tablespace1';
 (1 row)
 
 SELECT decompress_chunk(:'UNCOMPRESSED_CHUNK_NAME');
- decompress_chunk 
-------------------
- 
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
 --the compresse chunk was dropped by decompression
@@ -167,9 +167,9 @@ FROM pg_tables WHERE tablespace = 'tablespace1';
 (1 row)
 
 SELECT compress_chunk(:'UNCOMPRESSED_CHUNK_NAME');
- compress_chunk 
-----------------
- 
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
 --the compressed chunk is now in the same tablespace as the uncompressed one

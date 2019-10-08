@@ -246,8 +246,9 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	ts_cache_release(hcache);
 }
 
-static void
-decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid)
+static bool
+decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid,
+					  bool if_compressed)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *uncompressed_hypertable =
@@ -279,11 +280,13 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		elog(ERROR, "hypertable and chunk do not match");
 
 	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
-		ereport(ERROR,
+	{
+		ts_cache_release(hcache);
+		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not a compressed",
-						get_rel_name(uncompressed_chunk_relid))));
-	;
+				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_relid))));
+		return false;
+	}
 
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, 0, true);
 
@@ -304,36 +307,47 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 
 	ts_cache_release(hcache);
+	return true;
 }
 
-void
-tsl_compress_chunk_wrapper(Oid chunk_relid)
+bool
+tsl_compress_chunk_wrapper(Oid chunk_relid, bool if_not_compressed)
 {
 	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
 	if (srcchunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
-		ereport(ERROR, (errcode(ERRCODE_DUPLICATE_OBJECT), errmsg("chunk is already compressed")));
+		ereport((if_not_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk_relid))));
+		return false;
 	}
 
 	compress_chunk_impl(srcchunk->hypertable_relid, chunk_relid);
+	return true;
 }
 
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
-	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	tsl_compress_chunk_wrapper(chunk_id);
-	PG_RETURN_VOID();
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	if (!tsl_compress_chunk_wrapper(uncompressed_chunk_id, if_not_compressed))
+		PG_RETURN_NULL();
+	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
 Datum
 tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unkown chunk id %d", uncompressed_chunk_id);
 
-	decompress_chunk_impl(uncompressed_chunk->hypertable_relid, uncompressed_chunk_id);
-	PG_RETURN_VOID();
+	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
+							   uncompressed_chunk_id,
+							   if_compressed))
+		PG_RETURN_NULL();
+	PG_RETURN_OID(uncompressed_chunk_id);
 }
