@@ -5167,6 +5167,44 @@ EXECUTE tableoid_prep;
 (1 row)
 
 DEALLOCATE tableoid_prep;
+\ir include/transparent_decompression_undiffed.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test planning regression with many chunks
+CREATE TABLE tags(id SERIAL PRIMARY KEY, name TEXT, fleet TEXT);
+INSERT INTO tags (name, fleet) VALUES('n1', 'f1');
+CREATE TABLE readings (time timestamptz, tags_id integer, fuel_consumption DOUBLE PRECISION);
+CREATE INDEX ON readings(tags_id, "time" DESC);
+CREATE INDEX ON readings("time" DESC);
+SELECT create_hypertable('readings', 'time', partitioning_column => 'tags_id', number_partitions => 1, chunk_time_interval => 43200000000, create_default_indexes=>false);
+psql:include/transparent_decompression_undiffed.sql:12: NOTICE:  adding not-null constraint to column "time"
+   create_hypertable    
+------------------------
+ (13,public,readings,t)
+(1 row)
+
+ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby = 'tags_id', timescaledb.compress_orderby = 'time desc');
+psql:include/transparent_decompression_undiffed.sql:13: NOTICE:  adding index _compressed_hypertable_14_tags_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_14 USING BTREE(tags_id, _ts_meta_sequence_num)
+INSERT into readings select g, 1, 1.3 from generate_series('2001-03-01 01:01:01', '2003-02-01 01:01:01', '1 day'::interval) g;
+SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name))
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
+ count 
+-------
+   703
+(1 row)
+
+SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
+FROM tags t
+INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
+GROUP BY fleet;
+ fleet | avg_fuel_consumption 
+-------+----------------------
+ f1    |                  1.3
+(1 row)
+
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
 SET max_parallel_workers_per_gather TO 4;
@@ -5227,8 +5265,8 @@ EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
                ->  Parallel Seq Scan on _hyper_2_12_chunk
 (19 rows)
 
-RESET parallel_setup_cost; 
-RESET parallel_tuple_cost; 
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
 SET enable_seqscan TO false;
 -- should order compressed chunks using index
 -- (we only EXPLAIN here b/c the resulting order is too inconsistent)
