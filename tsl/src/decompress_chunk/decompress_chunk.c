@@ -468,14 +468,9 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_relids = new_relids;
 			em->em_nullable_relids = new_nullable_relids;
 			em->em_is_const = false;
-			em->em_is_child = false;
+			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
-
-			if (!em->em_is_child) /* child members don't add to ec_relids */
-			{
-				cur_ec->ec_relids =
-					bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
-			}
+			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 
 			return;
@@ -555,13 +550,12 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 	root->simple_rel_array[compressed_index] = NULL;
 #if PG96
 	compressed_rel = build_simple_rel(root, compressed_index, RELOPT_BASEREL);
-
 #else
 	compressed_rel = build_simple_rel(root, compressed_index, NULL);
 #endif
-	root->simple_rel_array[compressed_index] = compressed_rel;
 
-	info->compressed_rel = root->simple_rel_array[compressed_index];
+	root->simple_rel_array[compressed_index] = compressed_rel;
+	info->compressed_rel = compressed_rel;
 
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
 	compressed_rel_setup_equivalence_classes(root, info);
