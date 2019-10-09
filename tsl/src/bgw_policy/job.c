@@ -24,7 +24,6 @@
 
 #include "errors.h"
 #include "job.h"
-#include "../hypertable.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -35,6 +34,7 @@
 #include "reorder.h"
 #include "utils.h"
 #include "drop_chunks_api.h"
+#include "interval.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS 5
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3

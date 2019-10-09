@@ -9,3 +9,7 @@ AS '@MODULE_PATHNAME@', 'ts_hypertable_insert_blocker' LANGUAGE C;
 -- Records mutations or INSERTs which would invalidate a continuous aggregate
 CREATE OR REPLACE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger() RETURNS TRIGGER
 AS '@MODULE_PATHNAME@', 'continuous_agg_invalidation_trigger' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION set_integer_now_func(hypertable REGCLASS, integer_now_func REGPROC, replace_if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_hypertable_set_integer_now_func'
+LANGUAGE C VOLATILE STRICT;

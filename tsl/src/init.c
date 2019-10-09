@@ -26,7 +26,6 @@
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
 #include "process_utility.h"
-#include "hypertable.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -62,8 +61,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.continuous_agg_materialize = continuous_agg_materialize,
-	.set_integer_now_func = hypertable_set_integer_now_func,
-	.valid_ts_interval = hypertable_valid_ts_interval,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
 	.add_reorder_policy = reorder_add_policy,
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,

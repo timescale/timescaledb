@@ -382,3 +382,13 @@ ts_interval_subtract_from_now(FormData_ts_interval *invl, Dimension *open_dim)
 	pg_unreachable();
 	return 0;
 }
+
+TS_FUNCTION_INFO_V1(ts_valid_ts_interval);
+Datum
+ts_valid_ts_interval(PG_FUNCTION_ARGS)
+{
+	/* this function does all the necessary validation and if successfull,
+	returns the interval which is not necessary here */
+	ts_interval_from_tuple(PG_GETARG_DATUM(0));
+	PG_RETURN_BOOL(true);
+}
