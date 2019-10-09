@@ -231,14 +231,6 @@ select remove_drop_chunks_policy('test_table');
 
 -- Test set_integer_now_func and add_drop_chunks_policy with
 -- hypertables that have integer time dimension
-\set ON_ERROR_STOP 0
-select set_integer_now_func('test_table', 42);
-ERROR:  integer_now_func can only be set for hypertables that have integer time dimensions
-select set_integer_now_func('test_table', 'set_integer_now_func');
-ERROR:  integer_now_func can only be set for hypertables that have integer time dimensions
-select set_integer_now_func('test_table_int', 'set_integer_now_func');
-ERROR:  integer_now_func must take no arguments and it must be STABLE
-\set ON_ERROR_STOP 1
 select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
@@ -247,44 +239,15 @@ select * from _timescaledb_catalog.dimension;
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE SCHEMA IF NOT EXISTS my_schema;
-create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
-grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
--- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
-select set_integer_now_func('test_table_int', 'dummy_now');
+CREATE SCHEMA IF NOT EXISTS my_new_schema;
+create or replace function my_new_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_new_schema to public;
+select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
  set_integer_now_func 
 ----------------------
  
 (1 row)
 
-\set ON_ERROR_STOP 0
-select set_integer_now_func('test_table_int', 'dummy_now');
-ERROR:  integer_now_func is already set for hypertable "test_table_int"
-\set ON_ERROR_STOP 1
-select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
-  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | public                  | dummy_now
-(2 rows)
-
-select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
- set_integer_now_func 
-----------------------
- 
-(1 row)
-
-select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                         | 
-  2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | my_schema               | dummy_now2
-(2 rows)
-
--- \c :TEST_DBNAME :ROLE_SUPERUSER q:: should all of the following be execed in super user mode?
--- partitioning.sql test does something similar bu tnot sure why superuser is necessary.
-ALTER SCHEMA my_schema RENAME TO my_new_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
