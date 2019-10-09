@@ -13,8 +13,6 @@
 #include "guc.h"
 #include "bgw/job.h"
 
-TS_FUNCTION_INFO_V1(ts_set_integer_now_func);
-TS_FUNCTION_INFO_V1(ts_valid_ts_interval);
 TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_add_reorder_policy);
 TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
@@ -26,18 +24,6 @@ TS_FUNCTION_INFO_V1(ts_partialize_agg);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
 TS_FUNCTION_INFO_V1(continuous_agg_invalidation_trigger);
-
-Datum
-ts_set_integer_now_func(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->set_integer_now_func(fcinfo));
-}
-
-Datum
-ts_valid_ts_interval(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->valid_ts_interval(fcinfo));
-}
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -243,8 +229,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.add_tsl_license_info_telemetry = add_telemetry_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
 	.continuous_agg_materialize = cagg_materialize_default_fn,
-	.set_integer_now_func = error_no_default_fn_pg_enterprise,
-	.valid_ts_interval = error_no_default_fn_pg_enterprise,
 	.add_drop_chunks_policy = error_no_default_fn_pg_enterprise,
 	.add_reorder_policy = error_no_default_fn_pg_enterprise,
 	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,

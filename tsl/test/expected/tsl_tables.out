@@ -253,7 +253,6 @@ grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
 -- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
 select set_integer_now_func('test_table_int', 'dummy_now');
-WARNING:  Timescale License expired
  set_integer_now_func 
 ----------------------
  
