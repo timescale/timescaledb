@@ -582,3 +582,53 @@ NOTICE:  adding not-null constraint to column "time"
  SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 (1 row)
 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test_table_int(time bigint, junk int);
+SELECT hypertable_id AS "TEST_TABLE_INT_HYPERTABLE_ID" FROM create_hypertable('test_table_int', 'time', chunk_time_interval => 1) \gset
+NOTICE:  adding not-null constraint to column "time"
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_schema;
+create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+create or replace function dummy_now3() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+REVOKE execute ON function dummy_now3() FROM PUBLIC;
+CREATE SCHEMA IF NOT EXISTS my_user_schema;
+GRANT ALL ON SCHEMA my_user_schema to PUBLIC;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+create or replace function my_user_schema.dummy_now4() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+select set_integer_now_func('test_table_int', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+ 24 |            15 | time        | bigint      | t       |            |                          |                   |               1 | public                  | dummy_now
+(1 row)
+
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table_int', 'dummy_now');
+ERROR:  integer_now_func is already set for hypertable "test_table_int"
+select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
+ERROR:  permission denied for schema my_schema at character 47
+select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);
+ERROR:  permission denied for function dummy_now3
+\set ON_ERROR_STOP
+select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', replace_if_exists => TRUE);
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+ 24 |            15 | time        | bigint      | t       |            |                          |                   |               1 | my_new_schema           | dummy_now4
+(1 row)
+

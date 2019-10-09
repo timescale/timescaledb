@@ -1930,6 +1930,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	Dimension *open_dim;
 	Oid open_dim_type;
+	AclResult aclresult;
 
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
@@ -1961,6 +1962,12 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 						"that have integer time dimensions")));
 
 	ts_interval_now_func_validate(now_func_oid, open_dim_type);
+
+	aclresult = pg_proc_aclcheck(now_func_oid, GetUserId(), ACL_EXECUTE);
+	if (aclresult != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for function %s", get_func_name(now_func_oid))));
 
 	dimension_update(table_relid,
 					 &open_dim->fd.column_name,

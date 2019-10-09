@@ -25,6 +25,7 @@
 #include <parser/parse_coerce.h>
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
+#include <miscadmin.h>
 
 #include "partitioning.h"
 #include "compat.h"
@@ -68,11 +69,18 @@ ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtyp
 {
 	HeapTuple tuple;
 	bool isvalid;
+	AclResult aclresult;
 
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcoid));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for function %u", funcoid);
+
+	aclresult = pg_proc_aclcheck(funcoid, GetUserId(), ACL_EXECUTE);
+	if (aclresult != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for function %s", get_func_name(funcoid))));
 
 	isvalid = IS_VALID_PARTITIONING_FUNC((Form_pg_proc) GETSTRUCT(tuple), dimtype, argtype);
 

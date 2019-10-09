@@ -336,3 +336,36 @@ DROP TABLE test_schema.test_sql_cmd CASCADE;
 CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
 SELECT test.execute_sql(:'create_cmd');
 
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test_table_int(time bigint, junk int);
+SELECT hypertable_id AS "TEST_TABLE_INT_HYPERTABLE_ID" FROM create_hypertable('test_table_int', 'time', chunk_time_interval => 1) \gset
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_schema;
+create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+create or replace function dummy_now3() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+REVOKE execute ON function dummy_now3() FROM PUBLIC;
+CREATE SCHEMA IF NOT EXISTS my_user_schema;
+GRANT ALL ON SCHEMA my_user_schema to PUBLIC;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+create or replace function my_user_schema.dummy_now4() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+
+
+select set_integer_now_func('test_table_int', 'dummy_now');
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+\set ON_ERROR_STOP 0
+select set_integer_now_func('test_table_int', 'dummy_now');
+select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
+select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);
+\set ON_ERROR_STOP
+
+select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', replace_if_exists => TRUE);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;

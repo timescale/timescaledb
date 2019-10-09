@@ -100,33 +100,14 @@ select remove_drop_chunks_policy('test_table');
 
 -- Test set_integer_now_func and add_drop_chunks_policy with
 -- hypertables that have integer time dimension
-\set ON_ERROR_STOP 0
-select set_integer_now_func('test_table', 42);
-select set_integer_now_func('test_table', 'set_integer_now_func');
-select set_integer_now_func('test_table_int', 'set_integer_now_func');
-\set ON_ERROR_STOP 1
 
 select * from _timescaledb_catalog.dimension;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE SCHEMA IF NOT EXISTS my_schema;
-create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
-grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
--- \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE SCHEMA IF NOT EXISTS my_new_schema;
+create or replace function my_new_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_new_schema to public;
+select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
 
-create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
-
-select set_integer_now_func('test_table_int', 'dummy_now');
-
-\set ON_ERROR_STOP 0
-select set_integer_now_func('test_table_int', 'dummy_now');
-\set ON_ERROR_STOP 1
-
-select * from _timescaledb_catalog.dimension;
-select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
-select * from _timescaledb_catalog.dimension;
--- \c :TEST_DBNAME :ROLE_SUPERUSER q:: should all of the following be execed in super user mode?
--- partitioning.sql test does something similar bu tnot sure why superuser is necessary.
-ALTER SCHEMA my_schema RENAME TO my_new_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
 
