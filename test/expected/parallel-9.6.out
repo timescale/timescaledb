@@ -21,12 +21,14 @@ NOTICE:  adding not-null constraint to column "i"
  (1,public,test,t)
 (1 row)
 
---has to be big enough to force at least 2 workers below.
-INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1) AS x;
+INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1,10) AS x;
 ANALYZE test;
+ALTER TABLE :CHUNK1 SET (parallel_workers=2);
+ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 SET work_mem TO '50MB';
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
+SET parallel_setup_cost TO 0;
 EXPLAIN (costs off) SELECT first(i, j) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
@@ -60,7 +62,7 @@ EXPLAIN (costs off) SELECT last(i, j) FROM "test";
 SELECT last(i, j) FROM "test";
   last  
 --------
- 999999
+ 999990
 (1 row)
 
 EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
@@ -123,11 +125,11 @@ ORDER BY sec
 LIMIT 5;
            sec            | last 
 --------------------------+------
- Wed Dec 31 16:00:00 1969 |  999
- Wed Dec 31 16:00:01 1969 | 1999
- Wed Dec 31 16:00:02 1969 | 2999
- Wed Dec 31 16:00:03 1969 | 3999
- Wed Dec 31 16:00:04 1969 | 4999
+ Wed Dec 31 16:00:00 1969 |  990
+ Wed Dec 31 16:00:01 1969 | 1990
+ Wed Dec 31 16:00:02 1969 | 2990
+ Wed Dec 31 16:00:03 1969 | 3990
+ Wed Dec 31 16:00:04 1969 | 4990
 (5 rows)
 
 --test variants of histogram
@@ -144,9 +146,9 @@ EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
 (7 rows)
 
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
-      histogram      
----------------------
- {1,500000,499999,0}
+     histogram     
+-------------------
+ {1,50000,49999,0}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
@@ -162,9 +164,9 @@ EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
 (7 rows)
 
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
-                                 histogram                                  
-----------------------------------------------------------------------------
- {1,100000,100000,100000,100000,100000,100000,100000,100000,100000,99999,0}
+                            histogram                             
+------------------------------------------------------------------
+ {1,10000,10000,10000,10000,10000,10000,10000,10000,10000,9999,0}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
@@ -180,9 +182,9 @@ EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
 (7 rows)
 
 SELECT histogram(i, 0, 100000, 5) FROM "test";
-                histogram                 
-------------------------------------------
- {0,20000,20000,20000,20000,20000,900000}
+             histogram              
+------------------------------------
+ {0,2000,2000,2000,2000,2000,90000}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
@@ -198,9 +200,9 @@ EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 (7 rows)
 
 SELECT histogram(i, 10, 100000, 5) FROM "test";
-                 histogram                 
--------------------------------------------
- {10,19998,19998,19998,19998,19998,900000}
+             histogram              
+------------------------------------
+ {1,2000,2000,2000,2000,1999,90000}
 (1 row)
 
 -- test parallel ChunkAppend
@@ -247,9 +249,9 @@ SET max_parallel_workers_per_gather TO 2;
 (16 rows)
 
 SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
- count  
---------
- 600000
+ count 
+-------
+ 60000
 (1 row)
 
 -- test worker assignment
@@ -276,9 +278,9 @@ SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
 (16 rows)
 
 SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
- count  
---------
- 600000
+ count 
+-------
+ 60000
 (1 row)
 
 -- test ChunkAppend with # workers < # childs
@@ -303,9 +305,9 @@ SET max_parallel_workers_per_gather TO 1;
 (14 rows)
 
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
-  count  
----------
- 1000000
+ count  
+--------
+ 100000
 (1 row)
 
 -- test ChunkAppend with # workers > # childs
@@ -328,9 +330,9 @@ SET max_parallel_workers_per_gather TO 2;
 (12 rows)
 
 SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
- count  
---------
- 500000
+ count 
+-------
+ 50000
 (1 row)
 
 RESET max_parallel_workers_per_gather;
