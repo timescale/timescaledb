@@ -755,7 +755,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	BgwJob *updated_job = (BgwJob *) data;
 	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(tuple);
-	TimestampTz nowts, next_start;
+	TimestampTz next_start;
 
 	ts_bgw_job_permission_check(updated_job);
 	/* when we update the schedule interval, modify the next start time as well*/
@@ -763,13 +763,16 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 										  IntervalPGetDatum(&fd->schedule_interval),
 										  IntervalPGetDatum(&updated_job->fd.schedule_interval))))
 	{
-		nowts = GetCurrentTimestamp();
+		BgwJobStat *stat = ts_bgw_job_stat_find(fd->id);
 
-		next_start = DatumGetTimestamp(
-			DirectFunctionCall2(timestamp_pl_interval,
-								TimestampGetDatum(nowts),
-								IntervalPGetDatum(&updated_job->fd.schedule_interval)));
-		ts_bgw_job_stat_update_next_start(updated_job, next_start);
+		if (stat != NULL)
+		{
+			next_start = DatumGetTimestampTz(
+				DirectFunctionCall2(timestamptz_pl_interval,
+									TimestampTzGetDatum(stat->fd.last_finish),
+									IntervalPGetDatum(&updated_job->fd.schedule_interval)));
+			ts_bgw_job_stat_update_next_start(updated_job, next_start);
+		}
 		fd->schedule_interval = updated_job->fd.schedule_interval;
 	}
 	fd->max_runtime = updated_job->fd.max_runtime;

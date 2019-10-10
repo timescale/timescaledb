@@ -39,11 +39,13 @@ REVOKE EXECUTE ON FUNCTION get_constant_no_perms() FROM PUBLIC;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 
+CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
+AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+
 -- Remove any default jobs, e.g., telemetry
 SELECT _timescaledb_internal.stop_background_workers();
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
-SELECT _timescaledb_internal.start_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -112,19 +114,95 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start, last_finish, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
+--clear log for next run of scheduler.
+TRUNCATE public.bgw_log;
+
+CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+	num_runs INTEGER;
+	message TEXT;
+BEGIN
+	select format('[TESTING] Wait until %%, started at %s', started_at) into message;
+	FOR i in 1..spins
+	LOOP
+	SELECT COUNT(*) from bgw_log where msg LIKE message INTO num_runs;
+	if (num_runs > 0) THEN
+		RETURN true;
+	ELSE
+        RAISE WARNING 'waiting';
+		PERFORM pg_sleep(0.1);
+	END IF;
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
+CREATE FUNCTION wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+	num_runs INTEGER;
+BEGIN
+	FOR i in 1..spins
+	LOOP
+	SELECT total_successes FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO num_runs;
+	if (num_runs = expected_runs) THEN
+		RETURN true;
+    ELSEIF (num_runs > expected_runs) THEN
+        RAISE 'num_runs > expected';
+	ELSE
+		PERFORM pg_sleep(0.1);
+	END IF;
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
+--make sure there is 1 job to start with
+SELECT wait_for_job_to_run(:job_id, 1);
+
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
+
+--start the scheduler on 0 time
+SELECT ts_bgw_params_reset_time(0, true);
+SELECT ts_bgw_db_scheduler_test_run(extract(epoch from interval '24 hour')::int * 1000, 0);
+SELECT wait_for_timer_to_run(0);
+
+--advance to 12:00 so that it runs one more time; now we know the
+--scheduler has loaded up the job with the old schedule_interval
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
+SELECT wait_for_job_to_run(:job_id, 2);
+
+--advance clock 1us to make the scheduler realize the job is done
+SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+1, true);
+
 --alter the refresh interval and check if next_scheduled_run is altered
-ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1h');
-SELECT view_name, 
-case when next_scheduled_run - now() > '59 min'::interval 
-      and  next_scheduled_run - now() < '60 min'::interval then 'Success'
-     else 'Fail'
-end 
- from 
-timescaledb_information.continuous_aggregate_stats;
+ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1m');
+SELECT job_id, next_start- last_finish as until_next, total_runs
+FROM _timescaledb_internal.bgw_job_stat
+WHERE job_id=:job_id;;
+
+--advance to 12:02, job should have run at 12:01
+SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute')::bigint * 1000000), true);
+SELECT wait_for_job_to_run(:job_id, 3);
+
+--next run in 1 minute
+SELECT job_id, next_start-last_finish as until_next, total_runs
+FROM _timescaledb_internal.bgw_job_stat
+WHERE job_id=:job_id;
+
+--advance clock to quit scheduler
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
+select ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+TRUNCATE public.bgw_log;
 
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
