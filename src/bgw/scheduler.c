@@ -425,6 +425,10 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 			cur_sjob->job = new_sjob->job;
 			*new_sjob = *cur_sjob;
 
+			/* reload the scheduling information from the job_stats */
+			if (cur_sjob->state == JOB_STATE_SCHEDULED)
+				scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
+
 			cur_ptr = lnext(cur_ptr);
 			new_ptr = lnext(new_ptr);
 		}
