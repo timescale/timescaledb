@@ -134,7 +134,6 @@ BEGIN
 	if (num_runs > 0) THEN
 		RETURN true;
 	ELSE
-        RAISE WARNING 'waiting';
 		PERFORM pg_sleep(0.1);
 	END IF;
 	END LOOP;
