@@ -173,7 +173,6 @@ BEGIN
 	if (num_runs > 0) THEN
 		RETURN true;
 	ELSE
-        RAISE WARNING 'waiting';
 		PERFORM pg_sleep(0.1);
 	END IF;
 	END LOOP;
@@ -226,7 +225,6 @@ SELECT ts_bgw_db_scheduler_test_run(extract(epoch from interval '24 hour')::int 
 (1 row)
 
 SELECT wait_for_timer_to_run(0);
-WARNING:  waiting
  wait_for_timer_to_run 
 -----------------------
  t
