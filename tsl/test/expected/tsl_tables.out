@@ -106,8 +106,8 @@ select add_reorder_policy('test_table2', 'test_table2_time_idx');
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
- 1001 | Reorder Background Job | reorder  | @ 12 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
+ 1001 | Reorder Background Job | reorder  | @ 12 hours        | @ 0         |          -1 | @ 5 mins
 (2 rows)
 
 DROP TABLE test_table2;
@@ -115,7 +115,7 @@ DROP TABLE test_table2;
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
@@ -497,8 +497,8 @@ select * from _timescaledb_config.bgw_job;
   id  |      application_name      |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period 
 ------+----------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------
     1 | Telemetry Reporter         | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour
- 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 12 hours
- 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 1 day
+ 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins
+ 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 5 mins
 (3 rows)
 
 DROP TABLE test_table;
@@ -569,8 +569,8 @@ select add_drop_chunks_policy('test_table2', INTERVAL '1 days');
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1009 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
- 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1009 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins
+ 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins
 (2 rows)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -585,7 +585,7 @@ DROP TABLE test_table_int;
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -664,7 +664,7 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 select * from _timescaledb_config.bgw_job where job_type='reorder';
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
@@ -680,7 +680,7 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 select * from _timescaledb_config.bgw_job where job_type='reorder';
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 -- Dropping the hypertable should drop the chunk, which should drop the reorder policy
@@ -726,8 +726,8 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
   id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period 
 ------+----------------------------+-------------+-------------------+-------------+-------------+--------------
- 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 1 day
- 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 12 hours
+ 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 5 mins
+ 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
@@ -746,7 +746,7 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1012 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1012 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 select remove_reorder_policy('test_table');
@@ -771,14 +771,14 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1014 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1014 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 -- No change
 select * from alter_job_schedule(:job_id);
  job_id | schedule_interval | max_runtime | max_retries | retry_period | next_start 
 --------+-------------------+-------------+-------------+--------------+------------
-   1014 | @ 84 hours        | @ 0         |          -1 | @ 1 day      | -infinity
+   1014 | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | -infinity
 (1 row)
 
 -- Changes expected

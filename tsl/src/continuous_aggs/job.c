@@ -15,24 +15,10 @@
 
 /* DEFAULT_SCHEDULE_INTERVAL 12 hours */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(12),                                       \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("12 hours"), InvalidOid, -1))
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 /* Right now, there is an infinite number of retries for continuous aggregate jobs */
 #define DEFAULT_MAX_RETRIES -1
 
