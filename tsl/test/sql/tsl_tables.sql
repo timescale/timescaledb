@@ -309,6 +309,37 @@ select * from alter_job_schedule(:job_id, max_retries => 20);
 select * from alter_job_schedule(:job_id, max_runtime => NULL);
 select * from alter_job_schedule(:job_id, max_retries => NULL);
 
+--change schedule_interval when bgw_job_stat does not exist
+select * from alter_job_schedule(:job_id, schedule_interval=>'1 min');
+select count(*) = 0 from _timescaledb_internal.bgw_job_stat where job_id = :job_id;
+--set next_start when bgw_job_stat does not exist
+select * from alter_job_schedule(:job_id, next_start=>'2001-01-01 01:01:01');
+--change schedule_interval when no last_finish set
+select * from alter_job_schedule(:job_id, schedule_interval=>'10 min');
+--next_start overrides any schedule_interval changes
+select * from alter_job_schedule(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
+
+--set the last_finish manually
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_internal.bgw_job_stat SET last_finish = '2003-01-01:01:01:01' WHERE job_id = :job_id;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+--not changing the interval doesn't change the next_start
+select * from alter_job_schedule(:job_id, schedule_interval=>'20 min');
+--changing the interval changes next_start
+select * from alter_job_schedule(:job_id, schedule_interval=>'30 min');
+--explicit next start overrides.
+select * from alter_job_schedule(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
+--test pausing
+select * from alter_job_schedule(:job_id, next_start=>'infinity');
+--test that you can use now() to unpause
+select next_start = now() from alter_job_schedule(:job_id, next_start=>now());
+
+\set ON_ERROR_STOP 0
+-- negative infinity disallowed (used as special value)
+select * from alter_job_schedule(:job_id, next_start=>'-infinity');
+\set ON_ERROR_STOP 1
+
 -- Check if_exists boolean works correctly
 select * from alter_job_schedule(1234, if_exists => TRUE);
 

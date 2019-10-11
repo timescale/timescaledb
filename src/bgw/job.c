@@ -771,7 +771,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 				DirectFunctionCall2(timestamptz_pl_interval,
 									TimestampTzGetDatum(stat->fd.last_finish),
 									IntervalPGetDatum(&updated_job->fd.schedule_interval)));
-			ts_bgw_job_stat_update_next_start(updated_job, next_start);
+			/* allow DT_NOBEGIN for next_start here through allow_unset=true in the case that
+			 * last_finish is DT_NOBEGIN,
+			 * This means the value is counted as unset which is what we want */
+			ts_bgw_job_stat_update_next_start(updated_job, next_start, true);
 		}
 		fd->schedule_interval = updated_job->fd.schedule_interval;
 	}

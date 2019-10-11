@@ -36,7 +36,7 @@
 #include "drop_chunks_api.h"
 #include "interval.h"
 
-#define ALTER_JOB_SCHEDULE_NUM_COLS 5
+#define ALTER_JOB_SCHEDULE_NUM_COLS 6
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
 static void
@@ -289,16 +289,15 @@ Datum
 bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 {
 	BgwJob *job;
+	BgwJobStat *stat;
 	TupleDesc tupdesc;
 	Datum values[ALTER_JOB_SCHEDULE_NUM_COLS];
 	bool nulls[ALTER_JOB_SCHEDULE_NUM_COLS] = { false };
 	HeapTuple tuple;
+	TimestampTz next_start;
 
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(5);
-
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
 
 	/* First get the job */
 	job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
@@ -318,6 +317,10 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
 	}
 
+	if (bgw_policy_job_requires_enterprise_license(job))
+		license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
+
 	ts_bgw_job_permission_check(job);
 
 	if (!PG_ARGISNULL(1))
@@ -331,6 +334,9 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_update_by_id(job_id, job);
 
+	if (!PG_ARGISNULL(6))
+		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(6));
+
 	/* Now look up the job and return it */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		ereport(ERROR,
@@ -338,12 +344,19 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
+	stat = ts_bgw_job_stat_find(job_id);
+	if (stat != NULL)
+		next_start = stat->fd.next_start;
+	else
+		next_start = DT_NOBEGIN;
+
 	tupdesc = BlessTupleDesc(tupdesc);
 	values[0] = Int32GetDatum(job->fd.id);
 	values[1] = IntervalPGetDatum(&job->fd.schedule_interval);
 	values[2] = IntervalPGetDatum(&job->fd.max_runtime);
 	values[3] = Int32GetDatum(job->fd.max_retries);
 	values[4] = IntervalPGetDatum(&job->fd.retry_period);
+	values[5] = TimestampTzGetDatum(next_start);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);
