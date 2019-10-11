@@ -888,6 +888,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 	int i;
 	Datum value;
 	bool isnull;
+	bool modified = false;
 
 	foreach_column(column.base, i, state)
 	{
@@ -899,6 +900,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 				{
 					state->subslot->tts_isnull[i] = false;
 					state->subslot->tts_values[i] = column.locf->value;
+					modified = true;
 				}
 				else
 					gapfill_locf_tuple_returned(column.locf, value, isnull);
@@ -913,6 +915,27 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			default:
 				break;
 		}
+	}
+
+	/*
+	 * If we modified any values we need to make postgres treat this as virtual tuple
+	 * by removing references to the original tuple.
+	 */
+	if (modified)
+	{
+		if (state->subslot->tts_shouldFree)
+		{
+			heap_freetuple(state->subslot->tts_tuple);
+			state->subslot->tts_shouldFree = false;
+		}
+		state->subslot->tts_tuple = NULL;
+
+		if (state->subslot->tts_shouldFreeMin)
+		{
+			heap_free_minimal_tuple(state->subslot->tts_mintuple);
+			state->subslot->tts_shouldFreeMin = false;
+		}
+		state->subslot->tts_mintuple = NULL;
 	}
 
 	return state->subslot;
