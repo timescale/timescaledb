@@ -72,7 +72,7 @@ select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_i
 select * from _timescaledb_config.bgw_job where job_type IN ('reorder');
   id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins
 (1 row)
 
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;

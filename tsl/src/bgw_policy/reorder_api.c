@@ -32,36 +32,15 @@
  * the default is 4 days, which is approximately 1/2 of the default chunk size, 7 days.
  */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(4),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("4 days"), InvalidOid, -1))
 /* Default max runtime for a reorder job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 /* Right now, there is an infinite number of retries for reorder jobs */
 #define DEFAULT_MAX_RETRIES -1
-/* Default retry period for reorder_jobs is currently 1 day */
+/* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(1),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
 
 static void
 check_valid_index(Hypertable *ht, Name index_name)

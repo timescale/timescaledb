@@ -26,36 +26,15 @@
 
 /* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(1),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1))
 /* Default max runtime for a drop_chunks job should not be very long. Right now set to 5 minutes */
 #define DEFAULT_MAX_RUNTIME                                                                        \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(5),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
 /* Right now, there is an infinite number of retries for drop_chunks jobs */
 #define DEFAULT_MAX_RETRIES -1
-/* Default retry period for drop_chunks_jobs is currently 12 hours */
+/* Default retry period for drop_chunks_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
-	DatumGetIntervalP(DirectFunctionCall7(make_interval,                                           \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(0),                                        \
-										  Int32GetDatum(12),                                       \
-										  Int32GetDatum(0),                                        \
-										  Float8GetDatum(0)))
+	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
 
 Datum
 drop_chunks_add_policy(PG_FUNCTION_ARGS)
