@@ -525,6 +525,13 @@ SELECT
 FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
 GROUP BY 1 ORDER BY 1;
 
+-- test locf with NULLs in resultset and treat_null_as_missing with resort
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=true) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1 DESC;
+
 -- test locf with constants
 SELECT
   time_bucket_gapfill(1,time,0,5),
