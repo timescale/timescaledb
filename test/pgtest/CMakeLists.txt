@@ -29,6 +29,7 @@ set(PG_IGNORE_TESTS
   opr_sanity
   sanity_check
   foreign_data
+  security_label
 )
 
 # Modify the test schedule to ignore some tests

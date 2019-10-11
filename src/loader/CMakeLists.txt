@@ -7,6 +7,10 @@ set(SOURCES
   lwlocks.c
 )
 
+if (PG_VERSION_SUPPORTS_MULTINODE)
+  list(APPEND SOURCES seclabel.c)
+endif()
+
 set(TEST_SOURCES
   ${PROJECT_SOURCE_DIR}/test/src/symbol_conflict.c
 )

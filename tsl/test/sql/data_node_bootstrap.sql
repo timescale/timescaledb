@@ -142,3 +142,54 @@ SELECT test_database_name(U&'\0441\043B\043E\043D');
 
 DROP DATABASE "Unusual Name";
 DROP DATABASE U&"\0441\043B\043E\043D";
+
+-- Test Access Node DATABASE DROP NOTICE message
+--
+
+-- Make sure the NOTICE message not shown on a DROP DATABASE error
+\set ON_ERROR_STOP 0
+DROP DATABASE :TEST_DBNAME;
+\set ON_ERROR_STOP 1
+
+CREATE DATABASE drop_db_test;
+\c drop_db_test :ROLE_CLUSTER_SUPERUSER;
+
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+SET client_min_messages TO NOTICE;
+
+-- No security label exists
+SELECT label FROM pg_shseclabel
+	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+	      provider = 'timescaledb';
+
+SELECT * FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
+
+-- Make sure security label is created
+SELECT substr(label, 0, 10) || ':uuid'
+	FROM pg_shseclabel
+	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+	      provider = 'timescaledb';
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+-- Check that timescaledb security label cannot be used directly
+\set ON_ERROR_STOP 0
+SECURITY LABEL FOR timescaledb
+	ON DATABASE drop_db_test
+	IS 'dist_uuid:00000000-0000-0000-0000-00000000000';
+\set ON_ERROR_STOP 1
+
+-- Check that security label functionality is working
+CREATE TABLE seclabel_test(id int);
+SECURITY LABEL ON TABLE seclabel_test IS 'label';
+DROP TABLE seclabel_test;
+
+-- This will generate NOTICE message
+DROP DATABASE drop_db_test;
+DROP DATABASE drop_db_test_dn;
+
+-- Ensure label is deleted after the DROP
+SELECT label FROM pg_shseclabel
+	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+	      provider = 'timescaledb';

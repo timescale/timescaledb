@@ -19,6 +19,7 @@
 #include <miscadmin.h>
 #include "compat.h"
 #include <utils/builtins.h>
+#include "loader/seclabel.h"
 
 /*
  * When added to a distributed database, this key in the metadata table will be set to match the
@@ -61,10 +62,32 @@ dist_util_membership(void)
 		return DIST_MEMBER_DATA_NODE;
 }
 
+static void
+seclabel_set_dist_uuid(Oid dbid, Datum dist_uuid)
+{
+	ObjectAddress dbobj;
+	Datum uuid_string = DirectFunctionCall1(uuid_out, dist_uuid);
+	const char *label = psprintf("%s%c%s",
+								 SECLABEL_DIST_TAG,
+								 SECLABEL_DIST_TAG_SEPARATOR,
+								 DatumGetCString(uuid_string));
+
+	ObjectAddressSet(dbobj, DatabaseRelationId, dbid);
+	SetSecurityLabel(&dbobj, SECLABEL_DIST_PROVIDER, label);
+}
+
 void
 dist_util_set_as_frontend()
 {
 	dist_util_set_id(ts_telemetry_metadata_get_uuid());
+
+	/*
+	 * Set security label to mark current database as the access node database.
+	 *
+	 * Presence of this label is used as a flag to send NOTICE messsage
+	 * after a DROP DATABASE operation completion.
+	 */
+	seclabel_set_dist_uuid(MyDatabaseId, local_get_dist_id(NULL));
 }
 
 bool

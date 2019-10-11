@@ -45,8 +45,13 @@ TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS:-pass}
 
 shift
 
+# Drop test database and make it less verbose in case of dropping a
+# distributed database
 function cleanup {
-  ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE \"${TEST_DBNAME}\";" >/dev/null
+    cat <<EOF | ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none >/dev/null 2>&1
+    SET client_min_messages=ERROR;
+    DROP DATABASE "${TEST_DBNAME}";
+EOF
 }
 
 trap cleanup EXIT

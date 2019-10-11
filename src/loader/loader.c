@@ -14,6 +14,7 @@
 #include <miscadmin.h>
 #include <parser/analyze.h>
 #include <storage/ipc.h>
+#include <tcop/utility.h>
 #include "../compat-msvc-exit.h"
 #include <utils/guc.h>
 #include <utils/inval.h>
@@ -23,6 +24,7 @@
 #include <access/parallel.h>
 
 #include "extension_utils.c"
+#include "config.h"
 #include "export.h"
 #include "compat.h"
 #include "extension_constants.h"
@@ -33,6 +35,9 @@
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
 #include "loader/lwlocks.h"
+#if PG_VERSION_SUPPORTS_MULTINODE
+#include "loader/seclabel.h"
+#endif
 
 /*
  * Loading process:
@@ -112,6 +117,10 @@ static bool guc_disable_load = false;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+#endif
 
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
@@ -409,12 +418,16 @@ post_analyze_hook(ParseState *pstate, Query *query)
 				break;
 			}
 			case T_DropdbStmt:
+			{
+				DropdbStmt *stmt = (DropdbStmt *) query->utilityStmt;
+
 				/*
 				 * If we drop a database, we need to intercept and stop any of our
 				 * schedulers that might be connected to said db.
 				 */
-				stop_workers_on_db_drop((DropdbStmt *) query->utilityStmt);
+				stop_workers_on_db_drop(stmt);
 				break;
+			}
 			case T_DropStmt:
 				if (drop_statement_drops_extension((DropStmt *) query->utilityStmt))
 
@@ -470,6 +483,62 @@ post_analyze_hook(ParseState *pstate, Query *query)
 	}
 }
 
+#if PG_VERSION_SUPPORTS_MULTINODE
+
+static void
+loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
+							ProcessUtilityContext context, ParamListInfo params,
+							QueryEnvironment *queryEnv, DestReceiver *dest, char *completion_tag)
+{
+	bool is_distributed_database = false;
+	char *dist_uuid = NULL;
+	ProcessUtility_hook_type process_utility;
+
+	/* Check if we are dropping a distributed database and get its uuid */
+	switch (nodeTag(pstmt->utilityStmt))
+	{
+		case T_DropdbStmt:
+		{
+			DropdbStmt *stmt = castNode(DropdbStmt, pstmt->utilityStmt);
+			Oid dboid = get_database_oid(stmt->dbname, stmt->missing_ok);
+
+			if (OidIsValid(dboid))
+				is_distributed_database = ts_seclabel_get_dist_uuid(dboid, &dist_uuid);
+			break;
+		}
+		case T_SecLabelStmt:
+		{
+			SecLabelStmt *stmt = castNode(SecLabelStmt, pstmt->utilityStmt);
+
+			if (stmt->provider && strcmp(stmt->provider, SECLABEL_DIST_PROVIDER) == 0)
+				ereport(ERROR, (errmsg("TimescaleDB label is for internal use only")));
+			break;
+		}
+		default:
+			break;
+	}
+
+	/* Process the command */
+	if (prev_ProcessUtility_hook)
+		process_utility = prev_ProcessUtility_hook;
+	else
+		process_utility = standard_ProcessUtility;
+
+	process_utility(pstmt, query_string, context, params, queryEnv, dest, completion_tag);
+
+	/*
+	 * Show a NOTICE warning message in case of dropping a
+	 * distributed database
+	 */
+	if (is_distributed_database)
+		ereport(NOTICE,
+				(errmsg("TimescaleDB distributed database might require "
+						"additional cleanup on the data nodes"),
+				 errdetail("Distributed database UUID is \"%s\".", dist_uuid)));
+}
+
+#endif /* PG_VERSION_SUPPORTS_MULTINODE */
+
 static void
 timescale_shmem_startup_hook(void)
 {
@@ -505,6 +574,9 @@ _PG_init(void)
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
+#if PG_VERSION_SUPPORTS_MULTINODE
+	ts_seclabel_init();
+#endif
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,
@@ -534,6 +606,12 @@ _PG_init(void)
 
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescale_shmem_startup_hook;
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+	/* register utility hook to handle a distributed database drop */
+	prev_ProcessUtility_hook = ProcessUtility_hook;
+	ProcessUtility_hook = loader_process_utility_hook;
+#endif
 }
 
 void
@@ -541,6 +619,10 @@ _PG_fini(void)
 {
 	post_parse_analyze_hook = prev_post_parse_analyze_hook;
 	shmem_startup_hook = prev_shmem_startup_hook;
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+	ProcessUtility_hook = prev_ProcessUtility_hook;
+#endif
 	/* No way to unregister relcache callback */
 }
 
