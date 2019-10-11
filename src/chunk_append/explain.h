@@ -10,6 +10,6 @@
 #include <commands/explain.h>
 #include <nodes/execnodes.h>
 
-extern void chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es);
+void chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
 #endif /* TIMESCALEDB_CHUNK_APPEND_EXPLAIN_H */
