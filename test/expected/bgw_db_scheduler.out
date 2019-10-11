@@ -95,8 +95,8 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 
 -- empty
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
- job_id | last_start | last_finish | next_start | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+------------+-------------+------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
+ job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
+--------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
 (0 rows)
 
 -- empty
@@ -266,6 +266,12 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
       1 |         0 | test_job_2       | Error job 2
 (3 rows)
+
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+         last_finish          | last_successful_finish | last_run_success 
+------------------------------+------------------------+------------------
+ Fri Dec 31 16:00:00 1999 PST | -infinity              | f
+(1 row)
 
 --Scheduler runs the job again, sees another error, and increases the wait time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
@@ -1125,9 +1131,9 @@ SELECT wait_for_job_1_to_run(2);
 (1 row)
 
 select * from _timescaledb_internal.bgw_job_stat;
- job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1026 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+ job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
+--------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
+   1026 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
@@ -1248,9 +1254,9 @@ SELECT * FROM sorted_bgw_log;
 (16 rows)
 
 select * from _timescaledb_internal.bgw_job_stat;
- job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1027 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+ job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
+--------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
+   1027 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);

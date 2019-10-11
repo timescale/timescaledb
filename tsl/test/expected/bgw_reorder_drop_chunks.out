@@ -70,8 +70,8 @@ SELECT * FROM timescaledb_information.reorder_policies;
 (0 rows)
 
 SELECT * FROM timescaledb_information.policy_stats;
- hypertable | job_id | job_type | last_run_success | last_finish | last_start | next_start | total_runs | total_failures 
-------------+--------+----------+------------------+-------------+------------+------------+------------+----------------
+ hypertable | job_id | job_type | last_run_success | last_finish | last_successful_finish | last_start | next_start | total_runs | total_failures 
+------------+--------+----------+------------------+-------------+------------------------+------------+------------+------------+----------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -249,9 +249,9 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
 SELECT *
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:reorder_job_id;
- job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST | t                |          3 | @ 0            |               3 |              0 |             0 |                    0 |                   0
+ job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
+--------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
+   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          3 | @ 0            |               3 |              0 |             0 |                    0 |                   0
 (1 row)
 
 -- three chunks clustered
@@ -293,9 +293,9 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
 SELECT *
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:reorder_job_id;
- job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
---------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST | t                |          3 | @ 0            |               3 |              0 |             0 |                    0 |                   0
+ job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
+--------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
+   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          3 | @ 0            |               3 |              0 |             0 |                    0 |                   0
 (1 row)
 
 -- still have 3 chunks clustered
@@ -317,9 +317,9 @@ SELECT * FROM timescaledb_information.reorder_policies;
 (1 row)
 
 SELECT * FROM timescaledb_information.policy_stats;
-     hypertable     | job_id | job_type | last_run_success |           last_finish           |           last_start            |           next_start            | total_runs | total_failures 
---------------------+--------+----------+------------------+---------------------------------+---------------------------------+---------------------------------+------------+----------------
- test_reorder_table |   1000 | reorder  | t                | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST |          3 |              0
+     hypertable     | job_id | job_type | last_run_success |           last_finish           |     last_successful_finish      |           last_start            |           next_start            | total_runs | total_failures 
+--------------------+--------+----------+------------------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------+----------------
+ test_reorder_table |   1000 | reorder  | t                | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST |          3 |              0
 (1 row)
 
 -- test deleting the policy
@@ -612,9 +612,9 @@ SELECT * FROM timescaledb_information.drop_chunks_policies;
 (1 row)
 
 SELECT * FROM timescaledb_information.policy_stats;
-       hypertable       | job_id |  job_type   | last_run_success |         last_finish          |          last_start          |          next_start          | total_runs | total_failures 
-------------------------+--------+-------------+------------------+------------------------------+------------------------------+------------------------------+------------+----------------
- test_drop_chunks_table |   1001 | drop_chunks | t                | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:02 1999 PST |          2 |              0
+       hypertable       | job_id |  job_type   | last_run_success |         last_finish          |    last_successful_finish    |          last_start          |          next_start          | total_runs | total_failures 
+------------------------+--------+-------------+------------------+------------------------------+------------------------------+------------------------------+------------------------------+------------+----------------
+ test_drop_chunks_table |   1001 | drop_chunks | t                | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:02 1999 PST |          2 |              0
 (1 row)
 
 -- continuous aggregate blocks drop_chunks

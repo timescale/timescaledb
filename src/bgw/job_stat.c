@@ -255,6 +255,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	{
 		fd->total_success++;
 		fd->consecutive_failures = 0;
+		fd->last_successful_finish = fd->last_finish;
 		/* Mark the next start at the end if the job itself hasn't */
 		if (!bgw_job_stat_next_start_was_set(fd))
 			fd->next_start = calculate_next_start_on_success(fd->last_finish, result_ctx->job);
@@ -316,6 +317,8 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 			TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(next_start);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_successful_finish)] =
+		TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] =
 		Int64GetDatum((mark_start ? 1 : 0));
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] =

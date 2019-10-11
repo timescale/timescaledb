@@ -60,3 +60,50 @@ DROP TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp;
 GRANT SELECT ON _timescaledb_config.bgw_policy_drop_chunks TO PUBLIC;
 
 DROP FUNCTION IF EXISTS alter_job_schedule(INTEGER, INTERVAL, INTERVAL, INTEGER, INTERVAL, BOOL);
+
+
+--ADDS last_successful_finish column
+--Must remove from extension first
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.bgw_job_stat;
+DROP VIEW IF EXISTS timescaledb_information.policy_stats;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregate_stats;
+
+--create table and drop instead of rename so that all indexes dropped as well
+CREATE TABLE _timescaledb_internal.bgw_job_stat_tmp AS SELECT * FROM _timescaledb_internal.bgw_job_stat;
+DROP TABLE _timescaledb_internal.bgw_job_stat;
+
+CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
+    job_id                  INTEGER         PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    last_start              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_finish             TIMESTAMPTZ NOT NULL,
+    next_start              TIMESTAMPTZ NOT NULL,
+    last_successful_finish  TIMESTAMPTZ NOT NULL,
+    last_run_success        BOOL        NOT NULL,
+    total_runs              BIGINT      NOT NULL,
+    total_duration          INTERVAL    NOT NULL,
+    total_successes         BIGINT      NOT NULL,
+    total_failures          BIGINT      NOT NULL,
+    total_crashes           BIGINT      NOT NULL,
+    consecutive_failures    INT         NOT NULL,
+    consecutive_crashes     INT         NOT NULL
+);
+--The job_stat table is not dumped by pg_dump on purpose because (see tables.sql for details)
+
+INSERT INTO _timescaledb_internal.bgw_job_stat
+    SELECT job_id,
+        last_start,
+        last_finish,
+        next_start,
+        CASE WHEN last_run_success THEN last_finish ELSE '-infinity'::timestamptz END as last_successful_finish,
+        last_run_success,
+        total_runs,
+        total_duration,
+        total_successes,
+        total_failures,
+        total_crashes,
+        consecutive_failures,
+        consecutive_crashes
+    FROM _timescaledb_internal.bgw_job_stat_tmp;
+
+DROP TABLE _timescaledb_internal.bgw_job_stat_tmp;
+GRANT SELECT ON _timescaledb_internal.bgw_job_stat TO PUBLIC;
