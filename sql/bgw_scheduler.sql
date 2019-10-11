@@ -45,7 +45,9 @@ CREATE OR REPLACE FUNCTION alter_job_schedule(
     max_runtime INTERVAL = NULL,
     max_retries INTEGER = NULL,
     retry_period INTERVAL = NULL,
-    if_exists BOOL = FALSE)
-RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL)
+    if_exists BOOL = FALSE,
+    next_start TIMESTAMPTZ = NULL
+)
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, next_start TIMESTAMPTZ)
 AS '@MODULE_PATHNAME@', 'ts_alter_job_schedule'
 LANGUAGE C VOLATILE;

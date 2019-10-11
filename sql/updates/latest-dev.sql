@@ -58,3 +58,5 @@ INSERT INTO _timescaledb_config.bgw_policy_drop_chunks
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
 DROP TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp;
 GRANT SELECT ON _timescaledb_config.bgw_policy_drop_chunks TO PUBLIC;
+
+DROP FUNCTION IF EXISTS alter_job_schedule(INTEGER, INTERVAL, INTERVAL, INTEGER, INTERVAL, BOOL);

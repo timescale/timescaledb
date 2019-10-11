@@ -440,9 +440,9 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
-             alter_job_schedule              
----------------------------------------------
- (1001,"@ 1 sec","@ 5 mins",-1,"@ 12 hours")
+                  alter_job_schedule                   
+-------------------------------------------------------
+ (1001,"@ 1 sec","@ 5 mins",-1,"@ 12 hours",-infinity)
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;

@@ -285,6 +285,28 @@ WHERE job_id=:job_id;
    1000 | @ 1 min    |          3
 (1 row)
 
+--change next run to be after 30s instead
+SELECT (next_start - '30s'::interval) AS "NEW_NEXT_START"
+FROM _timescaledb_internal.bgw_job_stat
+WHERE job_id=:job_id \gset
+SELECT alter_job_schedule(:job_id, next_start => :'NEW_NEXT_START');
+                         alter_job_schedule                         
+--------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min","Sat Jan 01 04:02:30 2000 PST")
+(1 row)
+
+SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+SELECT wait_for_job_to_run(:job_id, 4);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
 --advance clock to quit scheduler
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
  ts_bgw_params_reset_time 

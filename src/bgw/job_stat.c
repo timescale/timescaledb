@@ -296,7 +296,8 @@ bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 }
 
 static bool
-bgw_job_stat_insert_mark_start_relation(Relation rel, int32 bgw_job_id)
+bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
+							 TimestampTz next_start)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_bgw_job_stat];
@@ -307,21 +308,35 @@ bgw_job_stat_insert_mark_start_relation(Relation rel, int32 bgw_job_id)
 	};
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
-		TimestampGetDatum(ts_timer_get_current_timestamp());
+	if (mark_start)
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
+			TimestampGetDatum(ts_timer_get_current_timestamp());
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
+			TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(DT_NOBEGIN);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] = Int64GetDatum(1);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(next_start);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] =
+		Int64GetDatum((mark_start ? 1 : 0));
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] =
 		IntervalPGetDatum(&zero_ival);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
 
-	/* This is udone by any of the end marks */
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_run_success)] = BoolGetDatum(false);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(1);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(1);
+	if (mark_start)
+	{
+		/* This is udone by any of the end marks */
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_run_success)] = BoolGetDatum(false);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(1);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(1);
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_run_success)] = BoolGetDatum(true);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(0);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(0);
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -330,29 +345,27 @@ bgw_job_stat_insert_mark_start_relation(Relation rel, int32 bgw_job_id)
 	return true;
 }
 
-static bool
-bgw_job_stat_insert_mark_start(int32 bgw_job_id)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel;
-	bool result;
-
-	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB_STAT), RowExclusiveLock);
-	result = bgw_job_stat_insert_mark_start_relation(rel, bgw_job_id);
-	heap_close(rel, RowExclusiveLock);
-
-	return result;
-}
-
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
+	/* Use double-check locking */
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-		bgw_job_stat_insert_mark_start(bgw_job_id);
+	{
+		Relation rel =
+			heap_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
+		/* Recheck while having a self-exclusive lock */
+		if (!bgw_job_stat_scan_job_id(bgw_job_id,
+									  bgw_job_stat_tuple_mark_start,
+									  NULL,
+									  NULL,
+									  RowExclusiveLock))
+			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+		heap_close(rel, ShareRowExclusiveLock);
+	}
 }
 
 void
@@ -394,11 +407,11 @@ ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 
 /* update next_start if job stat exists */
 TSDLLEXPORT bool
-ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start)
+ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start, bool allow_unset)
 {
 	bool found = false;
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
-	if (next_start == DT_NOBEGIN)
+	if (!allow_unset && next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
 	found = bgw_job_stat_scan_job_id(job->fd.id,
@@ -407,6 +420,33 @@ ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start)
 									 &next_start,
 									 RowExclusiveLock);
 	return found;
+}
+
+TSDLLEXPORT void
+ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
+{
+	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
+	if (next_start == DT_NOBEGIN)
+		elog(ERROR, "cannot set next start to -infinity");
+
+	/* Use double-check locking */
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_set_next_start,
+								  NULL,
+								  &next_start,
+								  RowExclusiveLock))
+	{
+		Relation rel =
+			heap_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
+		/* Recheck while having a self-exclusive lock */
+		if (!bgw_job_stat_scan_job_id(bgw_job_id,
+									  bgw_job_stat_tuple_set_next_start,
+									  NULL,
+									  &next_start,
+									  RowExclusiveLock))
+			bgw_job_stat_insert_relation(rel, bgw_job_id, true, next_start);
+		heap_close(rel, ShareRowExclusiveLock);
+	}
 }
 
 bool

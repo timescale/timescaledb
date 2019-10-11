@@ -196,6 +196,15 @@ SELECT job_id, next_start-last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;
 
+--change next run to be after 30s instead
+SELECT (next_start - '30s'::interval) AS "NEW_NEXT_START"
+FROM _timescaledb_internal.bgw_job_stat
+WHERE job_id=:job_id \gset
+SELECT alter_job_schedule(:job_id, next_start => :'NEW_NEXT_START');
+
+SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);
+SELECT wait_for_job_to_run(:job_id, 4);
+
 --advance clock to quit scheduler
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
 select ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
