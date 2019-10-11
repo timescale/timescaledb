@@ -64,8 +64,8 @@ SELECT * FROM _timescaledb_config.bgw_job;
 (0 rows)
 
 SELECT * FROM timescaledb_information.policy_stats;
- hypertable | job_id | job_type | last_run_success | last_finish | last_start | next_start | total_runs | total_failures 
-------------+--------+----------+------------------+-------------+------------+------------+------------+----------------
+ hypertable | job_id | job_type | last_run_success | last_finish | last_successful_finish | last_start | next_start | total_runs | total_failures 
+------------+--------+----------+------------------+-------------+------------------------+------------+------------+------------+----------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;

@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
     last_start              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_finish             TIMESTAMPTZ NOT NULL,
     next_start              TIMESTAMPTZ NOT NULL,
+    last_successful_finish  TIMESTAMPTZ NOT NULL,
     last_run_success        BOOL        NOT NULL,
     total_runs              BIGINT      NOT NULL,
     total_duration          INTERVAL    NOT NULL,
@@ -275,7 +276,7 @@ CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx
 
 -- per cagg copy of invalidation log
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
-    materialization_id INTEGER 
+    materialization_id INTEGER
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
         ON DELETE CASCADE,
     lowest_modified_value BIGINT NOT NULL,

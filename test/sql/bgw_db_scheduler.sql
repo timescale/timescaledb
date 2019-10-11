@@ -159,6 +159,8 @@ SELECT job_id, next_start-last_finish as until_next, last_run_success, total_run
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+
 --Scheduler runs the job again, sees another error, and increases the wait time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes

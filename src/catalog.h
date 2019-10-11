@@ -552,6 +552,7 @@ enum Anum_bgw_job_stat
 	Anum_bgw_job_stat_last_start,
 	Anum_bgw_job_stat_last_finish,
 	Anum_bgw_job_stat_next_start,
+	Anum_bgw_job_stat_last_successful_finish,
 	Anum_bgw_job_stat_last_run_success,
 	Anum_bgw_job_stat_total_runs,
 	Anum_bgw_job_stat_total_duration,
@@ -571,6 +572,7 @@ typedef struct FormData_bgw_job_stat
 	TimestampTz last_start;
 	TimestampTz last_finish;
 	TimestampTz next_start;
+	TimestampTz last_successful_finish;
 	bool last_run_success;
 	int64 total_runs;
 	Interval total_duration;

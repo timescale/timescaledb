@@ -44,7 +44,7 @@ CREATE OR REPLACE VIEW timescaledb_information.reorder_policies as
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_start, js.next_start,
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
   FROM (SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_reorder
         UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks) p
@@ -115,6 +115,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     END AS invalidation_threshold,
     cagg.job_id as job_id,
     bgw_job_stat.last_start as last_run_started_at,
+    bgw_job_stat.last_successful_finish as last_successful_finish,
     CASE when bgw_job_stat.last_run_success = 't' then 'Success'
          when bgw_job_stat.last_run_success = 'f' then 'Failed'
     END AS last_run_status,
