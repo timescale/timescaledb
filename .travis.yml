@@ -83,7 +83,7 @@ jobs:
         # This runs tests on ARM32 emulation
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Regression 9.6 ARM processors"
+      name: "Regression 9.6.6 ARM processors"
       env:
         - PG_VERSION=9.6.6 CODECOV_FLAGS="-F arm"
       before_install:
@@ -159,8 +159,8 @@ jobs:
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 9.6.14"
-      env: PG_VERSION=9.6.14 CODECOV_FLAGS="-F cron -F pr"
+      name: "Regression 9.6.15"
+      env: PG_VERSION=9.6.15 CODECOV_FLAGS="-F cron -F pr"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -169,8 +169,8 @@ jobs:
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 10.9"
-      env: PG_VERSION=10.9 CODECOV_FLAGS="-F cron -F pr"
+      name: "Regression 10.10"
+      env: PG_VERSION=10.10 CODECOV_FLAGS="-F cron -F pr"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -179,14 +179,14 @@ jobs:
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 11.4"
-      env: PG_VERSION=11.4 CODECOV_FLAGS="-F cron -F pr"
+      name: "Regression 11.5"
+      env: PG_VERSION=11.5 CODECOV_FLAGS="-F cron -F pr"
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       env: PG_VERSION=9.6.6
-      name: "Update tests (versions w/o constraints support) 9.6"
+      name: "Update tests (versions w/o constraints support) 9.6.6"
       before_install:
       install:
       after_failure:
@@ -199,7 +199,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       env: PG_VERSION=9.6.6
-      name: "Update tests (versions w/ constraints support) 9.6"
+      name: "Update tests (versions w/ constraints support) 9.6.6"
       before_install:
       install:
       after_failure:
@@ -212,7 +212,7 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       stage: test
       env: PG_VERSION=10.2
-      name: "Update tests PostgreSQL 10"
+      name: "Update tests PostgreSQL 10.2"
       before_install:
       install:
       after_failure:
@@ -256,7 +256,7 @@ jobs:
     # ApacheOnly regression tests
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "ApacheOnly regression tests 11"
+      name: "ApacheOnly regression tests 11.0"
       env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     - if: (type = cron) OR (branch = prerelease_test)
@@ -272,7 +272,7 @@ jobs:
     # Release mode regression tests
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Release regression tests 11"
+      name: "Release regression tests 11.0"
       env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
