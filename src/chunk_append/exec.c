@@ -465,18 +465,19 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 	if (state->current >= 0)
 		pstate->finished[state->current] = true;
 
-	if (pstate->next_plan == NO_MATCHING_SUBPLANS)
-	{
-		/* all subplans are finished */
-		state->current = NO_MATCHING_SUBPLANS;
-		LWLockRelease(state->lock);
-		return;
-	}
-
 	if (pstate->next_plan == INVALID_SUBPLAN_INDEX)
 		next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
 	else
 		next_plan = pstate->next_plan;
+
+	if (next_plan == NO_MATCHING_SUBPLANS)
+	{
+		/* all subplans are finished */
+		pstate->next_plan = NO_MATCHING_SUBPLANS;
+		state->current = NO_MATCHING_SUBPLANS;
+		LWLockRelease(state->lock);
+		return;
+	}
 
 	start = next_plan;
 
@@ -489,9 +490,18 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 		if (next_plan < 0)
 			next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
 
-		if (next_plan == start)
+		if (next_plan == start || next_plan < 0)
 		{
-			/* back at start of search so all subplans are finished */
+			/*
+			 * back at start of search so all subplans are finished
+			 *
+			 * next_plan should not be < 0 because this means there
+			 * are no valid subplans and then the function would
+			 * have returned at the check before the while loop but
+			 * static analysis marked this so might as well include
+			 * that in the check
+			 */
+			Assert(next_plan >= 0);
 			pstate->next_plan = NO_MATCHING_SUBPLANS;
 			state->current = NO_MATCHING_SUBPLANS;
 			LWLockRelease(state->lock);
