@@ -41,7 +41,6 @@ ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 -- Negative test cases ---
 
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
-ALTER TABLE foo2 set (timescaledb.compress='f');
 
 
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
@@ -127,6 +126,8 @@ select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
+ALTER TABLE foo set (timescaledb.compress='f');
+ALTER TABLE foo reset (timescaledb.compress);
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;

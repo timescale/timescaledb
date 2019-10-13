@@ -2032,55 +2032,22 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-static ScanTupleResult
-hypertable_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
-{
-	bool nulls[Natts_hypertable];
-	Datum values[Natts_hypertable];
-	bool repl[Natts_hypertable] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	HeapTuple tuple;
-	int32 compressed_hypertable_id = *((int32 *) data);
-
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-
-	Assert(DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]) == false);
-	nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = false;
-	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
-		Int32GetDatum(compressed_hypertable_id);
-
-	repl[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
-	ts_catalog_restore_user(&sec_ctx);
-
-	return SCAN_DONE;
-}
 
 /*Assume permissions are already checked */
 bool
 ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
 {
-	int32 compress_id;
-	ScanKeyData scankey[1];
-	ScanKeyInit(&scankey[0],
-				Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(ht->fd.id));
-	compress_id = compressed_hypertable_id;
-	return hypertable_scan_limit_internal(scankey,
-										  1,
-										  HYPERTABLE_ID_INDEX,
-										  hypertable_set_compressed_id_in_tuple,
-										  &compress_id,
-										  1,
-										  RowExclusiveLock,
-										  false,
-										  CurrentMemoryContext) > 0;
+	Assert(!ht->fd.compressed);
+	ht->fd.compressed_hypertable_id = compressed_hypertable_id;
+	return ts_hypertable_update(ht) > 0;
+}
+
+bool
+ts_hypertable_unset_compressed_id(Hypertable *ht)
+{
+	Assert(!ht->fd.compressed);
+	ht->fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+	return ts_hypertable_update(ht) > 0;
 }
 
 /* create a compressed hypertable

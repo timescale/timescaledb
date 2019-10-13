@@ -79,8 +79,6 @@ NOTICE:  adding index _compressed_hypertable_10_c__ts_meta_sequence_num_idx ON _
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
 ERROR:  need to specify compress_orderby if it was previously set
-ALTER TABLE foo2 set (timescaledb.compress='f');
-ERROR:  disabling compression is not yet supported
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -229,6 +227,10 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ERROR:  chunks can be compressed only if compression property is set on the hypertable
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
 ERROR:  cannot change compression options as compressed chunks already exist for this table
+ALTER TABLE foo set (timescaledb.compress='f');
+ERROR:  cannot change compression options as compressed chunks already exist for this table
+ALTER TABLE foo reset (timescaledb.compress);
+ERROR:  compression options cannot be reset
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
 ERROR:  missing compressed hypertable

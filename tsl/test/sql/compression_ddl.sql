@@ -332,6 +332,49 @@ SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) W
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_HYPER_NAME'::regclass;
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_CHUNK_NAME'::regclass;
 
+--
+-- turn off compression
+--
+
+SELECT COUNT(*) AS count_compressed
+FROM
+(
+SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NULL ORDER BY chunk.id
+)
+AS sub;
+
+ALTER table test1 set (timescaledb.compress='f');
+
+--only one hypertable left
+SELECT count(*) = 1 FROM _timescaledb_catalog.hypertable hypertable;
+SELECT compressed_hypertable_id IS NULL FROM _timescaledb_catalog.hypertable hypertable WHERE hypertable.table_name like 'test1' ;
+--no hypertable compression entries left
+SELECT count(*) = 0 FROM _timescaledb_catalog.hypertable_compression;
+--make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
+SELECT count(*) as orphaned_compression_chunk_size
+FROM _timescaledb_catalog.compression_chunk_size size
+LEFT JOIN _timescaledb_catalog.chunk chunk ON (chunk.id = size.chunk_id)
+WHERE chunk.id IS NULL;
+
+
+--can turn compression back on
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
+
+SELECT COUNT(*) AS count_compressed
+FROM
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+)
+AS sub;
+
+
+
 DROP TABLE test1;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
