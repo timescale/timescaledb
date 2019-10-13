@@ -497,12 +497,12 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 (1 row)
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
  job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
+   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
 (1 row)
 
 -- chunks 8 and 10 dropped
@@ -536,12 +536,12 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 (1 row)
 
 -- still only 1 run
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
  job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
+   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
 (1 row)
 
 -- same chunks
@@ -588,12 +588,12 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 (1 row)
 
 -- 2 runs
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
  job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:02 1999 PST | Fri Dec 31 16:00:01 1999 PST | t                |          2 |               2 |              0 |             0
+   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          2 |               2 |              0 |             0
 (1 row)
 
 SELECT show_chunks('test_drop_chunks_table');
@@ -660,12 +660,12 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 (1 row)
 
 -- should now have a failure
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
- job_id |             next_start              |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+-------------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:14.971875 1999 PST | Fri Dec 31 16:00:10.05 1999 PST | f                |          3 |               2 |              1 |             0
+ job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | f                |          3 |               2 |              1 |             0
 (1 row)
 
 SELECT show_chunks('test_drop_chunks_table');

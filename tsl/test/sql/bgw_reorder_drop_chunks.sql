@@ -245,7 +245,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
 
@@ -260,7 +260,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
 -- still only 1 run
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
 
@@ -279,7 +279,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
 -- 2 runs
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
 
@@ -307,7 +307,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
 -- should now have a failure
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:drop_chunks_job_id;
 
