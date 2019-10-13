@@ -270,7 +270,7 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 
 ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler TO 'on';
 SELECT pg_reload_conf();
-SELECT pg_sleep(0.001);
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
@@ -279,7 +279,7 @@ SELECT * FROM sorted_bgw_log;
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
-SELECT pg_sleep(0.001);
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);

@@ -436,7 +436,12 @@ post_analyze_hook(ParseState *pstate, Query *query)
 					Oid db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
 
 					if (OidIsValid(db_oid))
-						ts_bgw_message_send_and_wait(RESTART, db_oid);
+					{
+						ts_bgw_message_send_and_wait(STOP, db_oid);
+						ereport(WARNING,
+								(errmsg("You need to manually restart any running "
+										"background workers after this command.")));
+					}
 				}
 				break;
 			default:
