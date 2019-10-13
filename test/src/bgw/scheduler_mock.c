@@ -176,8 +176,11 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 
 	worker_handle = start_test_scheduler(params);
 
-	Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(worker_handle, &pid));
-	Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(worker_handle));
+	if (worker_handle != NULL)
+	{
+		Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(worker_handle, &pid));
+		Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(worker_handle));
+	}
 
 	PG_RETURN_VOID();
 }
@@ -203,7 +206,10 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 extern Datum
 ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {
-	Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(current_handle));
+	if (current_handle != NULL)
+	{
+		Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(current_handle));
+	}
 	PG_RETURN_VOID();
 }
 

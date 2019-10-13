@@ -529,6 +529,7 @@ SELECT wait_for_bgw_scheduler('db_rename_test');
 (1 row)
 
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
+WARNING:  You need to manually restart any running background workers after this command.
 DROP DATABASE db_rename_test2;
 -- test create database with timescaledb database as template
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');

@@ -607,12 +607,7 @@ SELECT pg_reload_conf();
  t
 (1 row)
 
-SELECT pg_sleep(0.001);
- pg_sleep 
-----------
- 
-(1 row)
-
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
  timescaledb.shutdown_bgw_scheduler 
 ------------------------------------
@@ -638,12 +633,7 @@ SELECT pg_reload_conf();
  t
 (1 row)
 
-SELECT pg_sleep(0.001);
- pg_sleep 
-----------
- 
-(1 row)
-
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.shutdown_bgw_scheduler;
  timescaledb.shutdown_bgw_scheduler 
 ------------------------------------
