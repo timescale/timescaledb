@@ -811,12 +811,16 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	if (!compress_enable)
 	{
-		if (compression_already_enabled)
+		if (!with_clause_options[CompressOrderBy].is_default ||
+			!with_clause_options[CompressSegmentBy].is_default)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("disabling compression is not yet supported")));
-		/* compression is not enabled, so just return */
-		return false;
+					 errmsg(
+						 "cannot set additional compression options when disabling compression")));
+
+		if (!compression_already_enabled)
+			/* compression is not enabled, so just return */
+			return false;
 	}
 
 	if (compressed_chunks_exist)
@@ -828,7 +832,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	/* Require both order by and segment by when altering if they were previously set because
 	 * otherwise it's not clear what the default value means: does it mean leave as-is or is it an
 	 * empty list. */
-	if (compression_already_enabled)
+	if (compress_enable && compression_already_enabled)
 	{
 		List *info = ts_hypertable_compression_get(ht->fd.id);
 		ListCell *lc;
@@ -869,7 +873,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression cannot be used on table with row security")));
 
-	if (compression_already_enabled)
+	if (compression_already_enabled || !compress_enable)
 	{
 		Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		if (compressed == NULL)
@@ -878,6 +882,12 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		 * thus the column types of compressed hypertable need to change) */
 		ts_hypertable_drop(compressed, DROP_RESTRICT);
 		ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
+	}
+
+	if (!compress_enable)
+	{
+		ts_hypertable_unset_compressed_id(ht);
+		return true;
 	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);
