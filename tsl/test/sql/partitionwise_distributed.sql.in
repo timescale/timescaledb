@@ -5,7 +5,6 @@
 -- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
-CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
 CREATE OR REPLACE FUNCTION test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'test_override_pushdown_timestamptz'
@@ -17,21 +16,10 @@ DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 SET client_min_messages TO NOTICE;
 
-GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_3;
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_3;
 SET ROLE :ROLE_3;
 
 SELECT inet_server_port() AS "port" \gset
-
--- Need explicit password for non-super users to connect
-CREATE SERVER IF NOT EXISTS server_pg1 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
-CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg1
-OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
-OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 
 -- Add data nodes using the TimescaleDB node management API
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -42,29 +30,17 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost',
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2 TO PUBLIC;
 
 SET ROLE :ROLE_3;
--- Create a 2-dimensional partitioned table for comparision
-CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
-CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
-CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
-CREATE FOREIGN TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg2;
-CREATE FOREIGN TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg2;
-CREATE FOREIGN TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg2;
 
--- Create these partitioned tables on the servers
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2 }', $$
+-- Create a 2-dimensional partitioned table for comparision
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
+CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
 CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
-CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
-CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-$$);
+CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
 
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 2, chunk_time_interval => '3 months'::interval);
@@ -154,12 +130,6 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
 
-SELECT time, avg(temp)
-FROM pg2dim
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1
-ORDER BY 1;
-
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, avg(temp)
 FROM hyper
@@ -176,6 +146,12 @@ ORDER BY 1;
 
 SET enable_partitionwise_aggregate = ON;
 EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+
 SELECT time, avg(temp)
 FROM pg2dim
 WHERE time < '2018-06-01 00:00'
@@ -269,9 +245,9 @@ FROM pg2dim
 GROUP BY 1
 ORDER BY 1;
 
--- Show result
 SELECT device, avg(temp)
 FROM pg2dim
+WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
 
@@ -297,9 +273,9 @@ WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
 
+-- Show result
 SELECT device, avg(temp)
 FROM pg2dim
-WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
 
@@ -342,7 +318,6 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- Show result
 SELECT time, device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -367,6 +342,7 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
+-- Show result
 SELECT time, device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -474,13 +450,6 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- Show reference result
-SELECT date_trunc('month', time), device, avg(temp)
-FROM pg2dim
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1, 2
-ORDER BY 1, 2;
-
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
@@ -488,7 +457,6 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- Show result
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -504,6 +472,13 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
+-- Show reference result
+SELECT date_trunc('month', time), device, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
@@ -511,6 +486,7 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
+-- Show result
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'

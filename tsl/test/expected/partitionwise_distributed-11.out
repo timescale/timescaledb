@@ -14,7 +14,6 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
-CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 CREATE OR REPLACE FUNCTION test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'test_override_pushdown_timestamptz'
 LANGUAGE C VOLATILE STRICT;
@@ -23,19 +22,9 @@ SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
 DROP DATABASE IF EXISTS data_node_2;
 SET client_min_messages TO NOTICE;
-GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_3;
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_3;
 SET ROLE :ROLE_3;
 SELECT inet_server_port() AS "port" \gset
--- Need explicit password for non-super users to connect
-CREATE SERVER IF NOT EXISTS server_pg1 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'data_node_1', port :'port');
-CREATE SERVER IF NOT EXISTS server_pg2 FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS (host 'localhost', dbname 'data_node_2', port :'port');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg1
-OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
-CREATE USER MAPPING IF NOT EXISTS FOR :ROLE_3 server server_pg2
-OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
 -- Add data nodes using the TimescaleDB node management API
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
@@ -58,67 +47,12 @@ SET ROLE :ROLE_3;
 CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
 CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
-CREATE FOREIGN TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg1;
-CREATE FOREIGN TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00') SERVER server_pg2;
-CREATE FOREIGN TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00') SERVER server_pg2;
-CREATE FOREIGN TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00') SERVER server_pg2;
--- Create these partitioned tables on the servers
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2 }', $$
-CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device);
-CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time);
-CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time);
 CREATE TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
+CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
 CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00');
 CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00');
-CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
-CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-$$);
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device)
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time)
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time)
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-NOTICE:  [data_node_1]: 
-CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim (time timestamptz, device int, location int, temp float) PARTITION BY HASH (device)
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h1 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 0) PARTITION BY RANGE(time)
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h2 PARTITION OF pg2dim FOR VALUES WITH (MODULUS 2, REMAINDER 1) PARTITION BY RANGE(time)
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h1_t1 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h1_t2 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h2_t1 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-01-18 00:00') TO ('2018-04-18 00:00')
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h2_t2 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-04-18 00:00') TO ('2018-07-18 00:00')
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h1_t3 PARTITION OF pg2dim_h1 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-NOTICE:  [data_node_2]: 
-CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00')
-
- remote_exec 
--------------
- 
-(1 row)
-
+CREATE TABLE pg2dim_h2_t3 PARTITION OF pg2dim_h2 FOR VALUES FROM ('2018-07-18 00:00') TO ('2018-10-18 00:00');
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 2, chunk_time_interval => '3 months'::interval);
 NOTICE:  adding not-null constraint to column "time"
@@ -335,8 +269,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time"
@@ -344,41 +278,19 @@ ORDER BY 1;
          Output: pg2dim_h1_t1."time", avg(pg2dim_h1_t1.temp)
          Group Key: pg2dim_h1_t1."time"
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
-
-SELECT time, avg(temp)
-FROM pg2dim
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1
-ORDER BY 1;
-             time             | avg  
-------------------------------+------
- Fri Jan 19 13:01:00 2018 PST |  2.3
- Sat Jan 20 15:05:00 2018 PST |  5.3
- Mon Feb 19 13:02:00 2018 PST |  4.9
- Wed Feb 21 13:01:00 2018 PST |  1.5
- Wed Feb 28 15:05:00 2018 PST |  5.6
- Thu Mar 08 11:05:00 2018 PST | 6.35
- Sat Mar 10 17:02:00 2018 PST |  7.1
- Sat Mar 17 12:02:00 2018 PDT |  6.7
- Thu Apr 19 13:01:00 2018 PDT |  7.6
- Fri Apr 20 15:08:00 2018 PDT |  6.4
- Sat May 19 13:01:00 2018 PDT |  5.1
- Sun May 20 15:08:00 2018 PDT |  9.4
- Wed May 30 13:02:00 2018 PDT |    9
-(13 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, avg(temp)
@@ -439,8 +351,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time"
@@ -448,19 +360,41 @@ ORDER BY 1;
          Output: pg2dim_h1_t1."time", avg(pg2dim_h1_t1.temp)
          Group Key: pg2dim_h1_t1."time"
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
+
+SELECT time, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1
+ORDER BY 1;
+             time             | avg  
+------------------------------+------
+ Fri Jan 19 13:01:00 2018 PST |  2.3
+ Sat Jan 20 15:05:00 2018 PST |  5.3
+ Mon Feb 19 13:02:00 2018 PST |  4.9
+ Wed Feb 21 13:01:00 2018 PST |  1.5
+ Wed Feb 28 15:05:00 2018 PST |  5.6
+ Thu Mar 08 11:05:00 2018 PST | 6.35
+ Sat Mar 10 17:02:00 2018 PST |  7.1
+ Sat Mar 17 12:02:00 2018 PDT |  6.7
+ Thu Apr 19 13:01:00 2018 PDT |  7.6
+ Fri Apr 20 15:08:00 2018 PDT |  6.4
+ Sat May 19 13:01:00 2018 PDT |  5.1
+ Sun May 20 15:08:00 2018 PDT |  9.4
+ Wed May 30 13:02:00 2018 PDT |    9
+(13 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, avg(temp)
@@ -526,8 +460,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1.device
@@ -535,18 +469,18 @@ ORDER BY 1;
          Output: pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
          Group Key: pg2dim_h1_t1.device
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
 
 SELECT device, avg(temp)
@@ -619,8 +553,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1.device
@@ -628,18 +562,18 @@ ORDER BY 1;
          Output: pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
          Group Key: pg2dim_h1_t1.device
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -722,73 +656,59 @@ SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
 ORDER BY 1;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1.device
-   ->  Append
-         ->  Finalize HashAggregate
-               Output: pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
-               Group Key: pg2dim_h1_t1.device
-               ->  Append
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h1_t1.device, PARTIAL avg(pg2dim_h1_t1.temp)
-                           Group Key: pg2dim_h1_t1.device
-                           ->  Foreign Scan on public.pg2dim_h1_t1
-                                 Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t1
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h1_t2.device, PARTIAL avg(pg2dim_h1_t2.temp)
-                           Group Key: pg2dim_h1_t2.device
-                           ->  Foreign Scan on public.pg2dim_h1_t2
-                                 Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h1_t3.device, PARTIAL avg(pg2dim_h1_t3.temp)
-                           Group Key: pg2dim_h1_t3.device
-                           ->  Foreign Scan on public.pg2dim_h1_t3
-                                 Output: pg2dim_h1_t3.device, pg2dim_h1_t3.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t3
-         ->  Finalize HashAggregate
-               Output: pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
-               Group Key: pg2dim_h2_t1.device
-               ->  Append
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h2_t1.device, PARTIAL avg(pg2dim_h2_t1.temp)
-                           Group Key: pg2dim_h2_t1.device
-                           ->  Foreign Scan on public.pg2dim_h2_t1
-                                 Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t1
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h2_t2.device, PARTIAL avg(pg2dim_h2_t2.temp)
-                           Group Key: pg2dim_h2_t2.device
-                           ->  Foreign Scan on public.pg2dim_h2_t2
-                                 Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2
-                     ->  Partial HashAggregate
-                           Output: pg2dim_h2_t3.device, PARTIAL avg(pg2dim_h2_t3.temp)
-                           Group Key: pg2dim_h2_t3.device
-                           ->  Foreign Scan on public.pg2dim_h2_t3
-                                 Output: pg2dim_h2_t3.device, pg2dim_h2_t3.temp
-                                 Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t3
-(48 rows)
+   ->  Finalize HashAggregate
+         Output: pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
+         Group Key: pg2dim_h1_t1.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Output: pg2dim_h1_t1.device, PARTIAL avg(pg2dim_h1_t1.temp)
+                     Group Key: pg2dim_h1_t1.device
+                     ->  Seq Scan on public.pg2dim_h1_t1
+                           Output: pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+               ->  Partial HashAggregate
+                     Output: pg2dim_h1_t2.device, PARTIAL avg(pg2dim_h1_t2.temp)
+                     Group Key: pg2dim_h1_t2.device
+                     ->  Seq Scan on public.pg2dim_h1_t2
+                           Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+               ->  Partial HashAggregate
+                     Output: pg2dim_h1_t3.device, PARTIAL avg(pg2dim_h1_t3.temp)
+                     Group Key: pg2dim_h1_t3.device
+                     ->  Seq Scan on public.pg2dim_h1_t3
+                           Output: pg2dim_h1_t3.device, pg2dim_h1_t3.temp
+               ->  Partial HashAggregate
+                     Output: pg2dim_h2_t1.device, PARTIAL avg(pg2dim_h2_t1.temp)
+                     Group Key: pg2dim_h2_t1.device
+                     ->  Seq Scan on public.pg2dim_h2_t1
+                           Output: pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+               ->  Partial HashAggregate
+                     Output: pg2dim_h2_t2.device, PARTIAL avg(pg2dim_h2_t2.temp)
+                     Group Key: pg2dim_h2_t2.device
+                     ->  Seq Scan on public.pg2dim_h2_t2
+                           Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+               ->  Partial HashAggregate
+                     Output: pg2dim_h2_t3.device, PARTIAL avg(pg2dim_h2_t3.temp)
+                     Group Key: pg2dim_h2_t3.device
+                     ->  Seq Scan on public.pg2dim_h2_t3
+                           Output: pg2dim_h2_t3.device, pg2dim_h2_t3.temp
+(37 rows)
 
--- Show result
 SELECT device, avg(temp)
 FROM pg2dim
+WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
- device |       avg        
---------+------------------
-      1 |                6
-      2 |              6.7
-      3 |            5.875
-      4 |             7.75
-      5 | 6.96666666666667
-      6 |              8.1
-      7 |              4.6
-(7 rows)
+ device | avg  
+--------+------
+      1 | 6.85
+      3 | 9.45
+      4 | 7.75
+      5 |  7.9
+(4 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
@@ -843,8 +763,8 @@ FROM pg2dim
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
    Sort Key: pg2dim_h1_t2.device
@@ -852,32 +772,35 @@ ORDER BY 1;
          Output: pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
          Group Key: pg2dim_h1_t2.device
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t2
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t3
+                     Filter: (pg2dim_h1_t2."time" > 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t3
                      Output: pg2dim_h1_t3.device, pg2dim_h1_t3.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h1_t3 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h1_t3."time" > 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t2 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t3
+                     Filter: (pg2dim_h2_t2."time" > 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t3
                      Output: pg2dim_h2_t3.device, pg2dim_h2_t3.temp
-                     Remote SQL: SELECT device, temp FROM public.pg2dim_h2_t3 WHERE (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t3."time" > 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone)
 (19 rows)
 
+-- Show result
 SELECT device, avg(temp)
 FROM pg2dim
-WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
- device | avg  
---------+------
-      1 | 6.85
-      3 | 9.45
-      4 | 7.75
-      5 |  7.9
-(4 rows)
+ device |       avg        
+--------+------------------
+      1 |                6
+      2 |              6.7
+      3 |            5.875
+      4 |             7.75
+      5 | 6.96666666666667
+      6 |              8.1
+      7 |              4.6
+(7 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT device, avg(temp)
@@ -932,8 +855,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
@@ -941,18 +864,18 @@ ORDER BY 1, 2;
          Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
          Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
 
 SELECT time, device, avg(temp)
@@ -1009,7 +932,6 @@ ORDER BY 1, 2;
                            Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
 (19 rows)
 
--- Show result
 SELECT time, device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -1042,29 +964,28 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-   ->  Append
-         ->  Foreign Scan
-               Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t1 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, (avg(pg2dim_h2_t1.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t1 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, (avg(pg2dim_h2_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2
-(20 rows)
+   ->  HashAggregate
+         Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
+         Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
+         ->  Append
+               ->  Seq Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+(19 rows)
 
 -- On hypertable, first show partitionwise aggs without per-data node queries
 SET timescaledb.enable_per_data_node_queries = OFF;
@@ -1100,6 +1021,7 @@ ORDER BY 1, 2;
          Remote SQL: SELECT "time", device, avg(temp) FROM _timescaledb_internal._hyper_1_4_dist_chunk WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
 (22 rows)
 
+-- Show result
 SELECT time, device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -1187,37 +1109,43 @@ SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Sort
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
    ->  Append
-         ->  Foreign Scan
-               Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t1 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t1 GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, (avg(pg2dim_h1_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t2 GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, (avg(pg2dim_h1_t3.temp))
-               Relations: Aggregate on (public.pg2dim_h1_t3 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h1_t3 GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, (avg(pg2dim_h2_t1.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t1 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t1 GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, (avg(pg2dim_h2_t2.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t2 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t2 GROUP BY 1, 2
-         ->  Foreign Scan
-               Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, (avg(pg2dim_h2_t3.temp))
-               Relations: Aggregate on (public.pg2dim_h2_t3 pg2dim)
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.pg2dim_h2_t3 GROUP BY 1, 2
-(28 rows)
+         ->  HashAggregate
+               Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
+               Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
+               ->  Seq Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+         ->  HashAggregate
+               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
+               Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+               ->  Seq Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+         ->  HashAggregate
+               Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, avg(pg2dim_h1_t3.temp)
+               Group Key: pg2dim_h1_t3."time", pg2dim_h1_t3.device
+               ->  Seq Scan on public.pg2dim_h1_t3
+                     Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, pg2dim_h1_t3.temp
+         ->  HashAggregate
+               Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
+               Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
+               ->  Seq Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+         ->  HashAggregate
+               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
+               Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
+               ->  Seq Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+         ->  HashAggregate
+               Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, avg(pg2dim_h2_t3.temp)
+               Group Key: pg2dim_h2_t3."time", pg2dim_h2_t3.device
+               ->  Seq Scan on public.pg2dim_h2_t3
+                     Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, pg2dim_h2_t3.temp
+(34 rows)
 
 -- Show result
 SELECT time, device, avg(temp)
@@ -1336,31 +1264,23 @@ WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
-                                                                                                            QUERY PLAN                                                                                                            
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-   ->  GroupAggregate
-         Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
-         Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-         Filter: (avg(pg2dim_h1_t2.temp) > '4'::double precision)
-         ->  Sort
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-               Sort Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
+   Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+   Filter: (avg(pg2dim_h1_t2.temp) > '4'::double precision)
+   ->  Sort
+         Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+         Sort Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+         ->  Append
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
-   ->  GroupAggregate
-         Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
-         Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-         Filter: (avg(pg2dim_h2_t2.temp) > '4'::double precision)
-         ->  Sort
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-               Sort Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: ((pg2dim_h1_t2."time" >= 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone) AND (pg2dim_h1_t2."time" <= 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone))
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
-(22 rows)
+                     Filter: ((pg2dim_h2_t2."time" >= 'Thu Apr 19 00:01:00 2018 PDT'::timestamp with time zone) AND (pg2dim_h2_t2."time" <= 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone))
+(14 rows)
 
 SELECT time, device, avg(temp) AS temp
 FROM pg2dim
@@ -1433,8 +1353,8 @@ FROM pg2dim
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
@@ -1442,18 +1362,101 @@ ORDER BY 1, 2;
          Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
          Group Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
          ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+(19 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT date_trunc('month', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
+   Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
+   ->  HashAggregate
+         Output: (date_trunc('month'::text, hyper."time")), hyper.device, avg(hyper.temp)
+         Group Key: (date_trunc('month'::text, hyper."time")), hyper.device
+         ->  Custom Scan (AsyncAppend)
+               Output: (date_trunc('month'::text, hyper."time")), hyper.device, hyper.temp
+               ->  Append
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                           Output: date_trunc('month'::text, hyper_1."time"), hyper_1.device, hyper_1.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
+                           Output: date_trunc('month'::text, hyper_2."time"), hyper_2.device, hyper_2.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
+
+SELECT date_trunc('month', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+          date_trunc          | device | avg 
+------------------------------+--------+-----
+ Mon Jan 01 00:00:00 2018 PST |      1 | 3.8
+ Thu Feb 01 00:00:00 2018 PST |      1 | 5.6
+ Thu Feb 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Feb 01 00:00:00 2018 PST |      3 | 2.3
+ Thu Mar 01 00:00:00 2018 PST |      1 | 9.1
+ Thu Mar 01 00:00:00 2018 PST |      2 | 6.7
+ Thu Mar 01 00:00:00 2018 PST |      5 | 5.1
+ Thu Mar 01 00:00:00 2018 PST |      6 | 8.1
+ Thu Mar 01 00:00:00 2018 PST |      7 | 4.6
+ Sun Apr 01 00:00:00 2018 PDT |      1 | 7.6
+ Sun Apr 01 00:00:00 2018 PDT |      5 | 6.4
+ Tue May 01 00:00:00 2018 PDT |      3 |   9
+ Tue May 01 00:00:00 2018 PDT |      4 | 5.1
+ Tue May 01 00:00:00 2018 PDT |      5 | 9.4
+(14 rows)
+
+-- Now with partitionwise aggs enabled
+SET enable_partitionwise_aggregate = ON;
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT date_trunc('month', time), device, avg(temp)
+FROM pg2dim
+WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
+   Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
+   ->  HashAggregate
+         Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
+         Group Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
+         ->  Append
+               ->  Seq Scan on public.pg2dim_h1_t1
+                     Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h1_t2
+                     Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t1
+                     Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+               ->  Seq Scan on public.pg2dim_h2_t2
+                     Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (19 rows)
 
 -- Show reference result
@@ -1486,90 +1489,6 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
-   Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
-   ->  HashAggregate
-         Output: (date_trunc('month'::text, hyper."time")), hyper.device, avg(hyper.temp)
-         Group Key: (date_trunc('month'::text, hyper."time")), hyper.device
-         ->  Custom Scan (AsyncAppend)
-               Output: (date_trunc('month'::text, hyper."time")), hyper.device, hyper.temp
-               ->  Append
-                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
-                           Output: date_trunc('month'::text, hyper_1."time"), hyper_1.device, hyper_1.temp
-                           Data node: data_node_1
-                           Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
-                           Output: date_trunc('month'::text, hyper_2."time"), hyper_2.device, hyper_2.temp
-                           Data node: data_node_2
-                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(19 rows)
-
--- Show result
-SELECT date_trunc('month', time), device, avg(temp)
-FROM hyper
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1, 2
-ORDER BY 1, 2;
-          date_trunc          | device | avg 
-------------------------------+--------+-----
- Mon Jan 01 00:00:00 2018 PST |      1 | 3.8
- Thu Feb 01 00:00:00 2018 PST |      1 | 5.6
- Thu Feb 01 00:00:00 2018 PST |      2 | 6.7
- Thu Feb 01 00:00:00 2018 PST |      3 | 2.3
- Thu Mar 01 00:00:00 2018 PST |      1 | 9.1
- Thu Mar 01 00:00:00 2018 PST |      2 | 6.7
- Thu Mar 01 00:00:00 2018 PST |      5 | 5.1
- Thu Mar 01 00:00:00 2018 PST |      6 | 8.1
- Thu Mar 01 00:00:00 2018 PST |      7 | 4.6
- Sun Apr 01 00:00:00 2018 PDT |      1 | 7.6
- Sun Apr 01 00:00:00 2018 PDT |      5 | 6.4
- Tue May 01 00:00:00 2018 PDT |      3 |   9
- Tue May 01 00:00:00 2018 PDT |      4 | 5.1
- Tue May 01 00:00:00 2018 PDT |      5 | 9.4
-(14 rows)
-
--- Now with partitionwise aggs enabled
-SET enable_partitionwise_aggregate = ON;
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT date_trunc('month', time), device, avg(temp)
-FROM pg2dim
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1, 2
-ORDER BY 1, 2;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
-   Sort Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
-   ->  HashAggregate
-         Output: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
-         Group Key: (date_trunc('month'::text, pg2dim_h1_t1."time")), pg2dim_h1_t1.device
-         ->  Append
-               ->  Foreign Scan on public.pg2dim_h1_t1
-                     Output: date_trunc('month'::text, pg2dim_h1_t1."time"), pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h1_t2
-                     Output: date_trunc('month'::text, pg2dim_h1_t2."time"), pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t1
-                     Output: date_trunc('month'::text, pg2dim_h2_t1."time"), pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  Foreign Scan on public.pg2dim_h2_t2
-                     Output: date_trunc('month'::text, pg2dim_h2_t2."time"), pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(19 rows)
-
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT date_trunc('month', time), device, avg(temp)
-FROM hyper
-WHERE time < '2018-06-01 00:00'
-GROUP BY 1, 2
-ORDER BY 1, 2;
                                                                                                                                                               QUERY PLAN                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend)
@@ -1590,6 +1509,7 @@ ORDER BY 1, 2;
                Remote SQL: SELECT date_trunc('month'::text, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
 (16 rows)
 
+-- Show result
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
@@ -1847,27 +1767,27 @@ LIMIT 1;
          ->  HashAggregate
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp), sum((pg2dim_h1_t1.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
          ->  HashAggregate
                Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), sum((pg2dim_h1_t2.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               ->  Foreign Scan on public.pg2dim_h1_t2
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), sum((pg2dim_h2_t1.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
-               ->  Foreign Scan on public.pg2dim_h2_t1
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
          ->  HashAggregate
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), sum((pg2dim_h2_t2.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               ->  Foreign Scan on public.pg2dim_h2_t2
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
 (27 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -1917,28 +1837,24 @@ LIMIT 1;
          ->  HashAggregate
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp), (random() * (pg2dim_h1_t1.device)::double precision), custom_sum(pg2dim_h1_t1.device)
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-               ->  Foreign Scan on public.pg2dim_h1_t1
-                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), (random() * (pg2dim_h1_t2.device)::double precision), custom_sum(pg2dim_h1_t2.device)
-               Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               ->  Foreign Scan on public.pg2dim_h1_t2
-                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h1_t1
+                           Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                           Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     ->  Seq Scan on public.pg2dim_h1_t2
+                           Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                           Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), (random() * (pg2dim_h2_t1.device)::double precision), custom_sum(pg2dim_h2_t1.device)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
-               ->  Foreign Scan on public.pg2dim_h2_t1
-                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), (random() * (pg2dim_h2_t2.device)::double precision), custom_sum(pg2dim_h2_t2.device)
-               Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               ->  Foreign Scan on public.pg2dim_h2_t2
-                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(27 rows)
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h2_t1
+                           Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                           Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     ->  Seq Scan on public.pg2dim_h2_t2
+                           Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                           Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+(23 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), random() * device as rand_dev, custom_sum(device)
@@ -1987,31 +1903,25 @@ LIMIT 1;
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp), ((sum(pg2dim_h1_t1.temp) * random()) * (pg2dim_h1_t1.device)::double precision)
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
                Filter: ((avg(pg2dim_h1_t1.temp) * (custom_sum(pg2dim_h1_t1.device))::double precision) > '0.8'::double precision)
-               ->  Foreign Scan on public.pg2dim_h1_t1
-                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp), ((sum(pg2dim_h1_t2.temp) * random()) * (pg2dim_h1_t2.device)::double precision)
-               Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               Filter: ((avg(pg2dim_h1_t2.temp) * (custom_sum(pg2dim_h1_t2.device))::double precision) > '0.8'::double precision)
-               ->  Foreign Scan on public.pg2dim_h1_t2
-                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h1_t1
+                           Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                           Filter: (pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     ->  Seq Scan on public.pg2dim_h1_t2
+                           Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                           Filter: (pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp), ((sum(pg2dim_h2_t1.temp) * random()) * (pg2dim_h2_t1.device)::double precision)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
                Filter: ((avg(pg2dim_h2_t1.temp) * (custom_sum(pg2dim_h2_t1.device))::double precision) > '0.8'::double precision)
-               ->  Foreign Scan on public.pg2dim_h2_t1
-                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-         ->  HashAggregate
-               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp), ((sum(pg2dim_h2_t2.temp) * random()) * (pg2dim_h2_t2.device)::double precision)
-               Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               Filter: ((avg(pg2dim_h2_t2.temp) * (custom_sum(pg2dim_h2_t2.device))::double precision) > '0.8'::double precision)
-               ->  Foreign Scan on public.pg2dim_h2_t2
-                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(31 rows)
+               ->  Append
+                     ->  Seq Scan on public.pg2dim_h2_t1
+                           Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                           Filter: (pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+                     ->  Seq Scan on public.pg2dim_h2_t2
+                           Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                           Filter: (pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone)
+(25 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp) * random() * device as sum_temp
@@ -2056,35 +1966,35 @@ WHERE (pg2dim.temp * random() <= 20)
 AND time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, (avg(pg2dim_h1_t1.temp))
    ->  Append
          ->  HashAggregate
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-               ->  Append
-                     ->  Foreign Scan on public.pg2dim_h1_t1
-                           Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
-                           Filter: ((pg2dim_h1_t1.temp * random()) <= '20'::double precision)
-                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-                     ->  Foreign Scan on public.pg2dim_h1_t2
-                           Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
-                           Filter: ((pg2dim_h1_t2.temp * random()) <= '20'::double precision)
-                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Seq Scan on public.pg2dim_h1_t1
+                     Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
+                     Filter: ((pg2dim_h1_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone) AND ((pg2dim_h1_t1.temp * random()) <= '20'::double precision))
+         ->  HashAggregate
+               Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
+               Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
+               ->  Seq Scan on public.pg2dim_h1_t2
+                     Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
+                     Filter: ((pg2dim_h1_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone) AND ((pg2dim_h1_t2.temp * random()) <= '20'::double precision))
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
-               ->  Append
-                     ->  Foreign Scan on public.pg2dim_h2_t1
-                           Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
-                           Filter: ((pg2dim_h2_t1.temp * random()) <= '20'::double precision)
-                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-                     ->  Foreign Scan on public.pg2dim_h2_t2
-                           Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
-                           Filter: ((pg2dim_h2_t2.temp * random()) <= '20'::double precision)
-                           Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2 WHERE (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
+               ->  Seq Scan on public.pg2dim_h2_t1
+                     Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
+                     Filter: ((pg2dim_h2_t1."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone) AND ((pg2dim_h2_t1.temp * random()) <= '20'::double precision))
+         ->  HashAggregate
+               Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
+               Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
+               ->  Seq Scan on public.pg2dim_h2_t2
+                     Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
+                     Filter: ((pg2dim_h2_t2."time" < 'Fri Jun 01 00:00:00 2018 PDT'::timestamp with time zone) AND ((pg2dim_h2_t2.temp * random()) <= '20'::double precision))
 (27 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -2140,46 +2050,40 @@ LIMIT 1;
          ->  HashAggregate
                Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, avg(pg2dim_h1_t1.temp)
                Group Key: pg2dim_h1_t1."time", pg2dim_h1_t1.device
-               ->  Foreign Scan on public.pg2dim_h1_t1
+               ->  Seq Scan on public.pg2dim_h1_t1
                      Output: pg2dim_h1_t1."time", pg2dim_h1_t1.device, pg2dim_h1_t1.temp
                      Filter: (pg2dim_h1_t1."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t1
          ->  HashAggregate
                Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, avg(pg2dim_h1_t2.temp)
                Group Key: pg2dim_h1_t2."time", pg2dim_h1_t2.device
-               ->  Foreign Scan on public.pg2dim_h1_t2
+               ->  Seq Scan on public.pg2dim_h1_t2
                      Output: pg2dim_h1_t2."time", pg2dim_h1_t2.device, pg2dim_h1_t2.temp
                      Filter: (pg2dim_h1_t2."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t2
          ->  HashAggregate
                Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, avg(pg2dim_h1_t3.temp)
                Group Key: pg2dim_h1_t3."time", pg2dim_h1_t3.device
-               ->  Foreign Scan on public.pg2dim_h1_t3
+               ->  Seq Scan on public.pg2dim_h1_t3
                      Output: pg2dim_h1_t3."time", pg2dim_h1_t3.device, pg2dim_h1_t3.temp
                      Filter: (pg2dim_h1_t3."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h1_t3
          ->  HashAggregate
                Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, avg(pg2dim_h2_t1.temp)
                Group Key: pg2dim_h2_t1."time", pg2dim_h2_t1.device
-               ->  Foreign Scan on public.pg2dim_h2_t1
+               ->  Seq Scan on public.pg2dim_h2_t1
                      Output: pg2dim_h2_t1."time", pg2dim_h2_t1.device, pg2dim_h2_t1.temp
                      Filter: (pg2dim_h2_t1."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t1
          ->  HashAggregate
                Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, avg(pg2dim_h2_t2.temp)
                Group Key: pg2dim_h2_t2."time", pg2dim_h2_t2.device
-               ->  Foreign Scan on public.pg2dim_h2_t2
+               ->  Seq Scan on public.pg2dim_h2_t2
                      Output: pg2dim_h2_t2."time", pg2dim_h2_t2.device, pg2dim_h2_t2.temp
                      Filter: (pg2dim_h2_t2."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t2
          ->  HashAggregate
                Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, avg(pg2dim_h2_t3.temp)
                Group Key: pg2dim_h2_t3."time", pg2dim_h2_t3.device
-               ->  Foreign Scan on public.pg2dim_h2_t3
+               ->  Seq Scan on public.pg2dim_h2_t3
                      Output: pg2dim_h2_t3."time", pg2dim_h2_t3.device, pg2dim_h2_t3.temp
                      Filter: (pg2dim_h2_t3."time" < (now() - '@ 3 days'::interval))
-                     Remote SQL: SELECT "time", device, temp FROM public.pg2dim_h2_t3
-(45 rows)
+(39 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
