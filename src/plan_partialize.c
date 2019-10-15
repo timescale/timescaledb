@@ -75,7 +75,7 @@ ensure_only_partials(Node *node, void *state)
 }
 
 void
-plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
 {
 	Oid partialfnoid = InvalidOid;
 	Oid argtyp[] = { ANYELEMENTOID };

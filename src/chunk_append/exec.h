@@ -66,6 +66,6 @@ typedef struct ChunkAppendState
 
 } ChunkAppendState;
 
-extern Node *chunk_append_state_create(CustomScan *cscan);
+extern Node *ts_chunk_append_state_create(CustomScan *cscan);
 
 #endif /* TIMESCALEDB_CHUNK_APPEND_EXEC_H */

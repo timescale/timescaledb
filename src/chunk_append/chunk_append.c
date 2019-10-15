@@ -27,7 +27,7 @@ static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
-	.PlanCustomPath = chunk_append_plan_create,
+	.PlanCustomPath = ts_chunk_append_plan_create,
 };
 
 static bool

@@ -12,8 +12,8 @@
 
 #include "compat.h"
 
-extern TSDLLEXPORT Datum tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS);
-extern TSDLLEXPORT Datum tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS);
-extern TSDLLEXPORT Datum tsl_partialize_agg(PG_FUNCTION_ARGS);
+Datum tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS);
+Datum tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS);
+Datum tsl_partialize_agg(PG_FUNCTION_ARGS);
 
 #endif

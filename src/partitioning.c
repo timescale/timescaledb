@@ -94,11 +94,11 @@ ts_partitioning_func_get_closed_default(void)
 {
 	Oid argtype = ANYELEMENTOID;
 
-	return lookup_proc_filtered(DEFAULT_PARTITIONING_FUNC_SCHEMA,
-								DEFAULT_PARTITIONING_FUNC_NAME,
-								NULL,
-								closed_dim_partitioning_func_filter,
-								&argtype);
+	return ts_lookup_proc_filtered(DEFAULT_PARTITIONING_FUNC_SCHEMA,
+								   DEFAULT_PARTITIONING_FUNC_NAME,
+								   NULL,
+								   closed_dim_partitioning_func_filter,
+								   &argtype);
 }
 
 static bool
@@ -123,7 +123,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 	if (dimtype != DIMENSION_TYPE_CLOSED && dimtype != DIMENSION_TYPE_OPEN)
 		elog(ERROR, "invalid dimension type %u", dimtype);
 
-	funcoid = lookup_proc_filtered(pf->schema, pf->name, &pf->rettype, filter, &argtype);
+	funcoid = ts_lookup_proc_filtered(pf->schema, pf->name, &pf->rettype, filter, &argtype);
 
 	if (!OidIsValid(funcoid))
 	{

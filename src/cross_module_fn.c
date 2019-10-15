@@ -23,7 +23,7 @@ TS_FUNCTION_INFO_V1(ts_move_chunk);
 TS_FUNCTION_INFO_V1(ts_partialize_agg);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
-TS_FUNCTION_INFO_V1(continuous_agg_invalidation_trigger);
+TS_FUNCTION_INFO_V1(ts_continuous_agg_invalidation_trigger);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -68,7 +68,7 @@ ts_move_chunk(PG_FUNCTION_ARGS)
 }
 
 Datum
-continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
+ts_continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->continuous_agg_trigfn(fcinfo));
 }

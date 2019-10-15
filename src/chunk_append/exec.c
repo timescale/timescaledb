@@ -54,7 +54,7 @@ static CustomExecMethods chunk_append_state_methods = {
 	.ExecCustomScan = chunk_append_exec,
 	.EndCustomScan = chunk_append_end,
 	.ReScanCustomScan = chunk_append_rescan,
-	.ExplainCustomScan = chunk_append_explain,
+	.ExplainCustomScan = ts_chunk_append_explain,
 	.EstimateDSMCustomScan = chunk_append_estimate_dsm,
 	.InitializeDSMCustomScan = chunk_append_initialize_dsm,
 #if !PG96
@@ -77,7 +77,7 @@ static void initialize_constraints(ChunkAppendState *state, List *initial_rt_ind
 static LWLock *chunk_append_get_lock_pointer(void);
 
 Node *
-chunk_append_state_create(CustomScan *cscan)
+ts_chunk_append_state_create(CustomScan *cscan)
 {
 	ChunkAppendState *state;
 	List *settings = linitial(cscan->custom_private);
@@ -147,7 +147,7 @@ do_startup_exclusion(ChunkAppendState *state)
 		List *restrictinfos = NIL;
 		List *ri_clauses = lfirst(lc_clauses);
 		ListCell *lc;
-		Scan *scan = chunk_append_get_scan_plan(lfirst(lc_plan));
+		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
 
 		i++;
 
@@ -291,7 +291,7 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 	for (i = 0; i < state->num_subplans; i++)
 	{
 		PlanState *ps = state->subplanstates[i];
-		Scan *scan = chunk_append_get_scan_plan(ps->plan);
+		Scan *scan = ts_chunk_append_get_scan_plan(ps->plan);
 		List *restrictinfos = NIL;
 		ListCell *lc;
 
@@ -929,7 +929,7 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			  lc_relid,
 			  initial_rt_indexes)
 	{
-		Scan *scan = chunk_append_get_scan_plan(lfirst(lc_plan));
+		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
 		Index initial_index = lfirst_oid(lc_relid);
 		List *relation_constraints = NIL;
 

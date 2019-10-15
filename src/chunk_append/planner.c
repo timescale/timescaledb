@@ -35,7 +35,7 @@ static Plan *adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *p
 
 static CustomScanMethods chunk_append_plan_methods = {
 	.CustomName = "ChunkAppend",
-	.CreateCustomScanState = chunk_append_state_create,
+	.CreateCustomScanState = ts_chunk_append_state_create,
 };
 
 void
@@ -80,8 +80,8 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 }
 
 Plan *
-chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
-						 List *clauses, List *custom_plans)
+ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
+							List *clauses, List *custom_plans)
 {
 	ListCell *lc_child;
 	List *chunk_ri_clauses = NIL;
@@ -230,7 +230,7 @@ chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, L
 	{
 		foreach (lc_child, cscan->custom_plans)
 		{
-			Scan *scan = chunk_append_get_scan_plan(lfirst(lc_child));
+			Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_child));
 
 			if (scan == NULL || scan->scanrelid == 0)
 			{
@@ -301,7 +301,7 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 }
 
 Scan *
-chunk_append_get_scan_plan(Plan *plan)
+ts_chunk_append_get_scan_plan(Plan *plan)
 {
 	if (plan != NULL && (IsA(plan, Sort) || IsA(plan, Result)))
 		plan = plan->lefttree;
