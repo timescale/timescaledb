@@ -927,8 +927,8 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 	AlterTableInternal(table_relid, list_make1(&cmd), false);
 }
 void
-dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum *interval,
-				 Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
+ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum *interval,
+					Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
@@ -1033,7 +1033,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 */
 	num_slices = num_slices_arg & 0xffff;
 
-	dimension_update(table_relid, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
+	ts_dimension_update(table_relid, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
 
 	PG_RETURN_VOID();
 }
@@ -1071,13 +1071,13 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid interval: an explicit interval must be specified")));
 	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	dimension_update(table_relid,
-					 colname,
-					 DIMENSION_TYPE_OPEN,
-					 &interval,
-					 &intervaltype,
-					 NULL,
-					 NULL);
+	ts_dimension_update(table_relid,
+						colname,
+						DIMENSION_TYPE_OPEN,
+						&interval,
+						&intervaltype,
+						NULL,
+						NULL);
 
 	PG_RETURN_VOID();
 }

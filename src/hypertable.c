@@ -1969,13 +1969,13 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for function %s", get_func_name(now_func_oid))));
 
-	dimension_update(table_relid,
-					 &open_dim->fd.column_name,
-					 DIMENSION_TYPE_OPEN,
-					 NULL,
-					 NULL,
-					 NULL,
-					 &now_func_oid);
+	ts_dimension_update(table_relid,
+						&open_dim->fd.column_name,
+						DIMENSION_TYPE_OPEN,
+						NULL,
+						NULL,
+						NULL,
+						&now_func_oid);
 
 	ts_cache_release(hcache);
 	PG_RETURN_NULL();

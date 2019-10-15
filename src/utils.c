@@ -489,9 +489,9 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
  * The caller can optionally pass a filter function and a type of the argument
  * that the partitioning function should take.
  */
-regproc
-lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, proc_filter filter,
-					 void *filter_arg)
+Oid
+ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, proc_filter filter,
+						void *filter_arg)
 {
 	Oid namespace_oid = LookupExplicitNamespace(schema, false);
 	regproc func = InvalidOid;
@@ -527,13 +527,13 @@ lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, pro
 }
 
 /*
- * get_operator
+ * ts_get_operator
  *
  *    finds an operator given an exact specification (name, namespace,
  *    left and right type IDs).
  */
 Oid
-get_operator(const char *name, Oid namespace, Oid left, Oid right)
+ts_get_operator(const char *name, Oid namespace, Oid left, Oid right)
 {
 	HeapTuple tup;
 	Oid opoid = InvalidOid;
@@ -553,12 +553,12 @@ get_operator(const char *name, Oid namespace, Oid left, Oid right)
 }
 
 /*
- * get_cast_func
+ * ts_get_cast_func
  *
  * returns Oid of functions that implements cast from source to target
  */
 Oid
-get_cast_func(Oid source, Oid target)
+ts_get_cast_func(Oid source, Oid target)
 {
 	Oid result = InvalidOid;
 	HeapTuple casttup;

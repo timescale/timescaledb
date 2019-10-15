@@ -18,10 +18,6 @@
 #include "compat.h"
 #include "partialize_finalize.h"
 
-TS_FUNCTION_INFO_V1(tsl_finalize_agg_sfunc);
-TS_FUNCTION_INFO_V1(tsl_finalize_agg_ffunc);
-TS_FUNCTION_INFO_V1(tsl_partialize_agg);
-
 /*
  * This file implements functions to split the calculation of partial and final
  * aggregates into separate steps such that the partials can be passed out of a
@@ -556,7 +552,7 @@ tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
  * occurs in the planner, with the actual function just used to ensure the
  * return type is correct.
  */
-TSDLLEXPORT Datum
+Datum
 tsl_partialize_agg(PG_FUNCTION_ARGS)
 {
 	Datum arg;

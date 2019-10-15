@@ -32,7 +32,7 @@ static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOpera
  * private state.
  */
 void
-chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+ts_chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
 

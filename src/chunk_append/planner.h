@@ -10,9 +10,9 @@
 #include <nodes/extensible.h>
 #include <nodes/relation.h>
 
-Plan *chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
-							   List *clauses, List *custom_plans);
-Scan *chunk_append_get_scan_plan(Plan *plan);
+Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
+								  List *clauses, List *custom_plans);
+Scan *ts_chunk_append_get_scan_plan(Plan *plan);
 
 void _chunk_append_init(void);
 

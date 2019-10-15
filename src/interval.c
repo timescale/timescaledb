@@ -309,11 +309,11 @@ get_integer_now_func(Dimension *open_dim)
 
 	Assert(IS_INTEGER_TYPE(rettype));
 
-	now_func = lookup_proc_filtered(NameStr(open_dim->fd.integer_now_func_schema),
-									NameStr(open_dim->fd.integer_now_func),
-									NULL,
-									noarg_integer_now_func_filter,
-									&rettype);
+	now_func = ts_lookup_proc_filtered(NameStr(open_dim->fd.integer_now_func_schema),
+									   NameStr(open_dim->fd.integer_now_func),
+									   NULL,
+									   noarg_integer_now_func_filter,
+									   &rettype);
 	return now_func;
 }
 

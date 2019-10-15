@@ -73,8 +73,8 @@ ts_transform_cross_datatype_comparison(Expr *clause)
 				target_type = right_type;
 			}
 
-			opno = get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
-			cast_oid = get_cast_func(source_type, target_type);
+			opno = ts_get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
+			cast_oid = ts_get_cast_func(source_type, target_type);
 
 			if (OidIsValid(opno) && OidIsValid(cast_oid))
 			{

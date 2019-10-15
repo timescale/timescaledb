@@ -68,11 +68,11 @@ extern int64 ts_get_interval_period_approx(Interval *interval);
 
 extern Oid ts_inheritance_parent_relid(Oid relid);
 
-extern TSDLLEXPORT regproc lookup_proc_filtered(const char *schema, const char *funcname,
-												Oid *rettype, proc_filter filter, void *filter_arg);
-extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
+extern Oid ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype,
+								   proc_filter filter, void *filter_arg);
+extern Oid ts_get_operator(const char *name, Oid namespace, Oid left, Oid right);
 
-extern Oid get_cast_func(Oid source, Oid target);
+extern Oid ts_get_cast_func(Oid source, Oid target);
 
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 										 size_t copy_size);

@@ -398,7 +398,8 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		 */
 		if (tce->type_id != castNode(Const, value)->consttype)
 		{
-			opno = get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
+			opno =
+				ts_get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
 
 			if (!OidIsValid(opno))
 				return op;
