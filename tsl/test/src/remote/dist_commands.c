@@ -55,7 +55,8 @@ tsl_invoke_distributed_commands(PG_FUNCTION_ARGS)
 
 	results = ts_dist_cmd_invoke_on_data_nodes("CREATE TABLE public.disttable2(time timestamptz, "
 											   "device int, temp float);",
-											   subset_nodes);
+											   subset_nodes,
+											   true);
 	TestAssertTrue(ts_dist_cmd_get_data_node_result(results, llast(data_nodes)) == NULL);
 
 	foreach (lc, subset_nodes)

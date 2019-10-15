@@ -78,7 +78,7 @@ hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
 	foreach (cell, deparse_get_tabledef_commands(ht->main_table_relid))
 		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
 
-	dist_res = ts_dist_cmd_invoke_on_data_nodes(commands->table_create_command, data_nodes);
+	dist_res = ts_dist_cmd_invoke_on_data_nodes(commands->table_create_command, data_nodes, true);
 	foreach (cell, data_nodes)
 	{
 		PGresult *res = ts_dist_cmd_get_data_node_result(dist_res, lfirst(cell));

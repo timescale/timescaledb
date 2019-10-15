@@ -288,7 +288,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
 		TSConnection *connection =
-			data_node_get_connection(NameStr(cdn->fd.node_name), REMOTE_TXN_NO_PREP_STMT);
+			data_node_get_connection(NameStr(cdn->fd.node_name), REMOTE_TXN_NO_PREP_STMT, true);
 
 		start_remote_copy_on_new_connection(state, connection);
 		chunk_connections->connections = lappend(chunk_connections->connections, connection);

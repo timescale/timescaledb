@@ -172,15 +172,25 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 }
 
 TSConnection *
-data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption const ps_opt)
+data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption const ps_opt,
+						 bool transactional)
 {
 	const ForeignServer *server;
 	TSConnectionId id;
+	TSConnection *conn;
+	Cache *conn_cache;
 
 	Assert(data_node != NULL);
 	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false);
 	id = remote_connection_id(server->serverid, GetUserId());
-	return remote_dist_txn_get_connection(id, ps_opt);
+
+	if (transactional)
+		return remote_dist_txn_get_connection(id, ps_opt);
+
+	conn_cache = remote_connection_cache_pin();
+	conn = remote_connection_cache_get_connection(conn_cache, id);
+	ts_cache_release(conn_cache);
+	return conn;
 }
 
 /* Attribute numbers for datum returned by create_data_node() */
