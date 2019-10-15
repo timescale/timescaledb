@@ -179,7 +179,7 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 	foreach (lc, data_node_list)
 	{
 		const char *node_name = lfirst(lc);
-		TSConnection *conn = data_node_get_connection(node_name, REMOTE_TXN_USE_PREP_STMT);
+		TSConnection *conn = data_node_get_connection(node_name, REMOTE_TXN_USE_PREP_STMT, true);
 
 		/* Configure connection to be compatible with current options of the test env */
 		set_connection_settings(conn);

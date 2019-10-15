@@ -19,7 +19,8 @@ extern ForeignServer *data_node_get_foreign_server(const char *node_name, AclMod
 extern ForeignServer *data_node_get_foreign_server_by_oid(Oid foreign_server_oid, AclMode mode);
 
 extern TSConnection *data_node_get_connection(const char *const data_node,
-											  RemoteTxnPrepStmtOption const ps_opt);
+											  RemoteTxnPrepStmtOption const ps_opt,
+											  bool transactional);
 
 extern Datum data_node_add(PG_FUNCTION_ARGS);
 extern Datum data_node_delete(PG_FUNCTION_ARGS);

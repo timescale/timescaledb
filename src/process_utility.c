@@ -717,8 +717,13 @@ process_vacuum(ProcessUtilityArgs *args)
 
 				/* Exclude distributed hypertables from the list of relations
 				 * to vacuum since they contain no local tuples. */
-				if (hypertable_is_distributed(ht) && (get_vacuum_options(stmt) & VACOPT_VACUUM))
-					continue;
+				if (hypertable_is_distributed(ht))
+				{
+					int opts = get_vacuum_options(stmt);
+
+					if (opts & VACOPT_VACUUM)
+						continue;
+				}
 
 				ctx.ht_vacuum_rel = vacuum_rel;
 				foreach_chunk(ht, add_chunk_to_vacuum, &ctx);

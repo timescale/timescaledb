@@ -196,7 +196,8 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 		funcctx->user_fctx =
 			ts_dist_cmd_invoke_on_data_nodes("SELECT * FROM "
 											 "timescaledb_information.hypertable_size_info;",
-											 list_make1((void *) node_name));
+											 list_make1((void *) node_name),
+											 true);
 		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
 		MemoryContextSwitchTo(oldcontext);
