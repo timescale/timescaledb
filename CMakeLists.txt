@@ -277,8 +277,8 @@ if (CLANG_FORMAT)
     message(FATAL_ERROR "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
   endif ()
 
-  if(${CMAKE_MATCH_1} LESS "7")
-    message(WARNING "clang-format is out of date (at least version 7 required)")
+  if((${CMAKE_MATCH_1} LESS "7") OR (${CMAKE_MATCH_1} GREATER "8"))
+    message(WARNING "clang-format version 7 or 8 required")
     set(CLANG_FORMAT False)
   endif()
 endif ()
@@ -291,7 +291,7 @@ if (NOT CLANG_FORMAT)
   else ()
     message(STATUS "Using docker based clang-format")
     add_custom_target(format
-      COMMAND docker run -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
+      COMMAND docker run --rm -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
     )
   endif()
 else()
