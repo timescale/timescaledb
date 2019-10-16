@@ -1354,19 +1354,19 @@ SET enable_seqscan TO false;
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE ORDER BY device_id;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _hyper_1_1_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk.device_id
-         ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk
+         ->  Index Only Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk
                Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk.device_id
    ->  Index Only Scan using _hyper_1_2_chunk_tmp_idx on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk.device_id
-         ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk
+         ->  Index Only Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk
                Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk.device_id
 (12 rows)
 
@@ -3941,21 +3941,21 @@ SET enable_seqscan TO false;
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE ORDER BY device_id;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _hyper_2_4_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk
          Output: _hyper_2_4_chunk.device_id
-         ->  Index Scan using compress_hyper_6_17_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_17_chunk
+         ->  Index Only Scan using compress_hyper_6_17_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_17_chunk
                Output: compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_5_chunk
          Output: _hyper_2_5_chunk.device_id
-         ->  Index Scan using compress_hyper_6_18_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_18_chunk
+         ->  Index Only Scan using compress_hyper_6_18_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_18_chunk
                Output: compress_hyper_6_18_chunk._ts_meta_count, compress_hyper_6_18_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_6_chunk
          Output: _hyper_2_6_chunk.device_id
-         ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk
+         ->  Index Only Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk
                Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id
    ->  Index Only Scan using _hyper_2_7_chunk_tmp_idx on _timescaledb_internal._hyper_2_7_chunk
          Output: _hyper_2_7_chunk.device_id
@@ -3965,11 +3965,11 @@ CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
          Output: _hyper_2_9_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk
          Output: _hyper_2_10_chunk.device_id
-         ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk
+         ->  Index Only Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk
                Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk
          Output: _hyper_2_11_chunk.device_id
-         ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk
+         ->  Index Only Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk
                Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id
    ->  Index Only Scan using _hyper_2_12_chunk_tmp_idx on _timescaledb_internal._hyper_2_12_chunk
          Output: _hyper_2_12_chunk.device_id
