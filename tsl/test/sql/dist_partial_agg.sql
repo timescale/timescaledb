@@ -99,7 +99,7 @@ SET enable_partitionwise_aggregate = ON;
 \o
 \set ECHO all
 
--- Note that some difference in output is expected here because
+-- Note that some difference in output could happen here because
 -- queries include last(col, time) and first(col, time); there are
 -- multiple values for "col" that has the same timestamp, so the
 -- output depends on the order of arriving tuples.
