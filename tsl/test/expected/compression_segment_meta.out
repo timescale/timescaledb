@@ -2,28 +2,28 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_segment_meta_min_max_append(internal, ANYELEMENT)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ts_segment_meta_min_max_append(internal, ANYELEMENT)
    RETURNS internal
-   AS :TSL_MODULE_PATHNAME, 'tsl_segment_meta_min_max_append'
+   AS :TSL_MODULE_PATHNAME, 'ts_segment_meta_min_max_append'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_segment_meta_min_max_finish_max(internal, ANYELEMENT)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ts_segment_meta_min_max_finish_max(internal, ANYELEMENT)
    RETURNS anyelement
-   AS :TSL_MODULE_PATHNAME, 'tsl_segment_meta_min_max_finish_max'
+   AS :TSL_MODULE_PATHNAME, 'ts_segment_meta_min_max_finish_max'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_segment_meta_min_max_finish_min(internal, ANYELEMENT)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ts_segment_meta_min_max_finish_min(internal, ANYELEMENT)
    RETURNS anyelement
-   AS :TSL_MODULE_PATHNAME, 'tsl_segment_meta_min_max_finish_min'
+   AS :TSL_MODULE_PATHNAME, 'ts_segment_meta_min_max_finish_min'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE AGGREGATE _timescaledb_internal.segment_meta_min_max_agg_min(ANYELEMENT) (
     STYPE = internal,
-    SFUNC = _timescaledb_internal.tsl_segment_meta_min_max_append,
-    FINALFUNC = _timescaledb_internal.tsl_segment_meta_min_max_finish_min,
+    SFUNC = _timescaledb_internal.ts_segment_meta_min_max_append,
+    FINALFUNC = _timescaledb_internal.ts_segment_meta_min_max_finish_min,
     FINALFUNC_EXTRA
 );
 CREATE AGGREGATE _timescaledb_internal.segment_meta_min_max_agg_max(ANYELEMENT) (
     STYPE = internal,
-    SFUNC = _timescaledb_internal.tsl_segment_meta_min_max_append,
-    FINALFUNC = _timescaledb_internal.tsl_segment_meta_min_max_finish_max,
+    SFUNC = _timescaledb_internal.ts_segment_meta_min_max_append,
+    FINALFUNC = _timescaledb_internal.ts_segment_meta_min_max_finish_max,
     FINALFUNC_EXTRA
 );
 \ir include/rand_generator.sql
