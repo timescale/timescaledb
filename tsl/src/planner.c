@@ -50,7 +50,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 		ListCell *lc;
 		/* is this a chunk under compressed hypertable ? */
 		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, rti, false);
-		Oid parent_oid = appinfo->parent_reloid;
+		Oid PG_USED_FOR_ASSERTS_ONLY parent_oid = appinfo->parent_reloid;
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 		Assert(parent_oid == ht->main_table_relid && (parent_oid == chunk->hypertable_relid));
 		if (chunk->fd.compressed_chunk_id > 0)

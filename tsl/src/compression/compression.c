@@ -999,8 +999,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 		{
 			MemoryContext old_ctx;
 
-			if (!HeapTupleIsValid(compressed_tuple))
-				continue;
+			Assert(HeapTupleIsValid(compressed_tuple));
 
 			old_ctx = MemoryContextSwitchTo(per_compressed_row_ctx);
 

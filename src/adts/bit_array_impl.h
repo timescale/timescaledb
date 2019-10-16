@@ -86,7 +86,8 @@ bit_array_num_buckets(const BitArray *array)
 static inline uint64
 bit_array_num_bits(const BitArray *array)
 {
-	return (BITS_PER_BUCKET * (array->buckets.num_elements - 1)) + array->bits_used_in_last_bucket;
+	return (BITS_PER_BUCKET * (array->buckets.num_elements - UINT64CONST(1))) +
+		   array->bits_used_in_last_bucket;
 }
 
 static inline uint64 *
