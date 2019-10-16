@@ -298,6 +298,7 @@ CREATE VIEW tdc_view
 
 SELECT show_chunks('test_drop_chunks_table');
 
+SELECT alter_job_schedule(:drop_chunks_job_id, max_retries => 0);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
 
 SELECT * FROM sorted_bgw_log;
