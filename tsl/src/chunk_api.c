@@ -6,8 +6,17 @@
 #include <postgres.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/builtins.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_class.h>
+#include <catalog/pg_inherits.h>
+#include <access/htup.h>
+#include <access/htup_details.h>
+#include <access/visibilitymap.h>
+#include <access/xact.h>
+#include <access/multixact.h>
+#include <commands/vacuum.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
@@ -24,6 +33,8 @@
 #include "remote/async.h"
 #include "remote/dist_txn.h"
 #include "remote/stmt_params.h"
+#include "remote/dist_commands.h"
+#include "remote/tuplefactory.h"
 #include "chunk_api.h"
 
 /*
@@ -445,5 +456,261 @@ chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 
 		cdn->fd.node_chunk_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_create_chunk_id)]);
+	}
+}
+
+enum Anum_chunk_relstats
+{
+	Anum_chunk_relstats_chunk_id = 1,
+	Anum_chunk_relstats_hypertable_id,
+	Anum_chunk_relstats_num_pages,
+	Anum_chunk_relstats_num_tuples,
+	Anum_chunk_relstats_num_allvisible,
+	_Anum_chunk_relstats_max,
+};
+
+/*
+ * Construct a tuple for the get_chunk_relstats SQL function.
+ */
+static HeapTuple
+chunk_get_single_stats_tuple(Chunk *chunk, TupleDesc tupdesc)
+{
+	HeapTuple ctup;
+	Form_pg_class pgcform;
+	Datum values[_Anum_chunk_relstats_max];
+	bool nulls[_Anum_chunk_relstats_max] = { false };
+
+	ctup = SearchSysCache1(RELOID, ObjectIdGetDatum(chunk->table_id));
+
+	if (!HeapTupleIsValid(ctup))
+		elog(ERROR,
+			 "pg_class entry for chunk \"%s.%s\" not found",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+
+	pgcform = (Form_pg_class) GETSTRUCT(ctup);
+
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_chunk_id)] = Int32GetDatum(chunk->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_hypertable_id)] =
+		Int32GetDatum(chunk->fd.hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_pages)] =
+		Int32GetDatum(pgcform->relpages);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_tuples)] =
+		Float4GetDatum(pgcform->reltuples);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_allvisible)] =
+		Int32GetDatum(pgcform->relallvisible);
+
+	ReleaseSysCache(ctup);
+
+	return heap_form_tuple(tupdesc, values, nulls);
+}
+
+/*
+ * Update the stats in the pg_class catalog entry for a chunk.
+ *
+ * Similar to code for vacuum/analyze.
+ *
+ * We do not update pg_class.relhasindex because vac_update_relstats() only
+ * sets that field if it reverts back to false (see internal implementation).
+ */
+static void
+chunk_update_relstats(Chunk *chunk, int32 num_pages, float num_tuples, int32 num_allvisible)
+{
+	Relation rel;
+
+	rel = try_relation_open(chunk->table_id, ShareUpdateExclusiveLock);
+
+	/* If a vacuum is running we might not be able to grab the lock, so just
+	 * raise an error and let the user try again. */
+	if (NULL == rel)
+		ereport(ERROR,
+				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+				 errmsg("skipping relstats update of \"%s\" --- lock not available",
+						NameStr(chunk->fd.table_name))));
+
+	vac_update_relstats(rel,
+						num_pages,
+						num_tuples,
+						num_allvisible,
+						true,
+						InvalidTransactionId,
+						InvalidMultiXactId,
+						false);
+
+	relation_close(rel, ShareUpdateExclusiveLock);
+}
+
+/*
+ * Fetch chunk relation stats from remote data nodes.
+ *
+ * This will remotely fetch, and locally update, relation stats (relpages,
+ * reltuples, relallvisible in pg_class) for all chunks in a distributed
+ * hypertable. We do not fetch 'relhasindex' because there is no way to set it
+ * using vac_update_relstats() unless the values reverts back to 'false' (see
+ * internal implementation of PG's vac_update_relstats).
+ *
+ * Note that we currently fetch stats from all chunk replicas, i.e., we might
+ * fetch stats for a local chunk multiple times (once for each
+ * replica). Presumably, stats should be the same for all replicas, but they
+ * might vary if ANALYZE didn't run recently on the data node. We currently
+ * don't care, however, and the "last" chunk replica will win w.r.t. which
+ * stats will take precedence. We might consider optimizing this in the
+ * future.
+ */
+static void
+fetch_remote_chunk_relstats(Hypertable *ht, FunctionCallInfo fcinfo)
+{
+	DistCmdResult *cmdres;
+	TupleDesc tupdesc;
+	TupleFactory *tf;
+	Size i;
+
+	Assert(hypertable_is_distributed(ht));
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	cmdres = ts_dist_cmd_invoke_func_call_on_all_data_nodes(fcinfo);
+	/* Expect TEXT response format since dist command API currently defaults
+	 * to requesting TEXT */
+	tf = tuplefactory_create_for_tupdesc(tupdesc, true);
+
+	for (i = 0; /* exit when res == NULL below */; i++)
+	{
+		PGresult *res;
+		const char *node_name;
+		int row;
+
+		res = ts_dist_cmd_get_result_by_index(cmdres, i, &node_name);
+
+		if (NULL == res)
+			break;
+
+		for (row = 0; row < PQntuples(res); row++)
+		{
+			Datum values[_Anum_chunk_relstats_max];
+			bool nulls[_Anum_chunk_relstats_max] = { false };
+			HeapTuple tuple;
+			int32 chunk_id;
+			ChunkDataNode *cdn;
+			Chunk *chunk;
+			int32 num_pages;
+			float num_tuples;
+			int32 num_allvisible;
+
+			tuple = tuplefactory_make_tuple(tf, res, row);
+			heap_deform_tuple(tuple, tupdesc, values, nulls);
+			chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_chunk_id)]);
+			cdn = ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(chunk_id,
+																		   node_name,
+																		   CurrentMemoryContext);
+			chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
+			num_pages =
+				DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_pages)]);
+			num_tuples =
+				DatumGetFloat4(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_tuples)]);
+			num_allvisible =
+				DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_allvisible)]);
+			chunk_update_relstats(chunk, num_pages, num_tuples, num_allvisible);
+		}
+	}
+
+	ts_dist_cmd_close_response(cmdres);
+}
+
+/*
+ * Get relation stats for chunks.
+ *
+ * This function takes a hypertable or chunk as input (regclass). In case of a
+ * hypertable, it will get the relstats for all the chunks in the hypertable,
+ * otherwise only the given chunk.
+ *
+ * If a hypertable is distributed, the function will first refresh the local
+ * chunk stats by fetching stats from remote data nodes.
+ */
+Datum
+chunk_api_get_chunk_relstats(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	List *chunk_oids = NIL;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+		MemoryContext oldcontext;
+		TupleDesc tupdesc;
+		Cache *hcache;
+		Hypertable *ht;
+
+		if (!OidIsValid(relid))
+			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid table")));
+
+		hcache = ts_hypertable_cache_pin();
+		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+
+		if (NULL == ht)
+		{
+			Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+			if (NULL == chunk)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("must be a hypertable or chunk")));
+
+			chunk_oids = list_make1_oid(chunk->table_id);
+		}
+		else
+		{
+			if (hypertable_is_distributed(ht))
+			{
+				/* If this is a distributed hypertable, we fetch stats from
+				 * remote nodes */
+				fetch_remote_chunk_relstats(ht, fcinfo);
+				/* Make updated stats visible so that we can retreive them locally below */
+				CommandCounterIncrement();
+			}
+
+			chunk_oids = find_inheritance_children(relid, NoLock);
+		}
+
+		ts_cache_release(hcache);
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		/* Save the chunk oid list on the multi-call memory context so that it
+		 * survives across multiple calls to this function (until SRF is
+		 * done). */
+		funcctx->user_fctx = list_copy(chunk_oids);
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	chunk_oids = (List *) funcctx->user_fctx;
+
+	if (chunk_oids == NIL)
+		SRF_RETURN_DONE(funcctx);
+	else
+	{
+		Oid relid = linitial_oid(chunk_oids);
+		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+		HeapTuple tuple = chunk_get_single_stats_tuple(chunk, funcctx->tuple_desc);
+		MemoryContext oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		chunk_oids = list_delete_first(chunk_oids);
+		funcctx->user_fctx = chunk_oids;
+		MemoryContextSwitchTo(oldcontext);
+
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 	}
 }

@@ -160,7 +160,7 @@ create_foreign_modify(EState *estate, Relation rel, CmdType operation, Oid check
 
 	/* Prepare for input conversion of RETURNING results. */
 	if (fmstate->has_returning)
-		fmstate->att_conv_metadata = data_format_create_att_conv_in_metadata(tupdesc);
+		fmstate->att_conv_metadata = data_format_create_att_conv_in_metadata(tupdesc, false);
 
 	if (operation == CMD_UPDATE || operation == CMD_DELETE)
 	{

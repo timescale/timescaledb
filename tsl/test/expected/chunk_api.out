@@ -102,3 +102,122 @@ FROM show_chunks('chunkapi');
  ChunkSchema | My_chunk_Table_name | table | default_perm_user
 (1 row)
 
+-- Test getting relation stats for chunk.  First get stats
+-- chunk-by-chunk. Note that the table isn't ANALYZED, so no stats
+-- present yet.
+SELECT (_timescaledb_internal.get_chunk_relstats(show_chunks)).*
+FROM show_chunks('chunkapi');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        1 |             1 |         0 |          0 |              0
+        2 |             1 |         0 |          0 |              0
+(2 rows)
+
+-- Get the same stats but by giving the hypertable as input
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        1 |             1 |         0 |          0 |              0
+        2 |             1 |         0 |          0 |              0
+(2 rows)
+
+-- Show stats after analyze
+ANALYZE chunkapi;
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        1 |             1 |         1 |          1 |              0
+        2 |             1 |         0 |          0 |              0
+(2 rows)
+
+-- Test getting chunk stats on a distribute hypertable
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+SET client_min_messages TO NOTICE;
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+(1 row)
+
+GRANT USAGE
+   ON FOREIGN SERVER data_node_1, data_node_2
+   TO :ROLE_1;
+SET ROLE :ROLE_1;
+CREATE TABLE disttable (time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | disttable  | t
+(1 row)
+
+INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4),
+                             ('2018-01-01 06:00:00-8', 4, 22.3),
+                             ('2018-01-01 06:00:00-8', 1, 21.1);
+-- No stats on the local table
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        3 |             2 |         0 |          0 |              0
+        4 |             2 |         0 |          0 |              0
+(2 rows)
+
+-- Run ANALYZE on data node 1
+SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+-- Stats should now be refreshed locally
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        3 |             2 |         1 |          2 |              0
+        4 |             2 |         0 |          0 |              0
+(2 rows)
+
+-- Run ANALYZE again, but on both nodes
+SELECT * FROM distributed_exec('ANALYZE disttable');
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+-- Now expect stats from all data node chunks
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        3 |             2 |         1 |          2 |              0
+        4 |             2 |         1 |          1 |              0
+(2 rows)
+
+RESET ROLE;
+-- Clean up
+TRUNCATE disttable;
+SELECT * FROM delete_data_node('data_node_1', force => true);
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT * FROM delete_data_node('data_node_2', force => true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_2"
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+DROP DATABASE data_node_1;
+DROP DATABASE data_node_2;

@@ -29,6 +29,7 @@
 #include <utils/float.h>
 #endif
 
+#include <guc.h>
 #include "utils.h"
 #include "compat.h"
 #include "remote/data_format.h"
@@ -145,7 +146,7 @@ conversion_error_callback(void *arg)
 }
 
 static TupleFactory *
-tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
+tuplefactory_create_common(TupleDesc tupdesc, List *retrieved_attrs, bool force_text)
 {
 	TupleFactory *tf = palloc0(sizeof(TupleFactory));
 
@@ -153,22 +154,48 @@ tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
 										  "tuple factory temporary data",
 										  ALLOCSET_SMALL_SIZES);
 
-	if (NULL != rel)
-		tf->tupdesc = RelationGetDescr(rel);
-	else
-	{
-		Assert(ss);
-		tf->tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
-	}
-
+	tf->tupdesc = tupdesc;
 	tf->retrieved_attrs = retrieved_attrs;
-	tf->attconv = data_format_create_att_conv_in_metadata(tf->tupdesc);
+	tf->attconv = data_format_create_att_conv_in_metadata(tf->tupdesc, force_text);
 	tf->values = (Datum *) palloc0(tf->tupdesc->natts * sizeof(Datum));
 	tf->nulls = (bool *) palloc(tf->tupdesc->natts * sizeof(bool));
 
 	/* Initialize to nulls for any columns not present in result */
 	memset(tf->nulls, true, tf->tupdesc->natts * sizeof(bool));
 
+	return tf;
+}
+
+TupleFactory *
+tuplefactory_create_for_tupdesc(TupleDesc tupdesc, bool force_text)
+{
+	List *retrieved_attrs = NIL;
+	int i;
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		if (!TupleDescAttr(tupdesc, i)->attisdropped)
+			retrieved_attrs = lappend_int(retrieved_attrs, i + 1);
+	}
+
+	return tuplefactory_create_common(tupdesc, retrieved_attrs, force_text);
+}
+
+static TupleFactory *
+tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
+{
+	TupleFactory *tf;
+	TupleDesc tupdesc;
+
+	Assert(!(rel && ss) && (rel || ss));
+
+	if (NULL != rel)
+		tupdesc = RelationGetDescr(rel);
+	else
+		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
+
+	tf =
+		tuplefactory_create_common(tupdesc, retrieved_attrs, !ts_guc_enable_connection_binary_data);
 	tf->errpos.rel = rel;
 	tf->errpos.cur_attno = 0;
 	tf->errpos.ss = ss;
@@ -223,8 +250,11 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row)
 	buf = makeStringInfo();
 
 	/* Install error callback */
-	tf->errcallback.previous = error_context_stack;
-	error_context_stack = &tf->errcallback;
+	if (tf->errcallback.callback != NULL)
+	{
+		tf->errcallback.previous = error_context_stack;
+		error_context_stack = &tf->errcallback;
+	}
 
 	/*
 	 * i indexes columns in the relation, j indexes columns in the PGresult.
@@ -315,7 +345,8 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row)
 	}
 
 	/* Uninstall error context callback. */
-	error_context_stack = tf->errcallback.previous;
+	if (tf->errcallback.callback != NULL)
+		error_context_stack = tf->errcallback.previous;
 
 	/*
 	 * Check we got the expected number of columns.  Note: j == 0 and

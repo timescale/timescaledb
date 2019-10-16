@@ -83,7 +83,7 @@ data_format_get_type_input_func(Oid type, bool *is_binary, bool force_text, Oid 
 }
 
 AttConvInMetadata *
-data_format_create_att_conv_in_metadata(TupleDesc tupdesc)
+data_format_create_att_conv_in_metadata(TupleDesc tupdesc, bool force_text)
 {
 	AttConvInMetadata *att_conv_metadata;
 	int i = 0;
@@ -103,15 +103,14 @@ data_format_create_att_conv_in_metadata(TupleDesc tupdesc)
 
 		if (!TupleDescAttr(tupdesc, i)->attisdropped)
 		{
-			funcoid =
-				data_format_get_type_input_func(TupleDescAttr(tupdesc, i)->atttypid,
-												&isbinary,
-												!ts_guc_enable_connection_binary_data || !isbinary,
-												&att_conv_metadata->ioparams[i]);
+			funcoid = data_format_get_type_input_func(TupleDescAttr(tupdesc, i)->atttypid,
+													  &isbinary,
+													  force_text || !isbinary,
+													  &att_conv_metadata->ioparams[i]);
 			if (prev == !isbinary)
 			{
 				i = 0; /* in/out functions has to be eiher all binary or all text (PostgreSQL
-						  limitation). Lets restart function discovery process */
+						  limitation). Let's restart function discovery process */
 				prev = false;
 				continue;
 			}

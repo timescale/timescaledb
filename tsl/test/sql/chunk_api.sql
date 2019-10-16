@@ -55,3 +55,64 @@ FROM show_chunks('chunkapi');
 -- Show the new chunks
 \dt public.*
 \dt "ChunkSchema".*
+
+
+-- Test getting relation stats for chunk.  First get stats
+-- chunk-by-chunk. Note that the table isn't ANALYZED, so no stats
+-- present yet.
+SELECT (_timescaledb_internal.get_chunk_relstats(show_chunks)).*
+FROM show_chunks('chunkapi');
+
+-- Get the same stats but by giving the hypertable as input
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+
+-- Show stats after analyze
+ANALYZE chunkapi;
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+
+-- Test getting chunk stats on a distribute hypertable
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+SET client_min_messages TO NOTICE;
+
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+
+GRANT USAGE
+   ON FOREIGN SERVER data_node_1, data_node_2
+   TO :ROLE_1;
+
+SET ROLE :ROLE_1;
+CREATE TABLE disttable (time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4),
+                             ('2018-01-01 06:00:00-8', 4, 22.3),
+                             ('2018-01-01 06:00:00-8', 1, 21.1);
+
+-- No stats on the local table
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+
+-- Run ANALYZE on data node 1
+SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
+
+-- Stats should now be refreshed locally
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+
+-- Run ANALYZE again, but on both nodes
+SELECT * FROM distributed_exec('ANALYZE disttable');
+
+-- Now expect stats from all data node chunks
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+
+RESET ROLE;
+-- Clean up
+TRUNCATE disttable;
+SELECT * FROM delete_data_node('data_node_1', force => true);
+SELECT * FROM delete_data_node('data_node_2', force => true);
+DROP DATABASE data_node_1;
+DROP DATABASE data_node_2;

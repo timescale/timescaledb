@@ -53,6 +53,7 @@ TS_FUNCTION_INFO_V1(ts_data_node_detach);
 TS_FUNCTION_INFO_V1(ts_data_node_block_new_chunks);
 TS_FUNCTION_INFO_V1(ts_data_node_allow_new_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_set_default_data_node);
+TS_FUNCTION_INFO_V1(ts_chunk_get_relstats);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
@@ -170,6 +171,12 @@ Datum
 ts_chunk_set_default_data_node(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_data_node(fcinfo));
+}
+
+Datum
+ts_chunk_get_relstats(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->get_chunk_relstats(fcinfo));
 }
 
 Datum
@@ -644,6 +651,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_hypertable_info = error_no_default_fn_pg_community,
 	.validate_as_data_node = error_no_default_fn_community,
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
+	.get_chunk_relstats = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

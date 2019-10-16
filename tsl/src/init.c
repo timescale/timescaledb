@@ -261,6 +261,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.validate_as_data_node = NULL,
 	.distributed_exec = error_not_supported_default_fn,
 	.func_call_on_data_nodes = error_func_call_on_data_nodes_not_supported,
+	.get_chunk_relstats = error_not_supported_default_fn,
 #else
 	.add_data_node = data_node_add,
 	.delete_data_node = data_node_delete,
@@ -294,6 +295,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.validate_as_data_node = validate_data_node_settings,
 	.distributed_exec = ts_dist_cmd_exec,
 	.func_call_on_data_nodes = ts_dist_cmd_func_call_on_data_nodes,
+	.get_chunk_relstats = chunk_api_get_chunk_relstats,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
