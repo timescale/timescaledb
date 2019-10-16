@@ -6,7 +6,7 @@
 -- Setup
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
+CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
@@ -32,7 +32,6 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 SELECT _timescaledb_internal.stop_background_workers();
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
-SELECT _timescaledb_internal.start_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -114,7 +113,7 @@ SELECT indexrelid::regclass, indisclustered
     WHERE indisclustered = true ORDER BY 1;
 
 -- second call to scheduler should immediately run reorder again, due to catchup
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -131,7 +130,7 @@ SELECT indexrelid::regclass, indisclustered
     WHERE indisclustered = true ORDER BY 1;
 
 -- third call to scheduler should immediately run reorder again, due to catchup
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 
 -- job info is gone
 
@@ -150,7 +149,7 @@ SELECT indexrelid::regclass, indisclustered
 
 
 -- running is a nop
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 100);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -180,7 +179,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:reorder_job_id;
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125, 125);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -253,7 +252,7 @@ SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last
 SELECT show_chunks('test_drop_chunks_table');
 
 -- job doesn't run again immediately
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -272,7 +271,7 @@ INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '12 months', 0);
 
 SELECT show_chunks('test_drop_chunks_table');
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -300,7 +299,7 @@ CREATE VIEW tdc_view
 
 SELECT show_chunks('test_drop_chunks_table');
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 10000);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
 
 SELECT * FROM sorted_bgw_log;
 
@@ -335,7 +334,7 @@ INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = 
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100000, 10000);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000000);
 
 --make sure same # of compressed and uncompressed chunks after policy, reduced by 1
 SELECT count(*) as count_chunks_uncompressed

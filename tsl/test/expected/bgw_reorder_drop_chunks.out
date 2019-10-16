@@ -5,7 +5,7 @@
 -- Setup
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
+CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
@@ -29,12 +29,6 @@ SELECT _timescaledb_internal.stop_background_workers();
 
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
-SELECT _timescaledb_internal.start_background_workers();
- start_background_workers 
---------------------------
- t
-(1 row)
-
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -181,7 +175,7 @@ SELECT indexrelid::regclass, indisclustered
 (1 row)
 
 -- second call to scheduler should immediately run reorder again, due to catchup
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -222,7 +216,7 @@ SELECT indexrelid::regclass, indisclustered
 (2 rows)
 
 -- third call to scheduler should immediately run reorder again, due to catchup
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -266,7 +260,7 @@ SELECT indexrelid::regclass, indisclustered
 (3 rows)
 
 -- running is a nop
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 100);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -346,7 +340,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 --------+------------+------------+------------------+------------+-----------------+----------------+---------------
 (0 rows)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125, 125);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -515,7 +509,7 @@ SELECT show_chunks('test_drop_chunks_table');
 (3 rows)
 
 -- job doesn't run again immediately
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -564,7 +558,7 @@ SELECT show_chunks('test_drop_chunks_table');
  _timescaledb_internal._hyper_2_11_chunk
 (4 rows)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 25);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -633,7 +627,7 @@ SELECT show_chunks('test_drop_chunks_table');
  _timescaledb_internal._hyper_2_12_chunk
 (4 rows)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000, 10000);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -711,7 +705,7 @@ WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
                        4
 (1 row)
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100000, 10000);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
