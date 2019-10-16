@@ -65,9 +65,9 @@ select * from _timescaledb_config.bgw_job where job_type like 'compress%';
 
 select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
 WARNING:  Timescale License expired
- job_id | schedule_interval | max_runtime | max_retries | retry_period 
---------+-------------------+-------------+-------------+--------------
-   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | next_start 
+--------+-------------------+-------------+-------------+--------------+------------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | -infinity
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';

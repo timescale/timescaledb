@@ -545,10 +545,10 @@ ts_decompress_table(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_append);
+TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_append);
 
 Datum
-tsl_segment_meta_min_max_append(PG_FUNCTION_ARGS)
+ts_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 {
 	SegmentMetaMinMaxBuilder *builder =
 		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
@@ -558,7 +558,7 @@ tsl_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &agg_context))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "tsl_segment_meta_min_max_append called in non-aggregate context");
+		elog(ERROR, "ts_segment_meta_min_max_append called in non-aggregate context");
 	}
 
 	old_context = MemoryContextSwitchTo(agg_context);
@@ -577,9 +577,9 @@ tsl_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(builder);
 }
 
-TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish_max);
+TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_finish_max);
 Datum
-tsl_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
+ts_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
 {
 	SegmentMetaMinMaxBuilder *builder =
 		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
@@ -590,9 +590,9 @@ tsl_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(segment_meta_min_max_builder_max(builder));
 }
 
-TS_FUNCTION_INFO_V1(tsl_segment_meta_min_max_finish_min);
+TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_finish_min);
 Datum
-tsl_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
+ts_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
 {
 	SegmentMetaMinMaxBuilder *builder =
 		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));

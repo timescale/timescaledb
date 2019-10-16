@@ -2032,7 +2032,6 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-
 /*Assume permissions are already checked */
 bool
 ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
