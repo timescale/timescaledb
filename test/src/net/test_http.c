@@ -105,6 +105,8 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 			success = ts_http_response_state_parse(state, bytes);
 
 			Assert(success);
+			if (!success)
+				elog(ERROR, "could not parse http state");
 
 			success = ts_http_response_state_is_done(state);
 
@@ -131,6 +133,7 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 		HttpResponseState *state = ts_http_response_state_create();
 		ssize_t bufsize = 0;
 		char *buf;
+		int cmp;
 
 		buf = ts_http_response_state_next_buffer(state, &bufsize);
 
@@ -147,9 +150,12 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 		Assert(ts_http_response_state_is_done(state));
 		Assert(ts_http_response_state_content_length(state) == TEST_LENGTHS[i]);
 		/* Make sure we read the right message body */
-		Assert(!strncmp(MESSAGE_BODY[i],
-						ts_http_response_state_body_start(state),
-						ts_http_response_state_content_length(state)));
+		cmp = !strncmp(MESSAGE_BODY[i],
+					   ts_http_response_state_body_start(state),
+					   ts_http_response_state_content_length(state));
+		Assert(cmp);
+		if (!cmp)
+			elog(ERROR, "bad message");
 
 		ts_http_response_state_destroy(state);
 	}
@@ -186,6 +192,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 									"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
 	char *host = "herp.com";
 	HttpRequest *req = ts_http_request_create(HTTP_GET);
+	int cmp_res;
 
 	ts_http_request_set_uri(req, "/v1/alerts");
 	ts_http_request_set_version(req, HTTP_VERSION_11);
@@ -194,7 +201,10 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 
 	serialized = ts_http_request_build(req, &request_len);
 
-	Assert(!strncmp(expected_response, serialized, request_len));
+	cmp_res = !strncmp(expected_response, serialized, request_len);
+	Assert(cmp_res);
+	if (!cmp_res)
+		elog(ERROR, "bad response");
 	ts_http_request_destroy(req);
 
 	expected_response =

@@ -35,13 +35,18 @@ set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform th
 is built for")
 message(STATUS "Install method is '${PROJECT_INSTALL_METHOD}'")
 
+option(TS_COVERAGE_ONLY "run in debug mode with assertions disabled to provide more accurate test-coverage info")
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of CMAKE_C_FLAGS_DEBUG is
   # determined at build time by running cmake --build . --config Debug (at least on Windows).
   # Therefore, we only set these flags if the configuration-time CMAKE_BUILD_TYPE is set to
   # Debug. Then Debug enabled builds will only happen on Windows if both the configuration-
   # and build-time settings are Debug.
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1 -DDEBUG=1 -DTS_DEBUG=1")
+  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DDEBUG=1 -DTS_DEBUG=1")
+  if (NOT TS_COVERAGE_ONLY)
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1")
+  endif()
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(SUPPORTED_COMPILERS "GNU" "Clang" "AppleClang" "MSVC")
@@ -111,7 +116,7 @@ if (ENABLE_CODECOVERAGE)
 
   find_program(CODECOV_GCOV gcov)
   find_program(CODECOV_LCOV lcov)
-  add_definitions(-fprofile-arcs -ftest-coverage)
+  add_definitions(-fprofile-arcs -ftest-coverage -coverage)
   link_libraries(gcov)
   set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --coverage -fprofile-arcs)
   add_custom_target(coverage_init ALL ${CODECOV_LCOV} --base-directory . --directory ${CMAKE_BINARY_DIR} --output-file ${CODECOV_OUTPUTFILE} --capture --initial)

@@ -178,8 +178,15 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 
 	if (worker_handle != NULL)
 	{
-		Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(worker_handle, &pid));
-		Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(worker_handle));
+		BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
+		Assert(BGWH_STARTED == status);
+		if (status != BGWH_STARTED)
+			elog(ERROR, "bgw not started");
+
+		status = WaitForBackgroundWorkerShutdown(worker_handle);
+		Assert(BGWH_STOPPED == status);
+		if (status != BGWH_STOPPED)
+			elog(ERROR, "bgw not stopped");
 	}
 
 	PG_RETURN_VOID();
@@ -193,12 +200,16 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	char *params = serialize_test_parameters(PG_GETARG_INT32(0));
 	pid_t pid;
 	MemoryContext old_ctx;
+	BgwHandleStatus status;
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
 	current_handle = start_test_scheduler(params);
 	MemoryContextSwitchTo(old_ctx);
 
-	Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(current_handle, &pid));
+	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
+	Assert(BGWH_STARTED == status);
+	if (status != BGWH_STARTED)
+		elog(ERROR, "bgw not started");
 
 	PG_RETURN_VOID();
 }
@@ -208,7 +219,10 @@ ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {
 	if (current_handle != NULL)
 	{
-		Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(current_handle));
+		BgwHandleStatus status = WaitForBackgroundWorkerShutdown(current_handle);
+		Assert(BGWH_STOPPED == status);
+		if (status != BGWH_STOPPED)
+			elog(ERROR, "bgw not stopped");
 	}
 	PG_RETURN_VOID();
 }
