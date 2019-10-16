@@ -1,4 +1,5 @@
 set(TEST_FILES
+  compression_ddl.spec
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec)
 
