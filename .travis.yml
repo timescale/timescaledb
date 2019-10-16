@@ -29,11 +29,11 @@ install:
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
 script:
   # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS='-Werror -O2' cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres -DCMAKE_BUILD_TYPE=Debug ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug-nossl/"
   # Run only telemetry test to see that it works without OpenSSL
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Now build with OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS='-Werror -O2' cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
   # Now run all tests
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Run the PG regression tests too
@@ -42,8 +42,6 @@ after_failure:
   - docker exec -u postgres -it pgbuild find /build -name regression.diffs -exec cat {} +
   - docker exec -u postgres -it pgbuild find /build -name postmaster.log -exec cat {} +
 after_success:
-  - ci_env=`bash <(curl -s https://codecov.io/env)`
-  - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 after_script:
   - docker rm -f pgbuild
 
@@ -181,6 +179,40 @@ jobs:
       stage: test
       name: "Regression 11.5"
       env: PG_VERSION=11.5 CODECOV_FLAGS="-F cron -F pr"
+
+    #get codecov info, we only run 11.0 on PRs and the rest in cron
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "CodeCov 11.0"
+      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F pr"
+      after_success:
+        - ci_env=`bash <(curl -s https://codecov.io/env)`
+        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "CodeCov 9.6.15"
+      env: PG_VERSION=9.6.15 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      after_success:
+        - ci_env=`bash <(curl -s https://codecov.io/env)`
+        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "CodeCov 11.5"
+      env: PG_VERSION=11.5 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      after_success:
+        - ci_env=`bash <(curl -s https://codecov.io/env)`
+        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
+
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "CodeCov 11.0"
+      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      after_success:
+        - ci_env=`bash <(curl -s https://codecov.io/env)`
+        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: (type = cron) OR (branch = prerelease_test)
