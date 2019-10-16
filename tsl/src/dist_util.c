@@ -204,7 +204,7 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
-	result = ts_dist_cmd_get_data_node_result(funcctx->user_fctx, node_name);
+	result = ts_dist_cmd_get_result_by_node_name(funcctx->user_fctx, node_name);
 
 	if (funcctx->call_cntr < PQntuples(result))
 	{

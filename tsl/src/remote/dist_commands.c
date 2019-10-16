@@ -186,7 +186,7 @@ ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes)
 }
 
 PGresult *
-ts_dist_cmd_get_data_node_result(DistCmdResult *response, const char *node_name)
+ts_dist_cmd_get_result_by_node_name(DistCmdResult *response, const char *node_name)
 {
 	int i;
 
@@ -198,6 +198,31 @@ ts_dist_cmd_get_data_node_result(DistCmdResult *response, const char *node_name)
 			return async_response_result_get_pg_result(resp->result);
 	}
 	return NULL;
+}
+
+/*
+ * Get the n:th command result.
+ *
+ * Returns the n:th command result as given by the index, or NULL if no such
+ * result.
+ *
+ * Optionally get the name of the node that the result was from via the
+ * node_name parameter.
+ */
+PGresult *
+ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index, const char **node_name)
+{
+	DistCmdResponse *rsp;
+
+	if (index >= response->num_responses)
+		return NULL;
+
+	rsp = &response->responses[index];
+
+	if (NULL != node_name)
+		*node_name = rsp->data_node;
+
+	return async_response_result_get_pg_result(rsp->result);
 }
 
 void

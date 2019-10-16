@@ -19,7 +19,7 @@ TS_FUNCTION_INFO_V1(tsl_invoke_faulty_distributed_command);
 	elog(INFO,                                                                                     \
 		 "%s result: %s",                                                                          \
 		 TARGET,                                                                                   \
-		 PQresStatus(PQresultStatus(ts_dist_cmd_get_data_node_result(RESULT, TARGET))));
+		 PQresStatus(PQresultStatus(ts_dist_cmd_get_result_by_node_name(RESULT, TARGET))));
 
 Datum
 tsl_invoke_distributed_commands(PG_FUNCTION_ARGS)
@@ -57,7 +57,7 @@ tsl_invoke_distributed_commands(PG_FUNCTION_ARGS)
 											   "device int, temp float);",
 											   subset_nodes,
 											   true);
-	TestAssertTrue(ts_dist_cmd_get_data_node_result(results, llast(data_nodes)) == NULL);
+	TestAssertTrue(ts_dist_cmd_get_result_by_node_name(results, llast(data_nodes)) == NULL);
 
 	foreach (lc, subset_nodes)
 	{

@@ -81,7 +81,7 @@ hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
 	dist_res = ts_dist_cmd_invoke_on_data_nodes(commands->table_create_command, data_nodes, true);
 	foreach (cell, data_nodes)
 	{
-		PGresult *res = ts_dist_cmd_get_data_node_result(dist_res, lfirst(cell));
+		PGresult *res = ts_dist_cmd_get_result_by_node_name(dist_res, lfirst(cell));
 
 		Assert(PQntuples(res) == 1);
 		Assert(PQnfields(res) == AttrNumberGetAttrOffset(_Anum_create_hypertable_max));

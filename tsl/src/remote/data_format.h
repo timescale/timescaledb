@@ -22,7 +22,8 @@ typedef struct AttConvInMetadata
 	bool binary; /* if we use function with binary input */
 } AttConvInMetadata;
 
-extern AttConvInMetadata *data_format_create_att_conv_in_metadata(TupleDesc tupdesc);
+extern AttConvInMetadata *data_format_create_att_conv_in_metadata(TupleDesc tupdesc,
+																  bool force_text);
 
 extern Oid data_format_get_type_output_func(Oid type, bool *is_binary, bool force_text);
 extern Oid data_format_get_type_input_func(Oid type, bool *is_binary, bool force_text,

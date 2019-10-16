@@ -119,28 +119,45 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 
 static int
 ts_chunk_data_node_scan_by_chunk_id_and_node_internal(int32 chunk_id, const char *node_name,
+													  bool scan_by_remote_chunk_id,
 													  tuple_found_func tuple_found, void *data,
 													  LOCKMODE lockmode, MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
 	int nkeys = 0;
+	int attrnum_chunk_id;
+	int attrnum_node_name;
+	int indexid;
+
+	if (scan_by_remote_chunk_id)
+	{
+		attrnum_chunk_id = Anum_chunk_data_node_node_chunk_id_node_name_idx_chunk_id;
+		attrnum_node_name = Anum_chunk_data_node_node_chunk_id_node_name_idx_node_name;
+		indexid = CHUNK_DATA_NODE_NODE_CHUNK_ID_NODE_NAME_IDX;
+	}
+	else
+	{
+		attrnum_chunk_id = Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id;
+		attrnum_node_name = Anum_chunk_data_node_chunk_id_node_name_idx_node_name;
+		indexid = CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX;
+	}
 
 	ScanKeyInit(&scankey[nkeys++],
-				Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id,
+				attrnum_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk_id));
 
 	if (NULL != node_name)
 		ScanKeyInit(&scankey[nkeys++],
-					Anum_chunk_data_node_chunk_id_node_name_idx_node_name,
+					attrnum_node_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
 					DirectFunctionCall1(namein, CStringGetDatum(node_name)));
 
 	return chunk_data_node_scan_limit_internal(scankey,
 											   nkeys,
-											   CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX,
+											   indexid,
 											   tuple_found,
 											   data,
 											   0,
@@ -177,6 +194,7 @@ ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 
 	ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
 														  NULL,
+														  false,
 														  chunk_data_node_tuple_found,
 														  &chunk_data_nodes,
 														  AccessShareLock,
@@ -184,15 +202,16 @@ ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 	return chunk_data_nodes;
 }
 
-ChunkDataNode *
-ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
-												  MemoryContext mctx)
+static ChunkDataNode *
+chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
+											   bool scan_by_remote_chunk_id, MemoryContext mctx)
 
 {
 	List *chunk_data_nodes = NIL;
 
 	ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
 														  node_name,
+														  scan_by_remote_chunk_id,
 														  chunk_data_node_tuple_found,
 														  &chunk_data_nodes,
 														  AccessShareLock,
@@ -202,6 +221,22 @@ ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *no
 	if (chunk_data_nodes == NIL)
 		return NULL;
 	return linitial(chunk_data_nodes);
+}
+
+ChunkDataNode *
+ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
+												  MemoryContext mctx)
+
+{
+	return chunk_data_node_scan_by_chunk_id_and_node_name(chunk_id, node_name, false, mctx);
+}
+
+ChunkDataNode *
+ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
+														 MemoryContext mctx)
+
+{
+	return chunk_data_node_scan_by_chunk_id_and_node_name(chunk_id, node_name, true, mctx);
 }
 
 static ScanTupleResult
@@ -221,6 +256,7 @@ ts_chunk_data_node_delete_by_chunk_id(int32 chunk_id)
 {
 	return ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
 																 NULL,
+																 false,
 																 chunk_data_node_tuple_delete,
 																 NULL,
 																 RowExclusiveLock,
@@ -232,6 +268,7 @@ ts_chunk_data_node_delete_by_chunk_id_and_node_name(int32 chunk_id, const char *
 {
 	return ts_chunk_data_node_scan_by_chunk_id_and_node_internal(chunk_id,
 																 node_name,
+																 false,
 																 chunk_data_node_tuple_delete,
 																 NULL,
 																 RowExclusiveLock,

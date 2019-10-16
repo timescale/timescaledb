@@ -23,7 +23,10 @@ extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_all_data_nodes(FunctionCal
 extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo,
 																 List *data_nodes);
 extern void ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes);
-extern PGresult *ts_dist_cmd_get_data_node_result(DistCmdResult *response, const char *node_name);
+extern PGresult *ts_dist_cmd_get_result_by_node_name(DistCmdResult *response,
+													 const char *node_name);
+extern PGresult *ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index,
+												 const char **node_name);
 
 extern void ts_dist_cmd_close_response(DistCmdResult *response);
 
