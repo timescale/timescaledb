@@ -263,6 +263,10 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 #endif
 	ce->run_cost += cpu_tuple_cost * num_groups;
 	ce->run_cost += ptarget->cost.per_tuple * num_groups;
+
+	/* Update the relation's number of output rows. Needed on UPPER rels as
+	 * "cached" value when we compute costs for different pathkeys */
+	rel->rows = ce->rows;
 }
 
 static void

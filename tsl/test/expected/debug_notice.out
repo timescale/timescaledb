@@ -115,31 +115,32 @@ GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=0 width=20
+RELOPTINFO (hyper): rows=9 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
 	Agg [parents: hyper] rows=3 cost=128.18..128.34
 		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=0 cost=100.09..129.73 has pathkeys
+	Agg [parents: hyper] rows=3 cost=100.00..129.74 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=0 width=20
+RELOPTINFO (hyper): rows=19 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.19..156.69
 	Agg [parents: hyper] rows=6 cost=156.61..157.18 has pathkeys
 		Sort [parents: hyper] rows=19 cost=156.61..156.66 has pathkeys
 			CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.00..156.21
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=0 cost=100.20..159.50 has pathkeys
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=0 width=20
+RELOPTINFO (hyper): rows=9 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
 	Agg [parents: hyper] rows=3 cost=128.18..128.34
 		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=0 cost=100.09..129.73 has pathkeys
+	Agg [parents: hyper] rows=3 cost=100.00..129.74 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
 
 
              time             | device | temp 
