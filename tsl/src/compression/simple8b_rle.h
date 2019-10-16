@@ -658,8 +658,6 @@ simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIter
 
 	if (iter->current_in_compressed_pos < 0)
 	{
-		Assert(iter->current_compressed_pos >= 0);
-
 		iter->current_block =
 			simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
 															 SIMPLE8B_BITS_PER_SELECTOR),
