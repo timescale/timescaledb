@@ -1506,22 +1506,24 @@ SET enable_seqscan TO false;
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE ORDER BY device_id;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append (actual rows=27360 loops=1)
    Sort Key: _hyper_1_1_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=7200 loops=1)
          Output: _hyper_1_1_chunk.device_id
-         ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=10 loops=1)
+         ->  Index Only Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=10 loops=1)
                Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk.device_id
+               Heap Fetches: 10
    ->  Index Only Scan using _hyper_1_2_chunk_tmp_idx on _timescaledb_internal._hyper_1_2_chunk (actual rows=10080 loops=1)
          Output: _hyper_1_2_chunk.device_id
          Heap Fetches: 10080
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=10080 loops=1)
          Output: _hyper_1_3_chunk.device_id
-         ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
+         ->  Index Only Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
                Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk.device_id
-(13 rows)
+               Heap Fetches: 15
+(15 rows)
 
 DROP INDEX tmp_idx CASCADE;
 --use the peer index
@@ -4392,22 +4394,25 @@ SET enable_seqscan TO false;
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE ORDER BY device_id;
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append (actual rows=27360 loops=1)
    Sort Key: _hyper_2_4_chunk.device_id
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (actual rows=1440 loops=1)
          Output: _hyper_2_4_chunk.device_id
-         ->  Index Scan using compress_hyper_6_17_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=2 loops=1)
+         ->  Index Only Scan using compress_hyper_6_17_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=2 loops=1)
                Output: compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk.device_id
+               Heap Fetches: 2
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_5_chunk (actual rows=4320 loops=1)
          Output: _hyper_2_5_chunk.device_id
-         ->  Index Scan using compress_hyper_6_18_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_18_chunk (actual rows=6 loops=1)
+         ->  Index Only Scan using compress_hyper_6_18_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_18_chunk (actual rows=6 loops=1)
                Output: compress_hyper_6_18_chunk._ts_meta_count, compress_hyper_6_18_chunk.device_id
+               Heap Fetches: 6
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_6_chunk (actual rows=1440 loops=1)
          Output: _hyper_2_6_chunk.device_id
-         ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=2 loops=1)
+         ->  Index Only Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=2 loops=1)
                Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id
+               Heap Fetches: 2
    ->  Index Only Scan using _hyper_2_7_chunk_tmp_idx on _timescaledb_internal._hyper_2_7_chunk (actual rows=2016 loops=1)
          Output: _hyper_2_7_chunk.device_id
          Heap Fetches: 2016
@@ -4419,16 +4424,18 @@ CREATE INDEX tmp_idx ON :TEST_TABLE(device_id);
          Heap Fetches: 2016
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=2016 loops=1)
          Output: _hyper_2_10_chunk.device_id
-         ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
+         ->  Index Only Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
                Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk.device_id
+               Heap Fetches: 3
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
          Output: _hyper_2_11_chunk.device_id
-         ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
+         ->  Index Only Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
                Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id
+               Heap Fetches: 9
    ->  Index Only Scan using _hyper_2_12_chunk_tmp_idx on _timescaledb_internal._hyper_2_12_chunk (actual rows=2016 loops=1)
          Output: _hyper_2_12_chunk.device_id
          Heap Fetches: 2016
-(34 rows)
+(39 rows)
 
 DROP INDEX tmp_idx CASCADE;
 --use the peer index
