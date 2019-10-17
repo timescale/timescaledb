@@ -277,13 +277,23 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 
 	res = remote_connection_exec(entry->conn, "SELECT count(*) FROM pg_prepared_statements");
 
-	Assert(1 == PQntuples(res));
-	Assert(1 == PQnfields(res));
-
-	count_string = PQgetvalue(res, 0, 0);
-	if (strcmp("0", count_string) != 0)
-		elog(WARNING, "connection leaked prepared statement");
-
+	if (PQresultStatus(res) == PGRES_TUPLES_OK)
+	{
+		if (PQntuples(res) == 1 && PQnfields(res) == 1)
+		{
+			count_string = PQgetvalue(res, 0, 0);
+			if (strcmp("0", count_string) != 0)
+				elog(WARNING, "leak check: connection leaked prepared statement");
+		}
+		else
+		{
+			elog(ERROR, "leak check: incorrect number of rows or columns returned");
+		}
+	}
+	else
+	{
+		elog(WARNING, "leak check: unexpected result \"%s\"", PQresultErrorMessage(res));
+	}
 	remote_result_close(res);
 }
 #endif
