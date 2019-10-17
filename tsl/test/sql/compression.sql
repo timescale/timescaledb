@@ -155,6 +155,14 @@ where hypertable_name::text like 'conditions'
 order by hypertable_name, chunk_name;
 select * from timescaledb_information.compressed_hypertable_stats
 order by hypertable_name;
+vacuum full foo;
+vacuum full conditions;
+-- After vacuum, table_bytes is 0, but any associated index/toast storage is not
+-- completely reclaimed. Sets it at 8K (page size). So a chunk which has
+-- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
+select * from timescaledb_information.hypertable
+where table_name like 'foo' or table_name like 'conditions'
+order by table_name;
 \x
 
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
