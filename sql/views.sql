@@ -6,7 +6,8 @@ CREATE SCHEMA IF NOT EXISTS timescaledb_information;
 
 -- Convenience view to list all hypertables and their space usage
 CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
-  SELECT ht.schema_name AS table_schema,
+WITH ht_size as (
+  SELECT ht.id, ht.schema_name AS table_schema,
     ht.table_name,
     t.tableowner AS table_owner,
     ht.num_dimensions,
@@ -14,15 +15,36 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
      FROM _timescaledb_catalog.chunk ch
      WHERE ch.hypertable_id=ht.id
     ) AS num_chunks,
-    size.table_size,
-    size.index_size,
-    size.toast_size,
-    size.total_size
+    bsize.table_bytes,
+    bsize.index_bytes,
+    bsize.toast_bytes,
+    bsize.total_bytes
   FROM _timescaledb_catalog.hypertable ht
     LEFT OUTER JOIN pg_tables t ON ht.table_name=t.tablename AND ht.schema_name=t.schemaname
-    LEFT OUTER JOIN LATERAL @extschema@.hypertable_relation_size_pretty(
+    LEFT OUTER JOIN LATERAL @extschema@.hypertable_relation_size(
       CASE WHEN has_schema_privilege(ht.schema_name,'USAGE') THEN format('%I.%I',ht.schema_name,ht.table_name) ELSE NULL END
-    ) size ON true;
+    ) bsize ON true
+),
+compht_size as
+(
+  select srcht.id,
+  sum(map.compressed_heap_size) as heap_bytes,
+  sum(map.compressed_index_size) as index_bytes,
+  sum(map.compressed_toast_size) as toast_bytes,
+  sum(map.compressed_heap_size) + sum(map.compressed_toast_size) + sum(map.compressed_index_size) as total_bytes
+ FROM _timescaledb_catalog.chunk srcch, _timescaledb_catalog.compression_chunk_size map,
+      _timescaledb_catalog.hypertable srcht
+ where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
+ group by srcht.id
+)
+select hts.table_schema, hts.table_name, hts.table_owner, 
+       hts.num_dimensions, hts.num_chunks,
+       pg_size_pretty( COALESCE(hts.table_bytes + compht_size.heap_bytes, hts.table_bytes)) as table_size,
+       pg_size_pretty( COALESCE(hts.index_bytes + compht_size.index_bytes , hts.index_bytes, compht_size.index_bytes)) as index_size,
+       pg_size_pretty( COALESCE(hts.toast_bytes + compht_size.toast_bytes, hts.toast_bytes, compht_size.toast_bytes)) as toast_size,
+       pg_size_pretty( COALESCE(hts.total_bytes + compht_size.total_bytes, hts.total_bytes)) as total_size
+FROM ht_size hts LEFT OUTER JOIN compht_size 
+ON hts.id = compht_size.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.license AS
   SELECT _timescaledb_internal.license_edition() as edition,
