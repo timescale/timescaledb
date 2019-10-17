@@ -25,6 +25,7 @@
 #include "license_guc.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/reorder.h"
+#include "compression_chunk_size.h"
 
 #include "cross_module_fn.h"
 
@@ -51,6 +52,7 @@
 #define REQ_BUILD_ARCHITECTURE "build_architecture"
 #define REQ_DATA_VOLUME "data_volume"
 #define REQ_NUM_HYPERTABLES "num_hypertables"
+#define REQ_NUM_COMPRESSED_HYPERTABLES "num_compressed_hypertables"
 #define REQ_NUM_CONTINUOUS_AGGS "num_continuous_aggs"
 #define REQ_NUM_REORDER_POLICIES "num_reorder_policies"
 #define REQ_NUM_DROP_CHUNKS_POLICIES "num_drop_chunks_policies"
@@ -66,6 +68,14 @@
 
 #define PG_PROMETHEUS "pg_prometheus"
 #define POSTGIS "postgis"
+
+#define REQ_COMPRESSED_HEAP_SIZE "compressed_heap_size"
+#define REQ_COMPRESSED_INDEX_SIZE "compressed_index_size"
+#define REQ_COMPRESSED_TOAST_SIZE "compressed_toast_size"
+#define REQ_UNCOMPRESSED_HEAP_SIZE "uncompressed_heap_size"
+#define REQ_UNCOMPRESSED_INDEX_SIZE "uncompressed_index_size"
+#define REQ_UNCOMPRESSED_TOAST_SIZE "uncompressed_toast_size"
+
 #define TS_TELEMETRY_REPORT_OVERRIDE_ARG "always_display_report := true"
 
 static const char *related_extensions[] = { PG_PROMETHEUS, POSTGIS };
@@ -163,11 +173,29 @@ process_response(const char *json)
 }
 
 static char *
+get_size(int64 size)
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%ld", size);
+	return buf->data;
+}
+
+static char *
 get_num_hypertables()
 {
 	StringInfo buf = makeStringInfo();
 
-	appendStringInfo(buf, "%d", ts_number_of_hypertables());
+	appendStringInfo(buf, "%d", ts_number_of_user_hypertables());
+	return buf->data;
+}
+
+static char *
+get_num_compressed_hypertables()
+{
+	StringInfo buf = makeStringInfo();
+
+	appendStringInfo(buf, "%d", ts_number_compressed_hypertables());
 	return buf->data;
 }
 
@@ -291,6 +319,7 @@ build_version_body(void)
 	StringInfo jtext;
 	VersionOSInfo osinfo;
 	JsonbParseState *parseState = NULL;
+	TotalSizes sizes = ts_compression_chunk_size_totals();
 
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
 
@@ -329,9 +358,23 @@ build_version_body(void)
 	ts_jsonb_add_str(parseState, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
 	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
 	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
+	ts_jsonb_add_str(parseState, REQ_NUM_COMPRESSED_HYPERTABLES, get_num_compressed_hypertables());
 	ts_jsonb_add_str(parseState, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
 	ts_jsonb_add_str(parseState, REQ_NUM_REORDER_POLICIES, get_num_reorder_policies());
 	ts_jsonb_add_str(parseState, REQ_NUM_DROP_CHUNKS_POLICIES, get_num_drop_chunks_policies());
+
+	ts_jsonb_add_str(parseState, REQ_COMPRESSED_HEAP_SIZE, get_size(sizes.compressed_heap_size));
+	ts_jsonb_add_str(parseState, REQ_COMPRESSED_INDEX_SIZE, get_size(sizes.compressed_index_size));
+	ts_jsonb_add_str(parseState, REQ_COMPRESSED_TOAST_SIZE, get_size(sizes.compressed_toast_size));
+	ts_jsonb_add_str(parseState,
+					 REQ_UNCOMPRESSED_HEAP_SIZE,
+					 get_size(sizes.uncompressed_heap_size));
+	ts_jsonb_add_str(parseState,
+					 REQ_UNCOMPRESSED_INDEX_SIZE,
+					 get_size(sizes.uncompressed_index_size));
+	ts_jsonb_add_str(parseState,
+					 REQ_UNCOMPRESSED_TOAST_SIZE,
+					 get_size(sizes.uncompressed_toast_size));
 
 	/* Add related extensions, which is a nested JSON */
 	ext_key.type = jbvString;

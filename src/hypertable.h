@@ -54,7 +54,9 @@ enum Anum_create_hypertable
 
 #define Natts_create_hypertable (_Anum_create_hypertable_max - 1)
 
-extern int ts_number_of_hypertables(void);
+extern int ts_number_of_user_hypertables(void);
+
+extern int ts_number_compressed_hypertables(void);
 
 extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
@@ -115,7 +117,6 @@ extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
 extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
 														int32 compressed_hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed_id(Hypertable *ht);
-extern TSDLLEXPORT bool ts_hypertable_is_compressed_internal(int32 compressed_hypertable_id);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
 																	  List *constraint_list);
 

@@ -37,3 +37,28 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 	}
 	return count;
 }
+
+TotalSizes
+ts_compression_chunk_size_totals()
+{
+	TotalSizes sizes = {};
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessExclusiveLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		FormData_compression_chunk_size *fd = STRUCT_FROM_TUPLE(ti->tuple,
+																ti->mctx,
+																FormData_compression_chunk_size,
+																FormData_compression_chunk_size);
+		sizes.uncompressed_heap_size += fd->uncompressed_heap_size;
+		sizes.uncompressed_index_size += fd->uncompressed_index_size;
+		sizes.uncompressed_toast_size += fd->uncompressed_toast_size;
+		sizes.compressed_heap_size += fd->compressed_heap_size;
+		sizes.compressed_index_size += fd->compressed_index_size;
+		sizes.compressed_toast_size += fd->compressed_toast_size;
+	}
+
+	return sizes;
+}

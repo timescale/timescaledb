@@ -56,6 +56,12 @@ if(NOT APACHE_ONLY)
     edition.sql
     telemetry_community.sql
     )
+#compression only for PG > 9
+if (${PG_VERSION_MAJOR} GREATER "9")
+  list(APPEND TEST_FILES
+    telemetry_compression.sql
+  )
+endif ()
 endif()
 
 # tests that fail or are unreliable when run in parallel
