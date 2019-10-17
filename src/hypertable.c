@@ -293,18 +293,40 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 	return ts_scanner_scan(&scanctx);
 }
 
+/* Number of user-created hypertables (doesn't count internal hypertables for compression or
+ * continuous aggs) */
 int
-ts_number_of_hypertables()
+ts_number_of_user_hypertables()
 {
-	return hypertable_scan_limit_internal(NULL,
-										  0,
-										  HYPERTABLE_ID_INDEX,
-										  NULL,
-										  NULL,
-										  -1,
-										  AccessShareLock,
-										  false,
-										  CurrentMemoryContext);
+	int count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE, AccessExclusiveLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		Hypertable *hyper = ts_hypertable_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator));
+		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(hyper->fd.id);
+		if (!hyper->fd.compressed && status != HypertableIsMaterialization)
+			count++;
+	}
+	return count;
+}
+
+/* Number of hypertables with compression enabled */
+int
+ts_number_compressed_hypertables()
+{
+	int count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE, AccessExclusiveLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		Hypertable *hyper = ts_hypertable_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator));
+		if (hyper->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+			count++;
+	}
+	return count;
 }
 
 static ScanTupleResult
@@ -2141,28 +2163,4 @@ ts_hypertable_clone_constraints_to_compressed(Hypertable *user_ht, List *constra
 							 Int32GetDatum(user_ht->fd.compressed_hypertable_id));
 	}
 	ts_catalog_restore_user(&sec_ctx);
-}
-
-/* is this a internal hypertable created for compression */
-TSDLLEXPORT bool
-ts_hypertable_is_compressed_internal(int32 compressed_hypertable_id)
-{
-	bool compressed = false;
-	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_hypertable_pkey_idx_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(compressed_hypertable_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-		compressed =
-			DatumGetBool(heap_getattr(ti->tuple, Anum_hypertable_compressed, ti->desc, &isnull));
-	}
-	return compressed;
 }

@@ -30,3 +30,10 @@ GROUP BY bucket;
 
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs');
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_hypertables');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_compressed_hypertables');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_heap_size');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_index_size');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_toast_size');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_heap_size');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_index_size');
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_toast_size');

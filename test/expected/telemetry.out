@@ -324,10 +324,17 @@ WHERE key != 'os_name_pretty';
  related_extensions
  num_continuous_aggs
  timescaledb_version
+ compressed_heap_size
  num_reorder_policies
+ compressed_index_size
+ compressed_toast_size
+ uncompressed_heap_size
+ uncompressed_index_size
+ uncompressed_toast_size
  num_drop_chunks_policies
+ num_compressed_hypertables
  build_architecture_bit_size
-(24 rows)
+(31 rows)
 
 -- Test telemetry report contents
 SET timescaledb.telemetry_level=basic;
@@ -356,10 +363,17 @@ WHERE key != 'os_name_pretty';
  related_extensions
  num_continuous_aggs
  timescaledb_version
+ compressed_heap_size
  num_reorder_policies
+ compressed_index_size
+ compressed_toast_size
+ uncompressed_heap_size
+ uncompressed_index_size
+ uncompressed_toast_size
  num_drop_chunks_policies
+ num_compressed_hypertables
  build_architecture_bit_size
-(24 rows)
+(31 rows)
 
 -- check telemetry picks up flagged content from metadata
 SELECT json_object_field(get_telemetry_report()::json,'db_metadata');
