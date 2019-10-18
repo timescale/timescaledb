@@ -119,8 +119,7 @@ SELECT * FROM  _timescaledb_internal._hyper_1_7_dist_chunk;
 
 ------------------------------------------------------------------------
 -- PARTIAL partitionwise - open "time" dimension covered by GROUP BY.
--- Note that we don't yet support pushing down partials and PG can't
--- do it on partitioned rels.
+-- Note that PG can't do it on partitioned rels.
 -----------------------------------------------------------------------
 SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -171,6 +170,22 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1
 ORDER BY 1;
+
+-- Hitting only one node. Should therefore do full push-down even
+-- though we group on only time.
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1;
+
+-- Show result
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1;
 
 -------------------------------------------------------------------------
 -- FULL partitionwise - only closed "space" dimension covered by GROUP
@@ -549,6 +564,23 @@ ORDER BY 1, 2;
 SELECT time_bucket('1 day', time), device, avg(temp)
 FROM hyper
 WHERE time < '2018-06-01 00:00'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- Hitting only one node
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time_bucket('1 day', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+
+SELECT time_bucket('1 day', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
 GROUP BY 1, 2
 ORDER BY 1, 2;
 

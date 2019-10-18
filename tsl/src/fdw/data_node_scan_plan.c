@@ -291,21 +291,23 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 static void
 force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
+	PartitionScheme partscheme = hyper_rel->part_scheme;
 	List *groupexprs;
-	int num_group_exprs;
+	int16 new_partnatts;
 	ListCell *lc;
 	int i = 0;
 
+	Assert(partscheme != NULL);
+
 	groupexprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
+	new_partnatts = list_length(groupexprs);
 
-	num_group_exprs = list_length(groupexprs);
+	/* Only reallocate the partitioning attributes array if it is smaller than
+	 * the new size */
+	if (partscheme->partnatts < new_partnatts)
+		hyper_rel->partexprs = (List **) palloc0(sizeof(List *) * new_partnatts);
 
-	if (hyper_rel->part_scheme->partnatts < num_group_exprs)
-	{
-		hyper_rel->part_scheme->partnatts = list_length(groupexprs);
-		hyper_rel->partexprs =
-			(List **) palloc0(sizeof(List *) * hyper_rel->part_scheme->partnatts);
-	}
+	partscheme->partnatts = new_partnatts;
 
 	foreach (lc, groupexprs)
 	{
@@ -313,6 +315,8 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 
 		hyper_rel->partexprs[i++] = list_make1(expr);
 	}
+
+	Assert(i == partscheme->partnatts);
 }
 
 /*
