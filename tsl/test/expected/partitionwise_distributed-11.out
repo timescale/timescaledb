@@ -259,8 +259,7 @@ SELECT * FROM  _timescaledb_internal._hyper_1_7_dist_chunk;
 
 ------------------------------------------------------------------------
 -- PARTIAL partitionwise - open "time" dimension covered by GROUP BY.
--- Note that we don't yet support pushing down partials and PG can't
--- do it on partitioned rels.
+-- Note that PG can't do it on partitioned rels.
 -----------------------------------------------------------------------
 SET enable_partitionwise_aggregate = OFF;
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -447,6 +446,40 @@ ORDER BY 1;
  Sun May 20 15:08:00 2018 PDT |  9.4
  Wed May 30 13:02:00 2018 PDT |    9
 (13 rows)
+
+-- Hitting only one node. Should therefore do full push-down even
+-- though we group on only time.
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1;
+                                                                                                         QUERY PLAN                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DataNodeScan)
+         Output: hyper."time", (avg(hyper.temp))
+         Relations: Aggregate on (public.hyper)
+         Data node: data_node_1
+         Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+         Remote SQL: SELECT "time", avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) AND ((device = 1)) GROUP BY 1
+(7 rows)
+
+-- Show result
+SELECT time, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1;
+             time             | avg 
+------------------------------+-----
+ Fri Jan 19 13:01:00 2018 PST | 2.3
+ Sat Jan 20 15:05:00 2018 PST | 5.3
+ Wed Feb 28 15:05:00 2018 PST | 5.6
+ Sat Mar 10 17:02:00 2018 PST | 9.1
+ Thu Apr 19 13:01:00 2018 PDT | 7.6
+(5 rows)
 
 -------------------------------------------------------------------------
 -- FULL partitionwise - only closed "space" dimension covered by GROUP
@@ -1754,6 +1787,43 @@ ORDER BY 1, 2;
  Sat May 19 17:00:00 2018 PDT |      5 | 9.4
  Tue May 29 17:00:00 2018 PDT |      3 |   9
 (16 rows)
+
+-- Hitting only one node
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT time_bucket('1 day', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                                                                                                                      QUERY PLAN                                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
+   Sort Key: (time_bucket('@ 1 day'::interval, hyper."time"))
+   ->  Append
+         ->  Custom Scan (DataNodeScan)
+               Output: (time_bucket('@ 1 day'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
+               Relations: Aggregate on (public.hyper)
+               Data node: data_node_1
+               Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
+               Remote SQL: SELECT public.time_bucket('@ 1 day'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) AND ((device = 1)) GROUP BY 1, 2
+(10 rows)
+
+SELECT time_bucket('1 day', time), device, avg(temp)
+FROM hyper
+WHERE time < '2018-06-01 00:00'
+AND device = 1
+GROUP BY 1, 2
+ORDER BY 1, 2;
+         time_bucket          | device | avg 
+------------------------------+--------+-----
+ Thu Jan 18 16:00:00 2018 PST |      1 | 2.3
+ Fri Jan 19 16:00:00 2018 PST |      1 | 5.3
+ Tue Feb 27 16:00:00 2018 PST |      1 | 5.6
+ Sat Mar 10 16:00:00 2018 PST |      1 | 9.1
+ Wed Apr 18 17:00:00 2018 PDT |      1 | 7.6
+(5 rows)
 
 ---------------------------------------------------------------------
 -- Test expressions that either aren't pushed down or only pushed down
