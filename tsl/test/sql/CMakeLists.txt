@@ -104,11 +104,9 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     telemetry_distributed.sql
     data_fetcher.sql
     )
-  list(APPEND TEST_TEMPLATES
-    dist_query.sql.in
-  )
   if (CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_TEMPLATES
+      dist_query.sql.in
       hypertable_distributed.sql.in
       partitionwise_distributed.sql.in
     )

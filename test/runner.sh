@@ -76,7 +76,6 @@ cd ${EXE_DIR}/sql
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb; GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO ${TEST_ROLE_1};"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
-
 export TEST_DBNAME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>

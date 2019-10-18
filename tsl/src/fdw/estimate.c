@@ -34,6 +34,35 @@ typedef struct CostEstimate
 	Cost run_cost;
 } CostEstimate;
 
+/*
+ * Get the AggsSplit mode of a relation.
+ *
+ * The AggSplit (partial or full aggregation) affects costing.
+ */
+static AggSplit
+get_aggsplit(RelOptInfo *rel)
+{
+	ListCell *lc;
+
+	foreach (lc, rel->reltarget->exprs)
+	{
+		Node *expr = lfirst(lc);
+
+		if (IsA(expr, Aggref))
+		{
+			/* All aggregates to compute this relation must have the same
+			 * mode, so we can return here. */
+			return castNode(Aggref, expr)->aggsplit;
+		}
+	}
+	/* Assume AGGSPLIT_SIMPLE (non-partial) aggregate. We really shouldn't
+	 * get there though if this function is called on upper rel with an
+	 * aggregate. */
+	pg_unreachable();
+
+	return AGGSPLIT_SIMPLE;
+}
+
 static void
 get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 {
@@ -69,14 +98,16 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 
 	if (root->parse->hasAggs)
 	{
-		get_agg_clause_costs(root, (Node *) fpinfo->grouped_tlist, AGGSPLIT_SIMPLE, &aggcosts);
+		AggSplit aggsplit = get_aggsplit(rel);
+
+		get_agg_clause_costs(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
 
 		/*
 		 * The cost of aggregates in the HAVING qual will be the same
 		 * for each child as it is for the parent, so there's no need
 		 * to use a translated version of havingQual.
 		 */
-		get_agg_clause_costs(root, (Node *) root->parse->havingQual, AGGSPLIT_SIMPLE, &aggcosts);
+		get_agg_clause_costs(root, (Node *) root->parse->havingQual, aggsplit, &aggcosts);
 	}
 
 	/* Get number of grouping columns and possible number of groups */
