@@ -364,11 +364,13 @@ merge_fdw_options(TsFdwRelInfo *fpinfo, const TsFdwRelInfo *fpinfo_o, const TsFd
  * this function to TsFdwRelInfo of the input relation.
  */
 static bool
-foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual)
+foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraData *extra)
 {
 	Query *query = root->parse;
+	Node *having_qual = extra->havingQual;
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(grouped_rel);
 	PathTarget *grouping_target = grouped_rel->reltarget;
+	bool ispartial = extra->patype == PARTITIONWISE_AGGREGATE_PARTIAL;
 	TsFdwRelInfo *ofpinfo;
 	List *aggvars;
 	ListCell *lc;
@@ -474,14 +476,22 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, Node *havingQual
 	}
 
 	/*
-	 * Classify the pushable and non-pushable HAVING clauses and save them in
-	 * remote_conds and local_conds of the grouped rel's fpinfo.
+	 * For non-partial aggregations, classify the pushable and non-pushable
+	 * HAVING clauses and save them in remote_conds and local_conds of the
+	 * grouped rel's fpinfo.
+	 *
+	 * For partial agggregations, we never push-down the HAVING clause since
+	 * it either has (1) been reduced by the planner to a simple filter on the
+	 * base rel, or, in case of aggregates, the aggregates must be partials
+	 * and have therefore been pulled up into the target list (unless they're
+	 * already there). Any partial aggregates in the HAVING clause must be
+	 * finalized on the access node and applied there.
 	 */
-	if (havingQual)
+	if (having_qual && !ispartial)
 	{
 		ListCell *lc;
 
-		foreach (lc, (List *) havingQual)
+		foreach (lc, (List *) having_qual)
 		{
 			Expr *expr = (Expr *) lfirst(lc);
 			RestrictInfo *rinfo;
@@ -609,7 +619,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	 * Use HAVING qual from extra. In case of child partition, it will have
 	 * translated Vars.
 	 */
-	if (!foreign_grouping_ok(root, grouped_rel, extra->havingQual))
+	if (!foreign_grouping_ok(root, grouped_rel, extra))
 		return;
 
 	/* Estimate the cost of push down */
@@ -654,19 +664,29 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 	if (!input_fpinfo->pushdown_safe)
 		return;
 
-	/* Ignore stages we don't support; and skip any duplicate calls (i.e.,
-	 * output_rel->fdw_private has already been set by a previous call to this
-	 * function). */
-	if ((stage != UPPERREL_GROUP_AGG && stage != UPPERREL_PARTIAL_GROUP_AGG) ||
-		output_rel->fdw_private)
+	/* Skip any duplicate calls (i.e., output_rel->fdw_private has already
+	 * been set by a previous call to this function). */
+	if (output_rel->fdw_private)
 		return;
 
-	input_fpinfo = fdw_relinfo_alloc(output_rel, input_fpinfo->type);
-	input_fpinfo->pushdown_safe = false;
-
-	add_foreign_grouping_paths(root,
-							   input_rel,
-							   output_rel,
-							   (GroupPathExtraData *) extra,
-							   create_path);
+	switch (stage)
+	{
+		case UPPERREL_GROUP_AGG:
+		case UPPERREL_PARTIAL_GROUP_AGG:
+			input_fpinfo = fdw_relinfo_alloc(output_rel, input_fpinfo->type);
+			input_fpinfo->pushdown_safe = false;
+			add_foreign_grouping_paths(root,
+									   input_rel,
+									   output_rel,
+									   (GroupPathExtraData *) extra,
+									   create_path);
+			break;
+			/* Currently not handled (or received) */
+		case UPPERREL_DISTINCT:
+		case UPPERREL_ORDERED:
+		case UPPERREL_SETOP:
+		case UPPERREL_WINDOW:
+		case UPPERREL_FINAL:
+			break;
+	}
 }

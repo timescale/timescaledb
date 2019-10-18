@@ -27,6 +27,8 @@
 #include <func_cache.h>
 #include <dimension.h>
 #include <compat.h>
+#include <debug_guc.h>
+#include <debug.h>
 
 #if PG12_GE
 #include <optimizer/appendinfo.h>
@@ -42,8 +44,6 @@
 #include "scan_plan.h"
 #include "data_node_scan_plan.h"
 #include "data_node_scan_exec.h"
-#include "debug.h"
-#include "debug_guc.h"
 #include "fdw_utils.h"
 
 /*
@@ -444,8 +444,7 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 		data_node_rel->pages = sca->pages;
 		data_node_rel->tuples = sca->tuples;
 		data_node_rel->rows = sca->rows;
-
-		/* Should also have the same width as any queried chunk */
+		/* The width should be the same as any chunk */
 		data_node_rel->reltarget->width = hyper_rel->part_rels[0]->reltarget->width;
 
 		fpinfo = fdw_relinfo_create(root,
@@ -453,6 +452,7 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 									data_node_rel->serverid,
 									hyper_rte->relid,
 									TS_FDW_RELINFO_HYPERTABLE_DATA_NODE);
+
 		fpinfo->sca = sca;
 
 		if (!bms_is_empty(sca->chunk_relids))
