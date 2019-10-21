@@ -545,3 +545,55 @@ AS sub;
 DROP TABLE test1;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+-- Triggers are NOT fired for compress/decompress
+CREATE TABLE test1 ("Time" timestamptz, i integer);
+SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
+NOTICE:  adding not-null constraint to column "Time"
+ table_name 
+------------
+ test1
+(1 row)
+
+CREATE OR REPLACE FUNCTION test1_print_func()
+RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+   RAISE NOTICE ' raise notice test1_print_trigger called ';
+   RETURN OLD;
+END;
+$BODY$;
+CREATE TRIGGER test1_trigger 
+BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON test1
+FOR EACH STATEMENT EXECUTE PROCEDURE test1_print_func();
+INSERT INTO test1 SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 1:00', '1 hour') , 1 ;
+NOTICE:   raise notice test1_print_trigger called 
+-- add a row trigger too --
+CREATE TRIGGER test1_trigger2 
+BEFORE INSERT OR UPDATE OR DELETE ON test1
+FOR EACH ROW EXECUTE PROCEDURE test1_print_func();
+INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
+NOTICE:   raise notice test1_print_trigger called 
+NOTICE:   raise notice test1_print_trigger called 
+ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
+SELECT COUNT(*) AS count_compressed FROM
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id) AS subq;
+ count_compressed 
+------------------
+                2
+(1 row)
+
+SELECT COUNT(*) AS count_compressed FROM
+(
+SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test1'  ORDER BY chunk.id ) as subq;
+ count_compressed 
+------------------
+                2
+(1 row)
+
