@@ -78,7 +78,7 @@ GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
 DEBUG:  In tsl_set_rel_pathlist:
-RELOPTINFO (hyper): rows=36 width=20
+RELOPTINFO [BASEREL] (names: hyper): rows=36 width=20
 	path list:
 	Append [parents: hyper] rows=37 cost=100.00..412.58
 		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
@@ -115,7 +115,7 @@ GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=9 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=9 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
 	Agg [parents: hyper] rows=3 cost=128.18..128.34
@@ -125,7 +125,7 @@ RELOPTINFO (hyper): rows=9 width=20
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=19 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=19 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.19..156.69
 	Agg [parents: hyper] rows=6 cost=156.61..157.18 has pathkeys
@@ -134,7 +134,7 @@ RELOPTINFO (hyper): rows=19 width=20
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO (hyper): rows=9 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=9 width=20
 	path list:
 	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
 	Agg [parents: hyper] rows=3 cost=128.18..128.34

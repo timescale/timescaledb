@@ -44,6 +44,20 @@
 
 static void appendExpr(StringInfo buf, const Node *expr, const List *rtable);
 
+static const char *reloptkind_name[] = {
+	[RELOPT_BASEREL] = "BASEREL",
+	[RELOPT_JOINREL] = "JOINREL",
+	[RELOPT_OTHER_MEMBER_REL] = "OTHER_MEMBER_REL",
+#if PG11_GE
+	[RELOPT_OTHER_JOINREL] = "OTHER_JOINREL",
+#endif
+	[RELOPT_UPPER_REL] = "UPPER_REL",
+#if PG11_GE
+	[RELOPT_OTHER_UPPER_REL] = "OTHER_UPPER_REL",
+#endif
+	[RELOPT_DEADREL] = "DEADREL",
+};
+
 const char *upperrel_stage_name[] = {
 	[UPPERREL_SETOP] = "SETOP",
 #if PG11_GE
@@ -466,7 +480,7 @@ tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int
 void
 tsl_debug_append_rel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel)
 {
-	appendStringInfoString(buf, "RELOPTINFO (");
+	appendStringInfo(buf, "RELOPTINFO [%s] (names: ", reloptkind_name[rel->reloptkind]);
 	appendRelids(buf, root, rel->relids);
 	appendStringInfo(buf, "): rows=%.0f width=%d\n", rel->rows, rel->reltarget->width);
 
