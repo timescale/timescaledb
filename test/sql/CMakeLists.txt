@@ -144,11 +144,6 @@ set(TEST_TEMPLATES
 # be in the same directory. These files are updated when the template
 # is edited, but not when the output file is deleted. If the output is
 # deleted either recreate it manually, or rerun cmake on the root dir.
-if (${PG_VERSION_MAJOR} GREATER "9")
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
-else ()
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})
-endif ()
 foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   string(LENGTH ${TEMPLATE_FILE} TEMPLATE_NAME_LEN)
   math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)

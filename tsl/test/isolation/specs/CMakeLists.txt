@@ -1,20 +1,22 @@
 set(TEST_FILES
   continuous_aggs_insert.spec
-  continuous_aggs_multi.spec)
-
-set(TEST_FILES_GT_9
-  compression_ddl.spec)
+  continuous_aggs_multi.spec
+)
 
 set(TEST_TEMPLATES
  reorder_deadlock.spec.in
- reorder_vs_insert_other_chunk.spec.in)
+ reorder_vs_insert_other_chunk.spec.in
+)
 
 set(TEST_TEMPLATES_DEBUG
   reorder_vs_insert.spec.in
-  reorder_vs_select.spec.in)
+  reorder_vs_select.spec.in
+)
 
 if (${PG_VERSION_MAJOR} GREATER "9")
-    list( INSERT TEST_FILES 0 ${TEST_FILES_GT_9})
+  list(APPEND TEST_FILES
+    compression_ddl.spec
+  )
 endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
@@ -30,7 +32,9 @@ endforeach(TEMPLATE_FILE)
 
 file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 
+list(SORT TEST_FILES)
+
 foreach(TEST_FILE ${TEST_FILES})
-    string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})
-    file(APPEND ${ISOLATION_TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
+  string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})
+  file(APPEND ${ISOLATION_TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
 endforeach(TEST_FILE)

@@ -18,16 +18,6 @@ INSERT INTO devices VALUES
 (2,'Device 2'),
 (3,'Device 3');
 
--- create a table where we create chunks in order
-CREATE TABLE ordered_append(time timestamptz NOT NULL, device_id INT, value float);
-SELECT create_hypertable('ordered_append','time');
-CREATE index on ordered_append(time DESC,device_id);
-CREATE index on ordered_append(device_id,time DESC);
-
-INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 1, 0.5;
-INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 2, 1.5;
-INSERT INTO ordered_append SELECT generate_series('2000-01-01'::timestamptz,'2000-01-18'::timestamptz,'1m'::interval), 3, 2.5;
-
 -- create a second table where we create chunks in reverse order
 CREATE TABLE ordered_append_reverse(time timestamptz NOT NULL, device_id INT, value float);
 SELECT create_hypertable('ordered_append_reverse','time');
@@ -60,7 +50,6 @@ INSERT INTO dimension_only VALUES
 ('2000-01-07');
 
 ANALYZE devices;
-ANALYZE ordered_append;
 ANALYZE ordered_append_reverse;
 ANALYZE dimension_last;
 ANALYZE dimension_only;
@@ -103,18 +92,6 @@ ALTER TABLE ht_dropped_columns DROP COLUMN c5;
 INSERT INTO ht_dropped_columns(time,device_id,value) SELECT generate_series('2000-01-29'::timestamptz,'2000-01-30'::timestamptz,'1m'::interval), 1, 0.5;
 
 ANALYZE ht_dropped_columns;
-
-CREATE TABLE space(time timestamptz NOT NULL, device_id int NOT NULL, value float);
-SELECT create_hypertable('space','time','device_id',number_partitions:=4);
-
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 1, 1.5;
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 2, 2.5;
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 3, 3.5;
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 4, 4.5;
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 5, 5.5;
-INSERT INTO space SELECT generate_series('2000-01-10'::timestamptz,'2000-01-01'::timestamptz,'-1m'::interval), 6, 6.5;
-
-ANALYZE space;
 
 CREATE TABLE space2(time timestamptz NOT NULL, device_id int NOT NULL, tag_id int NOT NULL, value float);
 SELECT create_hypertable('space2','time','device_id',number_partitions:=3);

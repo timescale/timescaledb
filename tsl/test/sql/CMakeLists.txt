@@ -1,37 +1,24 @@
 set(TEST_FILES
-    continuous_aggs_dump.sql
-    continuous_aggs_errors.sql
-    continuous_aggs_usage.sql
-    continuous_aggs_watermark.sql
-    edition.sql
-    gapfill.sql
-    move.sql
-    partialize_finalize.sql
-    reorder.sql
+  continuous_aggs_dump.sql
+  continuous_aggs_errors.sql
+  continuous_aggs_usage.sql
+  continuous_aggs_watermark.sql
+  edition.sql
+  gapfill.sql
+  move.sql
+  partialize_finalize.sql
+  reorder.sql
 )
 
 set(TEST_FILES_DEBUG
-    bgw_policy.sql
-    bgw_reorder_drop_chunks.sql
-    continuous_aggs.sql
-    continuous_aggs_bgw.sql
-    continuous_aggs_materialize.sql
-    continuous_aggs_multi.sql
-    ddl_hook.sql
-    tsl_tables.sql
-)
-
-#only test for version PG10 onwards
-set(TEST_FILES_DEBUG_GT_9
-    compress_table.sql
-    compression.sql
-    compression_algos.sql
-    compression_ddl.sql
-    compression_errors.sql
-    compression_hypertable.sql
-    compression_segment_meta.sql
-    compression_bgw.sql
-    compress_bgw_drop_chunks.sql
+  bgw_policy.sql
+  bgw_reorder_drop_chunks.sql
+  continuous_aggs.sql
+  continuous_aggs_bgw.sql
+  continuous_aggs_materialize.sql
+  continuous_aggs_multi.sql
+  ddl_hook.sql
+  tsl_tables.sql
 )
 
 set(TEST_TEMPLATES
@@ -42,15 +29,26 @@ set(TEST_TEMPLATES
 )
 
 #compression only for PG > 9
-set(TEST_TEMPLATES_DEBUG_GT_9
-  compression_permissions.sql.in
-  transparent_decompression.sql.in
-)
-
 if (${PG_VERSION_MAJOR} GREATER "9")
-    list(APPEND TEST_FILES_DEBUG ${TEST_FILES_DEBUG_GT_9})
-    list(APPEND TEST_TEMPLATES ${TEST_TEMPLATES_DEBUG_GT_9})
+
+  list(APPEND TEST_FILES_DEBUG
+    compress_table.sql
+    compression.sql
+    compression_algos.sql
+    compression_ddl.sql
+    compression_errors.sql
+    compression_hypertable.sql
+    compression_segment_meta.sql
+    compression_bgw.sql
+    compress_bgw_drop_chunks.sql
+  )
+
+  list(APPEND TEST_TEMPLATES_DEBUG
+    compression_permissions.sql.in
+    transparent_decompression.sql.in
+  )
 endif ()
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -60,12 +58,6 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 # be in the same directory. These files are updated when the template
 # is edited, but not when the output file is deleted. If the output is
 # deleted either recreate it manually, or rerun cmake on the root dir.
-if (${PG_VERSION_MAJOR} GREATER "9")
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
-else ()
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})
-endif ()
-
 foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   string(LENGTH ${TEMPLATE_FILE} TEMPLATE_NAME_LEN)
   math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)
@@ -82,3 +74,4 @@ foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
   file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
 endforeach(TEST_FILE)
+
