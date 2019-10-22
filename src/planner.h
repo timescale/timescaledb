@@ -12,6 +12,7 @@ typedef struct TimescaleDBPrivate
 	/* attno of the time dimension in the parent table if appends are ordered */
 	int order_attno;
 	List *nested_oids;
+	bool compressed;
 } TimescaleDBPrivate;
 
 #endif /* TIMESCALEDB_PLANNER_H */
