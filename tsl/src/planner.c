@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <parser/parsetree.h>
 
+#include <planner.h>
 #include "planner.h"
 #include "nodes/gapfill/planner.h"
 #include "nodes/compress_dml/compress_dml.h"
@@ -33,7 +34,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 						   Hypertable *ht)
 {
 	if (ts_guc_enable_transparent_decompression && ht != NULL &&
-		rel->reloptkind == RELOPT_OTHER_MEMBER_REL && ht->fd.compressed_hypertable_id > 0)
+		rel->reloptkind == RELOPT_OTHER_MEMBER_REL && ht->fd.compressed_hypertable_id > 0 &&
+		rel->fdw_private != NULL && ((TimescaleDBPrivate *) rel->fdw_private)->compressed)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 
