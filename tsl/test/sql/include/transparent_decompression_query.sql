@@ -214,19 +214,28 @@ DROP INDEX tmp_idx CASCADE;
 
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer = 1 ORDER BY device_id_peer;
 
+--ensure that we can get a nested loop
+SET enable_seqscan TO true;
+SET enable_hashjoin TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1));
 
+--with multiple values can get a nested loop.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1), (2));
+RESET enable_hashjoin;
 
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
 
+--with multiple values can get a semi-join or nested loop depending on seq_page_cost.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+SET seq_page_cost=100;
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+RESET seq_page_cost;
 
 -- force a BitmapHeapScan
 SET enable_indexscan TO false;
+set enable_seqscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
 
-SET enable_indexscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
 
 SET enable_indexscan TO true;

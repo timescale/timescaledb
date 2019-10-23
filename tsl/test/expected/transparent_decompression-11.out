@@ -47,10 +47,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- compress first and last chunk on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='v0, v1 desc, time', timescaledb.compress_segmentby='device_id,device_id_peer');
 NOTICE:  adding index _compressed_hypertable_5_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id, _ts_meta_sequence_num)
@@ -129,10 +129,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -1591,6 +1591,9 @@ DROP INDEX tmp_idx CASCADE;
                Index Cond: (compress_hyper_5_16_chunk.device_id_peer = 1)
 (15 rows)
 
+--ensure that we can get a nested loop
+SET enable_seqscan TO true;
+SET enable_hashjoin TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1));
                                                                          QUERY PLAN                                                                         
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1618,6 +1621,7 @@ DROP INDEX tmp_idx CASCADE;
                      Index Cond: (compress_hyper_5_16_chunk.device_id_peer = (1))
 (22 rows)
 
+--with multiple values can get a nested loop.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1), (2));
                                                                          QUERY PLAN                                                                         
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1648,6 +1652,7 @@ DROP INDEX tmp_idx CASCADE;
                      Index Cond: (compress_hyper_5_16_chunk.device_id_peer = "*VALUES*".column1)
 (25 rows)
 
+RESET enable_hashjoin;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1675,6 +1680,7 @@ DROP INDEX tmp_idx CASCADE;
                      Index Cond: (compress_hyper_5_16_chunk.device_id = (1))
 (22 rows)
 
+--with multiple values can get a semi-join or nested loop depending on seq_page_cost.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1705,8 +1711,35 @@ DROP INDEX tmp_idx CASCADE;
                      Index Cond: (compress_hyper_5_16_chunk.device_id = "*VALUES*".column1)
 (25 rows)
 
+SET seq_page_cost=100;
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Semi Join (actual rows=10944 loops=1)
+   Output: _hyper_1_1_chunk.device_id_peer
+   Hash Cond: (_hyper_1_1_chunk.device_id = "*VALUES*".column1)
+   ->  Append (actual rows=27360 loops=1)
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=7200 loops=1)
+               Output: _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.device_id
+               ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=10 loops=1)
+                     Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer
+         ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=10080 loops=1)
+               Output: _hyper_1_2_chunk.device_id_peer, _hyper_1_2_chunk.device_id
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=10080 loops=1)
+               Output: _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.device_id
+               ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=15 loops=1)
+                     Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer
+   ->  Hash (actual rows=2 loops=1)
+         Output: "*VALUES*".column1
+         Buckets: 1024  Batches: 1 
+         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+               Output: "*VALUES*".column1
+(19 rows)
+
+RESET seq_page_cost;
 -- force a BitmapHeapScan
 SET enable_indexscan TO false;
+set enable_seqscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1742,7 +1775,6 @@ SET enable_indexscan TO false;
                            Index Cond: (compress_hyper_5_16_chunk.device_id = (1))
 (30 rows)
 
-SET enable_indexscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2395,8 +2427,8 @@ DEALLOCATE param_prep;
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
@@ -4637,9 +4669,12 @@ DROP INDEX tmp_idx CASCADE;
          Heap Fetches: 0
 (42 rows)
 
+--ensure that we can get a nested loop
+SET enable_seqscan TO true;
+SET enable_hashjoin TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1));
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=0 loops=1)
    Output: _hyper_2_4_chunk.device_id_peer
    ->  HashAggregate (actual rows=1 loops=1)
@@ -4663,21 +4698,18 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_19_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=0 loops=1)
                      Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_19_chunk.device_id_peer = (1))
-         ->  Index Only Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_7_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=0 loops=1)
                Output: _hyper_2_7_chunk.device_id_peer
                Filter: ((1) = _hyper_2_7_chunk.device_id_peer)
                Rows Removed by Filter: 2016
-               Heap Fetches: 2016
-         ->  Index Only Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_8_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=0 loops=1)
                Output: _hyper_2_8_chunk.device_id_peer
                Filter: ((1) = _hyper_2_8_chunk.device_id_peer)
                Rows Removed by Filter: 6048
-               Heap Fetches: 6048
-         ->  Index Only Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=1)
                Output: _hyper_2_9_chunk.device_id_peer
                Filter: ((1) = _hyper_2_9_chunk.device_id_peer)
                Rows Removed by Filter: 2016
-               Heap Fetches: 2016
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=0 loops=1)
                Output: _hyper_2_10_chunk.device_id_peer
                ->  Index Scan using compress_hyper_6_20_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=0 loops=1)
@@ -4688,16 +4720,16 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_21_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=0 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_21_chunk.device_id_peer = (1))
-         ->  Index Only Scan using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=1)
                Output: _hyper_2_12_chunk.device_id_peer
                Filter: ((1) = _hyper_2_12_chunk.device_id_peer)
                Rows Removed by Filter: 2016
-               Heap Fetches: 2016
-(53 rows)
+(49 rows)
 
+--with multiple values can get a nested loop.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1), (2));
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=0 loops=1)
    Output: _hyper_2_4_chunk.device_id_peer
    ->  Unique (actual rows=2 loops=1)
@@ -4724,18 +4756,18 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_19_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=0 loops=2)
                      Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_19_chunk.device_id_peer = "*VALUES*".column1)
-         ->  Index Only Scan using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_7_chunk (actual rows=0 loops=2)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=0 loops=2)
                Output: _hyper_2_7_chunk.device_id_peer
-               Index Cond: (_hyper_2_7_chunk.device_id_peer = "*VALUES*".column1)
-               Heap Fetches: 0
-         ->  Index Only Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_8_chunk (actual rows=0 loops=2)
+               Filter: ("*VALUES*".column1 = _hyper_2_7_chunk.device_id_peer)
+               Rows Removed by Filter: 2016
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=0 loops=2)
                Output: _hyper_2_8_chunk.device_id_peer
-               Index Cond: (_hyper_2_8_chunk.device_id_peer = "*VALUES*".column1)
-               Heap Fetches: 0
-         ->  Index Only Scan using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=2)
+               Filter: ("*VALUES*".column1 = _hyper_2_8_chunk.device_id_peer)
+               Rows Removed by Filter: 6048
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=2)
                Output: _hyper_2_9_chunk.device_id_peer
-               Index Cond: (_hyper_2_9_chunk.device_id_peer = "*VALUES*".column1)
-               Heap Fetches: 0
+               Filter: ("*VALUES*".column1 = _hyper_2_9_chunk.device_id_peer)
+               Rows Removed by Filter: 2016
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=0 loops=2)
                Output: _hyper_2_10_chunk.device_id_peer
                ->  Index Scan using compress_hyper_6_20_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=0 loops=2)
@@ -4746,15 +4778,16 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_21_chunk_device_id_peer_idx on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=0 loops=2)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_21_chunk.device_id_peer = "*VALUES*".column1)
-         ->  Index Only Scan using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=2)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=2)
                Output: _hyper_2_12_chunk.device_id_peer
-               Index Cond: (_hyper_2_12_chunk.device_id_peer = "*VALUES*".column1)
-               Heap Fetches: 0
+               Filter: ("*VALUES*".column1 = _hyper_2_12_chunk.device_id_peer)
+               Rows Removed by Filter: 2016
 (52 rows)
 
+RESET enable_hashjoin;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=5472 loops=1)
    Output: _hyper_2_4_chunk.device_id_peer
    ->  HashAggregate (actual rows=1 loops=1)
@@ -4778,19 +4811,17 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=0 loops=1)
                      Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id, compress_hyper_6_19_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_19_chunk.device_id = (1))
-         ->  Index Only Scan Backward using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_7_chunk (actual rows=2016 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=2016 loops=1)
                Output: _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.device_id
                Filter: ((1) = _hyper_2_7_chunk.device_id)
-               Heap Fetches: 2016
          ->  Index Only Scan using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_8_chunk (actual rows=0 loops=1)
                Output: _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.device_id
                Index Cond: (_hyper_2_8_chunk.device_id = (1))
                Heap Fetches: 0
-         ->  Index Only Scan Backward using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=0 loops=1)
                Output: _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.device_id
                Filter: ((1) = _hyper_2_9_chunk.device_id)
                Rows Removed by Filter: 2016
-               Heap Fetches: 2016
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=2016 loops=1)
                Output: _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.device_id
                ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
@@ -4801,13 +4832,56 @@ DROP INDEX tmp_idx CASCADE;
                ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=0 loops=1)
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer
                      Index Cond: (compress_hyper_6_21_chunk.device_id = (1))
-         ->  Index Only Scan Backward using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=0 loops=1)
                Output: _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.device_id
                Filter: ((1) = _hyper_2_12_chunk.device_id)
                Rows Removed by Filter: 2016
-               Heap Fetches: 2016
-(51 rows)
+(48 rows)
 
+--with multiple values can get a semi-join or nested loop depending on seq_page_cost.
+:PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Semi Join (actual rows=10944 loops=1)
+   Output: _hyper_2_4_chunk.device_id_peer
+   Hash Cond: (_hyper_2_4_chunk.device_id = "*VALUES*".column1)
+   ->  Append (actual rows=27360 loops=1)
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (actual rows=1440 loops=1)
+               Output: _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.device_id
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=2 loops=1)
+                     Output: compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk.device_id, compress_hyper_6_17_chunk.device_id_peer
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_5_chunk (actual rows=4320 loops=1)
+               Output: _hyper_2_5_chunk.device_id_peer, _hyper_2_5_chunk.device_id
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_18_chunk (actual rows=6 loops=1)
+                     Output: compress_hyper_6_18_chunk._ts_meta_count, compress_hyper_6_18_chunk.device_id, compress_hyper_6_18_chunk.device_id_peer
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_6_chunk (actual rows=1440 loops=1)
+               Output: _hyper_2_6_chunk.device_id_peer, _hyper_2_6_chunk.device_id
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_19_chunk (actual rows=2 loops=1)
+                     Output: compress_hyper_6_19_chunk._ts_meta_count, compress_hyper_6_19_chunk.device_id, compress_hyper_6_19_chunk.device_id_peer
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=2016 loops=1)
+               Output: _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.device_id
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=6048 loops=1)
+               Output: _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.device_id
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=2016 loops=1)
+               Output: _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.device_id
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=2016 loops=1)
+               Output: _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.device_id
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=3 loops=1)
+                     Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_11_chunk (actual rows=6048 loops=1)
+               Output: _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.device_id
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_21_chunk (actual rows=9 loops=1)
+                     Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=2016 loops=1)
+               Output: _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.device_id
+   ->  Hash (actual rows=2 loops=1)
+         Output: "*VALUES*".column1
+         Buckets: 1024  Batches: 1 
+         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+               Output: "*VALUES*".column1
+(37 rows)
+
+SET seq_page_cost=100;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
                                                                             QUERY PLAN                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4865,8 +4939,10 @@ DROP INDEX tmp_idx CASCADE;
                Heap Fetches: 0
 (52 rows)
 
+RESET seq_page_cost;
 -- force a BitmapHeapScan
 SET enable_indexscan TO false;
+set enable_seqscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4944,7 +5020,6 @@ SET enable_indexscan TO false;
                ->  Bitmap Index Scan on _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 (actual rows=2016 loops=1)
 (72 rows)
 
-SET enable_indexscan TO false;
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -5665,8 +5740,8 @@ DEALLOCATE param_prep;
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:274: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:274: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
