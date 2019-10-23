@@ -94,6 +94,70 @@ make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *ex
 }
 
 static void
+prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
+					  Oid sortop, bool nulls_first)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
+
+	Oid opfamily, opcintype, equality_op;
+	int16 strategy;
+	List *opfamilies;
+	EquivalenceClass *newec = makeNode(EquivalenceClass);
+	EquivalenceMember *em = makeNode(EquivalenceMember);
+
+	/* Find the operator in pg_amop --- failure shouldn't happen */
+	if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+		elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+
+	/*
+	 * EquivalenceClasses need to contain opfamily lists based on the family
+	 * membership of mergejoinable equality operators, which could belong to
+	 * more than one opfamily.  So we have to look up the opfamily's equality
+	 * operator and get its membership.
+	 */
+	equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
+	if (!OidIsValid(equality_op)) /* shouldn't happen */
+		elog(ERROR,
+			 "missing operator %d(%u,%u) in opfamily %u",
+			 BTEqualStrategyNumber,
+			 opcintype,
+			 opcintype,
+			 opfamily);
+	opfamilies = get_mergejoin_opfamilies(equality_op);
+	if (!opfamilies) /* certainly should find some */
+		elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
+
+	em->em_expr = (Expr *) var;
+	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
+	em->em_nullable_relids = NULL;
+	em->em_is_const = false;
+	em->em_is_child = false;
+	em->em_datatype = INT4OID;
+
+	newec->ec_opfamilies = list_copy(opfamilies);
+	newec->ec_collation = 0;
+	newec->ec_members = list_make1(em);
+	newec->ec_sources = NIL;
+	newec->ec_derives = NIL;
+	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
+	newec->ec_has_const = false;
+	newec->ec_has_volatile = false;
+	newec->ec_below_outer_join = false;
+	newec->ec_broken = false;
+	newec->ec_sortref = 0;
+#if PG10_GE
+	newec->ec_min_security = UINT_MAX;
+	newec->ec_max_security = 0;
+#endif
+	newec->ec_merged = NULL;
+
+	/* Prepend the ec */
+	root->eq_classes = lcons(newec, root->eq_classes);
+
+	MemoryContextSwitchTo(oldcontext);
+}
+
+static void
 build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chunk_pathkeys,
 							   CompressionInfo *info)
 {
@@ -180,6 +244,11 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			sortop = Int4LessOperator;
 			nulls_first = false;
 		}
+
+		/* Prepend the ec class for the sequence number. We are prepending
+		 * the ec for efficiency in finding it. We are more likely to look for it
+		 * then other ec classes */
+		prepend_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
 
 		pk = make_pathkey_from_compressed(root,
 										  info->compressed_rte->relid,
@@ -534,43 +603,26 @@ segmentby_compression_info_for_em(Node *node, EMCreationContext *context)
 }
 
 static Node *
-create_var_for_compressed_equivalence_member(Node *node, const EMCreationContext *context)
+create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *context)
 {
 	/* based on adjust_appendrel_attrs_mutator */
-	if (node == NULL)
-		return NULL;
+	Assert(context->current_col_info != NULL);
+	Assert(context->current_col_info->segmentby_column_index > 0);
+	Assert(var->varno == context->uncompressed_relid_idx);
+	Assert(var->varattno > 0);
 
-	Assert(!IsA(node, Query));
+	var = (Var *) copyObject(var);
 
-	if (IsA(node, Var))
+	if (var->varlevelsup == 0)
 	{
-		Var *var = castNode(Var, node);
+		var->varno = context->compressed_relid_idx;
+		var->varnoold = context->compressed_relid_idx;
+		var->varattno =
+			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
 
-		Assert(context->current_col_info != NULL);
-		Assert(context->current_col_info->segmentby_column_index > 0);
-		Assert(var->varno == context->uncompressed_relid_idx);
-		Assert(var->varattno > 0);
-
-		var = (Var *) copyObject(node);
-
-		if (var->varlevelsup == 0)
-		{
-			var->varno = context->compressed_relid_idx;
-			var->varnoold = context->compressed_relid_idx;
-			var->varattno =
-				get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
-
-			return (Node *) var;
-		}
-
-		return NULL;
+		return (Node *) var;
 	}
 
-	/*
-	 * we currently ignore non-Var expressions; the EC we care about
-	 * (the one relating Hypertable columns to chunk columns)
-	 * should not have any
-	 */
 	return NULL;
 }
 
@@ -586,21 +638,28 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		Relids new_relids;
 		Relids new_nullable_relids;
 		EquivalenceMember *cur_em = (EquivalenceMember *) lfirst(lc);
+		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/* skip EquivalenceMembers that do not reference the uncompressed
-		 * chunk
-		 */
-		if (!bms_overlap(cur_em->em_relids, uncompressed_chunk_relids))
+		/* only consider EquivalenceMembers that are vars of the uncompressed chunk */
+		if (!IsA(cur_em->em_expr, Var))
 			continue;
+
+		var = castNode(Var, cur_em->em_expr);
+
+		if (var->varno != info->chunk_rel->relid)
+			continue;
+
+		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should be
+		 * set on the em */
+		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
 		context->current_col_info =
 			segmentby_compression_info_for_em((Node *) cur_em->em_expr, context);
 		if (context->current_col_info == NULL)
 			continue;
 
-		child_expr = (Expr *) create_var_for_compressed_equivalence_member((Node *) cur_em->em_expr,
-																		   context);
+		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context);
 		if (child_expr == NULL)
 			continue;
 
@@ -636,7 +695,8 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
-			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+			/* Prepend the ec member because it's likely to be accessed soon */
+			cur_ec->ec_members = lcons(em, cur_ec->ec_members);
 
 			return;
 		}
