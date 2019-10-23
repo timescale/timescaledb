@@ -19,7 +19,7 @@ CREATE TABLE conditions (
       temperature DOUBLE PRECISION  NULL,
       humidity    DOUBLE PRECISION  NULL
     );
-select table_name from create_hypertable( 'conditions', 'timec');
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=>'1month'::interval);
  table_name 
 ------------
  conditions
@@ -62,3 +62,88 @@ select add_compress_chunks_policy('conditions', '1day'::interval);
 --try dropping policy
 select remove_compress_chunks_policy('conditions', true);
 ERROR:  must be owner of hypertable "conditions"
+--Tests for GRANTS.
+-- as owner grant select , compress chunk and check SELECT works
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+select count(*) from
+(select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL ) as subq;
+ count 
+-------
+     2
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from conditions;
+ count 
+-------
+    31
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT INSERT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+insert into conditions
+select '2019-04-01 00:00+0'::timestamp with time zone, 'NYC', 'klick', 55, 75;
+select count(*) from conditions;
+ count 
+-------
+    32
+(1 row)
+
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone; 
+ERROR:  permission denied for relation conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT UPDATE, DELETE on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ NYC
+(1 row)
+
+--NOTE constraint exclusion excludes the other chunks here
+--otherwise update would fail
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ SFO
+(1 row)
+
+--update expected to fail as executor touches all chunks
+update conditions
+set location = 'PNC'
+where location = 'SFO';
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
+delete from conditions
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+(0 rows)
+
+--should fail.
+SELECT ch1.schema_name|| '.' || ch1.table_name as "COMPT_NAME"
+FROM _timescaledb_catalog.hypertable ch1, _timescaledb_catalog.hypertable ht where ht.table_name like 'conditions' and ht.compressed_hypertable_id = ch1.id
+\gset
+select count(*) from :COMPT_NAME;
+ERROR:  permission denied for relation _compressed_hypertable_2
+CREATE VIEW v2 as select * from conditions;
+select count(*) from v2;
+ count 
+-------
+    31
+(1 row)
+
+--should fail after revoking permissions 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+REVOKE SELECT on conditions FROM :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from v2;
+ERROR:  permission denied for relation conditions

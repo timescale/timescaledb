@@ -844,7 +844,7 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->inh = false;
 	rte->inFromCl = false;
 
-	rte->requiredPerms = ACL_SELECT;
+	rte->requiredPerms = 0;
 	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
 	rte->selectedCols = NULL;
 	rte->insertedCols = NULL;
