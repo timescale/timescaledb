@@ -620,6 +620,8 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 		var->varattno =
 			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
 
+		var->varoattno = var->varattno;
+
 		return (Node *) var;
 	}
 
