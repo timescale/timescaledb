@@ -2848,6 +2848,16 @@ process_create_rule_start(ProcessUtilityArgs *args)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
 }
 
+static void
+check_supported_pg_version_for_compression()
+{
+#if PG10_LT
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("compression is not supported with postgres version older than 10")));
+#endif
+}
+
 /* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
 static bool
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
@@ -2871,6 +2881,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	else
 		return false;
 
+	check_supported_pg_version_for_compression();
 	if (pg_options != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
