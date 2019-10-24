@@ -4,32 +4,33 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/xact.h>
+
 #include <access/htup_details.h>
-#include <nodes/makefuncs.h>
-#include <nodes/parsenodes.h>
-#include <catalog/pg_foreign_server.h>
+#include <access/xact.h>
+#include <catalog.h>
 #include <catalog/namespace.h>
-#include <catalog/pg_namespace.h>
+#include <catalog/pg_database.h>
+#include <catalog/pg_foreign_server.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_namespace.h>
+#include <chunk_data_node.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
-#include <utils/builtins.h>
-#include <utils/syscache.h>
-#include <utils/acl.h>
-#include <utils/guc.h>
-#include <utils/builtins.h>
-#include <utils/inval.h>
+#include <compat.h>
+#include <extension.h>
+#include <funcapi.h>
+#include <hypertable_data_node.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
-#include <funcapi.h>
-
-#include <hypertable_data_node.h>
-#include <extension.h>
-#include <compat.h>
-#include <catalog.h>
-#include <chunk_data_node.h>
+#include <nodes/makefuncs.h>
+#include <nodes/parsenodes.h>
+#include <utils/acl.h>
+#include <utils/builtins.h>
+#include <utils/builtins.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
+#include <utils/syscache.h>
 
 #include "fdw/fdw.h"
 #include "remote/async.h"
@@ -42,12 +43,42 @@
 #include "errors.h"
 #include "dist_util.h"
 #include "utils/uuid.h"
+#include "mb/pg_wchar.h"
 #include "chunk.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
 #define ERRCODE_DUPLICATE_DATABASE_STR "42P04"
+
+/*
+ * get_database_info - given a database OID, look up info about the database
+ *
+ * Returns:
+ *  True if a record for the OID was found, false otherwise.
+ */
+static bool
+get_database_info(Oid dbid, const char **encoding, const char **chartype, const char **collation)
+{
+	HeapTuple dbtuple;
+	Form_pg_database dbrecord;
+
+	Assert(encoding && chartype && collation);
+
+	dbtuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(dbid));
+
+	if (!HeapTupleIsValid(dbtuple))
+		return false;
+
+	dbrecord = (Form_pg_database) GETSTRUCT(dbtuple);
+
+	*encoding = pg_encoding_to_char(dbrecord->encoding);
+	*collation = pstrdup(NameStr(dbrecord->datcollate));
+	*chartype = pstrdup(NameStr(dbrecord->datctype));
+
+	ReleaseSysCache(dbtuple);
+	return true;
+}
 
 /*
  * Verify that server is TimescaleDB server and perform optional ACL check
@@ -278,7 +309,8 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 }
 
 static void
-data_node_bootstrap_database(TSConnection *conn, const char *dbname)
+data_node_bootstrap_database(TSConnection *conn, const char *dbname, const char *encoding,
+							 const char *chartype, const char *collation)
 {
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 
@@ -290,8 +322,12 @@ data_node_bootstrap_database(TSConnection *conn, const char *dbname)
 	 * if the database already exists, but we catch the error and continue
 	 * with the bootstrapping if it does. */
 	res = remote_connection_execf(conn,
-								  "CREATE DATABASE %s OWNER %s",
+								  "CREATE DATABASE %s ENCODING %s LC_COLLATE %s LC_CTYPE %s "
+								  "TEMPLATE template0 OWNER %s",
 								  quote_identifier(dbname),
+								  quote_identifier(encoding),
+								  quote_literal_cstr(collation),
+								  quote_literal_cstr(chartype),
 								  quote_identifier(username));
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -309,6 +345,58 @@ data_node_bootstrap_database(TSConnection *conn, const char *dbname)
 		 * error if the database already existed on the remote node. */
 		elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
 	}
+}
+
+static void
+data_node_validate_database(TSConnection *conn, const char *expected_encoding,
+							const char *expected_chartype, const char *expected_collation)
+{
+	PGresult *res;
+	const char *actual_encoding;
+	const char *actual_chartype;
+	const char *actual_collation;
+
+	res = remote_connection_execf(conn,
+								  "SELECT PG_ENCODING_TO_CHAR(encoding), datcollate, datctype "
+								  "FROM pg_database WHERE datname = current_database()");
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	/* This only fails if current database is not in pg_database, which would
+	 * very very strange. */
+	Assert(PQntuples(res) > 0 && PQnfields(res) > 2);
+
+	actual_encoding = PQgetvalue(res, 0, 0);
+	Assert(actual_encoding != NULL);
+	if (strcmp(actual_encoding, expected_encoding) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("database encoding mismatch"),
+				 errdetail("Expected database encoding to be \"%s\" but it was \"%s\"",
+						   expected_encoding,
+						   actual_encoding)));
+
+	actual_collation = PQgetvalue(res, 0, 1);
+	Assert(actual_collation != NULL);
+	if (strcmp(actual_collation, expected_collation) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("database collation mismatch"),
+				 errdetail("Expected collation \"%s\" but it was \"%s\"",
+						   expected_collation,
+						   actual_collation)));
+
+	actual_chartype = PQgetvalue(res, 0, 2);
+	Assert(actual_chartype != NULL);
+	if (strcmp(actual_chartype, expected_chartype) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("database LC_CTYPE mismatch"),
+				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\"",
+						   expected_chartype,
+						   actual_chartype)));
 }
 
 static void
@@ -428,6 +516,11 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
+	bool result;
+
+	const char *encoding;
+	const char *collation;
+	const char *chartype;
 
 	if (host == NULL)
 		ereport(ERROR,
@@ -454,6 +547,9 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 (errmsg("invalid port"),
 				  errhint("The port number must be between 1 and %u", PG_UINT16_MAX))));
+
+	result = get_database_info(MyDatabaseId, &encoding, &chartype, &collation);
+	Assert(result);
 
 	/*
 	 * Since this function creates databases on remote nodes, and CREATE DATABASE
@@ -484,9 +580,9 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 			node_options = create_data_node_options(host, port, bootstrap_database, username);
 			conn = remote_connection_open_with_options(node_name, node_options, false);
 
-			data_node_bootstrap_database(conn, dbname);
-
+			data_node_bootstrap_database(conn, dbname, encoding, chartype, collation);
 			database_created = true;
+
 			remote_connection_close(conn);
 		}
 
@@ -510,6 +606,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		}
 		else
 		{
+			data_node_validate_database(conn, encoding, chartype, collation);
 			data_node_validate_extension(conn);
 			data_node_validate_as_data_node(conn);
 		}

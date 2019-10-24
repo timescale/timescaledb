@@ -7,19 +7,36 @@ CREATE OR REPLACE FUNCTION show_data_nodes()
 RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'test_data_node_show' LANGUAGE C;
 
+-- Fetch the encoding, collation, and ctype as quoted strings into
+-- variables.
+SELECT QUOTE_LITERAL(PG_ENCODING_TO_CHAR(encoding)) AS enc
+     , QUOTE_LITERAL(datcollate) AS coll
+     , QUOTE_LITERAL(datctype) AS ctype
+  FROM pg_database
+ WHERE datname = current_database()
+ \gset
+
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS bootstrap_test;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
--- Ensure database and extensions are installed
+
+-- Ensure database and extensions are installed and have the correct
+-- encoding, ctype and collation.
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SELECT extname, nspname
 FROM pg_extension e, pg_namespace n
 WHERE e.extnamespace = n.oid
 AND e.extname = 'timescaledb';
+SELECT PG_ENCODING_TO_CHAR(encoding) = :enc
+     , datcollate = :coll
+     , datctype = :ctype
+  FROM pg_database
+ WHERE datname = current_database();
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- After delete database and extension should still be there
@@ -79,6 +96,74 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
 
 SELECT * FROM delete_data_node('bootstrap_test');
+DROP DATABASE bootstrap_test;
+
+----------------------------------------------------------------------
+-- Do a manual bootstrap of the data but check that a mismatching
+-- encoding, ctype, or collation will be caught.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+CREATE DATABASE bootstrap_test
+   ENCODING SQL_ASCII
+ LC_COLLATE 'C'
+   LC_CTYPE 'C'
+   TEMPLATE template0
+      OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set ON_ERROR_STOP 0
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
+\set ON_ERROR_STOP 1
+
+DROP DATABASE bootstrap_test;
+
+CREATE DATABASE bootstrap_test
+   ENCODING :"enc"
+ LC_COLLATE 'sv_SE.UTF-8'
+   LC_CTYPE :ctype
+   TEMPLATE template0
+      OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set ON_ERROR_STOP 0
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
+\set ON_ERROR_STOP 1
+
+DROP DATABASE bootstrap_test;
+
+CREATE DATABASE bootstrap_test
+   ENCODING :"enc"
+ LC_COLLATE :coll
+   LC_CTYPE 'sv_SE.UTF-8'
+   TEMPLATE template0
+      OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set ON_ERROR_STOP 0
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
+\set ON_ERROR_STOP 1
+
 DROP DATABASE bootstrap_test;
 
 -----------------------------------------------------------------------
@@ -160,24 +245,24 @@ SET client_min_messages TO NOTICE;
 
 -- No security label exists
 SELECT label FROM pg_shseclabel
-	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
-	      provider = 'timescaledb';
+    WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+          provider = 'timescaledb';
 
 SELECT * FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
 
 -- Make sure security label is created
 SELECT substr(label, 0, 10) || ':uuid'
-	FROM pg_shseclabel
-	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
-	      provider = 'timescaledb';
+    FROM pg_shseclabel
+    WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+          provider = 'timescaledb';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 -- Check that timescaledb security label cannot be used directly
 \set ON_ERROR_STOP 0
 SECURITY LABEL FOR timescaledb
-	ON DATABASE drop_db_test
-	IS 'dist_uuid:00000000-0000-0000-0000-00000000000';
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:00000000-0000-0000-0000-00000000000';
 \set ON_ERROR_STOP 1
 
 -- Check that security label functionality is working
@@ -191,5 +276,5 @@ DROP DATABASE drop_db_test_dn;
 
 -- Ensure label is deleted after the DROP
 SELECT label FROM pg_shseclabel
-	WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
-	      provider = 'timescaledb';
+    WHERE objoid = (SELECT oid from pg_database WHERE datname = 'drop_db_test') AND
+          provider = 'timescaledb';
