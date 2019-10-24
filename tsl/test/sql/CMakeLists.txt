@@ -13,14 +13,6 @@ set(TEST_FILES
 set(TEST_FILES_DEBUG
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
-    compress_table.sql
-    compression.sql
-    compression_algos.sql
-    compression_ddl.sql
-    compression_errors.sql
-    compression_hypertable.sql
-    compression_segment_meta.sql
-    compression_bgw.sql
     continuous_aggs.sql
     continuous_aggs_bgw.sql
     continuous_aggs_materialize.sql
@@ -29,15 +21,36 @@ set(TEST_FILES_DEBUG
     tsl_tables.sql
 )
 
+#only test for version PG10 onwards
+set(TEST_FILES_DEBUG_GT_9
+    compress_table.sql
+    compression.sql
+    compression_algos.sql
+    compression_ddl.sql
+    compression_errors.sql
+    compression_hypertable.sql
+    compression_segment_meta.sql
+    compression_bgw.sql
+    compress_bgw_drop_chunks.sql
+)
+
 set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   continuous_aggs_ddl.sql.in
   continuous_aggs_permissions.sql.in
-  compression_permissions.sql.in
   plan_gapfill.sql.in
+)
+
+#compression only for PG > 9
+set(TEST_TEMPLATES_DEBUG_GT_9
+  compression_permissions.sql.in
   transparent_decompression.sql.in
 )
 
+if (${PG_VERSION_MAJOR} GREATER "9")
+    list(APPEND TEST_FILES_DEBUG ${TEST_FILES_DEBUG_GT_9})
+    list(APPEND TEST_TEMPLATES ${TEST_TEMPLATES_DEBUG_GT_9})
+endif ()
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
 endif(CMAKE_BUILD_TYPE MATCHES Debug)

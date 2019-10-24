@@ -1,7 +1,9 @@
 set(TEST_FILES
-  compression_ddl.spec
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec)
+
+set(TEST_FILES_GT_9
+  compression_ddl.spec)
 
 set(TEST_TEMPLATES
  reorder_deadlock.spec.in
@@ -10,6 +12,10 @@ set(TEST_TEMPLATES
 set(TEST_TEMPLATES_DEBUG
   reorder_vs_insert.spec.in
   reorder_vs_select.spec.in)
+
+if (${PG_VERSION_MAJOR} GREATER "9")
+    list( INSERT TEST_FILES 0 ${TEST_FILES_GT_9})
+endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES ${TEST_TEMPLATES_DEBUG})

@@ -339,4 +339,4 @@ GROUP BY 1;
 REFRESH MATERIALIZED VIEW cagg_expr;
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
-
+ALTER TABLE metrics set(timescaledb.compress);

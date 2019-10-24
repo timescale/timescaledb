@@ -540,3 +540,5 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
  Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
 (5 rows)
 
+ALTER TABLE metrics set(timescaledb.compress);
+ERROR:  compression is not supported with postgres version older than 10
