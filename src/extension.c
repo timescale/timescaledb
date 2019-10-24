@@ -198,6 +198,18 @@ ts_extension_schema_name(void)
 bool
 ts_extension_invalidate(Oid relid)
 {
+	static bool in_recursion = false;
+	bool invalidate_all = false;
+
+	/* Since the state of the extension is determined by the snapshot of the transaction there
+	 * is no point processing recursive calls as the outer call will always set the correct state.
+	 * This also prevents deep recursion during `AcceptInvalidationMessages`.
+	 */
+	if (in_recursion)
+		return false;
+
+	in_recursion = true;
+
 	switch (extstate)
 	{
 		case EXTENSION_STATE_NOT_INSTALLED:
@@ -207,7 +219,7 @@ ts_extension_invalidate(Oid relid)
 		case EXTENSION_STATE_TRANSITIONING:
 			/* Has the create/drop extension finished? */
 			extension_update_state();
-			return false;
+			break;
 		case EXTENSION_STATE_CREATED:
 
 			/*
@@ -224,14 +236,16 @@ ts_extension_invalidate(Oid relid)
 					 * note this state may be UNKNOWN but should be
 					 * conservative
 					 */
-					return true;
+					invalidate_all = true;
 				}
 			}
-			return false;
+			break;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);
-			return false;
+			break;
 	}
+	in_recursion = false;
+	return invalidate_all;
 }
 
 bool
