@@ -30,19 +30,25 @@ endfunction()
 
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
-set(VERSION_REGEX "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))*\r?\nupdate_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))*(\r?\n)*$")
+set(VERSION_REGEX "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))?([-](dev))?\r?\nupdate_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))*(\r?\n)*$")
 
 if (NOT (${VERSION_CONFIG} MATCHES ${VERSION_REGEX}))
   message(FATAL_ERROR "Cannot read version from version.config")
 endif ()
+
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
 set(VERSION ${CMAKE_MATCH_1})
 set(VERSION_MOD ${CMAKE_MATCH_3})
-set(UPDATE_FROM_VERSION ${CMAKE_MATCH_4})
+set(VERSION_DEV ${CMAKE_MATCH_5})
+set(UPDATE_FROM_VERSION ${CMAKE_MATCH_6})
 
-if (VERSION_MOD)
+if (VERSION_MOD AND VERSION_DEV)
+  set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_MOD}-${VERSION_DEV})
+elseif (VERSION_MOD)
   set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_MOD})
+elseif (VERSION_DEV)
+  set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_DEV})
 else ()
   set(PROJECT_VERSION_MOD ${VERSION})
 endif ()
