@@ -542,8 +542,6 @@ deparse_result_type(StringInfo sql, FunctionCallInfo fcinfo)
 			break;
 		case TYPEFUNC_RECORD:
 			/* indeterminate rowtype result */
-			elog(NOTICE, "record return type");
-			break;
 		case TYPEFUNC_COMPOSITE_DOMAIN:
 			/* domain over determinable rowtype result */
 		case TYPEFUNC_OTHER:
