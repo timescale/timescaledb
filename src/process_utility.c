@@ -2856,6 +2856,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support  "
 							"enabling or disabling triggers.")));
+			/* Break here to silence compiler */
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
@@ -2864,11 +2865,13 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("logging cannot be turned off for hypertables")));
+			/* Break here to silence compiler */
 			break;
 		case AT_ReplicaIdentity:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support logical replication")));
+			/* Break here to silence compiler */
 			break;
 		case AT_EnableRule:
 		case AT_EnableAlwaysRule:
@@ -2878,6 +2881,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support rules")));
+			/* Break here to silence compiler */
 			break;
 		case AT_AlterConstraint:
 			process_altertable_alter_constraint_end(ht, cmd);

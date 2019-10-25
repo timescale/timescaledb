@@ -35,7 +35,7 @@ install:
   - docker exec -it pgbuild /bin/sh -c "wget -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v\$PG_VERSION/postgresql-\$PG_VERSION.tar.bz2 && tar --extract --file postgresql.tar.bz2 --directory /postgres --strip-components 1"
   # We set /usr/local as prefix so the regression tools will be able to find
   # initdb, psql, and postgres
-  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --prefix=/usr/local --enable-debug --enable-cassert --without-readline --without-zlib"
+  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --prefix=/usr/local --enable-debug --enable-cassert --without-readline --without-zlib --with-openssl"
   # We only need to build the regress and isolation stuff
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/regress"
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"

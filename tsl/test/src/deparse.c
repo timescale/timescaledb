@@ -69,7 +69,7 @@ tsl_test_deparse_func(PG_FUNCTION_ARGS)
 	TupleDesc tupdesc;
 	Oid resulttypeid;
 	const char *deparsed = deparse_func_call(fcinfo);
-	Datum retval;
+	Datum retval = 0;
 
 	elog(NOTICE, "Deparsed: %s", deparsed);
 
