@@ -475,7 +475,7 @@ SELECT t1.*,t2.m FROM
 SELECT t1.*,t2.m FROM
 (
   SELECT
-    time_bucket_gapfill(1,time,0,5) as time, 
+    time_bucket_gapfill(1,time,0,5) as time,
     color,
     locf(min(value)) as locf
   FROM
@@ -1456,3 +1456,21 @@ GROUP BY 1,device_id;
 
 
 
+
+--test interpolation with big diifferences in values (test overflows in calculations)
+--we use the biggest possible difference in time(x) and the value(y).
+--For bigints we also test values of smaller than bigintmax/min to avoid
+--the symmetry where x=y (which catches more errors)
+SELECT  9223372036854775807 as big_int_max \gset
+SELECT -9223372036854775808	 as big_int_min \gset
+
+SELECT
+  time_bucket_gapfill(1,time,0,1) AS time,
+  interpolate(min(s)) AS "smallint",
+  interpolate(min(i)) AS "int",
+  interpolate(min(b)) AS "bigint",
+  interpolate(min(b2)) AS "bigint2",
+  interpolate(min(d)) AS "double"
+FROM (values (:big_int_min,(-32768)::smallint,(-2147483648)::int,:big_int_min,-2147483648::bigint, '-Infinity'::double precision),
+             (:big_int_max, 32767::smallint, 2147483647::int,:big_int_max, 2147483647::bigint, 'Infinity'::double precision)) v(time,s,i,b,b2,d)
+GROUP BY 1 ORDER BY 1;
