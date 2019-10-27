@@ -73,6 +73,9 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
+--force a value to exist for exported_uuid
+INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
+
 \c postgres :ROLE_SUPERUSER
 
 -- We shell out to a script in order to grab the correct hostname from the
@@ -83,6 +86,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 \c :TEST_DBNAME
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
+--create a exported uuid before restoring (mocks telemetry running before restore)
+INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'new_db_uuid', true);
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
 SHOW timescaledb.restoring;
@@ -107,6 +112,10 @@ SELECT count(*) = :num_dependent_objects as dependent_objects_match
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+
+--we should have the original uuid from the backed up db set as the exported_uuid
+SELECT value = 'original_uuid' FROM _timescaledb_catalog.metadata  WHERE key='exported_uuid';
+SELECT count(*) = 1 FROM _timescaledb_catalog.metadata WHERE key LIKE 'exported%';
 
 --main table and chunk schemas should be the same
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');

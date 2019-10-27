@@ -18,10 +18,16 @@ WHERE hypertable.table_name like :'HYPERTABLE_NAME' and chunk.compressed_chunk_i
 \c postgres :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+
+\c :TEST_DBNAME
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+
 --\! cp dump/pg_dump.sql /tmp/dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
+SELECT timescaledb_pre_restore();
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
+SELECT timescaledb_post_restore();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 with original AS (

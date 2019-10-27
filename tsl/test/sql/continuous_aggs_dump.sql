@@ -123,10 +123,18 @@ SELECT count(*) FROM conditions_after;
 --dump & restore
 \c postgres :ROLE_SUPERUSER
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+
+\c :TEST_DBNAME
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+
 --\! cp dump/pg_dump.sql /tmp/dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
+SELECT timescaledb_pre_restore();
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
+SELECT timescaledb_post_restore();
+SELECT _timescaledb_internal.stop_background_workers();
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --make sure the appropriate DROP are still blocked.
