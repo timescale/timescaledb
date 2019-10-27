@@ -257,6 +257,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
 (12 rows)
 
+--force a value to exist for exported_uuid
+INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
 \c postgres :ROLE_SUPERUSER
 -- We shell out to a script in order to grab the correct hostname from the
 -- environmental variables that originally called this psql command. Sadly
@@ -273,6 +275,8 @@ pg_dump: Consider using a full dump instead of a --data-only dump to avoid this 
 \c :TEST_DBNAME
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
+--create a exported uuid before restoring (mocks telemetry running before restore)
+INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'new_db_uuid', true);
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 
@@ -315,6 +319,19 @@ SELECT count(*) = :num_dependent_objects as dependent_objects_match
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  dependent_objects_match 
 -------------------------
+ t
+(1 row)
+
+--we should have the original uuid from the backed up db set as the exported_uuid
+SELECT value = 'original_uuid' FROM _timescaledb_catalog.metadata  WHERE key='exported_uuid';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT count(*) = 1 FROM _timescaledb_catalog.metadata WHERE key LIKE 'exported%';
+ ?column? 
+----------
  t
 (1 row)
 

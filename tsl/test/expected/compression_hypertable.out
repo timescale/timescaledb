@@ -95,6 +95,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
@@ -227,6 +237,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
@@ -338,6 +358,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
@@ -449,6 +479,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
@@ -528,6 +568,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
@@ -602,6 +652,16 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0

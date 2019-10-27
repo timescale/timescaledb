@@ -153,10 +153,30 @@ pg_dump: NOTICE: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+\c :TEST_DBNAME
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
 --\! cp dump/pg_dump.sql /tmp/dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
+SELECT timescaledb_pre_restore();
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
+SELECT timescaledb_post_restore();
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --make sure the appropriate DROP are still blocked.
 \set ON_ERROR_STOP 0
