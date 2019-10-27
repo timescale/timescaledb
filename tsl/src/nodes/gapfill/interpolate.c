@@ -10,6 +10,7 @@
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/typcache.h>
+#include <utils/numeric.h>
 
 #include "compat.h"
 #include "nodes/gapfill/interpolate.h"
@@ -144,6 +145,25 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 	DecrTupleDescRefCount(tupdesc);
 }
 
+/* Calculate the interpolation using numerics, returning the result as a numeric datum */
+static Datum
+interpolate_numeric(int64 x_i, int64 x0_i, int64 x1_i, Datum y0, Datum y1)
+{
+	Datum x0 = DirectFunctionCall1(int8_numeric, Int64GetDatum(x0_i));
+	Datum x1 = DirectFunctionCall1(int8_numeric, Int64GetDatum(x1_i));
+	Datum x = DirectFunctionCall1(int8_numeric, Int64GetDatum(x_i));
+
+	Datum x1_sub_x = DirectFunctionCall2(numeric_sub, x1, x);
+	Datum x_sub_x0 = DirectFunctionCall2(numeric_sub, x, x0);
+	Datum y0_mul_x1_sub_x = DirectFunctionCall2(numeric_mul, y0, x1_sub_x);
+	Datum y1_mul_x_sub_x0 = DirectFunctionCall2(numeric_mul, y1, x_sub_x0);
+
+	Datum numerator = DirectFunctionCall2(numeric_add, y0_mul_x1_sub_x, y1_mul_x_sub_x0);
+	Datum denominator = DirectFunctionCall2(numeric_sub, x1, x0);
+
+	return DirectFunctionCall2(numeric_div, numerator, denominator);
+}
+
 /*
  * gapfill_interpolate_calculate gets called for every gapfilled tuple to calculate values
  *
@@ -178,14 +198,43 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 
 	switch (column->base.typid)
 	{
+		/* All integer types must use numeric-based interpolation calculations since they are
+		 * multiplied by int64 and this could cause an overflow. numerics also interpolate better
+		 * because the answer is rounded and not truncated. We can't use float8 because that
+		 doesn't handle really big ints exactly. We can't use the Postgres INT128 implementation
+		 because it doesn't support division. */
 		case INT2OID:
-			*value = Int16GetDatum(INTERPOLATE(x, x0, x1, DatumGetInt16(y0), DatumGetInt16(y1)));
+			*value =
+				DirectFunctionCall1(numeric_int2,
+									interpolate_numeric(x,
+														x0,
+														x1,
+														DirectFunctionCall1(int2_numeric,
+																			DatumGetInt16(y0)),
+														DirectFunctionCall1(int2_numeric,
+																			DatumGetInt16(y1))));
 			break;
 		case INT4OID:
-			*value = Int32GetDatum(INTERPOLATE(x, x0, x1, DatumGetInt32(y0), DatumGetInt32(y1)));
+			*value =
+				DirectFunctionCall1(numeric_int4,
+									interpolate_numeric(x,
+														x0,
+														x1,
+														DirectFunctionCall1(int4_numeric,
+																			DatumGetInt32(y0)),
+														DirectFunctionCall1(int4_numeric,
+																			DatumGetInt32(y1))));
 			break;
 		case INT8OID:
-			*value = Int64GetDatum(INTERPOLATE(x, x0, x1, DatumGetInt64(y0), DatumGetInt64(y1)));
+			*value =
+				DirectFunctionCall1(numeric_int8,
+									interpolate_numeric(x,
+														x0,
+														x1,
+														DirectFunctionCall1(int8_numeric,
+																			DatumGetInt64(y0)),
+														DirectFunctionCall1(int8_numeric,
+																			DatumGetInt64(y1))));
 			break;
 		case FLOAT4OID:
 			*value = Float4GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat4(y0), DatumGetFloat4(y1)));
