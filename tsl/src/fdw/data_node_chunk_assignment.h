@@ -17,6 +17,7 @@
 #include <nodes/relation.h>
 #endif
 #include <utils/hsearch.h>
+#include <storage/block.h>
 
 /*
  * data node-chunk assignments map chunks to the data nodes that will be responsible
@@ -29,6 +30,7 @@
 typedef struct DataNodeChunkAssignment
 {
 	Oid node_server_oid;
+	BlockNumber pages;
 	double rows;
 	double tuples;
 	Cost startup_cost;

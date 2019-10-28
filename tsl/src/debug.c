@@ -425,11 +425,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 		appendStringInfoString(buf, ")");
 	}
 
-	appendStringInfo(buf,
-					 " rows=%.0f cost=%.2f..%.2f",
-					 path->rows,
-					 path->startup_cost,
-					 path->total_cost);
+	appendStringInfo(buf, " rows=%.0f", path->rows);
 
 	if (path->pathkeys)
 		appendStringInfoString(buf, " has pathkeys");

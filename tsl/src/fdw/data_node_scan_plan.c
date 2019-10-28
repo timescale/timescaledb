@@ -435,10 +435,14 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 			data_node_chunk_assignment_get_or_create(&scas, data_node_rel);
 		TsFdwRelInfo *fpinfo;
 
-		/* Update the number of tuples and rows based on the chunk
-		 * assignments */
+		/* Basic stats for data node rels come from the assigned chunks since
+		 * data node rels don't correspond to real tables in the system */
+		data_node_rel->pages = sca->pages;
 		data_node_rel->tuples = sca->tuples;
 		data_node_rel->rows = sca->rows;
+
+		/* Should also have the same width as any queried chunk */
+		data_node_rel->reltarget->width = hyper_rel->part_rels[0]->reltarget->width;
 
 		fpinfo = fdw_relinfo_create(root,
 									data_node_rel,
