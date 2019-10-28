@@ -602,3 +602,39 @@ ts_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(segment_meta_min_max_builder_min(builder));
 }
+
+TS_FUNCTION_INFO_V1(ts_compression_custom_type_in);
+TS_FUNCTION_INFO_V1(ts_compression_custom_type_out);
+TS_FUNCTION_INFO_V1(ts_compression_custom_type_eq);
+
+/* basically int2in but returns by refrence */
+Datum
+ts_compression_custom_type_in(PG_FUNCTION_ARGS)
+{
+	char *num = PG_GETARG_CSTRING(0);
+	int16 *val = palloc(sizeof(*val));
+	*val = pg_atoi(num, sizeof(int16), '\0');
+
+	PG_RETURN_POINTER(val);
+}
+
+/* like int2out but takes values by ref */
+Datum
+ts_compression_custom_type_out(PG_FUNCTION_ARGS)
+{
+	int16 *arg = (int16 *) PG_GETARG_POINTER(0);
+	char *result = (char *) palloc(7); /* sign, 5 digits, '\0' */
+
+	pg_itoa(*arg, result);
+	PG_RETURN_CSTRING(result);
+}
+
+/* like int2eq but takes values by ref */
+Datum
+ts_compression_custom_type_eq(PG_FUNCTION_ARGS)
+{
+	int16 *arg1 = (int16 *) PG_GETARG_POINTER(0);
+	int16 *arg2 = (int16 *) PG_GETARG_POINTER(1);
+
+	PG_RETURN_BOOL(*arg1 == *arg2);
+}

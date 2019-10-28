@@ -27,6 +27,39 @@ insert into rand_minstd_state values (321);
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
+CREATE TYPE customtype;
+CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_in'
+LANGUAGE C IMMUTABLE STRICT;
+NOTICE:  return type customtype is only a shell
+CREATE OR REPLACE FUNCTION customtype_out(customtype) RETURNS cstring
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_out'
+LANGUAGE C IMMUTABLE STRICT;
+NOTICE:  argument type customtype is only a shell
+CREATE OR REPLACE FUNCTION customtype_eq(customtype, customtype) RETURNS BOOL
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_eq'
+LANGUAGE C IMMUTABLE STRICT;
+NOTICE:  argument type customtype is only a shell
+NOTICE:  argument type customtype is only a shell
+-- for testing purposes we need a fixed length pass-by-ref type, and one whose
+-- alignment is greater than it's size. This type serves both purposes.
+CREATE TYPE customtype (
+  INPUT = customtype_in,
+  OUTPUT = customtype_out,
+  INTERNALLENGTH = 2,
+  ALIGNMENT = double,
+  STORAGE = plain
+);
+create operator = (
+  leftarg = customtype,
+  rightarg = customtype,
+  procedure = customtype_eq,
+  commutator = =
+);
+CREATE OPERATOR CLASS customtype_ops
+  DEFAULT
+  FOR TYPE customtype
+  USING hash AS OPERATOR 1 =;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
@@ -455,4 +488,77 @@ SELECT * FROM test5;
  time | device_id | temperature 
 ------+-----------+-------------
 (0 rows)
+
+-- test 6, test with custom type, and NULLs in the segmentby
+CREATE table test6(
+  time INT NOT NULL,
+  device_id INT,
+  data customtype
+);
+SELECT create_hypertable('test6', 'time', chunk_time_interval=> 50);
+ create_hypertable  
+--------------------
+ (9,public,test6,t)
+(1 row)
+
+ALTER TABLE test6 SET
+  (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  adding index _compressed_hypertable_10_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id, _ts_meta_sequence_num)
+INSERT INTO test6 SELECT t, d, customtype_in((t + d)::TEXT::cstring)
+  FROM generate_series(1, 200) t, generate_series(1, 3) d;
+INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
+  FROM generate_series(1, 200) t;
+\set QUERY 'SELECT * FROM test6 ORDER BY device_id, time'
+\set HYPERTABLE_NAME 'test6'
+\ir include/compression_test_hypertable.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count_compressed 
+------------------
+                5
+(1 row)
+
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   hypertable
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump:   chunk
+pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
+                                     ?column?                                      | count 
+-----------------------------------------------------------------------------------+-------
+ Number of rows different between original and query on compressed data (expect 0) |     0
+(1 row)
+
+ count_decompressed 
+--------------------
+                  5
+(1 row)
+
+                                                   ?column?                                                   | count 
+--------------------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
+(1 row)
+
+\set TYPE INT
+\set ORDER_BY_COL_NAME time
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count_compressed 
+------------------
+                5
+(1 row)
+
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
+(1 row)
 

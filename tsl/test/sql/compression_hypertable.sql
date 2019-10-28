@@ -5,6 +5,42 @@
 \ir include/rand_generator.sql
 \c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/compression_utils.sql
+CREATE TYPE customtype;
+
+CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_in'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION customtype_out(customtype) RETURNS cstring
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_out'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION customtype_eq(customtype, customtype) RETURNS BOOL
+AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_eq'
+LANGUAGE C IMMUTABLE STRICT;
+
+-- for testing purposes we need a fixed length pass-by-ref type, and one whose
+-- alignment is greater than it's size. This type serves both purposes.
+CREATE TYPE customtype (
+  INPUT = customtype_in,
+  OUTPUT = customtype_out,
+  INTERNALLENGTH = 2,
+  ALIGNMENT = double,
+  STORAGE = plain
+);
+
+create operator = (
+  leftarg = customtype,
+  rightarg = customtype,
+  procedure = customtype_eq,
+  commutator = =
+);
+
+CREATE OPERATOR CLASS customtype_ops
+  DEFAULT
+  FOR TYPE customtype
+  USING hash AS OPERATOR 1 =;
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
@@ -167,3 +203,30 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 TRUNCATE test5;
 
 SELECT * FROM test5;
+
+-- test 6, test with custom type, and NULLs in the segmentby
+CREATE table test6(
+  time INT NOT NULL,
+  device_id INT,
+  data customtype
+);
+
+SELECT create_hypertable('test6', 'time', chunk_time_interval=> 50);
+ALTER TABLE test6 SET
+  (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby = 'time DESC');
+
+INSERT INTO test6 SELECT t, d, customtype_in((t + d)::TEXT::cstring)
+  FROM generate_series(1, 200) t, generate_series(1, 3) d;
+INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
+  FROM generate_series(1, 200) t;
+
+\set QUERY 'SELECT * FROM test6 ORDER BY device_id, time'
+
+\set HYPERTABLE_NAME 'test6'
+
+\ir include/compression_test_hypertable.sql
+\set TYPE INT
+\set ORDER_BY_COL_NAME time
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
