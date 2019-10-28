@@ -50,3 +50,6 @@ FROM _timescaledb_catalog.dimension d, _timescaledb_catalog.dimension_slice ds
 WHERE num_slices IS NOT NULL
 AND d.id = ds.dimension_id
 ORDER BY 1, 2, 3;
+
+ANALYZE hyper;
+ANALYZE hyper_repart;

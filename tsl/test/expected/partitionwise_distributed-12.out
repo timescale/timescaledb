@@ -842,28 +842,30 @@ FROM hyper
 WHERE time > '2018-04-19 00:01'
 GROUP BY 1
 ORDER BY 1;
-                                                                                                                                         QUERY PLAN                                                                                                                                          
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Output: device, avg(temp)
-   Group Key: device
-   ->  Custom Scan (AsyncAppend)
-         Output: device, (PARTIAL avg(temp))
-         ->  Merge Append
-               Sort Key: hyper.device
-               ->  Custom Scan (DataNodeScan)
-                     Output: hyper.device, (PARTIAL avg(hyper.temp))
-                     Relations: Aggregate on (public.hyper)
-                     Data node: data_node_1
-                     Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3, 4]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
-               ->  Custom Scan (DataNodeScan)
-                     Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
-                     Relations: Aggregate on (public.hyper)
-                     Data node: data_node_2
-                     Chunks: _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
-(19 rows)
+                                                                                                                             QUERY PLAN                                                                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: device, (avg(temp))
+   Sort Key: device
+   ->  Finalize HashAggregate
+         Output: device, avg(temp)
+         Group Key: device
+         ->  Custom Scan (AsyncAppend)
+               Output: device, (PARTIAL avg(temp))
+               ->  Append
+                     ->  Custom Scan (DataNodeScan)
+                           Output: hyper.device, (PARTIAL avg(hyper.temp))
+                           Relations: Aggregate on (public.hyper)
+                           Data node: data_node_1
+                           Chunks: _hyper_1_3_dist_chunk, _hyper_1_5_dist_chunk, _hyper_1_7_dist_chunk
+                           Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3, 4]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1
+                     ->  Custom Scan (DataNodeScan)
+                           Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
+                           Relations: Aggregate on (public.hyper)
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk, _hyper_1_6_dist_chunk
+                           Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 3]) AND (("time" > '2018-04-19 00:01:00-07'::timestamp with time zone)) GROUP BY 1
+(21 rows)
 
 SELECT device, avg(temp)
 FROM hyper
@@ -1270,29 +1272,28 @@ FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (AsyncAppend)
-   Output: "time", device, (avg(temp))
-   ->  Merge Append
+                                                                                                                                      QUERY PLAN                                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: hyper."time", hyper.device, avg(hyper.temp)
+   Group Key: hyper."time", hyper.device
+   ->  Sort
+         Output: hyper."time", hyper.device, hyper.temp
          Sort Key: hyper."time", hyper.device
-         ->  GroupAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp)
-               Group Key: hyper."time", hyper.device
-               ->  Custom Scan (DataNodeScan) on public.hyper
-                     Output: hyper."time", hyper.device, hyper.temp
-                     Data node: data_node_1
-                     Chunks: _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp)
-               Group Key: hyper_1."time", hyper_1.device
-               ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
-                     Output: hyper_1."time", hyper_1.device, hyper_1.temp
-                     Data node: data_node_2
-                     Chunks: _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(20 rows)
+         ->  Custom Scan (AsyncAppend)
+               Output: hyper."time", hyper.device, hyper.temp
+               ->  Append
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                           Output: hyper_1."time", hyper_1.device, hyper_1.temp
+                           Data node: data_node_1
+                           Chunks: _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+                     ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
+                           Output: hyper_2."time", hyper_2.device, hyper_2.temp
+                           Data node: data_node_2
+                           Chunks: _hyper_1_4_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+(19 rows)
 
 -- Test HAVING qual
 EXPLAIN (VERBOSE, COSTS OFF)
@@ -1344,31 +1345,35 @@ WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (AsyncAppend)
-   Output: "time", device, (avg(temp))
-   ->  Merge Append
-         Sort Key: hyper."time", hyper.device
-         ->  GroupAggregate
-               Output: hyper."time", hyper.device, avg(hyper.temp)
-               Group Key: hyper."time", hyper.device
-               Filter: (avg(hyper.temp) > '4'::double precision)
+                                                                                                                                   QUERY PLAN                                                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
+   Sort Key: hyper."time", hyper.device
+   ->  GroupAggregate
+         Output: hyper."time", hyper.device, avg(hyper.temp)
+         Group Key: hyper."time", hyper.device
+         Filter: (avg(hyper.temp) > '4'::double precision)
+         ->  Sort
+               Output: hyper."time", hyper.device, hyper.temp
+               Sort Key: hyper."time", hyper.device
                ->  Custom Scan (DataNodeScan) on public.hyper
                      Output: hyper."time", hyper.device, hyper.temp
                      Data node: data_node_1
                      Chunks: _hyper_1_3_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-         ->  GroupAggregate
-               Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp)
-               Group Key: hyper_1."time", hyper_1.device
-               Filter: (avg(hyper_1.temp) > '4'::double precision)
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+   ->  GroupAggregate
+         Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp)
+         Group Key: hyper_1."time", hyper_1.device
+         Filter: (avg(hyper_1.temp) > '4'::double precision)
+         ->  Sort
+               Output: hyper_1."time", hyper_1.device, hyper_1.temp
+               Sort Key: hyper_1."time", hyper_1.device
                ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
                      Output: hyper_1."time", hyper_1.device, hyper_1.temp
                      Data node: data_node_2
                      Chunks: _hyper_1_4_dist_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
-(22 rows)
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2]) AND (("time" >= '2018-04-19 00:01:00-07'::timestamp with time zone)) AND (("time" <= '2018-06-01 00:00:00-07'::timestamp with time zone))
+(26 rows)
 
 SELECT time, device, avg(temp) AS temp
 FROM hyper
@@ -1942,30 +1947,31 @@ FROM hyper
 WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 LIMIT 1;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                               QUERY PLAN                                                                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "time", device, (avg(temp)), ((random() * (device)::double precision)), (custom_sum(device))
    ->  Custom Scan (AsyncAppend)
          Output: "time", device, (avg(temp)), ((random() * (device)::double precision)), (custom_sum(device))
-         ->  Append
-               ->  HashAggregate
+         ->  Merge Append
+               Sort Key: hyper."time", hyper.device
+               ->  GroupAggregate
                      Output: hyper."time", hyper.device, avg(hyper.temp), (random() * (hyper.device)::double precision), custom_sum(hyper.device)
                      Group Key: hyper."time", hyper.device
                      ->  Custom Scan (DataNodeScan) on public.hyper
                            Output: hyper."time", hyper.device, hyper.temp
                            Data node: data_node_1
                            Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  HashAggregate
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+               ->  GroupAggregate
                      Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), (random() * (hyper_1.device)::double precision), custom_sum(hyper_1.device)
                      Group Key: hyper_1."time", hyper_1.device
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
                            Output: hyper_1."time", hyper_1.device, hyper_1.temp
                            Data node: data_node_2
                            Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(21 rows)
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+(22 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp), sum(temp) * random() * device as sum_temp
@@ -2010,14 +2016,15 @@ WHERE time < '2018-06-01 00:00'
 GROUP BY 1, 2
 HAVING avg(temp) * custom_sum(device) > 0.8
 LIMIT 1;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                               QUERY PLAN                                                                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "time", device, (avg(temp)), (((sum(temp) * random()) * (device)::double precision))
    ->  Custom Scan (AsyncAppend)
          Output: "time", device, (avg(temp)), (((sum(temp) * random()) * (device)::double precision))
-         ->  Append
-               ->  HashAggregate
+         ->  Merge Append
+               Sort Key: hyper."time", hyper.device
+               ->  GroupAggregate
                      Output: hyper."time", hyper.device, avg(hyper.temp), ((sum(hyper.temp) * random()) * (hyper.device)::double precision)
                      Group Key: hyper."time", hyper.device
                      Filter: ((avg(hyper.temp) * (custom_sum(hyper.device))::double precision) > '0.8'::double precision)
@@ -2025,8 +2032,8 @@ LIMIT 1;
                            Output: hyper."time", hyper.device, hyper.temp
                            Data node: data_node_1
                            Chunks: _hyper_1_1_dist_chunk, _hyper_1_3_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-               ->  HashAggregate
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+               ->  GroupAggregate
                      Output: hyper_1."time", hyper_1.device, avg(hyper_1.temp), ((sum(hyper_1.temp) * random()) * (hyper_1.device)::double precision)
                      Group Key: hyper_1."time", hyper_1.device
                      Filter: ((avg(hyper_1.temp) * (custom_sum(hyper_1.device))::double precision) > '0.8'::double precision)
@@ -2034,8 +2041,8 @@ LIMIT 1;
                            Output: hyper_1."time", hyper_1.device, hyper_1.temp
                            Data node: data_node_2
                            Chunks: _hyper_1_4_dist_chunk, _hyper_1_2_dist_chunk
-                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone))
-(23 rows)
+                           Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[2, 1]) AND (("time" < '2018-06-01 00:00:00-07'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
+(24 rows)
 
 -- not pushed down because of non-shippable expression on the
 -- underlying rel

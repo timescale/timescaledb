@@ -239,8 +239,14 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			rel->pages = 10;
 			rel->tuples = (10 * BLCKSZ) / (rel->reltarget->width + MAXALIGN(SizeofHeapTupleHeader));
 		}
-		/* Estimate rel size as best we can with local statistics. */
-		set_baserel_size_estimates(root, rel);
+
+		/* Estimate rel size as best we can with local statistics. There are
+		 * no local statistics for data node rels since they aren't real base
+		 * rels (there's no corresponding table in the system to associate
+		 * stats with). Instead, data node rels already have basic stats set
+		 * at creation time based on data-node-chunk assignment. */
+		if (fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+			set_baserel_size_estimates(root, rel);
 
 		/* Fill in basically-bogus cost estimates for use later. */
 		fdw_estimate_path_cost_size(root,

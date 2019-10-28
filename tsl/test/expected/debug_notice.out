@@ -61,6 +61,7 @@ INSERT INTO hyper VALUES
        ('2018-05-19 13:01', 4, 4, 5.1),
        ('2018-05-20 15:08', 5, 1, 9.4),
        ('2018-05-30 13:02', 3, 2, 9.0);
+ANALYZE hyper;
 -- Optimizer debug messages shown at debug level 2
 SET client_min_messages TO DEBUG2;
 -- Turning on show_rel should show a message
@@ -78,16 +79,16 @@ GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
 DEBUG:  In tsl_set_rel_pathlist:
-RELOPTINFO [BASEREL] (names: hyper): rows=36 width=20
+RELOPTINFO [BASEREL] (names: hyper): rows=5 width=20
 	path list:
-	Append [parents: hyper] rows=37 cost=100.00..412.58
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.00..156.21
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-	MergeAppend [parents: hyper] rows=37 cost=300.02..418.48 has pathkeys
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.00..159.00 has pathkeys
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
+	Append [parents: hyper] rows=5
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=3 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
+	MergeAppend [parents: hyper] rows=5 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=3 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
 
 
              time             | device | temp 
@@ -115,32 +116,22 @@ GROUP BY 1, 2
 HAVING avg(temp) > 4
 ORDER BY 1, 2;
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=9 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=1 width=20
 	path list:
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
-	Agg [parents: hyper] rows=3 cost=128.18..128.34
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-	Agg [parents: hyper] rows=3 cost=100.00..129.74 has pathkeys
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
+	CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=19 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=3 width=20
 	path list:
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.19..156.69
-	Agg [parents: hyper] rows=6 cost=156.61..157.18 has pathkeys
-		Sort [parents: hyper] rows=19 cost=156.61..156.66 has pathkeys
-			CustomScan (DataNodeScanPath) [parents: hyper] rows=19 cost=100.00..156.21
+	Agg [parents: hyper] rows=1 has pathkeys
+		CustomScan (DataNodeScanPath) [parents: hyper] rows=3 has pathkeys
 
 
 DEBUG:  Stage GROUP_AGG in get_foreign_upper_paths:
-RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=9 width=20
+RELOPTINFO [OTHER_UPPER_REL] (names: hyper): rows=1 width=20
 	path list:
-	CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.09..128.32
-	Agg [parents: hyper] rows=3 cost=128.18..128.34
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..128.09
-	Agg [parents: hyper] rows=3 cost=100.00..129.74 has pathkeys
-		CustomScan (DataNodeScanPath) [parents: hyper] rows=9 cost=100.00..129.49 has pathkeys
+	CustomScan (DataNodeScanPath) [parents: hyper] rows=1 has pathkeys
 
 
              time             | device | temp 
