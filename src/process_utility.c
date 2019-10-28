@@ -201,7 +201,7 @@ static void
 check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt *stmt)
 {
 	ListCell *lc;
-	if (ht->fd.compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+	if (!TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		return;
 
 	/* only allow if all commands are allowed */
@@ -736,7 +736,7 @@ process_truncate(ProcessUtilityArgs *args)
 				foreach_chunk(ht, process_truncate_chunk, stmt);
 
 				/* propogate to the compressed hypertable */
-				if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+				if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
 				{
 					Hypertable *compressed_ht =
 						ts_hypertable_cache_get_entry_by_id(hcache,
@@ -866,8 +866,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
 				 * the compressed hypertable.
 				 */
-				if (stmt->behavior == DROP_CASCADE &&
-					ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+				if (stmt->behavior == DROP_CASCADE && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 				{
 					Hypertable *compressed_hypertable =
 						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
@@ -1414,7 +1413,7 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
 
-	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
@@ -2268,7 +2267,7 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
 	foreach_chunk(ht, process_altertable_chunk, cmd);
-	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);

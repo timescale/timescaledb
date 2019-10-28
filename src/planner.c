@@ -294,24 +294,6 @@ is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
 		   rte->relkind == RELKIND_RELATION;
 }
 
-static RelOptInfo *
-get_parentrel(PlannerInfo *root, Index rti)
-{
-#if PG11_LT
-	ListCell *lc;
-	foreach (lc, root->append_rel_list)
-	{
-		AppendRelInfo *appinfo = lfirst(lc);
-		if (appinfo->child_relid == rti)
-			return root->simple_rel_array[appinfo->parent_relid];
-	}
-#else
-	if (root->append_rel_array[rti])
-		return root->simple_rel_array[root->append_rel_array[rti]->parent_relid];
-#endif
-	return NULL;
-}
-
 static Oid
 get_parentoid(PlannerInfo *root, Index rti)
 {
@@ -521,8 +503,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 		Assert(ht != NULL);
 
+		Assert(rel->fdw_private == NULL);
 		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
-		((TimescaleDBPrivate *) rel->fdw_private)->compressed = ht->fd.compressed_hypertable_id > 0;
 
 		ts_plan_expand_hypertable_chunks(ht, root, relation_objectid, inhparent, rel);
 #if PG11_GE
@@ -534,15 +516,17 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 	if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
 	{
-		RelOptInfo *parent = get_parentrel(root, rel->relid);
+		Oid ht_oid = get_parentoid(root, rel->relid);
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
 
-		if (parent != NULL && parent->fdw_private != NULL &&
-			((TimescaleDBPrivate *) parent->fdw_private)->compressed)
+		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{
 			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 
 			if (chunk->fd.compressed_chunk_id > 0)
 			{
+				Assert(rel->fdw_private == NULL);
 				rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 				((TimescaleDBPrivate *) rel->fdw_private)->compressed = true;
 
@@ -555,6 +539,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				rel->indexlist = NIL;
 			}
 		}
+		ts_cache_release(hcache);
 	}
 }
 
