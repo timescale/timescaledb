@@ -805,7 +805,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
 	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
-	compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ON(ht);
+	compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
 	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
 

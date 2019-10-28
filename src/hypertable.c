@@ -384,7 +384,7 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 		elog(ERROR, "hypertable_tuple_update chunk_sizing_function cannot be NULL");
 	}
 	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(ht->fd.compressed);
-	if (ht->fd.compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+	if (!TS_HYPERTABLE_HAS_COMPRESSION(ht))
 	{
 		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
 	}
@@ -2129,7 +2129,7 @@ ts_hypertable_clone_constraints_to_compressed(Hypertable *user_ht, List *constra
 	CatalogSecurityContext sec_ctx;
 
 	ListCell *lc;
-	Assert(user_ht->fd.compressed_hypertable_id != 0);
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION(user_ht));
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	foreach (lc, constraint_list)
 	{

@@ -169,7 +169,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_relid))));
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_ON(srcht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION(srcht))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

@@ -30,7 +30,9 @@
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 
-#define TS_HYPERTABLE_HAS_COMPRESSION_ON(ht) (ht->fd.compressed_hypertable_id > 0)
+#define TS_HYPERTABLE_HAS_COMPRESSION(ht)                                                          \
+	((ht)->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
