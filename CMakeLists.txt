@@ -1,6 +1,34 @@
 cmake_minimum_required(VERSION 3.4)
 include(CheckCCompilerFlag)
 
+# Function to call pg_config and extract values.
+#
+function(GET_PG_CONFIG var)
+  set(_temp)
+
+  # Only call pg_config if the variable didn't already have a value.
+  if(NOT ${var})
+    execute_process(
+      COMMAND ${PG_CONFIG} ${ARGN}
+      OUTPUT_VARIABLE _temp
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  endif()
+
+  
+  # On Windows, fields that are not recorded will be given the value
+  # "not recorded", so we translate this into <var>-NOTFOUND to make
+  # it undefined.
+  #
+  # It will then also show as, e.g., "PG_LDFLAGS-NOTFOUND" in any
+  # string interpolation, making it obvious that it is an undefined
+  # CMake variable.
+  if(${_temp} STREQUAL "not recorded")
+    set(_temp ${var}-NOTFOUND)
+  endif()
+
+  set(${var} ${_temp} PARENT_SCOPE)
+endfunction()
+
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
 set(VERSION_REGEX "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))*\r?\nupdate_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))*(\r?\n)*$")
@@ -202,58 +230,16 @@ if ((${PG_VERSION} VERSION_LESS "9.6")
 endif ()
 
 # Get PostgreSQL configuration from pg_config
-if (NOT PG_INCLUDEDIR)
-  execute_process(
-    COMMAND ${PG_CONFIG} --includedir
-    OUTPUT_VARIABLE PG_INCLUDEDIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-if (NOT PG_INCLUDEDIR_SERVER)
-  execute_process(
-    COMMAND ${PG_CONFIG} --includedir-server
-    OUTPUT_VARIABLE PG_INCLUDEDIR_SERVER
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-if (NOT PG_LIBDIR)
-  execute_process(
-    COMMAND ${PG_CONFIG} --libdir
-    OUTPUT_VARIABLE PG_LIBDIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-if (NOT PG_PKGLIBDIR)
-  execute_process(
-    COMMAND ${PG_CONFIG} --pkglibdir
-    OUTPUT_VARIABLE PG_PKGLIBDIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-if (NOT PG_SHAREDIR)
-  execute_process(
-    COMMAND ${PG_CONFIG} --sharedir
-    OUTPUT_VARIABLE PG_SHAREDIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-if (NOT PG_BINDIR)
-  execute_process(
-    COMMAND ${PG_CONFIG} --bindir
-    OUTPUT_VARIABLE PG_BINDIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif ()
-execute_process(
-  COMMAND ${PG_CONFIG} --cppflags
-  OUTPUT_VARIABLE PG_CPPFLAGS
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(
-  COMMAND ${PG_CONFIG} --cflags
-  OUTPUT_VARIABLE PG_CFLAGS
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(
-  COMMAND ${PG_CONFIG} --ldflags
-  OUTPUT_VARIABLE PG_LDFLAGS
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(
-  COMMAND ${PG_CONFIG} --libs
-  OUTPUT_VARIABLE PG_LIBS
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+get_pg_config(PG_INCLUDEDIR --includedir)
+get_pg_config(PG_INCLUDEDIR_SERVER --includedir-server)
+get_pg_config(PG_LIBDIR --libdir)
+get_pg_config(PG_PKGLIBDIR --pkglibdir)
+get_pg_config(PG_SHAREDIR --sharedir)
+get_pg_config(PG_BINDIR --bindir)
+get_pg_config(PG_CPPFLAGS --cppflags)
+get_pg_config(PG_CFLAGS --cflags)
+get_pg_config(PG_LDFLAGS --ldflags)
+get_pg_config(PG_LIBS --libs)
 
 find_path(PG_SOURCE_DIR
   src/include/pg_config.h.in
