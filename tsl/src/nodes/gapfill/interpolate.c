@@ -209,10 +209,8 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 									interpolate_numeric(x,
 														x0,
 														x1,
-														DirectFunctionCall1(int2_numeric,
-																			DatumGetInt16(y0)),
-														DirectFunctionCall1(int2_numeric,
-																			DatumGetInt16(y1))));
+														DirectFunctionCall1(int2_numeric, y0),
+														DirectFunctionCall1(int2_numeric, y1)));
 			break;
 		case INT4OID:
 			*value =
@@ -220,10 +218,8 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 									interpolate_numeric(x,
 														x0,
 														x1,
-														DirectFunctionCall1(int4_numeric,
-																			DatumGetInt32(y0)),
-														DirectFunctionCall1(int4_numeric,
-																			DatumGetInt32(y1))));
+														DirectFunctionCall1(int4_numeric, y0),
+														DirectFunctionCall1(int4_numeric, y1)));
 			break;
 		case INT8OID:
 			*value =
@@ -231,10 +227,8 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 									interpolate_numeric(x,
 														x0,
 														x1,
-														DirectFunctionCall1(int8_numeric,
-																			DatumGetInt64(y0)),
-														DirectFunctionCall1(int8_numeric,
-																			DatumGetInt64(y1))));
+														DirectFunctionCall1(int8_numeric, y0),
+														DirectFunctionCall1(int8_numeric, y1)));
 			break;
 		case FLOAT4OID:
 			*value = Float4GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat4(y0), DatumGetFloat4(y1)));
