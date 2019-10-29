@@ -19,7 +19,7 @@ FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
 
-SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
+EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
 INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
 GROUP BY fleet;

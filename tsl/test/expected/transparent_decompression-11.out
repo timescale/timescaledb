@@ -5934,14 +5934,1426 @@ WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
    703
 (1 row)
 
-SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
+EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
 INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
 GROUP BY fleet;
- fleet | avg_fuel_consumption 
--------+----------------------
- f1    |                  1.3
-(1 row)
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ HashAggregate
+   Group Key: t.fleet
+   ->  Hash Join
+         Hash Cond: (r.tags_id = t.id)
+         ->  Append
+               ->  Custom Scan (DecompressChunk) on _hyper_13_32_chunk r
+                     ->  Seq Scan on compress_hyper_14_735_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_33_chunk r_1
+                     ->  Seq Scan on compress_hyper_14_736_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_34_chunk r_2
+                     ->  Seq Scan on compress_hyper_14_737_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_35_chunk r_3
+                     ->  Seq Scan on compress_hyper_14_738_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_36_chunk r_4
+                     ->  Seq Scan on compress_hyper_14_739_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_37_chunk r_5
+                     ->  Seq Scan on compress_hyper_14_740_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_38_chunk r_6
+                     ->  Seq Scan on compress_hyper_14_741_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_39_chunk r_7
+                     ->  Seq Scan on compress_hyper_14_742_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_40_chunk r_8
+                     ->  Seq Scan on compress_hyper_14_743_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_41_chunk r_9
+                     ->  Seq Scan on compress_hyper_14_744_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_42_chunk r_10
+                     ->  Seq Scan on compress_hyper_14_745_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_43_chunk r_11
+                     ->  Seq Scan on compress_hyper_14_746_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_44_chunk r_12
+                     ->  Seq Scan on compress_hyper_14_747_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_45_chunk r_13
+                     ->  Seq Scan on compress_hyper_14_748_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_46_chunk r_14
+                     ->  Seq Scan on compress_hyper_14_749_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_47_chunk r_15
+                     ->  Seq Scan on compress_hyper_14_750_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_48_chunk r_16
+                     ->  Seq Scan on compress_hyper_14_751_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_49_chunk r_17
+                     ->  Seq Scan on compress_hyper_14_752_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_50_chunk r_18
+                     ->  Seq Scan on compress_hyper_14_753_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_51_chunk r_19
+                     ->  Seq Scan on compress_hyper_14_754_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_52_chunk r_20
+                     ->  Seq Scan on compress_hyper_14_755_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_53_chunk r_21
+                     ->  Seq Scan on compress_hyper_14_756_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_54_chunk r_22
+                     ->  Seq Scan on compress_hyper_14_757_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_55_chunk r_23
+                     ->  Seq Scan on compress_hyper_14_758_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_56_chunk r_24
+                     ->  Seq Scan on compress_hyper_14_759_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_57_chunk r_25
+                     ->  Seq Scan on compress_hyper_14_760_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_58_chunk r_26
+                     ->  Seq Scan on compress_hyper_14_761_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_59_chunk r_27
+                     ->  Seq Scan on compress_hyper_14_762_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_60_chunk r_28
+                     ->  Seq Scan on compress_hyper_14_763_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_61_chunk r_29
+                     ->  Seq Scan on compress_hyper_14_764_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_62_chunk r_30
+                     ->  Seq Scan on compress_hyper_14_765_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_63_chunk r_31
+                     ->  Seq Scan on compress_hyper_14_766_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_64_chunk r_32
+                     ->  Seq Scan on compress_hyper_14_767_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_65_chunk r_33
+                     ->  Seq Scan on compress_hyper_14_768_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_66_chunk r_34
+                     ->  Seq Scan on compress_hyper_14_769_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_67_chunk r_35
+                     ->  Seq Scan on compress_hyper_14_770_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_68_chunk r_36
+                     ->  Seq Scan on compress_hyper_14_771_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_69_chunk r_37
+                     ->  Seq Scan on compress_hyper_14_772_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_70_chunk r_38
+                     ->  Seq Scan on compress_hyper_14_773_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_71_chunk r_39
+                     ->  Seq Scan on compress_hyper_14_774_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_72_chunk r_40
+                     ->  Seq Scan on compress_hyper_14_775_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_73_chunk r_41
+                     ->  Seq Scan on compress_hyper_14_776_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_74_chunk r_42
+                     ->  Seq Scan on compress_hyper_14_777_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_75_chunk r_43
+                     ->  Seq Scan on compress_hyper_14_778_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_76_chunk r_44
+                     ->  Seq Scan on compress_hyper_14_779_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_77_chunk r_45
+                     ->  Seq Scan on compress_hyper_14_780_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_78_chunk r_46
+                     ->  Seq Scan on compress_hyper_14_781_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_79_chunk r_47
+                     ->  Seq Scan on compress_hyper_14_782_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_80_chunk r_48
+                     ->  Seq Scan on compress_hyper_14_783_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_81_chunk r_49
+                     ->  Seq Scan on compress_hyper_14_784_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_82_chunk r_50
+                     ->  Seq Scan on compress_hyper_14_785_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_83_chunk r_51
+                     ->  Seq Scan on compress_hyper_14_786_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_84_chunk r_52
+                     ->  Seq Scan on compress_hyper_14_787_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_85_chunk r_53
+                     ->  Seq Scan on compress_hyper_14_788_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_86_chunk r_54
+                     ->  Seq Scan on compress_hyper_14_789_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_87_chunk r_55
+                     ->  Seq Scan on compress_hyper_14_790_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_88_chunk r_56
+                     ->  Seq Scan on compress_hyper_14_791_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_89_chunk r_57
+                     ->  Seq Scan on compress_hyper_14_792_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_90_chunk r_58
+                     ->  Seq Scan on compress_hyper_14_793_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_91_chunk r_59
+                     ->  Seq Scan on compress_hyper_14_794_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_92_chunk r_60
+                     ->  Seq Scan on compress_hyper_14_795_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_93_chunk r_61
+                     ->  Seq Scan on compress_hyper_14_796_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_94_chunk r_62
+                     ->  Seq Scan on compress_hyper_14_797_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_95_chunk r_63
+                     ->  Seq Scan on compress_hyper_14_798_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_96_chunk r_64
+                     ->  Seq Scan on compress_hyper_14_799_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_97_chunk r_65
+                     ->  Seq Scan on compress_hyper_14_800_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_98_chunk r_66
+                     ->  Seq Scan on compress_hyper_14_801_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_99_chunk r_67
+                     ->  Seq Scan on compress_hyper_14_802_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_100_chunk r_68
+                     ->  Seq Scan on compress_hyper_14_803_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_101_chunk r_69
+                     ->  Seq Scan on compress_hyper_14_804_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_102_chunk r_70
+                     ->  Seq Scan on compress_hyper_14_805_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_103_chunk r_71
+                     ->  Seq Scan on compress_hyper_14_806_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_104_chunk r_72
+                     ->  Seq Scan on compress_hyper_14_807_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_105_chunk r_73
+                     ->  Seq Scan on compress_hyper_14_808_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_106_chunk r_74
+                     ->  Seq Scan on compress_hyper_14_809_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_107_chunk r_75
+                     ->  Seq Scan on compress_hyper_14_810_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_108_chunk r_76
+                     ->  Seq Scan on compress_hyper_14_811_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_109_chunk r_77
+                     ->  Seq Scan on compress_hyper_14_812_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_110_chunk r_78
+                     ->  Seq Scan on compress_hyper_14_813_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_111_chunk r_79
+                     ->  Seq Scan on compress_hyper_14_814_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_112_chunk r_80
+                     ->  Seq Scan on compress_hyper_14_815_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_113_chunk r_81
+                     ->  Seq Scan on compress_hyper_14_816_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_114_chunk r_82
+                     ->  Seq Scan on compress_hyper_14_817_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_115_chunk r_83
+                     ->  Seq Scan on compress_hyper_14_818_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_116_chunk r_84
+                     ->  Seq Scan on compress_hyper_14_819_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_117_chunk r_85
+                     ->  Seq Scan on compress_hyper_14_820_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_118_chunk r_86
+                     ->  Seq Scan on compress_hyper_14_821_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_119_chunk r_87
+                     ->  Seq Scan on compress_hyper_14_822_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_120_chunk r_88
+                     ->  Seq Scan on compress_hyper_14_823_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_121_chunk r_89
+                     ->  Seq Scan on compress_hyper_14_824_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_122_chunk r_90
+                     ->  Seq Scan on compress_hyper_14_825_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_123_chunk r_91
+                     ->  Seq Scan on compress_hyper_14_826_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_124_chunk r_92
+                     ->  Seq Scan on compress_hyper_14_827_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_125_chunk r_93
+                     ->  Seq Scan on compress_hyper_14_828_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_126_chunk r_94
+                     ->  Seq Scan on compress_hyper_14_829_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_127_chunk r_95
+                     ->  Seq Scan on compress_hyper_14_830_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_128_chunk r_96
+                     ->  Seq Scan on compress_hyper_14_831_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_129_chunk r_97
+                     ->  Seq Scan on compress_hyper_14_832_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_130_chunk r_98
+                     ->  Seq Scan on compress_hyper_14_833_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_131_chunk r_99
+                     ->  Seq Scan on compress_hyper_14_834_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_132_chunk r_100
+                     ->  Seq Scan on compress_hyper_14_835_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_133_chunk r_101
+                     ->  Seq Scan on compress_hyper_14_836_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_134_chunk r_102
+                     ->  Seq Scan on compress_hyper_14_837_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_135_chunk r_103
+                     ->  Seq Scan on compress_hyper_14_838_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_136_chunk r_104
+                     ->  Seq Scan on compress_hyper_14_839_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_137_chunk r_105
+                     ->  Seq Scan on compress_hyper_14_840_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_138_chunk r_106
+                     ->  Seq Scan on compress_hyper_14_841_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_139_chunk r_107
+                     ->  Seq Scan on compress_hyper_14_842_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_140_chunk r_108
+                     ->  Seq Scan on compress_hyper_14_843_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_141_chunk r_109
+                     ->  Seq Scan on compress_hyper_14_844_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_142_chunk r_110
+                     ->  Seq Scan on compress_hyper_14_845_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_143_chunk r_111
+                     ->  Seq Scan on compress_hyper_14_846_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_144_chunk r_112
+                     ->  Seq Scan on compress_hyper_14_847_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_145_chunk r_113
+                     ->  Seq Scan on compress_hyper_14_848_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_146_chunk r_114
+                     ->  Seq Scan on compress_hyper_14_849_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_147_chunk r_115
+                     ->  Seq Scan on compress_hyper_14_850_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_148_chunk r_116
+                     ->  Seq Scan on compress_hyper_14_851_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_149_chunk r_117
+                     ->  Seq Scan on compress_hyper_14_852_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_150_chunk r_118
+                     ->  Seq Scan on compress_hyper_14_853_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_151_chunk r_119
+                     ->  Seq Scan on compress_hyper_14_854_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_152_chunk r_120
+                     ->  Seq Scan on compress_hyper_14_855_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_153_chunk r_121
+                     ->  Seq Scan on compress_hyper_14_856_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_154_chunk r_122
+                     ->  Seq Scan on compress_hyper_14_857_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_155_chunk r_123
+                     ->  Seq Scan on compress_hyper_14_858_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_156_chunk r_124
+                     ->  Seq Scan on compress_hyper_14_859_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_157_chunk r_125
+                     ->  Seq Scan on compress_hyper_14_860_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_158_chunk r_126
+                     ->  Seq Scan on compress_hyper_14_861_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_159_chunk r_127
+                     ->  Seq Scan on compress_hyper_14_862_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_160_chunk r_128
+                     ->  Seq Scan on compress_hyper_14_863_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_161_chunk r_129
+                     ->  Seq Scan on compress_hyper_14_864_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_162_chunk r_130
+                     ->  Seq Scan on compress_hyper_14_865_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_163_chunk r_131
+                     ->  Seq Scan on compress_hyper_14_866_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_164_chunk r_132
+                     ->  Seq Scan on compress_hyper_14_867_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_165_chunk r_133
+                     ->  Seq Scan on compress_hyper_14_868_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_166_chunk r_134
+                     ->  Seq Scan on compress_hyper_14_869_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_167_chunk r_135
+                     ->  Seq Scan on compress_hyper_14_870_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_168_chunk r_136
+                     ->  Seq Scan on compress_hyper_14_871_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_169_chunk r_137
+                     ->  Seq Scan on compress_hyper_14_872_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_170_chunk r_138
+                     ->  Seq Scan on compress_hyper_14_873_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_171_chunk r_139
+                     ->  Seq Scan on compress_hyper_14_874_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_172_chunk r_140
+                     ->  Seq Scan on compress_hyper_14_875_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_173_chunk r_141
+                     ->  Seq Scan on compress_hyper_14_876_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_174_chunk r_142
+                     ->  Seq Scan on compress_hyper_14_877_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_175_chunk r_143
+                     ->  Seq Scan on compress_hyper_14_878_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_176_chunk r_144
+                     ->  Seq Scan on compress_hyper_14_879_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_177_chunk r_145
+                     ->  Seq Scan on compress_hyper_14_880_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_178_chunk r_146
+                     ->  Seq Scan on compress_hyper_14_881_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_179_chunk r_147
+                     ->  Seq Scan on compress_hyper_14_882_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_180_chunk r_148
+                     ->  Seq Scan on compress_hyper_14_883_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_181_chunk r_149
+                     ->  Seq Scan on compress_hyper_14_884_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_182_chunk r_150
+                     ->  Seq Scan on compress_hyper_14_885_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_183_chunk r_151
+                     ->  Seq Scan on compress_hyper_14_886_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_184_chunk r_152
+                     ->  Seq Scan on compress_hyper_14_887_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_185_chunk r_153
+                     ->  Seq Scan on compress_hyper_14_888_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_186_chunk r_154
+                     ->  Seq Scan on compress_hyper_14_889_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_187_chunk r_155
+                     ->  Seq Scan on compress_hyper_14_890_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_188_chunk r_156
+                     ->  Seq Scan on compress_hyper_14_891_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_189_chunk r_157
+                     ->  Seq Scan on compress_hyper_14_892_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_190_chunk r_158
+                     ->  Seq Scan on compress_hyper_14_893_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_191_chunk r_159
+                     ->  Seq Scan on compress_hyper_14_894_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_192_chunk r_160
+                     ->  Seq Scan on compress_hyper_14_895_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_193_chunk r_161
+                     ->  Seq Scan on compress_hyper_14_896_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_194_chunk r_162
+                     ->  Seq Scan on compress_hyper_14_897_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_195_chunk r_163
+                     ->  Seq Scan on compress_hyper_14_898_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_196_chunk r_164
+                     ->  Seq Scan on compress_hyper_14_899_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_197_chunk r_165
+                     ->  Seq Scan on compress_hyper_14_900_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_198_chunk r_166
+                     ->  Seq Scan on compress_hyper_14_901_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_199_chunk r_167
+                     ->  Seq Scan on compress_hyper_14_902_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_200_chunk r_168
+                     ->  Seq Scan on compress_hyper_14_903_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_201_chunk r_169
+                     ->  Seq Scan on compress_hyper_14_904_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_202_chunk r_170
+                     ->  Seq Scan on compress_hyper_14_905_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_203_chunk r_171
+                     ->  Seq Scan on compress_hyper_14_906_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_204_chunk r_172
+                     ->  Seq Scan on compress_hyper_14_907_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_205_chunk r_173
+                     ->  Seq Scan on compress_hyper_14_908_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_206_chunk r_174
+                     ->  Seq Scan on compress_hyper_14_909_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_207_chunk r_175
+                     ->  Seq Scan on compress_hyper_14_910_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_208_chunk r_176
+                     ->  Seq Scan on compress_hyper_14_911_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_209_chunk r_177
+                     ->  Seq Scan on compress_hyper_14_912_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_210_chunk r_178
+                     ->  Seq Scan on compress_hyper_14_913_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_211_chunk r_179
+                     ->  Seq Scan on compress_hyper_14_914_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_212_chunk r_180
+                     ->  Seq Scan on compress_hyper_14_915_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_213_chunk r_181
+                     ->  Seq Scan on compress_hyper_14_916_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_214_chunk r_182
+                     ->  Seq Scan on compress_hyper_14_917_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_215_chunk r_183
+                     ->  Seq Scan on compress_hyper_14_918_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_216_chunk r_184
+                     ->  Seq Scan on compress_hyper_14_919_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_217_chunk r_185
+                     ->  Seq Scan on compress_hyper_14_920_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_218_chunk r_186
+                     ->  Seq Scan on compress_hyper_14_921_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_219_chunk r_187
+                     ->  Seq Scan on compress_hyper_14_922_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_220_chunk r_188
+                     ->  Seq Scan on compress_hyper_14_923_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_221_chunk r_189
+                     ->  Seq Scan on compress_hyper_14_924_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_222_chunk r_190
+                     ->  Seq Scan on compress_hyper_14_925_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_223_chunk r_191
+                     ->  Seq Scan on compress_hyper_14_926_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_224_chunk r_192
+                     ->  Seq Scan on compress_hyper_14_927_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_225_chunk r_193
+                     ->  Seq Scan on compress_hyper_14_928_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_226_chunk r_194
+                     ->  Seq Scan on compress_hyper_14_929_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_227_chunk r_195
+                     ->  Seq Scan on compress_hyper_14_930_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_228_chunk r_196
+                     ->  Seq Scan on compress_hyper_14_931_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_229_chunk r_197
+                     ->  Seq Scan on compress_hyper_14_932_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_230_chunk r_198
+                     ->  Seq Scan on compress_hyper_14_933_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_231_chunk r_199
+                     ->  Seq Scan on compress_hyper_14_934_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_232_chunk r_200
+                     ->  Seq Scan on compress_hyper_14_935_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_233_chunk r_201
+                     ->  Seq Scan on compress_hyper_14_936_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_234_chunk r_202
+                     ->  Seq Scan on compress_hyper_14_937_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_235_chunk r_203
+                     ->  Seq Scan on compress_hyper_14_938_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_236_chunk r_204
+                     ->  Seq Scan on compress_hyper_14_939_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_237_chunk r_205
+                     ->  Seq Scan on compress_hyper_14_940_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_238_chunk r_206
+                     ->  Seq Scan on compress_hyper_14_941_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_239_chunk r_207
+                     ->  Seq Scan on compress_hyper_14_942_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_240_chunk r_208
+                     ->  Seq Scan on compress_hyper_14_943_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_241_chunk r_209
+                     ->  Seq Scan on compress_hyper_14_944_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_242_chunk r_210
+                     ->  Seq Scan on compress_hyper_14_945_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_243_chunk r_211
+                     ->  Seq Scan on compress_hyper_14_946_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_244_chunk r_212
+                     ->  Seq Scan on compress_hyper_14_947_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_245_chunk r_213
+                     ->  Seq Scan on compress_hyper_14_948_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_246_chunk r_214
+                     ->  Seq Scan on compress_hyper_14_949_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_247_chunk r_215
+                     ->  Seq Scan on compress_hyper_14_950_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_248_chunk r_216
+                     ->  Seq Scan on compress_hyper_14_951_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_249_chunk r_217
+                     ->  Seq Scan on compress_hyper_14_952_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_250_chunk r_218
+                     ->  Seq Scan on compress_hyper_14_953_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_251_chunk r_219
+                     ->  Seq Scan on compress_hyper_14_954_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_252_chunk r_220
+                     ->  Seq Scan on compress_hyper_14_955_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_253_chunk r_221
+                     ->  Seq Scan on compress_hyper_14_956_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_254_chunk r_222
+                     ->  Seq Scan on compress_hyper_14_957_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_255_chunk r_223
+                     ->  Seq Scan on compress_hyper_14_958_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_256_chunk r_224
+                     ->  Seq Scan on compress_hyper_14_959_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_257_chunk r_225
+                     ->  Seq Scan on compress_hyper_14_960_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_258_chunk r_226
+                     ->  Seq Scan on compress_hyper_14_961_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_259_chunk r_227
+                     ->  Seq Scan on compress_hyper_14_962_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_260_chunk r_228
+                     ->  Seq Scan on compress_hyper_14_963_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_261_chunk r_229
+                     ->  Seq Scan on compress_hyper_14_964_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_262_chunk r_230
+                     ->  Seq Scan on compress_hyper_14_965_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_263_chunk r_231
+                     ->  Seq Scan on compress_hyper_14_966_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_264_chunk r_232
+                     ->  Seq Scan on compress_hyper_14_967_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_265_chunk r_233
+                     ->  Seq Scan on compress_hyper_14_968_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_266_chunk r_234
+                     ->  Seq Scan on compress_hyper_14_969_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_267_chunk r_235
+                     ->  Seq Scan on compress_hyper_14_970_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_268_chunk r_236
+                     ->  Seq Scan on compress_hyper_14_971_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_269_chunk r_237
+                     ->  Seq Scan on compress_hyper_14_972_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_270_chunk r_238
+                     ->  Seq Scan on compress_hyper_14_973_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_271_chunk r_239
+                     ->  Seq Scan on compress_hyper_14_974_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_272_chunk r_240
+                     ->  Seq Scan on compress_hyper_14_975_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_273_chunk r_241
+                     ->  Seq Scan on compress_hyper_14_976_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_274_chunk r_242
+                     ->  Seq Scan on compress_hyper_14_977_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_275_chunk r_243
+                     ->  Seq Scan on compress_hyper_14_978_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_276_chunk r_244
+                     ->  Seq Scan on compress_hyper_14_979_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_277_chunk r_245
+                     ->  Seq Scan on compress_hyper_14_980_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_278_chunk r_246
+                     ->  Seq Scan on compress_hyper_14_981_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_279_chunk r_247
+                     ->  Seq Scan on compress_hyper_14_982_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_280_chunk r_248
+                     ->  Seq Scan on compress_hyper_14_983_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_281_chunk r_249
+                     ->  Seq Scan on compress_hyper_14_984_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_282_chunk r_250
+                     ->  Seq Scan on compress_hyper_14_985_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_283_chunk r_251
+                     ->  Seq Scan on compress_hyper_14_986_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_284_chunk r_252
+                     ->  Seq Scan on compress_hyper_14_987_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_285_chunk r_253
+                     ->  Seq Scan on compress_hyper_14_988_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_286_chunk r_254
+                     ->  Seq Scan on compress_hyper_14_989_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_287_chunk r_255
+                     ->  Seq Scan on compress_hyper_14_990_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_288_chunk r_256
+                     ->  Seq Scan on compress_hyper_14_991_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_289_chunk r_257
+                     ->  Seq Scan on compress_hyper_14_992_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_290_chunk r_258
+                     ->  Seq Scan on compress_hyper_14_993_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_291_chunk r_259
+                     ->  Seq Scan on compress_hyper_14_994_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_292_chunk r_260
+                     ->  Seq Scan on compress_hyper_14_995_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_293_chunk r_261
+                     ->  Seq Scan on compress_hyper_14_996_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_294_chunk r_262
+                     ->  Seq Scan on compress_hyper_14_997_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_295_chunk r_263
+                     ->  Seq Scan on compress_hyper_14_998_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_296_chunk r_264
+                     ->  Seq Scan on compress_hyper_14_999_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_297_chunk r_265
+                     ->  Seq Scan on compress_hyper_14_1000_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_298_chunk r_266
+                     ->  Seq Scan on compress_hyper_14_1001_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_299_chunk r_267
+                     ->  Seq Scan on compress_hyper_14_1002_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_300_chunk r_268
+                     ->  Seq Scan on compress_hyper_14_1003_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_301_chunk r_269
+                     ->  Seq Scan on compress_hyper_14_1004_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_302_chunk r_270
+                     ->  Seq Scan on compress_hyper_14_1005_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_303_chunk r_271
+                     ->  Seq Scan on compress_hyper_14_1006_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_304_chunk r_272
+                     ->  Seq Scan on compress_hyper_14_1007_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_305_chunk r_273
+                     ->  Seq Scan on compress_hyper_14_1008_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_306_chunk r_274
+                     ->  Seq Scan on compress_hyper_14_1009_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_307_chunk r_275
+                     ->  Seq Scan on compress_hyper_14_1010_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_308_chunk r_276
+                     ->  Seq Scan on compress_hyper_14_1011_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_309_chunk r_277
+                     ->  Seq Scan on compress_hyper_14_1012_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_310_chunk r_278
+                     ->  Seq Scan on compress_hyper_14_1013_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_311_chunk r_279
+                     ->  Seq Scan on compress_hyper_14_1014_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_312_chunk r_280
+                     ->  Seq Scan on compress_hyper_14_1015_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_313_chunk r_281
+                     ->  Seq Scan on compress_hyper_14_1016_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_314_chunk r_282
+                     ->  Seq Scan on compress_hyper_14_1017_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_315_chunk r_283
+                     ->  Seq Scan on compress_hyper_14_1018_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_316_chunk r_284
+                     ->  Seq Scan on compress_hyper_14_1019_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_317_chunk r_285
+                     ->  Seq Scan on compress_hyper_14_1020_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_318_chunk r_286
+                     ->  Seq Scan on compress_hyper_14_1021_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_319_chunk r_287
+                     ->  Seq Scan on compress_hyper_14_1022_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_320_chunk r_288
+                     ->  Seq Scan on compress_hyper_14_1023_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_321_chunk r_289
+                     ->  Seq Scan on compress_hyper_14_1024_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_322_chunk r_290
+                     ->  Seq Scan on compress_hyper_14_1025_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_323_chunk r_291
+                     ->  Seq Scan on compress_hyper_14_1026_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_324_chunk r_292
+                     ->  Seq Scan on compress_hyper_14_1027_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_325_chunk r_293
+                     ->  Seq Scan on compress_hyper_14_1028_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_326_chunk r_294
+                     ->  Seq Scan on compress_hyper_14_1029_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_327_chunk r_295
+                     ->  Seq Scan on compress_hyper_14_1030_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_328_chunk r_296
+                     ->  Seq Scan on compress_hyper_14_1031_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_329_chunk r_297
+                     ->  Seq Scan on compress_hyper_14_1032_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_330_chunk r_298
+                     ->  Seq Scan on compress_hyper_14_1033_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_331_chunk r_299
+                     ->  Seq Scan on compress_hyper_14_1034_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_332_chunk r_300
+                     ->  Seq Scan on compress_hyper_14_1035_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_333_chunk r_301
+                     ->  Seq Scan on compress_hyper_14_1036_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_334_chunk r_302
+                     ->  Seq Scan on compress_hyper_14_1037_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_335_chunk r_303
+                     ->  Seq Scan on compress_hyper_14_1038_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_336_chunk r_304
+                     ->  Seq Scan on compress_hyper_14_1039_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_337_chunk r_305
+                     ->  Seq Scan on compress_hyper_14_1040_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_338_chunk r_306
+                     ->  Seq Scan on compress_hyper_14_1041_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_339_chunk r_307
+                     ->  Seq Scan on compress_hyper_14_1042_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_340_chunk r_308
+                     ->  Seq Scan on compress_hyper_14_1043_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_341_chunk r_309
+                     ->  Seq Scan on compress_hyper_14_1044_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_342_chunk r_310
+                     ->  Seq Scan on compress_hyper_14_1045_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_343_chunk r_311
+                     ->  Seq Scan on compress_hyper_14_1046_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_344_chunk r_312
+                     ->  Seq Scan on compress_hyper_14_1047_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_345_chunk r_313
+                     ->  Seq Scan on compress_hyper_14_1048_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_346_chunk r_314
+                     ->  Seq Scan on compress_hyper_14_1049_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_347_chunk r_315
+                     ->  Seq Scan on compress_hyper_14_1050_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_348_chunk r_316
+                     ->  Seq Scan on compress_hyper_14_1051_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_349_chunk r_317
+                     ->  Seq Scan on compress_hyper_14_1052_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_350_chunk r_318
+                     ->  Seq Scan on compress_hyper_14_1053_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_351_chunk r_319
+                     ->  Seq Scan on compress_hyper_14_1054_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_352_chunk r_320
+                     ->  Seq Scan on compress_hyper_14_1055_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_353_chunk r_321
+                     ->  Seq Scan on compress_hyper_14_1056_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_354_chunk r_322
+                     ->  Seq Scan on compress_hyper_14_1057_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_355_chunk r_323
+                     ->  Seq Scan on compress_hyper_14_1058_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_356_chunk r_324
+                     ->  Seq Scan on compress_hyper_14_1059_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_357_chunk r_325
+                     ->  Seq Scan on compress_hyper_14_1060_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_358_chunk r_326
+                     ->  Seq Scan on compress_hyper_14_1061_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_359_chunk r_327
+                     ->  Seq Scan on compress_hyper_14_1062_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_360_chunk r_328
+                     ->  Seq Scan on compress_hyper_14_1063_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_361_chunk r_329
+                     ->  Seq Scan on compress_hyper_14_1064_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_362_chunk r_330
+                     ->  Seq Scan on compress_hyper_14_1065_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_363_chunk r_331
+                     ->  Seq Scan on compress_hyper_14_1066_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_364_chunk r_332
+                     ->  Seq Scan on compress_hyper_14_1067_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_365_chunk r_333
+                     ->  Seq Scan on compress_hyper_14_1068_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_366_chunk r_334
+                     ->  Seq Scan on compress_hyper_14_1069_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_367_chunk r_335
+                     ->  Seq Scan on compress_hyper_14_1070_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_368_chunk r_336
+                     ->  Seq Scan on compress_hyper_14_1071_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_369_chunk r_337
+                     ->  Seq Scan on compress_hyper_14_1072_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_370_chunk r_338
+                     ->  Seq Scan on compress_hyper_14_1073_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_371_chunk r_339
+                     ->  Seq Scan on compress_hyper_14_1074_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_372_chunk r_340
+                     ->  Seq Scan on compress_hyper_14_1075_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_373_chunk r_341
+                     ->  Seq Scan on compress_hyper_14_1076_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_374_chunk r_342
+                     ->  Seq Scan on compress_hyper_14_1077_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_375_chunk r_343
+                     ->  Seq Scan on compress_hyper_14_1078_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_376_chunk r_344
+                     ->  Seq Scan on compress_hyper_14_1079_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_377_chunk r_345
+                     ->  Seq Scan on compress_hyper_14_1080_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_378_chunk r_346
+                     ->  Seq Scan on compress_hyper_14_1081_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_379_chunk r_347
+                     ->  Seq Scan on compress_hyper_14_1082_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_380_chunk r_348
+                     ->  Seq Scan on compress_hyper_14_1083_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_381_chunk r_349
+                     ->  Seq Scan on compress_hyper_14_1084_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_382_chunk r_350
+                     ->  Seq Scan on compress_hyper_14_1085_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_383_chunk r_351
+                     ->  Seq Scan on compress_hyper_14_1086_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_384_chunk r_352
+                     ->  Seq Scan on compress_hyper_14_1087_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_385_chunk r_353
+                     ->  Seq Scan on compress_hyper_14_1088_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_386_chunk r_354
+                     ->  Seq Scan on compress_hyper_14_1089_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_387_chunk r_355
+                     ->  Seq Scan on compress_hyper_14_1090_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_388_chunk r_356
+                     ->  Seq Scan on compress_hyper_14_1091_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_389_chunk r_357
+                     ->  Seq Scan on compress_hyper_14_1092_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_390_chunk r_358
+                     ->  Seq Scan on compress_hyper_14_1093_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_391_chunk r_359
+                     ->  Seq Scan on compress_hyper_14_1094_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_392_chunk r_360
+                     ->  Seq Scan on compress_hyper_14_1095_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_393_chunk r_361
+                     ->  Seq Scan on compress_hyper_14_1096_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_394_chunk r_362
+                     ->  Seq Scan on compress_hyper_14_1097_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_395_chunk r_363
+                     ->  Seq Scan on compress_hyper_14_1098_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_396_chunk r_364
+                     ->  Seq Scan on compress_hyper_14_1099_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_397_chunk r_365
+                     ->  Seq Scan on compress_hyper_14_1100_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_398_chunk r_366
+                     ->  Seq Scan on compress_hyper_14_1101_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_399_chunk r_367
+                     ->  Seq Scan on compress_hyper_14_1102_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_400_chunk r_368
+                     ->  Seq Scan on compress_hyper_14_1103_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_401_chunk r_369
+                     ->  Seq Scan on compress_hyper_14_1104_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_402_chunk r_370
+                     ->  Seq Scan on compress_hyper_14_1105_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_403_chunk r_371
+                     ->  Seq Scan on compress_hyper_14_1106_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_404_chunk r_372
+                     ->  Seq Scan on compress_hyper_14_1107_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_405_chunk r_373
+                     ->  Seq Scan on compress_hyper_14_1108_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_406_chunk r_374
+                     ->  Seq Scan on compress_hyper_14_1109_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_407_chunk r_375
+                     ->  Seq Scan on compress_hyper_14_1110_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_408_chunk r_376
+                     ->  Seq Scan on compress_hyper_14_1111_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_409_chunk r_377
+                     ->  Seq Scan on compress_hyper_14_1112_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_410_chunk r_378
+                     ->  Seq Scan on compress_hyper_14_1113_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_411_chunk r_379
+                     ->  Seq Scan on compress_hyper_14_1114_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_412_chunk r_380
+                     ->  Seq Scan on compress_hyper_14_1115_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_413_chunk r_381
+                     ->  Seq Scan on compress_hyper_14_1116_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_414_chunk r_382
+                     ->  Seq Scan on compress_hyper_14_1117_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_415_chunk r_383
+                     ->  Seq Scan on compress_hyper_14_1118_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_416_chunk r_384
+                     ->  Seq Scan on compress_hyper_14_1119_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_417_chunk r_385
+                     ->  Seq Scan on compress_hyper_14_1120_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_418_chunk r_386
+                     ->  Seq Scan on compress_hyper_14_1121_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_419_chunk r_387
+                     ->  Seq Scan on compress_hyper_14_1122_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_420_chunk r_388
+                     ->  Seq Scan on compress_hyper_14_1123_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_421_chunk r_389
+                     ->  Seq Scan on compress_hyper_14_1124_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_422_chunk r_390
+                     ->  Seq Scan on compress_hyper_14_1125_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_423_chunk r_391
+                     ->  Seq Scan on compress_hyper_14_1126_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_424_chunk r_392
+                     ->  Seq Scan on compress_hyper_14_1127_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_425_chunk r_393
+                     ->  Seq Scan on compress_hyper_14_1128_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_426_chunk r_394
+                     ->  Seq Scan on compress_hyper_14_1129_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_427_chunk r_395
+                     ->  Seq Scan on compress_hyper_14_1130_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_428_chunk r_396
+                     ->  Seq Scan on compress_hyper_14_1131_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_429_chunk r_397
+                     ->  Seq Scan on compress_hyper_14_1132_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_430_chunk r_398
+                     ->  Seq Scan on compress_hyper_14_1133_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_431_chunk r_399
+                     ->  Seq Scan on compress_hyper_14_1134_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_432_chunk r_400
+                     ->  Seq Scan on compress_hyper_14_1135_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_433_chunk r_401
+                     ->  Seq Scan on compress_hyper_14_1136_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_434_chunk r_402
+                     ->  Seq Scan on compress_hyper_14_1137_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_435_chunk r_403
+                     ->  Seq Scan on compress_hyper_14_1138_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_436_chunk r_404
+                     ->  Seq Scan on compress_hyper_14_1139_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_437_chunk r_405
+                     ->  Seq Scan on compress_hyper_14_1140_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_438_chunk r_406
+                     ->  Seq Scan on compress_hyper_14_1141_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_439_chunk r_407
+                     ->  Seq Scan on compress_hyper_14_1142_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_440_chunk r_408
+                     ->  Seq Scan on compress_hyper_14_1143_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_441_chunk r_409
+                     ->  Seq Scan on compress_hyper_14_1144_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_442_chunk r_410
+                     ->  Seq Scan on compress_hyper_14_1145_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_443_chunk r_411
+                     ->  Seq Scan on compress_hyper_14_1146_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_444_chunk r_412
+                     ->  Seq Scan on compress_hyper_14_1147_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_445_chunk r_413
+                     ->  Seq Scan on compress_hyper_14_1148_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_446_chunk r_414
+                     ->  Seq Scan on compress_hyper_14_1149_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_447_chunk r_415
+                     ->  Seq Scan on compress_hyper_14_1150_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_448_chunk r_416
+                     ->  Seq Scan on compress_hyper_14_1151_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_449_chunk r_417
+                     ->  Seq Scan on compress_hyper_14_1152_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_450_chunk r_418
+                     ->  Seq Scan on compress_hyper_14_1153_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_451_chunk r_419
+                     ->  Seq Scan on compress_hyper_14_1154_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_452_chunk r_420
+                     ->  Seq Scan on compress_hyper_14_1155_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_453_chunk r_421
+                     ->  Seq Scan on compress_hyper_14_1156_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_454_chunk r_422
+                     ->  Seq Scan on compress_hyper_14_1157_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_455_chunk r_423
+                     ->  Seq Scan on compress_hyper_14_1158_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_456_chunk r_424
+                     ->  Seq Scan on compress_hyper_14_1159_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_457_chunk r_425
+                     ->  Seq Scan on compress_hyper_14_1160_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_458_chunk r_426
+                     ->  Seq Scan on compress_hyper_14_1161_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_459_chunk r_427
+                     ->  Seq Scan on compress_hyper_14_1162_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_460_chunk r_428
+                     ->  Seq Scan on compress_hyper_14_1163_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_461_chunk r_429
+                     ->  Seq Scan on compress_hyper_14_1164_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_462_chunk r_430
+                     ->  Seq Scan on compress_hyper_14_1165_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_463_chunk r_431
+                     ->  Seq Scan on compress_hyper_14_1166_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_464_chunk r_432
+                     ->  Seq Scan on compress_hyper_14_1167_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_465_chunk r_433
+                     ->  Seq Scan on compress_hyper_14_1168_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_466_chunk r_434
+                     ->  Seq Scan on compress_hyper_14_1169_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_467_chunk r_435
+                     ->  Seq Scan on compress_hyper_14_1170_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_468_chunk r_436
+                     ->  Seq Scan on compress_hyper_14_1171_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_469_chunk r_437
+                     ->  Seq Scan on compress_hyper_14_1172_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_470_chunk r_438
+                     ->  Seq Scan on compress_hyper_14_1173_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_471_chunk r_439
+                     ->  Seq Scan on compress_hyper_14_1174_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_472_chunk r_440
+                     ->  Seq Scan on compress_hyper_14_1175_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_473_chunk r_441
+                     ->  Seq Scan on compress_hyper_14_1176_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_474_chunk r_442
+                     ->  Seq Scan on compress_hyper_14_1177_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_475_chunk r_443
+                     ->  Seq Scan on compress_hyper_14_1178_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_476_chunk r_444
+                     ->  Seq Scan on compress_hyper_14_1179_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_477_chunk r_445
+                     ->  Seq Scan on compress_hyper_14_1180_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_478_chunk r_446
+                     ->  Seq Scan on compress_hyper_14_1181_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_479_chunk r_447
+                     ->  Seq Scan on compress_hyper_14_1182_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_480_chunk r_448
+                     ->  Seq Scan on compress_hyper_14_1183_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_481_chunk r_449
+                     ->  Seq Scan on compress_hyper_14_1184_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_482_chunk r_450
+                     ->  Seq Scan on compress_hyper_14_1185_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_483_chunk r_451
+                     ->  Seq Scan on compress_hyper_14_1186_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_484_chunk r_452
+                     ->  Seq Scan on compress_hyper_14_1187_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_485_chunk r_453
+                     ->  Seq Scan on compress_hyper_14_1188_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_486_chunk r_454
+                     ->  Seq Scan on compress_hyper_14_1189_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_487_chunk r_455
+                     ->  Seq Scan on compress_hyper_14_1190_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_488_chunk r_456
+                     ->  Seq Scan on compress_hyper_14_1191_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_489_chunk r_457
+                     ->  Seq Scan on compress_hyper_14_1192_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_490_chunk r_458
+                     ->  Seq Scan on compress_hyper_14_1193_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_491_chunk r_459
+                     ->  Seq Scan on compress_hyper_14_1194_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_492_chunk r_460
+                     ->  Seq Scan on compress_hyper_14_1195_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_493_chunk r_461
+                     ->  Seq Scan on compress_hyper_14_1196_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_494_chunk r_462
+                     ->  Seq Scan on compress_hyper_14_1197_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_495_chunk r_463
+                     ->  Seq Scan on compress_hyper_14_1198_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_496_chunk r_464
+                     ->  Seq Scan on compress_hyper_14_1199_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_497_chunk r_465
+                     ->  Seq Scan on compress_hyper_14_1200_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_498_chunk r_466
+                     ->  Seq Scan on compress_hyper_14_1201_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_499_chunk r_467
+                     ->  Seq Scan on compress_hyper_14_1202_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_500_chunk r_468
+                     ->  Seq Scan on compress_hyper_14_1203_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_501_chunk r_469
+                     ->  Seq Scan on compress_hyper_14_1204_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_502_chunk r_470
+                     ->  Seq Scan on compress_hyper_14_1205_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_503_chunk r_471
+                     ->  Seq Scan on compress_hyper_14_1206_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_504_chunk r_472
+                     ->  Seq Scan on compress_hyper_14_1207_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_505_chunk r_473
+                     ->  Seq Scan on compress_hyper_14_1208_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_506_chunk r_474
+                     ->  Seq Scan on compress_hyper_14_1209_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_507_chunk r_475
+                     ->  Seq Scan on compress_hyper_14_1210_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_508_chunk r_476
+                     ->  Seq Scan on compress_hyper_14_1211_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_509_chunk r_477
+                     ->  Seq Scan on compress_hyper_14_1212_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_510_chunk r_478
+                     ->  Seq Scan on compress_hyper_14_1213_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_511_chunk r_479
+                     ->  Seq Scan on compress_hyper_14_1214_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_512_chunk r_480
+                     ->  Seq Scan on compress_hyper_14_1215_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_513_chunk r_481
+                     ->  Seq Scan on compress_hyper_14_1216_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_514_chunk r_482
+                     ->  Seq Scan on compress_hyper_14_1217_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_515_chunk r_483
+                     ->  Seq Scan on compress_hyper_14_1218_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_516_chunk r_484
+                     ->  Seq Scan on compress_hyper_14_1219_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_517_chunk r_485
+                     ->  Seq Scan on compress_hyper_14_1220_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_518_chunk r_486
+                     ->  Seq Scan on compress_hyper_14_1221_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_519_chunk r_487
+                     ->  Seq Scan on compress_hyper_14_1222_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_520_chunk r_488
+                     ->  Seq Scan on compress_hyper_14_1223_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_521_chunk r_489
+                     ->  Seq Scan on compress_hyper_14_1224_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_522_chunk r_490
+                     ->  Seq Scan on compress_hyper_14_1225_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_523_chunk r_491
+                     ->  Seq Scan on compress_hyper_14_1226_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_524_chunk r_492
+                     ->  Seq Scan on compress_hyper_14_1227_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_525_chunk r_493
+                     ->  Seq Scan on compress_hyper_14_1228_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_526_chunk r_494
+                     ->  Seq Scan on compress_hyper_14_1229_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_527_chunk r_495
+                     ->  Seq Scan on compress_hyper_14_1230_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_528_chunk r_496
+                     ->  Seq Scan on compress_hyper_14_1231_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_529_chunk r_497
+                     ->  Seq Scan on compress_hyper_14_1232_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_530_chunk r_498
+                     ->  Seq Scan on compress_hyper_14_1233_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_531_chunk r_499
+                     ->  Seq Scan on compress_hyper_14_1234_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_532_chunk r_500
+                     ->  Seq Scan on compress_hyper_14_1235_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_533_chunk r_501
+                     ->  Seq Scan on compress_hyper_14_1236_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_534_chunk r_502
+                     ->  Seq Scan on compress_hyper_14_1237_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_535_chunk r_503
+                     ->  Seq Scan on compress_hyper_14_1238_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_536_chunk r_504
+                     ->  Seq Scan on compress_hyper_14_1239_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_537_chunk r_505
+                     ->  Seq Scan on compress_hyper_14_1240_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_538_chunk r_506
+                     ->  Seq Scan on compress_hyper_14_1241_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_539_chunk r_507
+                     ->  Seq Scan on compress_hyper_14_1242_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_540_chunk r_508
+                     ->  Seq Scan on compress_hyper_14_1243_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_541_chunk r_509
+                     ->  Seq Scan on compress_hyper_14_1244_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_542_chunk r_510
+                     ->  Seq Scan on compress_hyper_14_1245_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_543_chunk r_511
+                     ->  Seq Scan on compress_hyper_14_1246_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_544_chunk r_512
+                     ->  Seq Scan on compress_hyper_14_1247_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_545_chunk r_513
+                     ->  Seq Scan on compress_hyper_14_1248_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_546_chunk r_514
+                     ->  Seq Scan on compress_hyper_14_1249_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_547_chunk r_515
+                     ->  Seq Scan on compress_hyper_14_1250_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_548_chunk r_516
+                     ->  Seq Scan on compress_hyper_14_1251_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_549_chunk r_517
+                     ->  Seq Scan on compress_hyper_14_1252_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_550_chunk r_518
+                     ->  Seq Scan on compress_hyper_14_1253_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_551_chunk r_519
+                     ->  Seq Scan on compress_hyper_14_1254_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_552_chunk r_520
+                     ->  Seq Scan on compress_hyper_14_1255_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_553_chunk r_521
+                     ->  Seq Scan on compress_hyper_14_1256_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_554_chunk r_522
+                     ->  Seq Scan on compress_hyper_14_1257_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_555_chunk r_523
+                     ->  Seq Scan on compress_hyper_14_1258_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_556_chunk r_524
+                     ->  Seq Scan on compress_hyper_14_1259_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_557_chunk r_525
+                     ->  Seq Scan on compress_hyper_14_1260_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_558_chunk r_526
+                     ->  Seq Scan on compress_hyper_14_1261_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_559_chunk r_527
+                     ->  Seq Scan on compress_hyper_14_1262_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_560_chunk r_528
+                     ->  Seq Scan on compress_hyper_14_1263_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_561_chunk r_529
+                     ->  Seq Scan on compress_hyper_14_1264_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_562_chunk r_530
+                     ->  Seq Scan on compress_hyper_14_1265_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_563_chunk r_531
+                     ->  Seq Scan on compress_hyper_14_1266_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_564_chunk r_532
+                     ->  Seq Scan on compress_hyper_14_1267_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_565_chunk r_533
+                     ->  Seq Scan on compress_hyper_14_1268_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_566_chunk r_534
+                     ->  Seq Scan on compress_hyper_14_1269_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_567_chunk r_535
+                     ->  Seq Scan on compress_hyper_14_1270_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_568_chunk r_536
+                     ->  Seq Scan on compress_hyper_14_1271_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_569_chunk r_537
+                     ->  Seq Scan on compress_hyper_14_1272_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_570_chunk r_538
+                     ->  Seq Scan on compress_hyper_14_1273_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_571_chunk r_539
+                     ->  Seq Scan on compress_hyper_14_1274_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_572_chunk r_540
+                     ->  Seq Scan on compress_hyper_14_1275_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_573_chunk r_541
+                     ->  Seq Scan on compress_hyper_14_1276_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_574_chunk r_542
+                     ->  Seq Scan on compress_hyper_14_1277_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_575_chunk r_543
+                     ->  Seq Scan on compress_hyper_14_1278_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_576_chunk r_544
+                     ->  Seq Scan on compress_hyper_14_1279_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_577_chunk r_545
+                     ->  Seq Scan on compress_hyper_14_1280_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_578_chunk r_546
+                     ->  Seq Scan on compress_hyper_14_1281_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_579_chunk r_547
+                     ->  Seq Scan on compress_hyper_14_1282_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_580_chunk r_548
+                     ->  Seq Scan on compress_hyper_14_1283_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_581_chunk r_549
+                     ->  Seq Scan on compress_hyper_14_1284_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_582_chunk r_550
+                     ->  Seq Scan on compress_hyper_14_1285_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_583_chunk r_551
+                     ->  Seq Scan on compress_hyper_14_1286_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_584_chunk r_552
+                     ->  Seq Scan on compress_hyper_14_1287_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_585_chunk r_553
+                     ->  Seq Scan on compress_hyper_14_1288_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_586_chunk r_554
+                     ->  Seq Scan on compress_hyper_14_1289_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_587_chunk r_555
+                     ->  Seq Scan on compress_hyper_14_1290_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_588_chunk r_556
+                     ->  Seq Scan on compress_hyper_14_1291_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_589_chunk r_557
+                     ->  Seq Scan on compress_hyper_14_1292_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_590_chunk r_558
+                     ->  Seq Scan on compress_hyper_14_1293_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_591_chunk r_559
+                     ->  Seq Scan on compress_hyper_14_1294_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_592_chunk r_560
+                     ->  Seq Scan on compress_hyper_14_1295_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_593_chunk r_561
+                     ->  Seq Scan on compress_hyper_14_1296_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_594_chunk r_562
+                     ->  Seq Scan on compress_hyper_14_1297_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_595_chunk r_563
+                     ->  Seq Scan on compress_hyper_14_1298_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_596_chunk r_564
+                     ->  Seq Scan on compress_hyper_14_1299_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_597_chunk r_565
+                     ->  Seq Scan on compress_hyper_14_1300_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_598_chunk r_566
+                     ->  Seq Scan on compress_hyper_14_1301_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_599_chunk r_567
+                     ->  Seq Scan on compress_hyper_14_1302_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_600_chunk r_568
+                     ->  Seq Scan on compress_hyper_14_1303_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_601_chunk r_569
+                     ->  Seq Scan on compress_hyper_14_1304_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_602_chunk r_570
+                     ->  Seq Scan on compress_hyper_14_1305_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_603_chunk r_571
+                     ->  Seq Scan on compress_hyper_14_1306_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_604_chunk r_572
+                     ->  Seq Scan on compress_hyper_14_1307_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_605_chunk r_573
+                     ->  Seq Scan on compress_hyper_14_1308_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_606_chunk r_574
+                     ->  Seq Scan on compress_hyper_14_1309_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_607_chunk r_575
+                     ->  Seq Scan on compress_hyper_14_1310_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_608_chunk r_576
+                     ->  Seq Scan on compress_hyper_14_1311_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_609_chunk r_577
+                     ->  Seq Scan on compress_hyper_14_1312_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_610_chunk r_578
+                     ->  Seq Scan on compress_hyper_14_1313_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_611_chunk r_579
+                     ->  Seq Scan on compress_hyper_14_1314_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_612_chunk r_580
+                     ->  Seq Scan on compress_hyper_14_1315_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_613_chunk r_581
+                     ->  Seq Scan on compress_hyper_14_1316_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_614_chunk r_582
+                     ->  Seq Scan on compress_hyper_14_1317_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_615_chunk r_583
+                     ->  Seq Scan on compress_hyper_14_1318_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_616_chunk r_584
+                     ->  Seq Scan on compress_hyper_14_1319_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_617_chunk r_585
+                     ->  Seq Scan on compress_hyper_14_1320_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_618_chunk r_586
+                     ->  Seq Scan on compress_hyper_14_1321_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_619_chunk r_587
+                     ->  Seq Scan on compress_hyper_14_1322_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_620_chunk r_588
+                     ->  Seq Scan on compress_hyper_14_1323_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_621_chunk r_589
+                     ->  Seq Scan on compress_hyper_14_1324_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_622_chunk r_590
+                     ->  Seq Scan on compress_hyper_14_1325_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_623_chunk r_591
+                     ->  Seq Scan on compress_hyper_14_1326_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_624_chunk r_592
+                     ->  Seq Scan on compress_hyper_14_1327_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_625_chunk r_593
+                     ->  Seq Scan on compress_hyper_14_1328_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_626_chunk r_594
+                     ->  Seq Scan on compress_hyper_14_1329_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_627_chunk r_595
+                     ->  Seq Scan on compress_hyper_14_1330_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_628_chunk r_596
+                     ->  Seq Scan on compress_hyper_14_1331_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_629_chunk r_597
+                     ->  Seq Scan on compress_hyper_14_1332_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_630_chunk r_598
+                     ->  Seq Scan on compress_hyper_14_1333_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_631_chunk r_599
+                     ->  Seq Scan on compress_hyper_14_1334_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_632_chunk r_600
+                     ->  Seq Scan on compress_hyper_14_1335_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_633_chunk r_601
+                     ->  Seq Scan on compress_hyper_14_1336_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_634_chunk r_602
+                     ->  Seq Scan on compress_hyper_14_1337_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_635_chunk r_603
+                     ->  Seq Scan on compress_hyper_14_1338_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_636_chunk r_604
+                     ->  Seq Scan on compress_hyper_14_1339_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_637_chunk r_605
+                     ->  Seq Scan on compress_hyper_14_1340_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_638_chunk r_606
+                     ->  Seq Scan on compress_hyper_14_1341_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_639_chunk r_607
+                     ->  Seq Scan on compress_hyper_14_1342_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_640_chunk r_608
+                     ->  Seq Scan on compress_hyper_14_1343_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_641_chunk r_609
+                     ->  Seq Scan on compress_hyper_14_1344_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_642_chunk r_610
+                     ->  Seq Scan on compress_hyper_14_1345_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_643_chunk r_611
+                     ->  Seq Scan on compress_hyper_14_1346_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_644_chunk r_612
+                     ->  Seq Scan on compress_hyper_14_1347_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_645_chunk r_613
+                     ->  Seq Scan on compress_hyper_14_1348_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_646_chunk r_614
+                     ->  Seq Scan on compress_hyper_14_1349_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_647_chunk r_615
+                     ->  Seq Scan on compress_hyper_14_1350_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_648_chunk r_616
+                     ->  Seq Scan on compress_hyper_14_1351_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_649_chunk r_617
+                     ->  Seq Scan on compress_hyper_14_1352_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_650_chunk r_618
+                     ->  Seq Scan on compress_hyper_14_1353_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_651_chunk r_619
+                     ->  Seq Scan on compress_hyper_14_1354_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_652_chunk r_620
+                     ->  Seq Scan on compress_hyper_14_1355_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_653_chunk r_621
+                     ->  Seq Scan on compress_hyper_14_1356_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_654_chunk r_622
+                     ->  Seq Scan on compress_hyper_14_1357_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_655_chunk r_623
+                     ->  Seq Scan on compress_hyper_14_1358_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_656_chunk r_624
+                     ->  Seq Scan on compress_hyper_14_1359_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_657_chunk r_625
+                     ->  Seq Scan on compress_hyper_14_1360_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_658_chunk r_626
+                     ->  Seq Scan on compress_hyper_14_1361_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_659_chunk r_627
+                     ->  Seq Scan on compress_hyper_14_1362_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_660_chunk r_628
+                     ->  Seq Scan on compress_hyper_14_1363_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_661_chunk r_629
+                     ->  Seq Scan on compress_hyper_14_1364_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_662_chunk r_630
+                     ->  Seq Scan on compress_hyper_14_1365_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_663_chunk r_631
+                     ->  Seq Scan on compress_hyper_14_1366_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_664_chunk r_632
+                     ->  Seq Scan on compress_hyper_14_1367_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_665_chunk r_633
+                     ->  Seq Scan on compress_hyper_14_1368_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_666_chunk r_634
+                     ->  Seq Scan on compress_hyper_14_1369_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_667_chunk r_635
+                     ->  Seq Scan on compress_hyper_14_1370_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_668_chunk r_636
+                     ->  Seq Scan on compress_hyper_14_1371_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_669_chunk r_637
+                     ->  Seq Scan on compress_hyper_14_1372_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_670_chunk r_638
+                     ->  Seq Scan on compress_hyper_14_1373_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_671_chunk r_639
+                     ->  Seq Scan on compress_hyper_14_1374_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_672_chunk r_640
+                     ->  Seq Scan on compress_hyper_14_1375_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_673_chunk r_641
+                     ->  Seq Scan on compress_hyper_14_1376_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_674_chunk r_642
+                     ->  Seq Scan on compress_hyper_14_1377_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_675_chunk r_643
+                     ->  Seq Scan on compress_hyper_14_1378_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_676_chunk r_644
+                     ->  Seq Scan on compress_hyper_14_1379_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_677_chunk r_645
+                     ->  Seq Scan on compress_hyper_14_1380_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_678_chunk r_646
+                     ->  Seq Scan on compress_hyper_14_1381_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_679_chunk r_647
+                     ->  Seq Scan on compress_hyper_14_1382_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_680_chunk r_648
+                     ->  Seq Scan on compress_hyper_14_1383_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_681_chunk r_649
+                     ->  Seq Scan on compress_hyper_14_1384_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_682_chunk r_650
+                     ->  Seq Scan on compress_hyper_14_1385_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_683_chunk r_651
+                     ->  Seq Scan on compress_hyper_14_1386_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_684_chunk r_652
+                     ->  Seq Scan on compress_hyper_14_1387_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_685_chunk r_653
+                     ->  Seq Scan on compress_hyper_14_1388_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_686_chunk r_654
+                     ->  Seq Scan on compress_hyper_14_1389_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_687_chunk r_655
+                     ->  Seq Scan on compress_hyper_14_1390_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_688_chunk r_656
+                     ->  Seq Scan on compress_hyper_14_1391_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_689_chunk r_657
+                     ->  Seq Scan on compress_hyper_14_1392_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_690_chunk r_658
+                     ->  Seq Scan on compress_hyper_14_1393_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_691_chunk r_659
+                     ->  Seq Scan on compress_hyper_14_1394_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_692_chunk r_660
+                     ->  Seq Scan on compress_hyper_14_1395_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_693_chunk r_661
+                     ->  Seq Scan on compress_hyper_14_1396_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_694_chunk r_662
+                     ->  Seq Scan on compress_hyper_14_1397_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_695_chunk r_663
+                     ->  Seq Scan on compress_hyper_14_1398_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_696_chunk r_664
+                     ->  Seq Scan on compress_hyper_14_1399_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_697_chunk r_665
+                     ->  Seq Scan on compress_hyper_14_1400_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_698_chunk r_666
+                     ->  Seq Scan on compress_hyper_14_1401_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_699_chunk r_667
+                     ->  Seq Scan on compress_hyper_14_1402_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_700_chunk r_668
+                     ->  Seq Scan on compress_hyper_14_1403_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_701_chunk r_669
+                     ->  Seq Scan on compress_hyper_14_1404_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_702_chunk r_670
+                     ->  Seq Scan on compress_hyper_14_1405_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_703_chunk r_671
+                     ->  Seq Scan on compress_hyper_14_1406_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_704_chunk r_672
+                     ->  Seq Scan on compress_hyper_14_1407_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_705_chunk r_673
+                     ->  Seq Scan on compress_hyper_14_1408_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_706_chunk r_674
+                     ->  Seq Scan on compress_hyper_14_1409_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_707_chunk r_675
+                     ->  Seq Scan on compress_hyper_14_1410_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_708_chunk r_676
+                     ->  Seq Scan on compress_hyper_14_1411_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_709_chunk r_677
+                     ->  Seq Scan on compress_hyper_14_1412_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_710_chunk r_678
+                     ->  Seq Scan on compress_hyper_14_1413_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_711_chunk r_679
+                     ->  Seq Scan on compress_hyper_14_1414_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_712_chunk r_680
+                     ->  Seq Scan on compress_hyper_14_1415_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_713_chunk r_681
+                     ->  Seq Scan on compress_hyper_14_1416_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_714_chunk r_682
+                     ->  Seq Scan on compress_hyper_14_1417_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_715_chunk r_683
+                     ->  Seq Scan on compress_hyper_14_1418_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_716_chunk r_684
+                     ->  Seq Scan on compress_hyper_14_1419_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_717_chunk r_685
+                     ->  Seq Scan on compress_hyper_14_1420_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_718_chunk r_686
+                     ->  Seq Scan on compress_hyper_14_1421_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_719_chunk r_687
+                     ->  Seq Scan on compress_hyper_14_1422_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_720_chunk r_688
+                     ->  Seq Scan on compress_hyper_14_1423_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_721_chunk r_689
+                     ->  Seq Scan on compress_hyper_14_1424_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_722_chunk r_690
+                     ->  Seq Scan on compress_hyper_14_1425_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_723_chunk r_691
+                     ->  Seq Scan on compress_hyper_14_1426_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_724_chunk r_692
+                     ->  Seq Scan on compress_hyper_14_1427_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_725_chunk r_693
+                     ->  Seq Scan on compress_hyper_14_1428_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_726_chunk r_694
+                     ->  Seq Scan on compress_hyper_14_1429_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_727_chunk r_695
+                     ->  Seq Scan on compress_hyper_14_1430_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_728_chunk r_696
+                     ->  Seq Scan on compress_hyper_14_1431_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_729_chunk r_697
+                     ->  Seq Scan on compress_hyper_14_1432_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_730_chunk r_698
+                     ->  Seq Scan on compress_hyper_14_1433_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_731_chunk r_699
+                     ->  Seq Scan on compress_hyper_14_1434_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_732_chunk r_700
+                     ->  Seq Scan on compress_hyper_14_1435_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_733_chunk r_701
+                     ->  Seq Scan on compress_hyper_14_1436_chunk
+               ->  Custom Scan (DecompressChunk) on _hyper_13_734_chunk r_702
+                     ->  Seq Scan on compress_hyper_14_1437_chunk
+         ->  Hash
+               ->  Seq Scan on tags t
+(1413 rows)
 
 -- run query with parallel enabled to ensure nothing is preventing parallel execution
 -- this is just a sanity check, the result queries dont run with parallel disabled
