@@ -239,8 +239,10 @@ FROM :TEST_TABLE WHERE time = (SELECT max(time) FROM :TEST_TABLE) ORDER BY time;
 
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
+SET enable_hashjoin = false;
 :PREFIX SELECT o1.time, o2.*
 FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o2 ON o1.time = o2.max_time ORDER BY time;
+RESET enable_hashjoin;
 
 -- test ordered append with limit expression
 :PREFIX SELECT time
