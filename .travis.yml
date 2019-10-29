@@ -29,7 +29,7 @@ install:
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
 script:
   # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres -DCMAKE_BUILD_TYPE=Debug ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug-nossl/"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
   # Run only telemetry test to see that it works without OpenSSL
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Now build with OpenSSL
