@@ -304,9 +304,11 @@ ts_number_of_user_hypertables()
 
 	ts_scanner_foreach(&iterator)
 	{
-		Hypertable *hyper = ts_hypertable_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator));
-		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(hyper->fd.id);
-		if (!hyper->fd.compressed && status != HypertableIsMaterialization)
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
+		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+
+		if (!ht->fd.compressed && status != HypertableIsMaterialization)
 			count++;
 	}
 	return count;
@@ -322,8 +324,10 @@ ts_number_compressed_hypertables()
 
 	ts_scanner_foreach(&iterator)
 	{
-		Hypertable *hyper = ts_hypertable_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator));
-		if (hyper->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
+
+		if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
 			count++;
 	}
 	return count;

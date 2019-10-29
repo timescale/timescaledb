@@ -41,7 +41,7 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 TotalSizes
 ts_compression_chunk_size_totals()
 {
-	TotalSizes sizes = {};
+	TotalSizes sizes = { 0 };
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessExclusiveLock, CurrentMemoryContext);
 
