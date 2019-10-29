@@ -119,16 +119,18 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "ts_hist_combinefunc called in non-aggregate context");
 	}
 
-	if (state2 == NULL)
+	if (state1 == NULL && state2 == NULL)
+	{
+		PG_RETURN_NULL();
+	}
+	else if (state2 == NULL)
 	{
 		result = copy_state(aggcontext, state1);
 	}
-
 	else if (state1 == NULL)
 	{
 		result = copy_state(aggcontext, state2);
 	}
-
 	else
 	{
 		Size i;
