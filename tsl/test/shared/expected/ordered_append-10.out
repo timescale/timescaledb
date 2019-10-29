@@ -4013,21 +4013,15 @@ ORDER BY device_id, time LIMIT 10;
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_3_13_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=10 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_4_18_chunk._ts_meta_sequence_num DESC
-                     Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (actual rows=4 loops=1)
-                           Index Cond: (device_id = 1)
+               ->  Index Scan Backward using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (actual rows=1 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_4_17_chunk._ts_meta_sequence_num DESC
-                     Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (actual rows=6 loops=1)
-                           Index Cond: (device_id = 1)
+               ->  Index Scan Backward using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (actual rows=1 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=1 loops=1)
                ->  Index Scan Backward using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
-(18 rows)
+(12 rows)
 
 -- queries without LIMIT should use ordered append
 :PREFIX SELECT
@@ -4484,16 +4478,12 @@ SELECT * FROM i;
                ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: compress_hyper_4_17_chunk._ts_meta_sequence_num
-                     ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (never executed)
-                           Index Cond: (device_id = 1)
+               ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (never executed)
+                     Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: compress_hyper_4_18_chunk._ts_meta_sequence_num
-                     ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (never executed)
-                           Index Cond: (device_id = 1)
-(16 rows)
+               ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (never executed)
+                     Index Cond: (device_id = 1)
+(12 rows)
 
 -- test plan with best index is chosen
 -- this should use time index
@@ -5180,16 +5170,11 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o1_1 (actual rows=1 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_4_18_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (actual rows=4 loops=1)
-                                 Index Cond: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_4_17_chunk._ts_meta_sequence_num DESC
-                           ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (never executed)
-                                 Index Cond: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o1_3 (never executed)
                      ->  Index Scan Backward using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk (never executed)
                            Index Cond: (device_id = 1)
@@ -5203,7 +5188,7 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o2_2 (never executed)
                      ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (never executed)
                            Index Cond: (device_id = 1)
-(28 rows)
+(23 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
@@ -7731,8 +7716,8 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 -- test JOIN on device_id
 -- should not use ordered append for 2nd hypertable
 :PREFIX SELECT o1.time FROM :TEST_TABLE o1 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id WHERE o1.device_id = 1 ORDER BY o1.time LIMIT 100;
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=1 loops=1)
@@ -7749,8 +7734,10 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                            ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
                                  Filter: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
-                           Index Cond: (device_id = 1)
+                     ->  Sort (never executed)
+                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
+                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
+                                 Filter: (device_id = 1)
          ->  Append (actual rows=100 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o2 (actual rows=100 loops=1)
                      ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=1 loops=1)
@@ -7761,7 +7748,7 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o2_2 (never executed)
                      ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (never executed)
                            Filter: (device_id = 1)
-(28 rows)
+(30 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
