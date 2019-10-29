@@ -83,7 +83,7 @@ jobs:
       stage: test
       name: "Regression 9.6.6 ARM processors"
       env:
-        - PG_VERSION=9.6.6 CODECOV_FLAGS="-F arm"
+        - PG_VERSION=9.6.6
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -106,7 +106,7 @@ jobs:
       stage: test
       name: "Regression 10.2 ARM processors"
       env:
-        - PG_VERSION=10.2 CODECOV_FLAGS="-F arm"
+        - PG_VERSION=10.2
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -129,7 +129,7 @@ jobs:
       stage: test
       name: "Regression 11.0 ARM processors"
       env:
-        - PG_VERSION=11.0 CODECOV_FLAGS="-F arm"
+        - PG_VERSION=11.0
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
@@ -158,7 +158,7 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6.15"
-      env: PG_VERSION=9.6.15 CODECOV_FLAGS="-F cron -F pr"
+      env: PG_VERSION=9.6.15
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -168,7 +168,7 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 10.10"
-      env: PG_VERSION=10.10 CODECOV_FLAGS="-F cron -F pr"
+      env: PG_VERSION=10.10
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -178,7 +178,7 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 11.5"
-      env: PG_VERSION=11.5 CODECOV_FLAGS="-F cron -F pr"
+      env: PG_VERSION=11.5
 
     #get codecov info, we only run 11.0 on PRs and the rest in cron
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
@@ -208,8 +208,8 @@ jobs:
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "CodeCov 11.0"
-      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 10.10"
+      env: PG_VERSION=10.10 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "

@@ -43,7 +43,7 @@ if (${PG_VERSION_MAJOR} GREATER "9")
     compress_bgw_drop_chunks.sql
   )
 
-  list(APPEND TEST_TEMPLATES_DEBUG
+  list(APPEND TEST_TEMPLATES
     compression_permissions.sql.in
     transparent_decompression.sql.in
   )
