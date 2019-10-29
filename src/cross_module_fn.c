@@ -414,7 +414,7 @@ license_end_time_default_fn(void)
 }
 
 static void
-add_telemetry_default(JsonbParseState *parseState)
+add_tsl_telemetry_info_default(JsonbParseState **parseState)
 {
 	error_no_default_fn_community();
 }
@@ -572,7 +572,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.license_end_time = license_end_time_default_fn,
 	.print_tsl_license_expiration_info_hook = NULL,
 	.module_shutdown_hook = NULL,
-	.add_tsl_license_info_telemetry = add_telemetry_default,
+	.add_tsl_telemetry_info = add_tsl_telemetry_info_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
 	.continuous_agg_materialize = cagg_materialize_default_fn,
 	.add_drop_chunks_policy = error_no_default_fn_pg_community,

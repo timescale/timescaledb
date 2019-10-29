@@ -62,6 +62,16 @@ dist_util_membership(void)
 		return DIST_MEMBER_DATA_NODE;
 }
 
+const char *
+dist_util_membership_str(DistUtilMembershipStatus status)
+{
+	static const char *dist_util_membership_status_str[] = { [DIST_MEMBER_NONE] = "none",
+															 [DIST_MEMBER_DATA_NODE] = "data node",
+															 [DIST_MEMBER_ACCESS_NODE] =
+																 "access node" };
+	return dist_util_membership_status_str[status];
+}
+
 static void
 seclabel_set_dist_uuid(Oid dbid, Datum dist_uuid)
 {

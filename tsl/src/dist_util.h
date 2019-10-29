@@ -17,6 +17,7 @@ typedef enum DistUtilMembershipStatus
 } DistUtilMembershipStatus;
 
 DistUtilMembershipStatus dist_util_membership(void);
+const char *dist_util_membership_str(DistUtilMembershipStatus status);
 
 void dist_util_set_as_frontend(void);
 bool dist_util_set_id(Datum dist_id);

@@ -431,6 +431,58 @@ ts_number_compressed_hypertables()
 }
 
 static ScanTupleResult
+hypertable_tuple_add_stat(TupleInfo *ti, void *data)
+{
+	HypertablesStat *stat = data;
+	bool isnull;
+	Datum datum;
+
+	datum = heap_getattr(ti->tuple, Anum_hypertable_replication_factor, ti->desc, &isnull);
+	if (!isnull)
+	{
+		int16 replication_factor = DatumGetInt16(datum);
+
+		switch (replication_factor)
+		{
+			case HYPERTABLE_DISTRIBUTED_MEMBER:
+				stat->num_hypertables_distributed_members++;
+				break;
+			case HYPERTABLE_REGULAR:
+				/* This should not be possible */
+				Assert(0);
+				break;
+			default:
+				Assert(replication_factor >= 1);
+				stat->num_hypertables_distributed++;
+				if (replication_factor > 1)
+					stat->num_hypertables_distributed_and_replicated++;
+				break;
+		}
+	}
+	else
+	{
+		stat->num_hypertables_regular++;
+	}
+
+	return SCAN_CONTINUE;
+}
+
+void
+ts_number_of_hypertables(HypertablesStat *stat)
+{
+	stat->num_hypertables_total = hypertable_scan_limit_internal(NULL,
+																 0,
+																 HYPERTABLE_ID_INDEX,
+																 hypertable_tuple_add_stat,
+																 stat,
+																 -1,
+																 AccessShareLock,
+																 false,
+																 CurrentMemoryContext,
+																 NULL);
+}
+
+static ScanTupleResult
 hypertable_tuple_append(TupleInfo *ti, void *data)
 {
 	List **hypertables = data;
