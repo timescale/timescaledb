@@ -854,6 +854,7 @@ FROM :TEST_TABLE WHERE time = (SELECT max(time) FROM :TEST_TABLE) ORDER BY time;
 
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
+SET enable_hashjoin = false;
 :PREFIX SELECT o1.time, o2.*
 FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o2 ON o1.time = o2.max_time ORDER BY time;
                                                              QUERY PLAN                                                              
@@ -888,6 +889,7 @@ FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o
                      Heap Fetches: 5
 (28 rows)
 
+RESET enable_hashjoin;
 -- test ordered append with limit expression
 :PREFIX SELECT time
 FROM :TEST_TABLE ORDER BY time LIMIT (SELECT length('four'));
@@ -2877,6 +2879,7 @@ FROM :TEST_TABLE WHERE time = (SELECT max(time) FROM :TEST_TABLE) ORDER BY time;
 
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
+SET enable_hashjoin = false;
 :PREFIX SELECT o1.time, o2.*
 FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o2 ON o1.time = o2.max_time ORDER BY time;
                                                                          QUERY PLAN                                                                         
@@ -2953,6 +2956,7 @@ FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o
                      Heap Fetches: 1
 (70 rows)
 
+RESET enable_hashjoin;
 -- test ordered append with limit expression
 :PREFIX SELECT time
 FROM :TEST_TABLE ORDER BY time LIMIT (SELECT length('four'));
@@ -4769,15 +4773,25 @@ FROM :TEST_TABLE WHERE time = (SELECT max(time) FROM :TEST_TABLE) ORDER BY time;
 
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
+SET enable_hashjoin = false;
 :PREFIX SELECT o1.time, o2.*
 FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o2 ON o1.time = o2.max_time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=5 loops=1)
    Sort Key: o1."time"
    Sort Method: quicksort 
-   ->  Hash Join (actual rows=5 loops=1)
-         Hash Cond: (o1."time" = (max(_hyper_3_13_chunk."time")))
+   ->  Nested Loop (actual rows=5 loops=1)
+         Join Filter: (o1."time" = (max(_hyper_3_13_chunk."time")))
+         Rows Removed by Join Filter: 68365
+         ->  Aggregate (actual rows=1 loops=1)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
+                           ->  Seq Scan on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=20 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (actual rows=30 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (actual rows=30 loops=1)
          ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o1 (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
@@ -4785,18 +4799,9 @@ FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o1_2 (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
-         ->  Hash (actual rows=1 loops=1)
-               Buckets: 1024  Batches: 1 
-               ->  Aggregate (actual rows=1 loops=1)
-                     ->  Append (actual rows=68370 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
-                                 ->  Seq Scan on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=20 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
-                                 ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (actual rows=30 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
-                                 ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (actual rows=30 loops=1)
-(22 rows)
+(21 rows)
 
+RESET enable_hashjoin;
 -- test ordered append with limit expression
 :PREFIX SELECT time
 FROM :TEST_TABLE ORDER BY time LIMIT (SELECT length('four'));
@@ -7022,15 +7027,37 @@ FROM :TEST_TABLE WHERE time = (SELECT max(time) FROM :TEST_TABLE) ORDER BY time;
 
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
+SET enable_hashjoin = false;
 :PREFIX SELECT o1.time, o2.*
 FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o2 ON o1.time = o2.max_time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=5 loops=1)
    Sort Key: o1."time"
    Sort Method: quicksort 
-   ->  Hash Join (actual rows=5 loops=1)
-         Hash Cond: (o1."time" = (max(_hyper_5_19_chunk."time")))
+   ->  Nested Loop (actual rows=5 loops=1)
+         Join Filter: (o1."time" = (max(_hyper_5_19_chunk."time")))
+         Rows Removed by Join Filter: 68365
+         ->  Aggregate (actual rows=1 loops=1)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_1 (actual rows=12 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_1 (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_1 (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_1 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_1 (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (actual rows=6 loops=1)
          ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1 (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
@@ -7050,30 +7077,9 @@ FROM :TEST_TABLE o1 INNER JOIN (SELECT max(time) AS max_time FROM :TEST_TABLE) o
                      ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o1_8 (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
-         ->  Hash (actual rows=1 loops=1)
-               Buckets: 1024  Batches: 1 
-               ->  Aggregate (actual rows=1 loops=1)
-                     ->  Append (actual rows=68370 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (actual rows=4 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_1 (actual rows=12 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_1 (actual rows=4 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (actual rows=6 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_1 (actual rows=18 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_1 (actual rows=6 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=6 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_1 (actual rows=18 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (actual rows=6 loops=1)
-(46 rows)
+(45 rows)
 
+RESET enable_hashjoin;
 -- test ordered append with limit expression
 :PREFIX SELECT time
 FROM :TEST_TABLE ORDER BY time LIMIT (SELECT length('four'));
