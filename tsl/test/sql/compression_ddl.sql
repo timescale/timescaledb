@@ -304,17 +304,14 @@ DROP VIEW dependent_1;
 
 --create a cont agg view on the ht as well then the drop should nuke everything
 --TODO put back when cont aggs work
---CREATE VIEW test1_cont_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
---AS SELECT time_bucket('1 hour', "Time"), SUM(i)
---    FROM test1
---    GROUP BY 1;
+CREATE VIEW test1_cont_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+AS SELECT time_bucket('1 hour', "Time"), SUM(i)
+   FROM test1
+   GROUP BY 1;
 
---REFRESH MATERIALIZED VIEW test1_cont_view;
+REFRESH MATERIALIZED VIEW test1_cont_view;
 
---SELECT count(*) FROM test1_cont_view;
---DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
---verify that there are no more hypertable remaining
---SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
+SELECT count(*) FROM test1_cont_view;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
@@ -375,7 +372,7 @@ AS sub;
 
 
 
-DROP TABLE test1;
+DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 
@@ -390,13 +387,13 @@ BEGIN
    RETURN OLD;
 END;
 $BODY$;
-CREATE TRIGGER test1_trigger 
+CREATE TRIGGER test1_trigger
 BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON test1
 FOR EACH STATEMENT EXECUTE PROCEDURE test1_print_func();
 
 INSERT INTO test1 SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 1:00', '1 hour') , 1 ;
 -- add a row trigger too --
-CREATE TRIGGER test1_trigger2 
+CREATE TRIGGER test1_trigger2
 BEFORE INSERT OR UPDATE OR DELETE ON test1
 FOR EACH ROW EXECUTE PROCEDURE test1_print_func();
 INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
