@@ -59,8 +59,6 @@
 #define REQ_NUM_DROP_CHUNKS_POLICIES "num_drop_chunks_policies"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_METADATA "db_metadata"
-#define REQ_LICENSE_INFO "license"
-#define REQ_LICENSE_EDITION "edition"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
 #define REQ_TS_LAST_TUNE_TIME "last_tuned_time"
 #define REQ_TS_LAST_TUNE_VERSION "last_tuned_version"
@@ -187,7 +185,13 @@ get_size(int64 size)
 static char *
 get_num_hypertables()
 {
+	//	HypertablesStat stat;
 	StringInfo buf = makeStringInfo();
+
+	//	memset(&stat, 0, sizeof(stat));
+	//	ts_number_of_hypertables(&stat);
+	//
+	//	appendStringInfo(buf, "%d", stat.num_hypertables_total);
 
 	appendStringInfo(buf, "%d", ts_number_of_user_hypertables());
 	return buf->data;
@@ -262,19 +266,6 @@ add_related_extensions(JsonbParseState *state)
 
 		ts_jsonb_add_str(state, ext, OidIsValid(get_extension_oid(ext, true)) ? "true" : "false");
 	}
-
-	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
-}
-
-static void
-add_license_info(JsonbParseState *state)
-{
-	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
-
-	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
-		ts_jsonb_add_str(state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
-	else
-		ts_cm_functions->add_tsl_license_info_telemetry(state);
 
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 }
@@ -386,12 +377,22 @@ build_version_body(void)
 	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
 	add_related_extensions(parseState);
 
-	/* add license info, which is a nested JSON */
-	license_info_key.type = jbvString;
-	license_info_key.val.string.val = REQ_LICENSE_INFO;
-	license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
-	pushJsonbValue(&parseState, WJB_KEY, &license_info_key);
-	add_license_info(parseState);
+	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
+	{
+		/* license */
+		license_info_key.type = jbvString;
+		license_info_key.val.string.val = REQ_LICENSE_INFO;
+		license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
+		pushJsonbValue(&parseState, WJB_KEY, &license_info_key);
+		pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(parseState, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
+		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	}
+	else
+	{
+		/* add license and distributed database fields */
+		ts_cm_functions->add_tsl_telemetry_info(&parseState);
+	}
 
 	/* add tuned info, which is optional */
 	if (ts_last_tune_time != NULL)

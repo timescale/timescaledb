@@ -44,7 +44,7 @@ typedef struct CrossModuleFunctions
 	TimestampTz (*license_end_time)(void);
 	void (*print_tsl_license_expiration_info_hook)(void);
 	void (*module_shutdown_hook)(void);
-	void (*add_tsl_license_info_telemetry)(JsonbParseState *parseState);
+	void (*add_tsl_telemetry_info)(JsonbParseState **parseState);
 	bool (*bgw_policy_job_execute)(BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 	Datum (*add_drop_chunks_policy)(PG_FUNCTION_ARGS);

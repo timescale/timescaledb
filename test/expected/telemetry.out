@@ -19,7 +19,6 @@ CREATE OR REPLACE FUNCTION test_check_version_response(response text)
        AS :MODULE_PATHNAME, 'ts_test_check_version_response'
        LANGUAGE C
        IMMUTABLE STRICT PARALLEL SAFE;
-       
 INSERT INTO _timescaledb_catalog.metadata VALUES ('foo','bar',TRUE);
 INSERT INTO _timescaledb_catalog.metadata VALUES ('bar','baz',FALSE);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -376,7 +375,7 @@ INFO:  Telemetry is disabled. Call get_telemetry_report(always_display_report :=
 (1 row)
 
 SELECT * FROM json_object_keys(get_telemetry_report(always_display_report := true)::json) AS key
-WHERE key != 'os_name_pretty';
+WHERE key != 'os_name_pretty' AND key != 'distributed_db';
              key             
 -----------------------------
  db_uuid
@@ -415,7 +414,7 @@ WHERE key != 'os_name_pretty';
 -- Test telemetry report contents
 SET timescaledb.telemetry_level=basic;
 SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
-WHERE key != 'os_name_pretty';
+WHERE key != 'os_name_pretty' AND key != 'distributed_db';
              key             
 -----------------------------
  db_uuid

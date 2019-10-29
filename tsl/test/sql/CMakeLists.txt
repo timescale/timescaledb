@@ -101,7 +101,8 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     remote_txn.sql
     remote_txn_id.sql
     remote_txn_resolve.sql
-    )
+    telemetry_distributed.sql
+  )
   if (CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_TEMPLATES
       hypertable_distributed.sql.in

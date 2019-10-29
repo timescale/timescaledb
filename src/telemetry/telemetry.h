@@ -16,6 +16,9 @@
 #include "net/http.h"
 #include "utils.h"
 
+#define REQ_LICENSE_INFO "license"
+#define REQ_LICENSE_EDITION "edition"
+
 #define TELEMETRY_SCHEME "https"
 #define TELEMETRY_HOST "telemetry.timescale.com"
 #define TELEMETRY_PATH "/v1/metrics"
