@@ -230,3 +230,33 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
 \set SEGMENT_META_COL_MIN _ts_meta_min_1
 \set SEGMENT_META_COL_MAX _ts_meta_max_1
 \ir include/compression_test_hypertable_segment_meta.sql
+
+DROP TABLE test6;
+
+-- test 7, compress misc types, and NULLs in dictionaries
+CREATE TABLE test7(time INT, c1 DATE, c2 TIMESTAMP, c3 FLOAT, n TEXT);
+SELECT create_hypertable('test7', 'time', chunk_time_interval=> 200);
+ALTER TABLE test7 SET
+  (timescaledb.compress, timescaledb.compress_orderby = 'time DESC, c1 DESC');
+
+INSERT INTO test7
+  SELECT t, d, '2019/07/07 01:00', gen_rand_minstd(), 'a'
+  FROM generate_series(1, 10) t,
+       generate_series('2019/02/01'::DATE, '2019/02/10', '1d') d;
+INSERT INTO test7
+  SELECT t, d, '2019/07/07 01:30', gen_rand_minstd(), NULL
+  FROM generate_series(10, 20) t,
+       generate_series('2019/03/01'::DATE, '2019/03/10', '1d') d;
+
+\set QUERY 'SELECT * FROM test7 ORDER BY time, c1'
+
+\set HYPERTABLE_NAME 'test7'
+
+\ir include/compression_test_hypertable.sql
+\set TYPE INT
+\set ORDER_BY_COL_NAME time
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+
+DROP TABLE test7;

@@ -237,11 +237,6 @@ delta_delta_compressor_for_type(Oid element_type)
 			return &compressor->base;
 #endif
 		default:
-			if (ts_type_is_int8_binary_compatible(element_type))
-			{
-				*compressor = (ExtendedCompressor){ .base = deltadelta_uint64_compressor };
-				return &compressor->base;
-			}
 			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
 	}
 }
@@ -497,6 +492,10 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 			return (DecompressResult){
 				.val = Int16GetDatum(res_internal.val),
 			};
+		case DATEOID:
+			return (DecompressResult){
+				.val = DateADTGetDatum(res_internal.val),
+			};
 #ifdef HAVE_INT64_TIMESTAMP
 		case TIMESTAMPTZOID:
 			return (DecompressResult){
@@ -508,10 +507,6 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 			};
 #endif
 		default:
-			if (ts_type_is_int8_binary_compatible(element_type))
-				return (DecompressResult){
-					.val = Int16GetDatum(res_internal.val),
-				};
 			elog(ERROR, "invalid type requested from deltadelta decompression %d", element_type);
 	}
 }
