@@ -3159,3 +3159,123 @@ id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_sc
  
 (1 row)
 
+-- Tests for using tablespaces with distributed hypertables
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_1 LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace2 OWNER :ROLE_1 LOCATION :TEST_TABLESPACE2_PATH;
+\set ON_ERROR_STOP 0
+SELECT attach_tablespace('tablespace1', 'disttable');
+ERROR:  cannot attach tablespace to distributed hypertable
+SELECT detach_tablespace('tablespace1', 'disttable');
+ERROR:  tablespace "tablespace1" is not attached to hypertable "disttable"
+\set ON_ERROR_STOP 1
+-- Continue to use previously attached tablespace, but block attach/detach
+CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
+SELECT create_distributed_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint);
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (13,public,disttable2,t)
+(1 row)
+
+-- Ensure that table is created on the data nodes without a tablespace
+SELECT * FROM distributed_exec($$
+SELECT * FROM show_tablespaces('disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+INSERT INTO disttable2 VALUES ('2017-01-01 06:01', 1, 1.1);
+SELECT * FROM show_chunks('disttable2');
+                  show_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._hyper_13_34_dist_chunk
+(1 row)
+
+-- Ensure tablespace oid is set to 0 for a foreign table
+SELECT reltablespace
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable2')) ch
+WHERE cl.oid = ch.chunk::regclass;
+ reltablespace 
+---------------
+             0
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT attach_tablespace('tablespace2', 'disttable2');
+ERROR:  cannot attach tablespace to distributed hypertable
+SELECT detach_tablespace('tablespace2', 'disttable2');
+ERROR:  tablespace "tablespace2" is not attached to hypertable "disttable2"
+\set ON_ERROR_STOP 1
+SELECT * FROM show_tablespaces('disttable2');
+ show_tablespaces 
+------------------
+(0 rows)
+
+-- Ensure tablespace API works for data nodes
+SELECT * FROM distributed_exec($$
+SELECT attach_tablespace('tablespace2', 'disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+SELECT * FROM distributed_exec($$
+SELECT detach_tablespace('tablespace2', 'disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+DROP TABLE disttable2;
+CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
+SELECT create_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint, replication_factor => 1);
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (14,public,disttable2,t)
+(1 row)
+
+-- Ensure that table is created on the data nodes without a tablespace
+SELECT * FROM distributed_exec($$
+SELECT * FROM show_tablespaces('disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+INSERT INTO disttable2 VALUES ('2017-01-01 06:01', 1, 1.1);
+SELECT * FROM show_chunks('disttable2');
+                  show_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._hyper_14_35_dist_chunk
+(1 row)
+
+-- Ensure tablespace oid is set to 0 for a foreign table
+SELECT reltablespace
+FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable2')) ch
+WHERE cl.oid = ch.chunk::regclass;
+ reltablespace 
+---------------
+             0
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT attach_tablespace('tablespace2', 'disttable2');
+ERROR:  cannot attach tablespace to distributed hypertable
+SELECT detach_tablespace('tablespace2', 'disttable2');
+ERROR:  tablespace "tablespace2" is not attached to hypertable "disttable2"
+\set ON_ERROR_STOP 1
+SELECT * FROM show_tablespaces('disttable2');
+ show_tablespaces 
+------------------
+(0 rows)
+
+DROP TABLE disttable2;
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;

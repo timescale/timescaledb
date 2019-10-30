@@ -316,7 +316,6 @@ deparse_get_tabledef(TableInfo *table_info)
 	StringInfo set_schema = makeStringInfo();
 	TableDef *table_def = palloc0(sizeof(TableDef));
 	Relation rel = table_open(table_info->relid, AccessShareLock);
-	Oid tablespace;
 
 	appendStringInfo(set_schema,
 					 "SET SCHEMA %s;",
@@ -336,10 +335,6 @@ deparse_get_tabledef(TableInfo *table_info)
 	deparse_columns(create_table, rel);
 
 	appendStringInfoChar(create_table, ')');
-
-	tablespace = get_rel_tablespace(table_info->relid);
-	if (tablespace != InvalidOid)
-		appendStringInfo(create_table, " TABLESPACE %s", get_tablespace_name(tablespace));
 
 	appendStringInfoChar(create_table, ';');
 	table_def->create_cmd = create_table->data;
