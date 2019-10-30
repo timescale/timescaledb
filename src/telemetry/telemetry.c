@@ -177,7 +177,7 @@ get_size(int64 size)
 {
 	StringInfo buf = makeStringInfo();
 
-	appendStringInfo(buf, "%ld", size);
+	appendStringInfo(buf, INT64_FORMAT, size);
 	return buf->data;
 }
 
