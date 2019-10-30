@@ -419,7 +419,7 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | 
+ _hyper_4_13_chunk | tablespace1
  hyper_in_space    | tablespace1
 (5 rows)
 
@@ -448,7 +448,7 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | 
+ _hyper_4_13_chunk | tablespace1
  hyper_in_space    | tablespace1
 (5 rows)
 
@@ -468,7 +468,7 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | 
+ _hyper_4_13_chunk | tablespace1
  _hyper_4_14_chunk | 
  _hyper_4_15_chunk | tablespace2
  hyper_in_space    | tablespace1

@@ -500,6 +500,11 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	}
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
+	if (hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot attach tablespace to distributed hypertable")));
+
 	if (ts_hypertable_has_tablespace(ht, tspc_oid))
 	{
 		if (if_not_attached)
