@@ -4,16 +4,63 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.5.0 (unreleased)
+## 1.5.0 (2019-10-31)
+
+This release adds major new features and bugfixes since the 1.4.2 release.
+We deem it moderate priority for upgrading.
+
+This release adds compression as a major new feature.
+Multiple type-specific compression options are available in this release
+(including DeltaDelta with run-length-encoding for integers and
+timestamps; Gorilla compression for floats; dictionary-based compression
+for any data type, but specifically for low-cardinality datasets;
+and other LZ-based techniques). Individual columns can be compressed with
+type-specific compression algorithms as Postgres' native row-based format
+are rolled up into columnar-like arrays on a per chunk basis.
+The query planner then handles transparent decompression for compressed
+chunks at execution time.
+
+This release also adds support for basic data tiering by supporting
+the migration of chunks between tablespaces, as well as support for
+parallel query coordination to the ChunkAppend node.
+Previously ChunkAppend would rely on parallel coordination in the
+underlying scans for parallel plans.
+
+More information can be found on [our blog](https://blog.timescale.com/blog/building-columnar-compression-in-a-row-oriented-database)
+or in this [tutorial](https://docs.timescale.com/latest/tutorials/compression-tutorial)
 
 **For this release only**, you will need to restart the database before running
 `ALTER EXTENSION`
 
-**Features**
+**Major Features**
+* #1393 Moving chunks between different tablespaces
 * #1433 Make ChunkAppend parallel aware
+* #1434 Introducing native compression, multiple compression algorithms, and hybrid row/columnar projections
+
+**Minor Features**
+* #1471 Allow setting reloptions on chunks
+* #1479 Add next_start option to alter_job_schedule
+* #1481 Add last_successful_finish to bgw_job_stats
 
 **Bugfixes**
 * #1444 Prevent LIMIT pushdown in JOINs
+* #1447 Fix runtime exclusion memory leak
+* #1464 Fix ordered append with expressions in ORDER BY clause with space partitioning
+* #1476 Fix logic for BGW rescheduling
+* #1477 Fix gapfill treat_null_as_missing
+* #1493 Prevent recursion in invalidation processing
+* #1498 Fix overflow in gapfill's interpolate
+* #1499 Fix error for exported_uuid in pg_restore
+* #1503 Fix bug with histogram function in parallel
+
+**Thanks**
+* @dhyun-obsec for reporting an issue with pg_restore
+* @rhaymo for reporting an issue with interpolate
+* @optijon for reporting an issue with locf treat_null_as_missing
+* @favnee for reporting an issue with runtime exclusion
+* @Lectem for reporting an issue with histograms
+* @rogerdwan for reporting an issue with BGW rescheduling
+* @od0 for reporting an issue with alter_job_schedule
 
 ## 1.4.2 (2019-09-11)
 
