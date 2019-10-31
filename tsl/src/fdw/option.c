@@ -103,13 +103,8 @@ option_validate(List *options_list, Oid catalog)
 		/*
 		 * Validate option value, when we can do so without any context.
 		 */
-		if (strcmp(def->defname, "use_remote_estimate") == 0)
-		{
-			/* these accept only boolean values */
-			(void) defGetBoolean(def);
-		}
-		else if (strcmp(def->defname, "fdw_startup_cost") == 0 ||
-				 strcmp(def->defname, "fdw_tuple_cost") == 0)
+		if (strcmp(def->defname, "fdw_startup_cost") == 0 ||
+			strcmp(def->defname, "fdw_tuple_cost") == 0)
 		{
 			/* these must have a non-negative numeric value */
 			double val;
@@ -147,9 +142,6 @@ init_ts_fdw_options(void)
 {
 	/* non-libpq FDW-specific FDW options */
 	static const TsFdwOption non_libpq_options[] = {
-		/* use_remote_estimate is available on both server and table */
-		{ "use_remote_estimate", ForeignServerRelationId },
-		{ "use_remote_estimate", ForeignTableRelationId },
 		/* cost factors */
 		{ "fdw_startup_cost", ForeignServerRelationId },
 		{ "fdw_tuple_cost", ForeignServerRelationId },

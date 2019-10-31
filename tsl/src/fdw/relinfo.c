@@ -45,9 +45,7 @@ apply_server_options(TsFdwRelInfo *fpinfo)
 	{
 		DefElem *def = (DefElem *) lfirst(lc);
 
-		if (strcmp(def->defname, "use_remote_estimate") == 0)
-			fpinfo->use_remote_estimate = defGetBoolean(def);
-		else if (strcmp(def->defname, "fdw_startup_cost") == 0)
+		if (strcmp(def->defname, "fdw_startup_cost") == 0)
 			fpinfo->fdw_startup_cost = strtod(defGetString(def), NULL);
 		else if (strcmp(def->defname, "fdw_tuple_cost") == 0)
 			fpinfo->fdw_tuple_cost = strtod(defGetString(def), NULL);
@@ -120,35 +118,15 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->server = GetForeignServer(server_oid);
 
 	/*
-	 * Extract user-settable option values.  Note that per-table setting of
-	 * use_remote_estimate overrides per-server setting.
+	 * Extract user-settable option values.  Note that per-table setting
+	 * overrides per-server setting.
 	 */
-	fpinfo->use_remote_estimate = false;
 	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
 	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
 	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
 	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
 	apply_server_options(fpinfo);
-
-	/*
-	 * If the table or the data node is configured to use remote estimates,
-	 * identify which user to do remote access as during planning.  This
-	 * should match what ExecCheckRTEPerms() does.  If we fail due to lack of
-	 * permissions, the query would have failed at runtime anyway.
-	 */
-	if (fpinfo->use_remote_estimate)
-	{
-		Oid userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
-
-		fpinfo->cid.server_id = fpinfo->server->serverid;
-		fpinfo->cid.user_id = userid;
-	}
-	else
-	{
-		fpinfo->cid.server_id = InvalidOid;
-		fpinfo->cid.user_id = InvalidOid;
-	}
 
 	/*
 	 * Identify which baserestrictinfo clauses can be sent to the data
@@ -197,67 +175,36 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->rel_retrieved_rows = -1;
 
 	/*
-	 * If the table or the data node is configured to use remote estimates,
-	 * connect to the data node and execute EXPLAIN to estimate the
-	 * number of rows selected by the restriction clauses, as well as the
-	 * average row width.  Otherwise, estimate using whatever statistics we
-	 * have locally, in a way similar to ordinary tables.
+	 * If the foreign table has never been ANALYZEd, it will have relpages
+	 * and reltuples equal to zero, which most likely has nothing to do
+	 * with reality.  We can't do a whole lot about that if we're not
+	 * allowed to consult the data node, but we can use a hack similar
+	 * to plancat.c's treatment of empty relations: use a minimum size
+	 * estimate of 10 pages, and divide by the column-datatype-based width
+	 * estimate to get the corresponding number of tuples.
 	 */
-	if (fpinfo->use_remote_estimate)
+	if (rel->pages == 0 && rel->tuples == 0)
 	{
-		/*
-		 * Get cost/size estimates with help of data node.  Save the
-		 * values in fpinfo so we don't need to do it again to generate the
-		 * basic foreign path.
-		 */
-		fdw_estimate_path_cost_size(root,
-									rel,
-									NIL,
-									NIL,
-									&fpinfo->rows,
-									&fpinfo->width,
-									&fpinfo->startup_cost,
-									&fpinfo->total_cost);
-
-		/* Report estimated rel size to planner. */
-		rel->rows = fpinfo->rows;
-		rel->reltarget->width = fpinfo->width;
+		rel->pages = 10;
+		rel->tuples = (10 * BLCKSZ) / (rel->reltarget->width + MAXALIGN(SizeofHeapTupleHeader));
 	}
-	else
-	{
-		/*
-		 * If the foreign table has never been ANALYZEd, it will have relpages
-		 * and reltuples equal to zero, which most likely has nothing to do
-		 * with reality.  We can't do a whole lot about that if we're not
-		 * allowed to consult the data node, but we can use a hack similar
-		 * to plancat.c's treatment of empty relations: use a minimum size
-		 * estimate of 10 pages, and divide by the column-datatype-based width
-		 * estimate to get the corresponding number of tuples.
-		 */
-		if (rel->pages == 0 && rel->tuples == 0)
-		{
-			rel->pages = 10;
-			rel->tuples = (10 * BLCKSZ) / (rel->reltarget->width + MAXALIGN(SizeofHeapTupleHeader));
-		}
 
-		/* Estimate rel size as best we can with local statistics. There are
-		 * no local statistics for data node rels since they aren't real base
-		 * rels (there's no corresponding table in the system to associate
-		 * stats with). Instead, data node rels already have basic stats set
-		 * at creation time based on data-node-chunk assignment. */
-		if (fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
-			set_baserel_size_estimates(root, rel);
+	/* Estimate rel size as best we can with local statistics. There are
+	 * no local statistics for data node rels since they aren't real base
+	 * rels (there's no corresponding table in the system to associate
+	 * stats with). Instead, data node rels already have basic stats set
+	 * at creation time based on data-node-chunk assignment. */
+	if (fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+		set_baserel_size_estimates(root, rel);
 
-		/* Fill in basically-bogus cost estimates for use later. */
-		fdw_estimate_path_cost_size(root,
-									rel,
-									NIL,
-									NIL,
-									&fpinfo->rows,
-									&fpinfo->width,
-									&fpinfo->startup_cost,
-									&fpinfo->total_cost);
-	}
+	/* Fill in basically-bogus cost estimates for use later. */
+	fdw_estimate_path_cost_size(root,
+								rel,
+								NIL,
+								&fpinfo->rows,
+								&fpinfo->width,
+								&fpinfo->startup_cost,
+								&fpinfo->total_cost);
 
 	/*
 	 * Set the name of relation in fpinfo, while we are constructing it here.

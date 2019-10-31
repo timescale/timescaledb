@@ -34,148 +34,6 @@ typedef struct CostEstimate
 	Cost run_cost;
 } CostEstimate;
 
-/*
- * Estimate costs of executing a SQL statement remotely.
- * The given "sql" must be an EXPLAIN command.
- */
-static void
-send_remote_estimate_query(const char *sql, TSConnection *conn, CostEstimate *ce)
-{
-	AsyncResponseResult *volatile rsp = NULL;
-
-	/* PGresult must be released before leaving this function. */
-	PG_TRY();
-	{
-		AsyncRequest *req;
-		PGresult *res;
-		char *line;
-		char *p;
-		int n;
-
-		/*
-		 * Execute EXPLAIN remotely.
-		 */
-		req = async_request_send(conn, sql);
-		rsp = async_request_wait_any_result(req);
-		res = async_response_result_get_pg_result(rsp);
-
-		if (PQresultStatus(res) != PGRES_TUPLES_OK)
-			async_response_report_error((AsyncResponse *) rsp, ERROR);
-
-		/*
-		 * Extract cost numbers for topmost plan node.  Note we search for a
-		 * left paren from the end of the line to avoid being confused by
-		 * other uses of parentheses.
-		 */
-		line = PQgetvalue(res, 0, 0);
-		p = strrchr(line, '(');
-		if (p == NULL)
-			elog(ERROR, "could not interpret EXPLAIN output: \"%s\"", line);
-		n = sscanf(p,
-				   "(cost=%lf..%lf rows=%lf width=%d)",
-				   &ce->startup_cost,
-				   &ce->total_cost,
-				   &ce->rows,
-				   &ce->width);
-		if (n != 4)
-			elog(ERROR, "could not interpret EXPLAIN output: \"%s\"", line);
-
-		async_response_result_close(rsp);
-	}
-	PG_CATCH();
-	{
-		if (NULL != rsp)
-			async_response_result_close(rsp);
-
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-}
-
-static void
-get_remote_estimate(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds, List *pathkeys,
-					CostEstimate *ce)
-{
-	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
-	List *remote_param_join_conds;
-	List *local_param_join_conds;
-	StringInfoData sql;
-	TSConnection *conn;
-	Selectivity local_sel;
-	QualCost local_cost;
-	List *fdw_scan_tlist = NIL;
-	List *remote_conds;
-
-	/* Required only to be passed to deparseSelectStmtForRel */
-	List *retrieved_attrs;
-
-	/*
-	 * param_join_conds might contain both clauses that are safe to send
-	 * across, and clauses that aren't.
-	 */
-	classify_conditions(root,
-						rel,
-						param_join_conds,
-						&remote_param_join_conds,
-						&local_param_join_conds);
-
-	if (IS_JOIN_REL(rel))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("foreign joins are not supported")));
-
-	/* Build the list of columns to be fetched from the data node. */
-	if (IS_UPPER_REL(rel))
-		fdw_scan_tlist = build_tlist_to_deparse(rel);
-	else
-		fdw_scan_tlist = NIL;
-
-	/*
-	 * The complete list of remote conditions includes everything from
-	 * baserestrictinfo plus any extra join_conds relevant to this
-	 * particular path.
-	 */
-	remote_conds = list_concat(list_copy(remote_param_join_conds), fpinfo->remote_conds);
-
-	/*
-	 * Construct EXPLAIN query including the desired SELECT, FROM, and
-	 * WHERE clauses. Params and other-relation Vars are replaced by dummy
-	 * values, so don't request params_list.
-	 */
-	initStringInfo(&sql);
-	appendStringInfoString(&sql, "EXPLAIN ");
-	deparseSelectStmtForRel(&sql,
-							root,
-							rel,
-							fdw_scan_tlist,
-							remote_conds,
-							pathkeys,
-							false,
-							&retrieved_attrs,
-							NULL,
-							fpinfo->sca,
-							NULL);
-
-	/* Get the remote estimate */
-	conn = remote_dist_txn_get_connection(fpinfo->cid, REMOTE_TXN_NO_PREP_STMT);
-	send_remote_estimate_query(sql.data, conn, ce);
-
-	ce->retrieved_rows = ce->rows;
-
-	/* Factor in the selectivity of the locally-checked quals */
-	local_sel = clauselist_selectivity(root, local_param_join_conds, rel->relid, JOIN_INNER, NULL);
-	local_sel *= fpinfo->local_conds_sel;
-
-	ce->rows = clamp_row_est(ce->rows * local_sel);
-
-	/* Add in the eval cost of the locally-checked quals */
-	ce->startup_cost += fpinfo->local_conds_cost.startup;
-	ce->total_cost += fpinfo->local_conds_cost.per_tuple * ce->retrieved_rows;
-	cost_qual_eval(&local_cost, local_param_join_conds, root);
-	ce->startup_cost += local_cost.startup;
-	ce->total_cost += local_cost.per_tuple * ce->retrieved_rows;
-}
-
 static void
 get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 {
@@ -302,18 +160,17 @@ get_base_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
  * fdw_estimate_path_cost_size
  *		Get cost and size estimates for a foreign scan on given foreign
  *		relation either a base relation or an upper relation containing
- *		foreign relations.
+ *		foreign relations. Estimate rows using whatever statistics we have
+ *      locally, in a way similar to ordinary tables.
  *
- * param_join_conds are the parameterization clauses with outer relations.
  * pathkeys specify the expected sort order if any for given path being costed.
  *
  * The function returns the cost and size estimates in p_row, p_width,
  * p_startup_cost and p_total_cost variables.
  */
 void
-fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds,
-							List *pathkeys, double *p_rows, int *p_width, Cost *p_startup_cost,
-							Cost *p_total_cost)
+fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys, double *p_rows,
+							int *p_width, Cost *p_startup_cost, Cost *p_total_cost)
 {
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
 	CostEstimate ce = {
@@ -331,68 +188,50 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *param_join
 				 errmsg("foreign joins are not supported")));
 
 	/*
-	 * If the table or the data node is configured to use remote estimates,
-	 * connect to the data node and execute EXPLAIN to estimate the
-	 * number of rows selected by the restriction+join clauses.  Otherwise,
-	 * estimate rows using whatever statistics we have locally, in a way
-	 * similar to ordinary tables.
+	 * We will come here again and again with different set of pathkeys
+	 * that caller wants to cost. We don't need to calculate the cost of
+	 * bare scan each time. Instead, use the costs if we have cached them
+	 * already.
 	 */
-	if (fpinfo->use_remote_estimate)
-		get_remote_estimate(root, rel, param_join_conds, pathkeys, &ce);
-	else
+	if (REL_HAS_CACHED_COSTS(fpinfo))
 	{
-		/*
-		 * We don't support join conditions in this mode (hence, no
-		 * parameterized paths can be made).
-		 */
-		Assert(param_join_conds == NIL);
-
-		/*
-		 * We will come here again and again with different set of pathkeys
-		 * that caller wants to cost. We don't need to calculate the cost of
-		 * bare scan each time. Instead, use the costs if we have cached them
-		 * already.
-		 */
-		if (REL_HAS_CACHED_COSTS(fpinfo))
-		{
-			ce.startup_cost = fpinfo->rel_startup_cost;
-			ce.run_cost = fpinfo->rel_total_cost - fpinfo->rel_startup_cost;
-			ce.retrieved_rows = fpinfo->rel_retrieved_rows;
-		}
-		else if (IS_UPPER_REL(rel))
-			get_upper_rel_estimate(root, rel, &ce);
-		else
-			get_base_rel_estimate(root, rel, &ce);
-
-		/*
-		 * Without remote estimates, we have no real way to estimate the cost
-		 * of generating sorted output.  It could be free if the query plan
-		 * the remote side would have chosen generates properly-sorted output
-		 * anyway, but in most cases it will cost something.  Estimate a value
-		 * high enough that we won't pick the sorted path when the ordering
-		 * isn't locally useful, but low enough that we'll err on the side of
-		 * pushing down the ORDER BY clause when it's useful to do so.
-		 */
-		if (pathkeys != NIL)
-		{
-			/* TODO: check if sort covered by local index and use other sort multiplier */
-			ce.startup_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
-			ce.run_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
-		}
-
-		ce.total_cost = ce.startup_cost + ce.run_cost;
+		ce.startup_cost = fpinfo->rel_startup_cost;
+		ce.run_cost = fpinfo->rel_total_cost - fpinfo->rel_startup_cost;
+		ce.retrieved_rows = fpinfo->rel_retrieved_rows;
 	}
+	else if (IS_UPPER_REL(rel))
+		get_upper_rel_estimate(root, rel, &ce);
+	else
+		get_base_rel_estimate(root, rel, &ce);
 
 	/*
-	 * Cache the costs for scans without any pathkeys or parameterization
+	 * Without remote estimates, we have no real way to estimate the cost
+	 * of generating sorted output.  It could be free if the query plan
+	 * the remote side would have chosen generates properly-sorted output
+	 * anyway, but in most cases it will cost something.  Estimate a value
+	 * high enough that we won't pick the sorted path when the ordering
+	 * isn't locally useful, but low enough that we'll err on the side of
+	 * pushing down the ORDER BY clause when it's useful to do so.
+	 */
+	if (pathkeys != NIL)
+	{
+		/* TODO: check if sort covered by local index and use other sort multiplier */
+		ce.startup_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+		ce.run_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+	}
+
+	ce.total_cost = ce.startup_cost + ce.run_cost;
+
+	/*
+	 * Cache the costs for scans without any pathkeys
 	 * before adding the costs for transferring data from the data node.
 	 * These costs are useful for costing the join between this relation and
 	 * another foreign relation or to calculate the costs of paths with
 	 * pathkeys for this relation, when the costs can not be obtained from the
 	 * data node. This function will be called at least once for every
-	 * foreign relation without pathkeys and parameterization.
+	 * foreign relation without pathkeys.
 	 */
-	if (!REL_HAS_CACHED_COSTS(fpinfo) && pathkeys == NIL && param_join_conds == NIL)
+	if (!REL_HAS_CACHED_COSTS(fpinfo) && pathkeys == NIL)
 	{
 		fpinfo->rel_startup_cost = ce.startup_cost;
 		fpinfo->rel_total_cost = ce.total_cost;

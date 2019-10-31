@@ -30,111 +30,6 @@
 #include "scan_plan.h"
 
 /*
- * get_useful_ecs_for_relation
- *		Determine which EquivalenceClasses might be involved in useful
- *		orderings of this relation.
- *
- * This function is in some respects a mirror image of the core function
- * pathkeys_useful_for_merging: for a regular table, we know what indexes
- * we have and want to test whether any of them are useful.  For a foreign
- * table, we don't know what indexes are present on the remote side but
- * want to speculate about which ones we'd like to use if they existed.
- *
- * This function returns a list of potentially-useful equivalence classes,
- * but it does not guarantee that an EquivalenceMember exists which contains
- * Vars only from the given relation.  For example, given ft1 JOIN t1 ON
- * ft1.x + t1.x = 0, this function will say that the equivalence class
- * containing ft1.x + t1.x is potentially useful.  Supposing ft1 is remote and
- * t1 is local (or on a different data node), it will turn out that no useful
- * ORDER BY clause can be generated.  It's not our job to figure that out
- * here; we're only interested in identifying relevant ECs.
- */
-static List *
-get_useful_ecs_for_relation(PlannerInfo *root, RelOptInfo *rel)
-{
-	List *useful_eclass_list = NIL;
-	ListCell *lc;
-	Relids relids;
-
-	/*
-	 * First, consider whether any active EC is potentially useful for a merge
-	 * join against this relation.
-	 */
-	if (rel->has_eclass_joins)
-	{
-		foreach (lc, root->eq_classes)
-		{
-			EquivalenceClass *cur_ec = (EquivalenceClass *) lfirst(lc);
-
-			if (eclass_useful_for_merging(root, cur_ec, rel))
-				useful_eclass_list = lappend(useful_eclass_list, cur_ec);
-		}
-	}
-
-	/*
-	 * Next, consider whether there are any non-EC derivable join clauses that
-	 * are merge-joinable.  If the joininfo list is empty, we can exit
-	 * quickly.
-	 */
-	if (rel->joininfo == NIL)
-		return useful_eclass_list;
-
-	/* If this is a child rel, we must use the topmost parent rel to search. */
-	if (IS_OTHER_REL(rel))
-	{
-		Assert(!bms_is_empty(rel->top_parent_relids));
-		relids = rel->top_parent_relids;
-	}
-	else
-		relids = rel->relids;
-
-	/* Check each join clause in turn. */
-	foreach (lc, rel->joininfo)
-	{
-		RestrictInfo *restrictinfo = (RestrictInfo *) lfirst(lc);
-
-		/* Consider only mergejoinable clauses */
-		if (restrictinfo->mergeopfamilies == NIL)
-			continue;
-
-		/* Make sure we've got canonical ECs. */
-		update_mergeclause_eclasses(root, restrictinfo);
-
-		/*
-		 * restrictinfo->mergeopfamilies != NIL is sufficient to guarantee
-		 * that left_ec and right_ec will be initialized, per comments in
-		 * distribute_qual_to_rels.
-		 *
-		 * We want to identify which side of this merge-joinable clause
-		 * contains columns from the relation produced by this RelOptInfo. We
-		 * test for overlap, not containment, because there could be extra
-		 * relations on either side.  For example, suppose we've got something
-		 * like ((A JOIN B ON A.x = B.x) JOIN C ON A.y = C.y) LEFT JOIN D ON
-		 * A.y = D.y.  The input rel might be the joinrel between A and B, and
-		 * we'll consider the join clause A.y = D.y. relids contains a
-		 * relation not involved in the join class (B) and the equivalence
-		 * class for the left-hand side of the clause contains a relation not
-		 * involved in the input rel (C).  Despite the fact that we have only
-		 * overlap and not containment in either direction, A.y is potentially
-		 * useful as a sort column.
-		 *
-		 * Note that it's even possible that relids overlaps neither side of
-		 * the join clause.  For example, consider A LEFT JOIN B ON A.x = B.x
-		 * AND A.x = 1.  The clause A.x = 1 will appear in B's joininfo list,
-		 * but overlaps neither side of B.  In that case, we just skip this
-		 * join clause, since it doesn't suggest a useful sort order for this
-		 * relation.
-		 */
-		if (bms_overlap(relids, restrictinfo->right_ec->ec_relids))
-			useful_eclass_list = list_append_unique_ptr(useful_eclass_list, restrictinfo->right_ec);
-		else if (bms_overlap(relids, restrictinfo->left_ec->ec_relids))
-			useful_eclass_list = list_append_unique_ptr(useful_eclass_list, restrictinfo->left_ec);
-	}
-
-	return useful_eclass_list;
-}
-
-/*
  * get_useful_pathkeys_for_relation
  *		Determine which orderings of a relation might be useful.
  *
@@ -147,9 +42,6 @@ static List *
 get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 {
 	List *useful_pathkeys_list = NIL;
-	List *useful_eclass_list;
-	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
-	EquivalenceClass *query_ec = NULL;
 	ListCell *lc;
 
 	/*
@@ -188,60 +80,6 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 			useful_pathkeys_list = list_make1(list_copy(root->query_pathkeys));
 	}
 
-	/*
-	 * Even if we're not using remote estimates, having the remote side do the
-	 * sort generally won't be any worse than doing it locally, and it might
-	 * be much better if the remote side can generate data in the right order
-	 * without needing a sort at all.  However, what we're going to do next is
-	 * try to generate pathkeys that seem promising for possible merge joins,
-	 * and that's more speculative.  A wrong choice might hurt quite a bit, so
-	 * bail out if we can't use remote estimates.
-	 */
-	if (!fpinfo->use_remote_estimate)
-		return useful_pathkeys_list;
-
-	/* Get the list of interesting EquivalenceClasses. */
-	useful_eclass_list = get_useful_ecs_for_relation(root, rel);
-
-	/* Extract unique EC for query, if any, so we don't consider it again. */
-	if (list_length(root->query_pathkeys) == 1)
-	{
-		PathKey *query_pathkey = linitial(root->query_pathkeys);
-
-		query_ec = query_pathkey->pk_eclass;
-	}
-
-	/*
-	 * As a heuristic, the only pathkeys we consider here are those of length
-	 * one.  It's surely possible to consider more, but since each one we
-	 * choose to consider will generate a round-trip to the remote side, we
-	 * need to be a bit cautious here.  It would sure be nice to have a local
-	 * cache of information about remote index definitions...
-	 */
-	foreach (lc, useful_eclass_list)
-	{
-		EquivalenceClass *cur_ec = lfirst(lc);
-		Expr *em_expr;
-		PathKey *pathkey;
-
-		/* If redundant with what we did above, skip it. */
-		if (cur_ec == query_ec)
-			continue;
-
-		/* If no pushable expression for this rel, skip it. */
-		em_expr = find_em_expr_for_rel(cur_ec, rel);
-		if (em_expr == NULL || !is_foreign_expr(root, rel, em_expr))
-			continue;
-
-		/* Looks like we can generate a pathkey, so let's do it. */
-		pathkey = make_canonical_pathkey(root,
-										 cur_ec,
-										 linitial_oid(cur_ec->ec_opfamilies),
-										 BTLessStrategyNumber,
-										 false);
-		useful_pathkeys_list = lappend(useful_pathkeys_list, list_make1(pathkey));
-	}
-
 	return useful_pathkeys_list;
 }
 
@@ -269,7 +107,6 @@ add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_pa
 
 		fdw_estimate_path_cost_size(root,
 									rel,
-									NIL,
 									useful_pathkeys,
 									&rows,
 									&width,
@@ -515,7 +352,6 @@ merge_fdw_options(TsFdwRelInfo *fpinfo, const TsFdwRelInfo *fpinfo_o, const TsFd
 	fpinfo->fdw_startup_cost = fpinfo_o->fdw_startup_cost;
 	fpinfo->fdw_tuple_cost = fpinfo_o->fdw_tuple_cost;
 	fpinfo->shippable_extensions = fpinfo_o->shippable_extensions;
-	fpinfo->use_remote_estimate = fpinfo_o->use_remote_estimate;
 	fpinfo->fetch_size = fpinfo_o->fetch_size;
 }
 
@@ -761,7 +597,6 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	 */
 	fpinfo->table = ifpinfo->table;
 	fpinfo->server = ifpinfo->server;
-	fpinfo->cid = ifpinfo->cid;
 	fpinfo->sca = ifpinfo->sca;
 	merge_fdw_options(fpinfo, ifpinfo, NULL);
 
@@ -775,14 +610,7 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 		return;
 
 	/* Estimate the cost of push down */
-	fdw_estimate_path_cost_size(root,
-								grouped_rel,
-								NIL,
-								NIL,
-								&rows,
-								&width,
-								&startup_cost,
-								&total_cost);
+	fdw_estimate_path_cost_size(root, grouped_rel, NIL, &rows, &width, &startup_cost, &total_cost);
 
 	/* Now update this information in the fpinfo */
 	fpinfo->rows = rows;
