@@ -16,8 +16,8 @@
 #include <nodes/relation.h>
 #endif
 
-extern void fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *param_join_conds,
-										List *pathkeys, double *p_rows, int *p_width,
-										Cost *p_startup_cost, Cost *p_total_cost);
+extern void fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys,
+										double *p_rows, int *p_width, Cost *p_startup_cost,
+										Cost *p_total_cost);
 
 #endif /* TIMESCALEDB_TSL_FDW_ESTIMATE_H */

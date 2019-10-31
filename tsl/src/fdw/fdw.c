@@ -46,9 +46,7 @@ apply_table_options(ForeignTable *table, TsFdwRelInfo *fpinfo)
 	{
 		DefElem *def = (DefElem *) lfirst(lc);
 
-		if (strcmp(def->defname, "use_remote_estimate") == 0)
-			fpinfo->use_remote_estimate = defGetBoolean(def);
-		else if (strcmp(def->defname, "fetch_size") == 0)
+		if (strcmp(def->defname, "fetch_size") == 0)
 			fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
 	}
 }

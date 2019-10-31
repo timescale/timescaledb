@@ -78,9 +78,6 @@ typedef struct TsFdwRelInfo
 	Cost rel_total_cost;
 	double rel_retrieved_rows;
 
-	/* Options extracted from catalogs. */
-	bool use_remote_estimate;
-
 	/* Costs for transferring data across the network */
 	Cost fdw_startup_cost;
 	Cost fdw_tuple_cost;
@@ -89,7 +86,6 @@ typedef struct TsFdwRelInfo
 	/* Cached catalog information. */
 	ForeignTable *table;
 	ForeignServer *server;
-	TSConnectionId cid; /* only set in use_remote_estimate mode */
 
 	int fetch_size; /* fetch size for this remote table */
 

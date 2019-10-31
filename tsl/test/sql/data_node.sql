@@ -50,7 +50,6 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'dat
 
 -- Test altering server command is blocked
 \set ON_ERROR_STOP 0
-ALTER SERVER data_node_1 OPTIONS (ADD use_remote_estimate 'true');
 ALTER SERVER data_node_1 OPTIONS (SET fdw_startup_cost '110.0');
 ALTER SERVER data_node_1 OPTIONS (DROP sslmode);
 ALTER SERVER data_node_1 RENAME TO data_node_k;
