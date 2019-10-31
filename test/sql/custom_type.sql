@@ -23,10 +23,7 @@ CREATE TYPE customtype (
  OUTPUT = customtype_out,
  RECEIVE = customtype_recv,
  SEND = customtype_send,
- INTERNALLENGTH = 8,
- PASSEDBYVALUE,
- ALIGNMENT = double,
- STORAGE = plain
+ LIKE = TIMESTAMPTZ
 );
 
 CREATE CAST (customtype AS bigint)
