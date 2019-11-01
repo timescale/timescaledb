@@ -28,9 +28,9 @@
 
 #include "compat.h"
 #include "compression/create.h"
-#include "decompress_chunk/decompress_chunk.h"
-#include "decompress_chunk/planner.h"
-#include "decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/exec.h"
 #include "planner_import.h"
 #include "guc.h"
 #include "custom_type_cache.h"

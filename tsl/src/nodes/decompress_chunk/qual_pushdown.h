@@ -6,7 +6,7 @@
 
 #include <postgres.h>
 
-#include "decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 
 void pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
 					List *compression_info);

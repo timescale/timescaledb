@@ -28,9 +28,9 @@
 #include "compat.h"
 #include "compression/array.h"
 #include "compression/compression.h"
-#include "decompress_chunk/decompress_chunk.h"
-#include "decompress_chunk/exec.h"
-#include "decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/planner.h"
 #include "hypertable_compression.h"
 
 typedef enum DecompressChunkColumnType

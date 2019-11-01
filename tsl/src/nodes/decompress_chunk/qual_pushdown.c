@@ -19,8 +19,8 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
-#include "decompress_chunk/decompress_chunk.h"
-#include "decompress_chunk/qual_pushdown.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/qual_pushdown.h"
 #include "hypertable_compression.h"
 #include "compression/create.h"
 #include "custom_type_cache.h"
