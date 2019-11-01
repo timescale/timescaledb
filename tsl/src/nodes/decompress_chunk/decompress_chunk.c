@@ -27,9 +27,9 @@
 #include "hypertable.h"
 #include "hypertable_compression.h"
 #include "compression/create.h"
-#include "decompress_chunk/decompress_chunk.h"
-#include "decompress_chunk/planner.h"
-#include "decompress_chunk/qual_pushdown.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/qual_pushdown.h"
 #include "utils.h"
 
 #define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01

@@ -31,7 +31,7 @@
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
-#include "decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/planner.h"
 #include "process_utility.h"
 #include "hypertable.h"
 #include "compression/create.h"
