@@ -126,7 +126,7 @@ DROP DATABASE bootstrap_test;
 
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
- LC_COLLATE 'sv_SE.UTF-8'
+ LC_COLLATE 'C.UTF-8'
    LC_CTYPE :ctype
    TEMPLATE template0
       OWNER :ROLE_CLUSTER_SUPERUSER;
@@ -148,7 +148,7 @@ DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
  LC_COLLATE :coll
-   LC_CTYPE 'sv_SE.UTF-8'
+   LC_CTYPE 'C.UTF-8'
    TEMPLATE template0
       OWNER :ROLE_CLUSTER_SUPERUSER;
 
