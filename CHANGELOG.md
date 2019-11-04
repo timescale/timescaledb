@@ -215,10 +215,17 @@ indexes and updates from previous versions.
 * @84660320 for reporting an issue with bloom indexes
 * @gumshoes @perhamm @jermudgeon @gmisagm for reporting the issue with updates
 
-## 2.0.0-beta2 (2019-10-22)
+## 2.0.0-beta3 (2019-11-05)
 
 **For beta releases**, upgrading from an earlier version of the
 extension (including previous beta releases) is not supported.
+
+This release improves performance for queries executed on distributed
+hypertables, fixes minor issues and blocks a number of SQL API
+functions, which are not supported on distributed hypertables. It also
+adds information about distributed databases in the telemetry.
+
+## 2.0.0-beta2 (2019-10-22)
 
 This release introduces *distributed hypertables*, a major new
 feature that allows hypertables to scale out across multiple nodes for
