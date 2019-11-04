@@ -37,9 +37,8 @@ TS_FUNCTION_INFO_V1(ts_remote_exec);
  * temporary file stream and then read the result back.
  */
 static void
-print_result(int elevel, const char *server_name, AsyncResponseResult *result)
+print_result(int elevel, const char *server_name, const PGresult *pg_result)
 {
-	PGresult *pg_result = async_response_result_get_pg_result(result);
 	FILE *result_stream;
 	File tmpfile;
 	char *result_text = NULL;
@@ -49,6 +48,13 @@ print_result(int elevel, const char *server_name, AsyncResponseResult *result)
 		.align = 1,
 		.fieldSep = "|",
 	};
+
+	/* elevel is used to specify where to print the result, which is not an error */
+	Assert(elevel < ERROR);
+
+	/* If no result to print, i.e., no fields in the result, skip the rest */
+	if (PQnfields(pg_result) == 0)
+		return;
 
 	/* Open a temporary file for reading */
 	tmpfile = OpenTemporaryFile(false);
@@ -137,21 +143,27 @@ query_is_empty(const char *query)
 	return true;
 }
 
+#ifdef WIN32
+#define strtok_r strtok_s
+#endif
+
 static void
 split_query_and_execute(TSConnection *conn, const char *server_name, const char *sql)
 {
 	AsyncResponseResult *result;
 	char *sql_copy = pstrdup(sql);
+	char *saveptr = NULL;
 	char *query;
 
-	query = strtok(sql_copy, ";");
-	for (; query; query = strtok(NULL, ";"))
+	query = strtok_r(sql_copy, ";", &saveptr);
+
+	for (; query; query = strtok_r(NULL, ";", &saveptr))
 	{
 		if (query_is_empty(query))
 			break;
 		elog(NOTICE, "[%s]: %s", server_name, query);
 		result = async_request_wait_ok_result(async_request_send(conn, query));
-		print_result(NOTICE, server_name, result);
+		print_result(NOTICE, server_name, async_response_result_get_pg_result(result));
 		async_response_result_close(result);
 	}
 
