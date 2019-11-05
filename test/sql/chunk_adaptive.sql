@@ -126,7 +126,7 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
 
-SELECT * FROM chunk_relation_size('test_adaptive');
+SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive');
 
 -- Do same thing without an index on the time column. This affects
 -- both the calculation of fill-factor of the chunk and its size
@@ -145,7 +145,7 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
 
-SELECT * FROM chunk_relation_size('test_adaptive_no_index');
+SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive_no_index');
 
 -- Test added to check that the correct index (i.e. time index) is being used
 -- to find the min and max. Previously a bug selected the first index listed,
