@@ -60,51 +60,41 @@ docker_exec() {
     docker exec -it $1 /bin/bash -c "$2"
 }
 
-wait_for_pg() {
-    set +e
-    for i in {1..30}; do
-        sleep 2
-
-        docker_exec $1 "pg_isready -U postgres"
-
-        if [[ $? == 0 ]] ; then
-            # this makes the test less flaky, although not
-            # ideal. Apperently, pg_isready is not always a good
-            # indication of whether the DB is actually ready to accept
-            # queries
-            sleep 1
-            set -e
-            return 0
-        fi
-    done
-    exit 1
-}
-
-
 docker rm -f timescaledb-san 2>/dev/null || true
 
 docker run -d --privileged --name timescaledb-san -v ${TIMESCALE_DIR}:/timescaledb ${REMOTE_ORG}/${REMOTE_NAME}:${REMOTE_TAG}
 
-docker exec timescaledb-san /bin/bash -c "mkdir /tsdb_build && chown postgres /tsdb_build"
+# Run these commands as root to copy the source into the
+# container. Make sure that all files in the copy is owned by user
+# 'postgres', which we use to run tests below.
+docker exec -i timescaledb-san /bin/bash -Oe <<EOF
+mkdir /tsdb_build
+chown postgres /tsdb_build
+cp -R /timescaledb tsdb_build
+chown -R postgres:postgres /tsdb_build
+EOF
 
-docker exec -u postgres timescaledb-san /bin/bash -c "cp -R /timescaledb tsdb_build"
+# Build TimescaleDB as 'postgres' user
+docker exec -i -u postgres -w /tsdb_build/timescaledb timescaledb-san /bin/bash -Oe <<EOF
+export CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O2"
+export PG_SOURCE_DIR="/usr/src/postgresql/"
+export BUILD_FORCE_REMOVE=true
+./bootstrap -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1
+cd build
+make
+EOF
 
-docker exec -u postgres \
-    -e CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O2" \
-    -e PG_SOURCE_DIR="/usr/src/postgresql/" \
-    timescaledb-san /bin/bash -c \
-    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1 && cd build && make"
-
-wait_for_pg timescaledb-san
-
-docker exec timescaledb-san /bin/bash -c "cd /tsdb_build/timescaledb/build && make install"
+# Install TimescaleDB as root
+docker exec -i -w /tsdb_build/timescaledb/build timescaledb-san /bin/bash <<EOF
+make install
+EOF
 
 echo "Testing"
 
 # Echo to stderr
 >&2 echo -e "\033[1m$1\033[0m: $2"
-docker exec -u postgres \
-    timescaledb-san /bin/bash -c \
-    "cd /tsdb_build/timescaledb/build \
-        && PATH=\$PATH make -k regresscheck regresscheck-t \
-            IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'"
+
+# Run tests as 'postgres' user
+docker exec -i -u postgres -w /tsdb_build/timescaledb/build timescaledb-san /bin/bash <<EOF
+make -k regresscheck regresscheck-t IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
+EOF
