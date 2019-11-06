@@ -310,6 +310,20 @@ jobs:
       script:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg10.sh
 
+    # This tests the ability to upgrade to the latest version on pg 11
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+      stage: test
+      env: PG_VERSION=11.0
+      name: "Update tests PostgreSQL 11.0"
+      before_install:
+      install:
+      after_failure:
+      after_script:
+      after_success:
+      script:
+        - ${RETRY_PREFIX} bash ./scripts/test_updates_pg11.sh
+
+
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ABI breakage smoketest 9.6"
