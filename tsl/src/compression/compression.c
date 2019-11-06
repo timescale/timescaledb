@@ -15,6 +15,7 @@
 #include <catalog/pg_type.h>
 #include <catalog/index.h>
 #include <catalog/heap.h>
+#include <executor/tuptable.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
@@ -32,6 +33,8 @@
 #include <base64_compat.h>
 #include <catalog.h>
 #include <utils.h>
+
+#include <compat.h>
 
 #include "array.h"
 #include "deltadelta.h"
@@ -79,7 +82,7 @@ typedef struct SegmentInfo
 {
 	Datum val;
 	FmgrInfo eq_fn;
-	FunctionCallInfoData eq_fcinfo;
+	FunctionCallInfo eq_fcinfo;
 	int16 typlen;
 	bool is_null;
 	bool typ_by_val;
@@ -163,8 +166,10 @@ truncate_relation(Oid table_oid)
 	List *fks = heap_truncate_find_FKs(list_make1_oid(table_oid));
 	/* Take an access exclusive lock now. Note that this may very well
 	 *  be a lock upgrade. */
-	Relation rel = relation_open(table_oid, AccessExclusiveLock);
+	Relation rel = table_open(table_oid, AccessExclusiveLock);
+#if PG12_LT
 	MultiXactId minmulti;
+#endif
 	Oid toast_relid;
 
 	/* Chunks should never have fks into them, but double check */
@@ -172,21 +177,36 @@ truncate_relation(Oid table_oid)
 		elog(ERROR, "found a FK into a chunk while truncating");
 
 	CheckTableForSerializableConflictIn(rel);
-
+#if PG12_LT
 	minmulti = GetOldestMultiXactId();
+#endif
 
-	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence, RecentXmin, minmulti);
+	RelationSetNewRelfilenode(rel,
+							  rel->rd_rel->relpersistence
+#if PG12_LT
+							  ,
+							  RecentXmin,
+							  minmulti
+#endif
+	);
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	if (OidIsValid(toast_relid))
 	{
-		rel = relation_open(toast_relid, AccessExclusiveLock);
-		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence, RecentXmin, minmulti);
+		rel = table_open(toast_relid, AccessExclusiveLock);
+		RelationSetNewRelfilenode(rel,
+								  rel->rd_rel->relpersistence
+#if PG12_LT
+								  ,
+								  RecentXmin,
+								  minmulti
+#endif
+		);
 		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
-		heap_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);
@@ -204,13 +224,13 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	 * We may as well allow readers to keep reading the uncompressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation in_rel = relation_open(in_table, ExclusiveLock);
+	Relation in_rel = table_open(in_table, ExclusiveLock);
 	/* we are _just_ INSERTing into the out_table so in principle we could take
 	 * a RowExclusive lock, and let other operations read and write this table
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
 	 */
-	Relation out_rel = relation_open(out_table, ExclusiveLock);
+	Relation out_rel = table_open(out_table, ExclusiveLock);
 	// TODO error if out_rel is non-empty
 	// TODO typecheck the output types
 	int16 *in_column_offsets = compress_chunk_populate_keys(in_table,
@@ -311,8 +331,8 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	TupleDesc tupDesc = RelationGetDescr(in_rel);
 	Tuplesortstate *tuplesortstate;
 	HeapTuple tuple;
-	HeapScanDesc heapScan;
-	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlotCompat(tupDesc);
+	TableScanDesc heapScan;
+	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlotCompat(tupDesc, TTSOpsHeapTupleP);
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -334,12 +354,12 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 										  sort_collations,
 										  nulls_first,
 										  work_mem,
-#if PG11
+#if PG11_GE
 										  NULL,
 #endif
 										  false /*=randomAccess*/);
 
-	heapScan = heap_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+	heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 	for (tuple = heap_getnext(heapScan, ForwardScanDirection); tuple != NULL;
 		 tuple = heap_getnext(heapScan, ForwardScanDirection))
 	{
@@ -348,7 +368,12 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 			// TODO is this the most efficient way to do this?
 			//     (since we use begin_heap() the tuplestore expects tupleslots,
 			//      so ISTM that the options are this or maybe putdatum())
+#if PG12_LT
 			ExecStoreTuple(tuple, heap_tuple_slot, InvalidBuffer, false);
+#else
+			ExecStoreHeapTuple(tuple, heap_tuple_slot, false);
+#endif
+
 			tuplesort_puttupleslot(tuplesortstate, heap_tuple_slot);
 		}
 	}
@@ -534,7 +559,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 								  TupleDesc sorted_desc)
 {
 	CommandId mycid = GetCurrentCommandId(true);
-	TupleTableSlot *slot = MakeTupleTableSlotCompat(sorted_desc);
+	TupleTableSlot *slot = MakeTupleTableSlotCompat(sorted_desc, TTSOpsMinimalTupleP);
 	bool got_tuple;
 	bool first_iteration = true;
 
@@ -833,7 +858,8 @@ segment_info_new(Form_pg_attribute column_attr)
 		elog(ERROR, "no equality function for column \"%s\"", NameStr(column_attr->attname));
 	fmgr_info_cxt(eq_fn_oid, &segment_info->eq_fn, CurrentMemoryContext);
 
-	InitFunctionCallInfoData(segment_info->eq_fcinfo,
+	segment_info->eq_fcinfo = HEAP_FCINFO(2);
+	InitFunctionCallInfoData(*segment_info->eq_fcinfo,
 							 &segment_info->eq_fn /*=Flinfo*/,
 							 2 /*=Nargs*/,
 							 column_attr->attcollation /*=Collation*/,
@@ -858,7 +884,7 @@ static bool
 segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null)
 {
 	Datum data_is_eq;
-	FunctionCallInfoData *eq_fcinfo;
+	FunctionCallInfo eq_fcinfo;
 	/* if one of the datums is null and the other isn't, we must be in a new group */
 	if (segment_info->is_null != is_null)
 		return false;
@@ -868,12 +894,10 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 		return true;
 
 	/* neither is null, call the eq function */
-	eq_fcinfo = &segment_info->eq_fcinfo;
-	eq_fcinfo->arg[0] = segment_info->val;
-	eq_fcinfo->argnull[0] = false;
+	eq_fcinfo = segment_info->eq_fcinfo;
 
-	eq_fcinfo->arg[1] = datum;
-	eq_fcinfo->isnull = false;
+	FC_SET_ARG(eq_fcinfo, 0, segment_info->val);
+	FC_SET_ARG(eq_fcinfo, 1, datum);
 
 	data_is_eq = FunctionCallInvoke(eq_fcinfo);
 
@@ -948,13 +972,13 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
 	 */
-	Relation out_rel = relation_open(out_table, ExclusiveLock);
+	Relation out_rel = table_open(out_table, ExclusiveLock);
 	/*We want to prevent other decompressors from decompressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our decompression.
 	 * We may as well allow readers to keep reading the compressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation in_rel = relation_open(in_table, ExclusiveLock);
+	Relation in_rel = table_open(in_table, ExclusiveLock);
 	// TODO error if out_rel is non-empty
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
@@ -987,7 +1011,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 		bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * in_desc->natts);
 
 		HeapTuple compressed_tuple;
-		HeapScanDesc heapScan = heap_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+		TableScanDesc heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 		MemoryContext per_compressed_row_ctx =
 			AllocSetContextCreate(CurrentMemoryContext,
 								  "decompress chunk per-compressed row",

@@ -72,6 +72,7 @@ set(SOLO_TESTS
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
+  alternate_users-12
   net
   pg_dump_unprivileged
   telemetry

@@ -15,7 +15,6 @@
 #include <optimizer/paths.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -23,6 +22,12 @@
 #include <miscadmin.h>
 
 #include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
+
 #include "chunk.h"
 #include "hypertable.h"
 #include "hypertable_compression.h"
@@ -1016,12 +1021,15 @@ static RangeTblEntry *
 decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 {
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
-	Relation r = heap_open(compressed_relid, lockmode);
+	Relation r = table_open(compressed_relid, lockmode);
 	int varattno;
 
 	rte->rtekind = RTE_RELATION;
 	rte->relid = compressed_relid;
 	rte->relkind = r->rd_rel->relkind;
+#if PG12
+	rte->rellockmode = lockmode;
+#endif
 	rte->eref = makeAlias(RelationGetRelationName(r), NULL);
 
 	/*
@@ -1048,7 +1056,7 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	heap_close(r, NoLock);
+	table_close(r, NoLock);
 
 	/*
 	 * Set flags and access permissions.

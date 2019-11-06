@@ -155,16 +155,16 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               |                                                               Definition                                                               
--------------------+------+--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------
- restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+      Trigger      | Type |               Function               |                                                              Definition                                                               
+-------------------+------+--------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
+ restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION test_trigger()
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                       Definition                                                       
------------------+------+--------------+------------------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+     Trigger     | Type |   Function   |                                                      Definition                                                       
+-----------------+------+--------------+-----------------------------------------------------------------------------------------------------------------------
+ restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE FUNCTION test_trigger()
 (1 row)
 
 SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
@@ -264,11 +264,11 @@ INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uui
 -- environmental variables that originally called this psql command. Sadly
 -- vars passed to psql do not work in \! commands so we can't do it that way.
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -399,16 +399,16 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               |                                                               Definition                                                               
--------------------+------+--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------
- restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+      Trigger      | Type |               Function               |                                                              Definition                                                               
+-------------------+------+--------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
+ restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION test_trigger()
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                       Definition                                                       
------------------+------+--------------+------------------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+     Trigger     | Type |   Function   |                                                      Definition                                                       
+-----------------+------+--------------+-----------------------------------------------------------------------------------------------------------------------
+ restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE FUNCTION test_trigger()
 (1 row)
 
 --data should be the same
@@ -531,7 +531,8 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         refobjid = (select oid from pg_extension where extname='timescaledb') AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
-        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');
+        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
+        ORDER BY objid::text DESC;
                         objid                        
 -----------------------------------------------------
  timescaledb_information.compressed_hypertable_stats

@@ -19,6 +19,8 @@
 #include "bgw/job.h"
 #include "scan_iterator.h"
 
+#include "compat.h"
+
 static ScanTupleResult
 bgw_policy_reorder_tuple_found(TupleInfo *ti, void *const data)
 {
@@ -129,10 +131,10 @@ void
 ts_bgw_policy_reorder_insert(BgwPolicyReorder *policy)
 {
 	Catalog *catalog = ts_catalog_get();
-	Relation rel = heap_open(catalog_get_table_id(catalog, BGW_POLICY_REORDER), RowExclusiveLock);
+	Relation rel = table_open(catalog_get_table_id(catalog, BGW_POLICY_REORDER), RowExclusiveLock);
 
 	ts_bgw_policy_reorder_insert_with_relation(rel, policy);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 TSDLLEXPORT int32

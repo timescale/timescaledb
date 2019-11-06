@@ -18,6 +18,8 @@
 #include "metadata.h"
 #include "scanner.h"
 
+#include "compat.h"
+
 #define TYPE_ERROR(inout, typeid)                                                                  \
 	elog(ERROR, "ts_metadata: no %s function for type %u", inout, typeid);
 
@@ -143,7 +145,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
-	rel = heap_open(catalog_get_table_id(catalog, METADATA), ShareRowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, METADATA), ShareRowExclusiveLock);
 
 	/* Check for row existence while we have the lock */
 	existing_value = metadata_get_value_internal(metadata_key,
@@ -154,7 +156,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 
 	if (!isnull)
 	{
-		heap_close(rel, ShareRowExclusiveLock);
+		table_close(rel, ShareRowExclusiveLock);
 		return existing_value;
 	}
 
@@ -168,7 +170,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 
-	heap_close(rel, ShareRowExclusiveLock);
+	table_close(rel, ShareRowExclusiveLock);
 
 	return metadata_value;
 }

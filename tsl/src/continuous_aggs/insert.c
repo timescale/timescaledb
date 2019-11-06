@@ -35,6 +35,8 @@
 
 #include "continuous_aggs/insert.h"
 
+#include "compat.h"
+
 /*
  * When tuples in a hypertable that has a continuous aggregate are modified, the
  * lowest modified value and the greatest modified value must be tracked over
@@ -113,7 +115,10 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	datum = heap_getattr(tuple, col, tupdesc, &isnull);
 
 	if (NULL != d->partitioning)
-		datum = ts_partitioning_func_apply(d->partitioning, datum);
+	{
+		Oid collation = TupleDescAttr(tupdesc, col)->attcollation;
+		datum = ts_partitioning_func_apply(d->partitioning, collation, datum);
+	}
 
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
@@ -417,8 +422,8 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
 
 	Assert(entry->lowest_modified_value <= entry->greatest_modified_value);
 
-	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
-					RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
+					 RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	values[AttrNumberGetAttrOffset(
@@ -441,5 +446,5 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
 	/* Lock will be released by the transaction end. Since this is called on the
 	 * commit hook, this should be soon.
 	 */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 }

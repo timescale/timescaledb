@@ -51,10 +51,13 @@
 #include <utils/relmapper.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
-#include <utils/tqual.h>
 #include <utils/tuplesort.h>
 
 #include "compat.h"
+#if PG12_LT
+#include <utils/tqual.h>
+#endif
+
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
@@ -73,8 +76,10 @@ static void copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool
 						   bool *pSwapToastByContent, TransactionId *pFreezeXid,
 						   MultiXactId *pCutoffMulti);
 
+#if PG12_LT
 static void reform_and_rewrite_tuple(HeapTuple tuple, TupleDesc oldTupDesc, TupleDesc newTupDesc,
 									 Datum *values, bool *isnull, RewriteState rwstate);
+#endif
 
 static void finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids,
 							  List *new_index_oids, bool swap_toast_by_content, bool is_internal,
@@ -357,10 +362,12 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("can only reorder a relation.")));
 
+#if PG12_LT
 	if (OldHeap->rd_rel->relhasoids)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot reorder a table with OIDs.")));
+#endif
 
 	/*
 	 * Check that the index still exists
@@ -410,7 +417,7 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 							   destination_tablespace,
 							   index_tablespace);
 
-	/* NB: timescale_rebuild_relation does heap_close() on OldHeap */
+	/* NB: timescale_rebuild_relation does table_close() on OldHeap */
 }
 
 /*
@@ -443,7 +450,7 @@ timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wai
 	relpersistence = OldHeap->rd_rel->relpersistence;
 
 	/* Close relcache entry, but keep lock until transaction commit */
-	heap_close(OldHeap, NoLock);
+	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
 	OIDNewHeap = make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock);
@@ -497,27 +504,29 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	int natts;
 	Datum *values;
 	bool *isnull;
-	IndexScanDesc indexScan;
-	HeapScanDesc heapScan;
 	bool use_wal;
 	TransactionId OldestXmin;
 	TransactionId FreezeXid;
 	MultiXactId MultiXactCutoff;
 	RewriteState rwstate;
 	bool use_sort;
-	Tuplesortstate *tuplesort;
 	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
 	BlockNumber num_pages;
 	int elevel = verbose ? INFO : DEBUG2;
 	PGRUsage ru0;
+#if PG12_LT
+	IndexScanDesc indexScan;
+	TableScanDesc heapScan;
+	Tuplesortstate *tuplesort;
+#endif
 
 	pg_rusage_init(&ru0);
 
 	/*
 	 * Open the relations we need.
 	 */
-	NewHeap = heap_open(OIDNewHeap, AccessExclusiveLock);
-	OldHeap = heap_open(OIDOldHeap, ExclusiveLock);
+	NewHeap = table_open(OIDNewHeap, AccessExclusiveLock);
+	OldHeap = table_open(OIDOldHeap, ExclusiveLock);
 
 	if (OidIsValid(OIDOldIndex))
 		OldIndex = index_open(OIDOldIndex, ExclusiveLock);
@@ -642,12 +651,43 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	else
 		use_sort = false;
 
+	/* Log what we're doing */
+	if (OldIndex != NULL && !use_sort)
+		ereport(elevel,
+				(errmsg("reordering \"%s.%s\" using index scan on \"%s\"",
+						get_namespace_name(RelationGetNamespace(OldHeap)),
+						RelationGetRelationName(OldHeap),
+						RelationGetRelationName(OldIndex))));
+	else if (use_sort)
+		ereport(elevel,
+				(errmsg("reordering \"%s.%s\" using sequential scan and sort",
+						get_namespace_name(RelationGetNamespace(OldHeap)),
+						RelationGetRelationName(OldHeap))));
+	else
+		ereport(ERROR,
+				(errmsg("tried to use a reorder without an index \"%s.%s\"",
+						get_namespace_name(RelationGetNamespace(OldHeap)),
+						RelationGetRelationName(OldHeap))));
+
+#if PG12
+	table_relation_copy_for_cluster(OldHeap,
+									NewHeap,
+									OldIndex,
+									use_sort,
+									OldestXmin,
+									&FreezeXid,
+									&MultiXactCutoff,
+									&num_tuples,
+									&tups_vacuumed,
+									&tups_recently_dead);
+#else
+
 	/* Set up sorting if wanted */
 	if (use_sort)
 		tuplesort = tuplesort_begin_cluster(oldTupDesc,
 											OldIndex,
 											maintenance_work_mem,
-#if PG11
+#if PG11_GE
 											NULL,
 #endif
 											false);
@@ -670,24 +710,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 		heapScan = heap_beginscan(OldHeap, SnapshotAny, 0, (ScanKey) NULL);
 		indexScan = NULL;
 	}
-
-	/* Log what we're doing */
-	if (indexScan != NULL)
-		ereport(elevel,
-				(errmsg("reordering \"%s.%s\" using index scan on \"%s\"",
-						get_namespace_name(RelationGetNamespace(OldHeap)),
-						RelationGetRelationName(OldHeap),
-						RelationGetRelationName(OldIndex))));
-	else if (tuplesort != NULL)
-		ereport(elevel,
-				(errmsg("reordering \"%s.%s\" using sequential scan and sort",
-						get_namespace_name(RelationGetNamespace(OldHeap)),
-						RelationGetRelationName(OldHeap))));
-	else
-		ereport(ERROR,
-				(errmsg("tried to use a reorder without an index \"%s.%s\"",
-						get_namespace_name(RelationGetNamespace(OldHeap)),
-						RelationGetRelationName(OldHeap))));
 
 	/*
 	 * Scan through the OldHeap, either in OldIndex order or sequentially;
@@ -835,7 +857,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	/* Write out any remaining tuples, and fsync if needed */
 	end_heap_rewrite(rwstate);
-
+#endif
 	/* Reset rd_toastoid just to be tidy --- it shouldn't be looked at again */
 	NewHeap->rd_toastoid = InvalidOid;
 
@@ -859,11 +881,11 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	if (OldIndex != NULL)
 		index_close(OldIndex, NoLock);
-	heap_close(OldHeap, NoLock);
-	heap_close(NewHeap, NoLock);
+	table_close(OldHeap, NoLock);
+	table_close(NewHeap, NoLock);
 
 	/* Update pg_class to reflect the correct values of pages and tuples. */
-	relRelation = heap_open(RelationRelationId, RowExclusiveLock);
+	relRelation = table_open(RelationRelationId, RowExclusiveLock);
 
 	reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(OIDNewHeap));
 	if (!HeapTupleIsValid(reltup))
@@ -879,7 +901,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	/* Clean up. */
 	heap_freetuple(reltup);
-	heap_close(relRelation, RowExclusiveLock);
+	table_close(relRelation, RowExclusiveLock);
 
 	/* Make the update visible */
 	CommandCounterIncrement();
@@ -912,9 +934,9 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 	 */
 	if (OidIsValid(wait_id))
 	{
-		Relation waiter = heap_open(wait_id, AccessExclusiveLock);
+		Relation waiter = table_open(wait_id, AccessExclusiveLock);
 
-		heap_close(waiter, AccessExclusiveLock);
+		table_close(waiter, AccessExclusiveLock);
 	}
 #endif
 
@@ -949,7 +971,7 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("could not set deadlock_timeout guc.")));
 
-	oldHeapRel = heap_open(OIDOldHeap, AccessExclusiveLock);
+	oldHeapRel = table_open(OIDOldHeap, AccessExclusiveLock);
 
 	/*
 	 * All predicate locks on the tuples or pages are about to be made
@@ -984,7 +1006,9 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 							frozenXid,
 							cutoffMulti);
 	}
-	heap_close(oldHeapRel, NoLock);
+	table_close(oldHeapRel, NoLock);
+
+	CommandCounterIncrement();
 
 	/* Destroy new heap with old filenode */
 	object.classId = RelationRelationId;
@@ -1013,7 +1037,7 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 	{
 		Relation newrel;
 
-		newrel = heap_open(OIDOldHeap, NoLock);
+		newrel = table_open(OIDOldHeap, NoLock);
 		if (OidIsValid(newrel->rd_rel->reltoastrelid))
 		{
 			Oid toastidx;
@@ -1024,15 +1048,25 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 
 			/* rename the toast table ... */
 			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u", OIDOldHeap);
-			RenameRelationInternal(newrel->rd_rel->reltoastrelid, NewToastName, true);
+			RenameRelationInternalCompat(newrel->rd_rel->reltoastrelid, NewToastName, true, false);
 
 			/* ... and its valid index too. */
 			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u_index", OIDOldHeap);
 
-			RenameRelationInternal(toastidx, NewToastName, true);
+			RenameRelationInternalCompat(toastidx, NewToastName, true, true);
 		}
 		relation_close(newrel, NoLock);
 	}
+#if PG12
+	/* it's not a catalog table, clear any missing attribute settings */
+	{
+		Relation newrel;
+
+		newrel = table_open(OIDOldHeap, NoLock);
+		RelationClearMissing(newrel);
+		relation_close(newrel, NoLock);
+	}
+#endif
 }
 
 /*
@@ -1068,7 +1102,7 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	char swptmpchr;
 
 	/* We need writable copies of both pg_class tuples. */
-	relRelation = heap_open(RelationRelationId, RowExclusiveLock);
+	relRelation = table_open(RelationRelationId, RowExclusiveLock);
 
 	reltup1 = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(r1));
 	if (!HeapTupleIsValid(reltup1))
@@ -1273,7 +1307,7 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	heap_freetuple(reltup1);
 	heap_freetuple(reltup2);
 
-	heap_close(relRelation, RowExclusiveLock);
+	table_close(relRelation, RowExclusiveLock);
 
 	/*
 	 * Close both relcache entries' smgr links.  We need this kludge because
@@ -1295,6 +1329,7 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	RelationCloseSmgrByOid(r2);
 }
 
+#if PG12_LT
 /*
  * Reconstruct and rewrite the given tuple
  *
@@ -1334,3 +1369,4 @@ reform_and_rewrite_tuple(HeapTuple tuple, TupleDesc oldTupDesc, TupleDesc newTup
 
 	heap_freetuple(copiedTuple);
 }
+#endif

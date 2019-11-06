@@ -33,6 +33,9 @@ typedef struct ChunkDispatchState
 	 * for each chunk.
 	 */
 	ChunkDispatch *dispatch;
+#if PG12
+	TupleTableSlot *slot;
+#endif
 } ChunkDispatchState;
 
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"

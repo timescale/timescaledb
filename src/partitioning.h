@@ -51,7 +51,8 @@ extern PartitioningInfo *ts_partitioning_info_create(const char *schema, const c
 													 const char *partcol, DimensionType dimtype,
 													 Oid relid);
 extern List *ts_partitioning_func_qualified_name(PartitioningFunc *pf);
-extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation,
+													Datum value);
 
 /* NOTE: assume the tuple belongs to the root table, use ts_partitioning_func_apply for chunk tuples
  */

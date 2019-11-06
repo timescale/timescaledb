@@ -16,6 +16,10 @@
 #include "planner_import.h"
 #include "utils.h"
 
+#include "compat.h"
+#if PG12
+#include <optimizer/optimizer.h>
+#endif
 /*
  * This module contains functions for estimating, e.g., the number of groups
  * formed in various grouping expressions that involve time bucketing.

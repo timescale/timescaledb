@@ -8,10 +8,12 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/pg_list.h>
+#if PG12_LT
 #include <nodes/relation.h>
+#include <optimizer/var.h>
+#endif
 #include <optimizer/planner.h>
 #include <optimizer/cost.h>
-#include <optimizer/var.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>

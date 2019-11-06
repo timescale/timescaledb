@@ -16,12 +16,14 @@
 #include "params.h"
 #include "catalog.h"
 
-static char *application_name = "unset";
+#include "compat.h"
+
+static char *bgw_application_name = "unset";
 
 void
 ts_bgw_log_set_application_name(char *name)
 {
-	application_name = name;
+	bgw_application_name = name;
 }
 
 static bool
@@ -34,7 +36,7 @@ bgw_log_insert_relation(Relation rel, char *msg)
 
 	values[0] = Int32GetDatum(msg_no++);
 	values[1] = Int64GetDatum((int64) ts_params_get()->current_time);
-	values[2] = CStringGetTextDatum(application_name);
+	values[2] = CStringGetTextDatum(bgw_application_name);
 	values[3] = CStringGetTextDatum(msg);
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -52,9 +54,9 @@ bgw_log_insert(char *msg)
 	Relation rel;
 	Oid log_oid = get_relname_relid("bgw_log", get_namespace_oid("public", false));
 
-	rel = heap_open(log_oid, RowExclusiveLock);
+	rel = table_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static emit_log_hook_type prev_emit_log_hook = NULL;

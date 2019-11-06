@@ -11,11 +11,9 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <nodes/relation.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/plancat.h>
-#include <optimizer/predtest.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
@@ -26,6 +24,15 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <nodes/relation.h>
+#include <optimizer/predtest.h>
+#else
+#include <nodes/pathnodes.h>
+#include <optimizer/optimizer.h>
+#endif
+
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"

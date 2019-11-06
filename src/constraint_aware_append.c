@@ -24,10 +24,16 @@
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 
+#include "compat.h"
+
+#if PG12_GE
+#include <optimizer/appendinfo.h>
+#include <optimizer/optimizer.h>
+#endif
+
 #include "constraint_aware_append.h"
 #include "hypertable.h"
 #include "chunk_append/transform.h"
-#include "compat.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -135,6 +141,10 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 		.glob = &glob,
 		.parse = &parse,
 	};
+
+#if PG12
+	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+#endif
 
 	switch (nodeTag(subplan))
 	{
@@ -282,6 +292,14 @@ ca_append_exec(CustomScanState *node)
 		if (TupIsNull(subslot))
 			return NULL;
 
+#if PG12
+		if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
+			ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
+
+		ExecCopySlot(state->slot, subslot);
+		subslot = state->slot;
+#endif
+
 		if (!node->ss.ps.ps_ProjInfo)
 			return subslot;
 
@@ -308,6 +326,9 @@ ca_append_end(CustomScanState *node)
 	{
 		ExecEndNode(linitial(node->custom_ps));
 	}
+#if PG12
+	ExecDropSingleTupleTableSlot(((ConstraintAwareAppendState *) node)->slot);
+#endif
 }
 
 static void

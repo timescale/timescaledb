@@ -216,7 +216,7 @@ create_default_indexes(Hypertable *ht, Dimension *time_dim, Dimension *space_dim
 static void
 indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default, bool verify)
 {
-	Relation tblrel = relation_open(ht->main_table_relid, AccessShareLock);
+	Relation tblrel = table_open(ht->main_table_relid, AccessShareLock);
 	Dimension *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 	Dimension *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 	List *indexlist = RelationGetIndexList(tblrel);
@@ -365,7 +365,7 @@ ts_indexing_find_clustered_index(Oid table_relid)
 	ListCell *index;
 	Oid index_relid = InvalidOid;
 
-	rel = heap_open(table_relid, AccessShareLock);
+	rel = table_open(table_relid, AccessShareLock);
 
 	/* We need to find the index that has indisclustered set. */
 	foreach (index, RelationGetIndexList(rel))
@@ -390,7 +390,7 @@ ts_indexing_find_clustered_index(Oid table_relid)
 		index_relid = InvalidOid;
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return index_relid;
 }
@@ -411,7 +411,7 @@ ts_indexing_mark_as(Oid index_id, IndexValidity validity)
 	bool was_valid;
 
 	/* Open pg_index and fetch a writable copy of the index's tuple */
-	pg_index = heap_open(IndexRelationId, RowExclusiveLock);
+	pg_index = table_open(IndexRelationId, RowExclusiveLock);
 
 	indexTuple = SearchSysCacheCopy1(INDEXRELID, ObjectIdGetDatum(index_id));
 
@@ -440,7 +440,7 @@ ts_indexing_mark_as(Oid index_id, IndexValidity validity)
 	/* ... and write it back */
 	CatalogTupleUpdate(pg_index, &indexTuple->t_self, new_tuple);
 
-	heap_close(pg_index, RowExclusiveLock);
+	table_close(pg_index, RowExclusiveLock);
 	return was_valid;
 }
 

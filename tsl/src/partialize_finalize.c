@@ -78,9 +78,9 @@ typedef struct FACombineFnMeta
 	FmgrInfo internal_deserialfn;
 	FmgrInfo combinefn;
 	/* either deserialfn_fcinfo or internal_deserialfn_fcinfo is valid*/
-	FunctionCallInfoData deserialfn_fcinfo;
-	FunctionCallInfoData internal_deserialfn_fcinfo;
-	FunctionCallInfoData combfn_fcinfo;
+	FunctionCallInfo deserialfn_fcinfo;
+	FunctionCallInfo internal_deserialfn_fcinfo;
+	FunctionCallInfo combfn_fcinfo;
 
 } FACombineFnMeta;
 
@@ -89,7 +89,7 @@ typedef struct FAFinalFnMeta
 {
 	Oid finalfnoid;
 	FmgrInfo finalfn;
-	FunctionCallInfoData finalfn_fcinfo;
+	FunctionCallInfo finalfn_fcinfo;
 } FAFinalFnMeta;
 
 /*
@@ -157,7 +157,7 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 					  bool serialized_isnull, bool *deserialized_isnull)
 {
 	Datum deserialized = (Datum) 0;
-	FunctionCallInfoData *deser_fcinfo = &combine_meta->deserialfn_fcinfo;
+	FunctionCallInfo deser_fcinfo = combine_meta->deserialfn_fcinfo;
 	*deserialized_isnull = true;
 	if (OidIsValid(combine_meta->deserialfnoid))
 	{
@@ -166,9 +166,10 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 			PG_RETURN_VOID();
 			/*don't call the deser function */
 		}
-		deser_fcinfo->arg[0] = PointerGetDatum(serialized_partial);
-		deser_fcinfo->argnull[0] = serialized_isnull;
-		combine_meta->deserialfn_fcinfo.isnull = false;
+
+		FC_ARG(deser_fcinfo, 0) = PointerGetDatum(serialized_partial);
+		FC_NULL(deser_fcinfo, 0) = serialized_isnull;
+		combine_meta->deserialfn_fcinfo->isnull = false;
 		deserialized = FunctionCallInvoke(deser_fcinfo);
 		*deserialized_isnull = deser_fcinfo->isnull;
 	}
@@ -176,21 +177,19 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *serialized_partial,
 	{
 		int32 typmod = -1;
 		StringInfo string = makeStringInfo();
+		FunctionCallInfo internal_deserialfn_fcinfo = combine_meta->internal_deserialfn_fcinfo;
 
 		appendBinaryStringInfo(string,
 							   VARDATA_ANY(serialized_partial),
 							   VARSIZE_ANY_EXHDR(serialized_partial));
-		combine_meta->internal_deserialfn_fcinfo.arg[0] = PointerGetDatum(string);
-		combine_meta->internal_deserialfn_fcinfo.arg[1] =
-			ObjectIdGetDatum(combine_meta->typIOParam);
-		combine_meta->internal_deserialfn_fcinfo.arg[2] = Int32GetDatum(typmod);
-		combine_meta->internal_deserialfn_fcinfo.argnull[0] = false;
-		combine_meta->internal_deserialfn_fcinfo.argnull[1] = false;
-		combine_meta->internal_deserialfn_fcinfo.argnull[2] = false;
-		combine_meta->internal_deserialfn_fcinfo.isnull = false;
+		FC_SET_ARG(internal_deserialfn_fcinfo, 0, PointerGetDatum(string));
+		FC_SET_ARG(internal_deserialfn_fcinfo, 1, ObjectIdGetDatum(combine_meta->typIOParam));
+		FC_SET_ARG(internal_deserialfn_fcinfo, 2, Int32GetDatum(typmod));
 
-		deserialized = FunctionCallInvoke(&combine_meta->internal_deserialfn_fcinfo);
-		*deserialized_isnull = combine_meta->internal_deserialfn_fcinfo.isnull;
+		internal_deserialfn_fcinfo->isnull = false;
+
+		deserialized = FunctionCallInvoke(internal_deserialfn_fcinfo);
+		*deserialized_isnull = internal_deserialfn_fcinfo->isnull;
 	}
 	PG_RETURN_DATUM(deserialized);
 }
@@ -245,9 +244,10 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 		type_name = DatumGetName(slice_fields[1]);
 
 		schema_oid = get_namespace_oid(NameStr(*schema), false);
-		type_oid = GetSysCacheOid2(TYPENAMENSP,
-								   PointerGetDatum(NameStr(*type_name)),
-								   ObjectIdGetDatum(schema_oid));
+		type_oid = GetSysCacheOid2Compat(TYPENAMENSP,
+										 Anum_pg_type_oid,
+										 PointerGetDatum(NameStr(*type_name)),
+										 ObjectIdGetDatum(schema_oid));
 		if (!OidIsValid(type_oid))
 			elog(ERROR, "invalid input type: %s.%s", NameStr(*schema), NameStr(*type_name));
 
@@ -311,7 +311,8 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 			 "no valid combine function for the aggregate specified in Timescale finalize call");
 
 	fmgr_info_cxt(tstate->combine_meta.combinefnoid, &tstate->combine_meta.combinefn, qcontext);
-	InitFunctionCallInfoData(tstate->combine_meta.combfn_fcinfo,
+	tstate->combine_meta.combfn_fcinfo = HEAP_FCINFO(2);
+	InitFunctionCallInfoData(*tstate->combine_meta.combfn_fcinfo,
 							 &tstate->combine_meta.combinefn,
 							 2, /* combine fn always has two args */
 							 collation,
@@ -324,7 +325,8 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 		fmgr_info_cxt(tstate->combine_meta.deserialfnoid,
 					  &tstate->combine_meta.deserialfn,
 					  qcontext);
-		InitFunctionCallInfoData(tstate->combine_meta.deserialfn_fcinfo,
+		tstate->combine_meta.deserialfn_fcinfo = HEAP_FCINFO(1);
+		InitFunctionCallInfoData(*tstate->combine_meta.deserialfn_fcinfo,
 								 &tstate->combine_meta.deserialfn,
 								 1, /* deserialize always has 1 arg */
 								 collation,
@@ -341,7 +343,8 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 		fmgr_info_cxt(tstate->combine_meta.recv_fn,
 					  &tstate->combine_meta.internal_deserialfn,
 					  qcontext);
-		InitFunctionCallInfoData(tstate->combine_meta.internal_deserialfn_fcinfo,
+		tstate->combine_meta.internal_deserialfn_fcinfo = HEAP_FCINFO(3);
+		InitFunctionCallInfoData(*tstate->combine_meta.internal_deserialfn_fcinfo,
 								 &tstate->combine_meta.internal_deserialfn,
 								 3,
 								 InvalidOid,
@@ -364,7 +367,8 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 
 		fmgr_info_cxt(tstate->final_meta.finalfnoid, &tstate->final_meta.finalfn, qcontext);
 		/* pass the aggstate information from our current call context */
-		InitFunctionCallInfoData(tstate->final_meta.finalfn_fcinfo,
+		tstate->final_meta.finalfn_fcinfo = HEAP_FCINFO(num_args);
+		InitFunctionCallInfoData(*tstate->final_meta.finalfn_fcinfo,
 								 &tstate->final_meta.finalfn,
 								 num_args,
 								 collation,
@@ -383,10 +387,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 										 &expr);
 			fmgr_info_set_expr((Node *) expr, &tstate->final_meta.finalfn);
 			for (i = 1; i < num_args; i++)
-			{
-				tstate->final_meta.finalfn_fcinfo.arg[i] = (Datum) 0;
-				tstate->final_meta.finalfn_fcinfo.argnull[i] = true;
-			}
+				FC_SET_NULL(tstate->final_meta.finalfn_fcinfo, i);
 		}
 	}
 	fcinfo->flinfo->fn_extra = (void *) tstate;
@@ -404,13 +405,13 @@ static void
 group_state_advance(FAPerGroupState *per_group_state, FACombineFnMeta *combine_meta, Datum newval,
 					bool newval_isnull)
 {
-	combine_meta->combfn_fcinfo.arg[0] = per_group_state->trans_value;
-	combine_meta->combfn_fcinfo.argnull[0] = per_group_state->trans_value_isnull;
-	combine_meta->combfn_fcinfo.arg[1] = newval;
-	combine_meta->combfn_fcinfo.argnull[1] = newval_isnull;
-	combine_meta->combfn_fcinfo.isnull = false;
-	per_group_state->trans_value = FunctionCallInvoke(&combine_meta->combfn_fcinfo);
-	per_group_state->trans_value_isnull = combine_meta->combfn_fcinfo.isnull;
+	FC_ARG(combine_meta->combfn_fcinfo, 0) = per_group_state->trans_value;
+	FC_NULL(combine_meta->combfn_fcinfo, 0) = per_group_state->trans_value_isnull;
+	FC_ARG(combine_meta->combfn_fcinfo, 1) = newval;
+	FC_NULL(combine_meta->combfn_fcinfo, 1) = newval_isnull;
+	combine_meta->combfn_fcinfo->isnull = false;
+	per_group_state->trans_value = FunctionCallInvoke(combine_meta->combfn_fcinfo);
+	per_group_state->trans_value_isnull = combine_meta->combfn_fcinfo->isnull;
 };
 /*
  * The parameters for tsl_finalize_agg_sfunc (see util_aggregates.sql sql input names)
@@ -526,17 +527,15 @@ tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 		if (!(tstate->per_query_state->final_meta.finalfn.fn_strict &&
 			  tstate->per_group_state->trans_value_isnull) &&
 			!(tstate->per_query_state->final_meta.finalfn.fn_strict &&
-			  tstate->per_query_state->final_meta.finalfn_fcinfo.nargs > 1))
+			  tstate->per_query_state->final_meta.finalfn_fcinfo->nargs > 1))
 		{
-			tstate->per_query_state->final_meta.finalfn_fcinfo.arg[0] =
-				tstate->per_group_state->trans_value;
-			tstate->per_query_state->final_meta.finalfn_fcinfo.argnull[0] =
-				tstate->per_group_state->trans_value_isnull;
-			tstate->per_query_state->final_meta.finalfn_fcinfo.isnull = false;
-			tstate->per_group_state->trans_value =
-				FunctionCallInvoke(&tstate->per_query_state->final_meta.finalfn_fcinfo);
-			tstate->per_group_state->trans_value_isnull =
-				tstate->per_query_state->final_meta.finalfn_fcinfo.isnull;
+			FunctionCallInfo finalfn_fcinfo = tstate->per_query_state->final_meta.finalfn_fcinfo;
+			FC_ARG(finalfn_fcinfo, 0) = tstate->per_group_state->trans_value;
+			FC_NULL(finalfn_fcinfo, 0) = tstate->per_group_state->trans_value_isnull;
+			finalfn_fcinfo->isnull = false;
+
+			tstate->per_group_state->trans_value = FunctionCallInvoke(finalfn_fcinfo);
+			tstate->per_group_state->trans_value_isnull = finalfn_fcinfo->isnull;
 		}
 	}
 	MemoryContextSwitchTo(old_context);

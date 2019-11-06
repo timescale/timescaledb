@@ -63,8 +63,8 @@ SELECT histogram(i, 0, 100000, 5) FROM "test";
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 SELECT histogram(i, 10, 100000, 5) FROM "test";
 
-EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
-SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
+EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
+SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
 
 -- test parallel ChunkAppend
 :PREFIX SELECT i FROM "test" WHERE length(version()) > 0;

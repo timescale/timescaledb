@@ -15,7 +15,6 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <optimizer/clauses.h>
-#include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
@@ -25,6 +24,12 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
+
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/locf.h"
 #include "nodes/gapfill/interpolate.h"
@@ -517,8 +522,12 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
+#if PG12_LT
 	state->subslot = NULL;
-	state->scanslot = MakeSingleTupleTableSlot(tupledesc);
+#else
+	state->subslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
+#endif
+	state->scanslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(args)))
@@ -614,11 +623,12 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 			lfirst(list_nth_cell(targetlist, i)) = entry;
 		}
 	}
-	state->pi = ExecBuildProjectionInfoCompat(targetlist,
-											  state->csstate.ss.ps.ps_ExprContext,
-											  MakeSingleTupleTableSlot(tupledesc),
-											  &state->csstate.ss.ps,
-											  NULL);
+	state->pi =
+		ExecBuildProjectionInfoCompat(targetlist,
+									  state->csstate.ss.ps.ps_ExprContext,
+									  MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP),
+									  &state->csstate.ss.ps,
+									  NULL);
 
 	state->csstate.custom_ps = list_make1(ExecInitNode(state->subplan, estate, eflags));
 }
@@ -927,6 +937,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 	 */
 	if (modified)
 	{
+#if PG12_LT
 		if (state->subslot->tts_shouldFree)
 		{
 			heap_freetuple(state->subslot->tts_tuple);
@@ -940,6 +951,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			state->subslot->tts_shouldFreeMin = false;
 		}
 		state->subslot->tts_mintuple = NULL;
+#endif
 	}
 
 	return state->subslot;
@@ -984,7 +996,15 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	if (!subslot)
 		return NULL;
 
+#if PG12_LT
 	state->subslot = subslot;
+#else
+	/* in PG12 we cannot simply treat an arbitrary source slot as virtual,
+	 * instead we must copy the data into our own slot in order to be able to
+	 * modify it
+	 */
+	ExecCopySlot(state->subslot, subslot);
+#endif
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
 	if (isnull)
 		ereport(ERROR,
@@ -993,7 +1013,7 @@ gapfill_fetch_next_tuple(GapFillState *state)
 
 	state->subslot_time = gapfill_datum_get_internal(time_value, state->gapfill_typid);
 
-	return subslot;
+	return state->subslot;
 }
 
 /*

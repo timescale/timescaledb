@@ -13,7 +13,6 @@
 #include <utils/inet.h>
 #include <utils/cash.h>
 #include <utils/date.h>
-#include <utils/nabstime.h>
 #include <utils/jsonb.h>
 #include <utils/acl.h>
 #include <utils/rangetypes.h>
@@ -238,19 +237,18 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
  * message in case of NULL return values.
  */
 TSDLLEXPORT Datum
-ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
+ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
 {
-	FunctionCallInfoData fcinfo;
+	LOCAL_FCINFO(fcinfo, 1);
 	Datum result;
 
-	InitFunctionCallInfoData(fcinfo, &pinfo->partfunc.func_fmgr, 1, InvalidOid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo, &pinfo->partfunc.func_fmgr, 1, collation, NULL, NULL);
 
-	fcinfo.arg[0] = value;
-	fcinfo.argnull[0] = false;
+	FC_SET_ARG(fcinfo, 0, value);
 
-	result = FunctionCallInvoke(&fcinfo);
+	result = FunctionCallInvoke(fcinfo);
 
-	if (fcinfo.isnull)
+	if (fcinfo->isnull)
 		elog(ERROR,
 			 "partitioning function \"%s.%s\" returned NULL",
 			 pinfo->partfunc.schema,
@@ -265,6 +263,7 @@ ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, Tuple
 {
 	Datum value;
 	bool null;
+	Oid collation;
 
 	value = heap_getattr(tuple, pinfo->column_attnum, desc, &null);
 
@@ -274,7 +273,9 @@ ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, Tuple
 	if (null)
 		return 0;
 
-	return ts_partitioning_func_apply(pinfo, value);
+	collation = TupleDescAttr(desc, pinfo->column_attnum - 1)->attcollation;
+
+	return ts_partitioning_func_apply(pinfo, collation, value);
 }
 
 /*
@@ -429,6 +430,7 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
 	Datum hash;
 	int32 res;
+	Oid collation;
 
 	if (PG_NARGS() != 1)
 		elog(ERROR, "unexpected number of arguments to partitioning function");
@@ -445,7 +447,18 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	if (pfc->tce->hash_proc == InvalidOid)
 		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
 
-	hash = FunctionCall1(&pfc->tce->hash_proc_finfo, arg);
+#if PG12
+	/* use the supplied collation, if it exists, otherwise use the default for
+	 * the type
+	 */
+	collation = PG_GET_COLLATION();
+	if (!OidIsValid(collation))
+		collation = pfc->tce->typcollation;
+#else
+	collation = InvalidOid;
+#endif
+
+	hash = FunctionCall1Coll(&pfc->tce->hash_proc_finfo, collation, arg);
 
 	/* Only positive numbers */
 	res = (int32)(DatumGetUInt32(hash) & 0x7fffffff);

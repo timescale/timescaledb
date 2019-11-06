@@ -17,12 +17,18 @@
 #include <utils/fmgroids.h>
 #include <utils/builtins.h>
 #include <nodes/parsenodes.h>
-#include <optimizer/var.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/cluster.h>
 #include <access/xact.h>
 #include <miscadmin.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 #include "export.h"
 #include "chunk_index.h"
@@ -325,10 +331,10 @@ chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
 	Relation rel;
 	bool result;
 
-	rel = heap_open(catalog_get_table_id(catalog, CHUNK_INDEX), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CHUNK_INDEX), RowExclusiveLock);
 	result =
 		chunk_index_insert_relation(rel, chunk_id, chunk_index, hypertable_id, hypertable_index);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 
 	return result;
 }
@@ -459,10 +465,10 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 	List *indexlist;
 	ListCell *lc;
 
-	htrel = relation_open(hypertable_relid, AccessShareLock);
+	htrel = table_open(hypertable_relid, AccessShareLock);
 
 	/* Need ShareLock on the heap relation we are creating indexes on */
-	chunkrel = relation_open(chunkrelid, ShareLock);
+	chunkrel = table_open(chunkrelid, ShareLock);
 
 	/*
 	 * We should only add those indexes that aren't created from constraints,
@@ -480,7 +486,7 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 	foreach (lc, indexlist)
 	{
 		Oid hypertable_idxoid = lfirst_oid(lc);
-		Relation hypertable_idxrel = relation_open(hypertable_idxoid, AccessShareLock);
+		Relation hypertable_idxrel = index_open(hypertable_idxoid, AccessShareLock);
 
 		chunk_index_create(htrel,
 						   hypertable_id,
@@ -815,7 +821,7 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		namestrcpy(&chunk_index->hypertable_index_name, info->newname);
 
 		/* Rename the chunk index */
-		RenameRelationInternal(chunk_indexrelid, chunk_index_name, false);
+		RenameRelationInternalCompat(chunk_indexrelid, chunk_index_name, false, true);
 	}
 	else
 		namestrcpy(&chunk_index->index_name, info->newname);
@@ -935,11 +941,11 @@ ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const c
 TSDLLEXPORT void
 ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 {
-	Relation rel = heap_open(chunkrelid, AccessShareLock);
+	Relation rel = table_open(chunkrelid, AccessShareLock);
 
 	mark_index_clustered(rel, indexrelid, true);
 	CommandCounterIncrement();
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 TS_FUNCTION_INFO_V1(ts_chunk_index_clone);
@@ -985,12 +991,12 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 	Chunk *src_chunk;
 
 	/* TODO lock order? */
-	src_chunk_rel = heap_open(src_chunkrelid, AccessShareLock);
-	dest_chunk_rel = heap_open(dest_chunkrelid, ShareLock);
+	src_chunk_rel = table_open(src_chunkrelid, AccessShareLock);
+	dest_chunk_rel = table_open(dest_chunkrelid, ShareLock);
 
 	src_chunk = ts_chunk_get_by_relid(src_chunkrelid, 0, true);
 
-	hypertable_rel = heap_open(src_chunk->hypertable_relid, AccessShareLock);
+	hypertable_rel = table_open(src_chunk->hypertable_relid, AccessShareLock);
 
 	index_oids = RelationGetIndexList(src_chunk_rel);
 	foreach (index_elem, index_oids)
@@ -1005,10 +1011,10 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 		new_index_oids = lappend_oid(new_index_oids, new_chunk_indexrelid);
 	}
 
-	heap_close(hypertable_rel, AccessShareLock);
+	table_close(hypertable_rel, AccessShareLock);
 
-	heap_close(dest_chunk_rel, NoLock);
-	heap_close(src_chunk_rel, NoLock);
+	table_close(dest_chunk_rel, NoLock);
+	table_close(src_chunk_rel, NoLock);
 
 	if (src_index_oids != NULL)
 		*src_index_oids = index_oids;
@@ -1036,10 +1042,10 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
 
-	hypertable_rel = heap_open(cim.hypertableoid, AccessShareLock);
+	hypertable_rel = table_open(cim.hypertableoid, AccessShareLock);
 
 	/* Need ShareLock on the heap relation we are creating indexes on */
-	chunk_rel = heap_open(chunk_index_rel->rd_index->indrelid, ShareLock);
+	chunk_rel = table_open(chunk_index_rel->rd_index->indrelid, ShareLock);
 
 	constraint_oid = get_index_constraint(cim.parent_indexoid);
 
@@ -1049,9 +1055,9 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 													   OidIsValid(constraint_oid),
 													   InvalidOid);
 
-	heap_close(chunk_rel, NoLock);
+	table_close(chunk_rel, NoLock);
 
-	heap_close(hypertable_rel, AccessShareLock);
+	table_close(hypertable_rel, AccessShareLock);
 
 	relation_close(chunk_index_rel, AccessShareLock);
 
@@ -1103,7 +1109,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 		performDeletion(&idxobj, DROP_RESTRICT, 0);
 	}
 
-	RenameRelationInternal(chunk_index_oid_new, name, false);
+	RenameRelationInternalCompat(chunk_index_oid_new, name, false, true);
 
 	PG_RETURN_VOID();
 }

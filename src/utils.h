@@ -10,9 +10,16 @@
 #include <fmgr.h>
 #include <access/htup_details.h>
 #include <catalog/pg_proc.h>
-#include <nodes/primnodes.h>
-#include <nodes/relation.h>
 #include <utils/datetime.h>
+
+#include "compat.h"
+
+#include <nodes/primnodes.h>
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 #include "export.h"
 #include "compat.h"

@@ -10,7 +10,7 @@
 #include "compat.h"
 #include "telemetry/uuid.h"
 
-#if !PG96
+#if !PG96 && PG12_LT
 #include <utils/backend_random.h>
 #endif
 

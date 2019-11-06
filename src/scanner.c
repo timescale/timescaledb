@@ -10,6 +10,7 @@
 #include <storage/bufmgr.h>
 #include <utils/rel.h>
 
+#include "compat.h"
 #include "scanner.h"
 
 enum ScannerType
@@ -34,7 +35,7 @@ typedef struct Scanner
 static Relation
 heap_scanner_open(InternalScannerCtx *ctx)
 {
-	ctx->tablerel = heap_open(ctx->sctx->table, ctx->sctx->lockmode);
+	ctx->tablerel = table_open(ctx->sctx->table, ctx->sctx->lockmode);
 	return ctx->tablerel;
 }
 
@@ -43,7 +44,7 @@ heap_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
-	ctx->scan.heap_scan = heap_beginscan(ctx->tablerel, SnapshotSelf, sctx->nkeys, sctx->scankey);
+	ctx->scan.heap_scan = table_beginscan(ctx->tablerel, SnapshotSelf, sctx->nkeys, sctx->scankey);
 	return ctx->scan;
 }
 
@@ -63,14 +64,14 @@ heap_scanner_endscan(InternalScannerCtx *ctx)
 static void
 heap_scanner_close(InternalScannerCtx *ctx)
 {
-	heap_close(ctx->tablerel, ctx->sctx->lockmode);
+	table_close(ctx->tablerel, ctx->sctx->lockmode);
 }
 
 /* Functions implementing index scans */
 static Relation
 index_scanner_open(InternalScannerCtx *ctx)
 {
-	ctx->tablerel = heap_open(ctx->sctx->table, ctx->sctx->lockmode);
+	ctx->tablerel = table_open(ctx->sctx->table, ctx->sctx->lockmode);
 	ctx->indexrel = index_open(ctx->sctx->index, ctx->sctx->lockmode);
 	return ctx->indexrel;
 }
@@ -90,10 +91,19 @@ index_scanner_beginscan(InternalScannerCtx *ctx)
 static bool
 index_scanner_getnext(InternalScannerCtx *ctx)
 {
+	bool success;
+#if PG12_LT
 	ctx->tinfo.tuple = index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
+	success = HeapTupleIsValid(ctx->tinfo.tuple);
+#else /* TODO we should not materialize a HeapTuple unless needed */
+	success = index_getnext_slot(ctx->scan.index_scan, ctx->sctx->scandirection, ctx->tinfo.slot);
+	if (success)
+		ctx->tinfo.tuple = ExecFetchSlotHeapTuple(ctx->tinfo.slot, false, NULL);
+#endif
+
 	ctx->tinfo.ituple = ctx->scan.index_scan->xs_itup;
 	ctx->tinfo.ituple_desc = ctx->scan.index_scan->xs_itupdesc;
-	return HeapTupleIsValid(ctx->tinfo.tuple);
+	return success;
 }
 
 static void
@@ -105,7 +115,7 @@ index_scanner_endscan(InternalScannerCtx *ctx)
 static void
 index_scanner_close(InternalScannerCtx *ctx)
 {
-	heap_close(ctx->tablerel, ctx->sctx->lockmode);
+	table_close(ctx->tablerel, ctx->sctx->lockmode);
 	index_close(ctx->indexrel, ctx->sctx->lockmode);
 }
 
@@ -164,6 +174,9 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 	ictx->tinfo.scanrel = ictx->tablerel;
 	ictx->tinfo.desc = tuple_desc;
 	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
+#if PG12 /* TODO we should not materialize a HeapTuple unless needed */
+	ictx->tinfo.slot = MakeSingleTupleTableSlot(tuple_desc, &TTSOpsBufferHeapTuple);
+#endif
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)
@@ -190,6 +203,9 @@ ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 	scanner->endscan(ictx);
 	scanner->closeheap(ictx);
+#if PG12
+	ExecDropSingleTupleTableSlot(ictx->tinfo.slot);
+#endif
 	ictx->closed = true;
 }
 
@@ -208,7 +224,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 			if (ctx->tuplock.enabled)
 			{
 				Buffer buffer;
-				HeapUpdateFailureData hufd;
+				TM_FailureData hufd;
 
 				ictx->tinfo.lockresult = heap_lock_tuple(ictx->tablerel,
 														 ictx->tinfo.tuple,

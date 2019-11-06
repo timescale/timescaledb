@@ -155,7 +155,7 @@ ts_extension_schema_oid(void)
 	bool is_null = true;
 	Oid schema = InvalidOid;
 
-	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	rel = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
@@ -178,7 +178,7 @@ ts_extension_schema_oid(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (schema == InvalidOid)
 		elog(ERROR, "extension schema not found");

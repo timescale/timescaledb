@@ -230,15 +230,17 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 				/* this is passed down in `process_altertable_set_tablespace_end` */
 			case AT_SetStatistics: /* should this be pushed down in some way? */
 				continue;
-			/*
-			 * BLOCKED:
-			 *
-			 * List things that we want to explicitly block for documentation purposes
-			 * But also block everything else as well.
-			 */
+				/*
+				 * BLOCKED:
+				 *
+				 * List things that we want to explicitly block for documentation purposes
+				 * But also block everything else as well.
+				 */
+#if PG12_LT
 			case AT_AddOids:
 			case AT_DropOids:
 			case AT_AddOidsRecurse:
+#endif
 			case AT_EnableRowSecurity:
 			case AT_DisableRowSecurity:
 			case AT_ForceRowSecurity:
@@ -633,9 +635,14 @@ process_vacuum(ProcessUtilityArgs *args)
 		return false;
 
 	stmt->rels = list_concat(ctx.chunk_rels, stmt->rels);
-	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
+	PreventCommandDuringRecovery((stmt->options && VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
 	/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
-	ExecVacuum(stmt, is_toplevel);
+	ExecVacuum(
+#if PG12
+		args->parse_state,
+#endif
+		stmt,
+		is_toplevel);
 	return true;
 }
 #endif
@@ -1082,7 +1089,8 @@ process_drop(ProcessUtilityArgs *args)
 static void
 reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
-	ReindexStmt *stmt = (ReindexStmt *) arg;
+	ProcessUtilityArgs *args = arg;
+	ReindexStmt *stmt = (ReindexStmt *) args->parsetree;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	switch (stmt->kind)
@@ -1090,7 +1098,13 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		case REINDEX_OBJECT_TABLE:
 			stmt->relation->relname = NameStr(chunk->fd.table_name);
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
-			ReindexTable(stmt->relation, stmt->options);
+			ReindexTable(stmt->relation,
+						 stmt->options
+#if PG12
+						 ,
+						 stmt->concurrent /* TODO test */
+#endif
+			);
 			break;
 		case REINDEX_OBJECT_INDEX:
 			/* Not supported, a.t.m. See note in process_reindex(). */
@@ -1134,7 +1148,7 @@ process_reindex(ProcessUtilityArgs *args)
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
-				if (foreach_chunk(ht, reindex_chunk, stmt) >= 0)
+				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					ret = true;
 
 				process_add_hypertable(args, ht);
@@ -1925,7 +1939,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
-	info.extended_options.ht_hasoid = main_table_desc->tdhasoid;
+	info.extended_options.ht_hasoid = TupleDescHasOids(main_table_desc);
 
 	relation_close(main_table_index_relation, NoLock);
 
@@ -2113,7 +2127,15 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
-			cluster_rel(cim->chunkoid, cim->indexoid, true, stmt->verbose);
+			cluster_rel(cim->chunkoid,
+						cim->indexoid,
+#if PG12_LT
+						true,
+						stmt->verbose
+#else
+						stmt->options
+#endif
+			);
 			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}
@@ -2661,7 +2683,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
 		case AT_ReplaceRelOptions:
+#if PG12_LT
 		case AT_AddOids:
+#endif
 		case AT_DropOids:
 		case AT_SetOptions:
 		case AT_ResetOptions:
@@ -2681,6 +2705,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_SetNotNull:
+#if PG12
+		case AT_CheckNotNull: /*TODO test*/
+#endif
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
@@ -2699,7 +2726,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			break;
 		case AT_ReAddConstraint:
 		case AT_ReAddIndex:
+#if PG12_LT
 		case AT_AddOidsRecurse:
+#endif
 
 			/*
 			 * all of the above are internal commands that are hit in tests
@@ -3303,6 +3332,7 @@ timescaledb_ddl_command_start(
 		.pstmt = pstmt,
 		.parsetree = pstmt->utilityStmt,
 		.queryEnv = queryEnv,
+		.parse_state = make_parsestate(NULL),
 #else
 		.parsetree = parsetree,
 #endif
@@ -3311,6 +3341,10 @@ timescaledb_ddl_command_start(
 
 	bool altering_timescaledb = false;
 	bool handled;
+
+#if PG10_GE
+	args.parse_state->p_sourcetext = query_string;
+#endif
 
 	if (IsA(args.parsetree, AlterExtensionStmt))
 	{

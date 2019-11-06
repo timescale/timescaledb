@@ -6,7 +6,14 @@
 #ifndef TIMESCALEDB_PLAN_ADD_HASHAGG_H
 #define TIMESCALEDB_PLAN_ADD_HASHAGG_H
 
+#include "compat.h"
+
+#include <nodes/primnodes.h>
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
 #include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 /* This optimization adds a HashAggregate plan to many group by queries.
  * In plain postgres, many time-series queries will not use a the hash aggregate

@@ -49,7 +49,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal._hyper_3_1_chunk_index_test_time_idx | {time}  |      | t      | f       | f         | 
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |              index_name              | hypertable_id | hypertable_index_name 
 ----------+--------------------------------------+---------------+-----------------------
         1 | _hyper_3_1_chunk_index_test_time_idx |             3 | index_test_time_idx
@@ -64,7 +64,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_3_2_chunk | _timescaledb_internal._hyper_3_2_chunk_index_test_time_idx | {time}  |      | t      | f       | f         | 
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |              index_name              | hypertable_id | hypertable_index_name 
 ----------+--------------------------------------+---------------+-----------------------
         1 | _hyper_3_1_chunk_index_test_time_idx |             3 | index_test_time_idx
@@ -79,7 +79,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_3_2_chunk | _timescaledb_internal._hyper_3_2_chunk_index_test_time_idx | {time}  |      | t      | f       | f         | 
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |              index_name              | hypertable_id | hypertable_index_name 
 ----------+--------------------------------------+---------------+-----------------------
         2 | _hyper_3_2_chunk_index_test_time_idx |             3 | index_test_time_idx
@@ -150,16 +150,16 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (8 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
-        3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
+        3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
-        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
+        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
         4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
 (8 rows)
 
@@ -187,17 +187,17 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (8 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
+        3 | _hyper_4_3_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
-        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
-        3 | _hyper_4_3_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
 (8 rows)
 
 DROP INDEX index_test_time_idx2;
@@ -219,7 +219,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
@@ -337,17 +337,17 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 (8 rows)
 
 -- Constraint indexes are added to chunk_index table.
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
-        3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
-        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
-        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
-        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
-        3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
-        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
         3 | 3_1_index_test_time_device_key              |             4 | index_test_time_device_key
         4 | 4_2_index_test_time_device_key              |             4 | index_test_time_device_key
+        3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
+        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
 (8 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
@@ -363,7 +363,7 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 DROP TABLE index_test;
 -- Metadata removed
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
  chunk_id | index_name | hypertable_id | hypertable_index_name 
 ----------+------------+---------------+-----------------------
 (0 rows)

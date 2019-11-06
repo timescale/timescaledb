@@ -9,14 +9,19 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 #include "hypertable.h"
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
-#include "compat.h"
 #include "func_cache.h"
 #include "guc.h"
 
@@ -198,10 +203,15 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			foreach (lc_oid, current_oids)
 			{
-				Assert(lfirst_oid(lc_oid) ==
-					   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
-				merge_childs = lappend(merge_childs, lfirst(flat));
-				flat = lnext(flat);
+				/* postgres may have pruned away some children already */
+				if (lfirst_oid(lc_oid) ==
+					root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid)
+				{
+					Assert(lfirst_oid(lc_oid) ==
+						   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
+					merge_childs = lappend(merge_childs, lfirst(flat));
+					flat = lnext(flat);
+				}
 			}
 
 			if (list_length(merge_childs) > 1)
@@ -222,12 +232,20 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #endif
 				nested_children = lappend(nested_children, append);
 			}
+#if PG12
+			else if (list_length(merge_childs) == 0)
+			{
+				/* nop */
+			}
+#endif
 			else
 			{
 				has_scan_childs = true;
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
 		}
+
+		Assert(flat == NULL);
 
 		/*
 		 * if we do not have scans as direct childs of this

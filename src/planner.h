@@ -15,4 +15,6 @@ typedef struct TimescaleDBPrivate
 	bool compressed;
 } TimescaleDBPrivate;
 
+extern bool is_rte_hypertable(RangeTblEntry *rte);
+
 #endif /* TIMESCALEDB_PLANNER_H */

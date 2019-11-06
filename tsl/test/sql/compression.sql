@@ -249,7 +249,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "
 
 \set ON_ERROR_STOP 0
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
-SELECT device_id < device_id_2  FROM test_collation;
+-- SELECT device_id < device_id_2  FROM test_collation;
 \set ON_ERROR_STOP 1
 
 --segment meta on order bys pushdown

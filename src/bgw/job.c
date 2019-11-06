@@ -15,6 +15,7 @@
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
+#include <storage/lock.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
@@ -36,6 +37,28 @@
 #include <cross_module_fn.h>
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
+
+#if PG12_LT
+static VirtualTransactionId *
+GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
+{
+	VirtualTransactionId *ids = GetLockConflicts(locktag, lockmode);
+	if (countp != NULL)
+	{
+		VirtualTransactionId *i = ids;
+		*countp = 0;
+		while (VirtualTransactionIdIsValid(*i))
+		{
+			i += 1;
+			*countp += 1;
+		}
+	}
+	return ids;
+}
+#else
+#define GetLockConflictsCompat(locktag, lockmode, countp)                                          \
+	GetLockConflicts(locktag, lockmode, countp)
+#endif
 
 static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
@@ -362,7 +385,7 @@ get_job_lock_for_delete(int32 job_id)
 	{
 		/* If I couldn't get a lock, try killing the background worker that's running the job.
 		 * This is probably not bulletproof but best-effort is good enough here. */
-		VirtualTransactionId *vxid = GetLockConflicts(&tag, AccessExclusiveLock);
+		VirtualTransactionId *vxid = GetLockConflictsCompat(&tag, AccessExclusiveLock, NULL);
 		PGPROC *proc;
 
 		if (VirtualTransactionIdIsValid(*vxid))
@@ -780,7 +803,7 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 
-	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
@@ -797,7 +820,7 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
 }
 

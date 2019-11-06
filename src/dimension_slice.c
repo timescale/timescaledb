@@ -25,6 +25,8 @@
 #include "hypertable.h"
 #include "scanner.h"
 
+#include "compat.h"
+
 /* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
 /* This avoids the problem with coord < range_end where coord and range_end is an int64 */
 #define REMAP_LAST_COORDINATE(coord)                                                               \
@@ -676,12 +678,12 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 	Relation rel;
 	Size i;
 
-	rel = heap_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
 
 	for (i = 0; i < num_slices; i++)
 		dimension_slice_insert_relation(rel, slices[i]);
 
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static ScanTupleResult

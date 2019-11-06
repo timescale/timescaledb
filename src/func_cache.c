@@ -20,6 +20,12 @@
 #include <utils/builtins.h>
 #include <utils/rel.h>
 
+#include "compat.h"
+
+#if PG12
+#include <optimizer/optimizer.h>
+#endif
+
 #include "utils.h"
 #include "cache.h"
 #include "func_cache.h"
@@ -290,6 +296,17 @@ static FuncInfo funcinfo[] = {
 
 static HTAB *func_hash = NULL;
 
+static Oid
+proc_get_oid(HeapTuple tuple)
+{
+#if PG12
+	Form_pg_proc form = (Form_pg_proc) GETSTRUCT(tuple);
+	return form->oid;
+#else
+	return HeapTupleGetOid(tuple);
+#endif
+}
+
 static void
 initialize_func_info()
 {
@@ -306,7 +323,7 @@ initialize_func_info()
 
 	func_hash = hash_create("func_cache", _MAX_CACHE_FUNCTIONS, &hashctl, HASH_ELEM | HASH_BLOBS);
 
-	rel = heap_open(ProcedureRelationId, AccessShareLock);
+	rel = table_open(ProcedureRelationId, AccessShareLock);
 
 	for (i = 0; i < _MAX_CACHE_FUNCTIONS; i++)
 	{
@@ -328,7 +345,7 @@ initialize_func_info()
 				 finfo->funcname,
 				 finfo->nargs);
 
-		funcid = HeapTupleGetOid(tuple);
+		funcid = proc_get_oid(tuple);
 
 		fentry = hash_search(func_hash, &funcid, HASH_ENTER, &hash_found);
 		Assert(!hash_found);
@@ -337,7 +354,7 @@ initialize_func_info()
 		ReleaseSysCache(tuple);
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 FuncInfo *
