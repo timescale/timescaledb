@@ -16,7 +16,7 @@ fi
 
 
 TAGS="1.3.0-pg11 1.3.1-pg11 1.3.2-pg11 1.4.0-pg11 1.4.1-pg11 1.4.2-pg11"
-TEST_VERSION="v3"
+TEST_VERSION="v4"
 
 TAGS=$TAGS TEST_VERSION=$TEST_VERSION bash ${SCRIPT_DIR}/test_updates.sh
 EXIT_CODE=$?
