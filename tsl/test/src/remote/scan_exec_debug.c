@@ -8,13 +8,13 @@
 #include "export.h"
 #include "fdw/scan_exec.h"
 
-TS_FUNCTION_INFO_V1(ts_test_override_pushdown_timestamptz);
+TS_FUNCTION_INFO_V1(ts_test_override_current_timestamptz);
 
 Datum
-ts_test_override_pushdown_timestamptz(PG_FUNCTION_ARGS)
+ts_test_override_current_timestamptz(PG_FUNCTION_ARGS)
 {
 #ifdef TS_DEBUG
-	fdw_scan_debug_override_pushdown_timestamp(PG_GETARG_INT64(0));
+	fdw_scan_debug_override_current_timestamp(PG_GETARG_INT64(0));
 	PG_RETURN_VOID();
 #else
 	elog(ERROR, "unable to handle ts_test_is_frontend_session without TS_DEBUG flag set");

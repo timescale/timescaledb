@@ -2300,6 +2300,36 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 }
 
 /*
+ * Number of chunks created after given chunk.
+ * If chunk2.id > chunk1.id then chunk2 is created after chunk1
+ */
+int
+ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
+{
+	ScanKeyData scankey[1];
+
+	/*
+	 * Try to find chunks with a greater Id then a given chunk
+	 */
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_idx_id,
+				BTGreaterStrategyNumber,
+				F_INT4GT,
+				Int32GetDatum(chunk->fd.id));
+
+	return chunk_scan_internal(CHUNK_ID_INDEX,
+							   scankey,
+							   1,
+							   NULL,
+							   NULL,
+							   NULL,
+							   0,
+							   ForwardScanDirection,
+							   AccessShareLock,
+							   CurrentMemoryContext);
+}
+
+/*
  * Simple scans provide lightweight ways to access chunk information without the
  * overhead of getting a full chunk (i.e., no extra metadata, like constraints,
  * are joined in). This function forms the basis of a number of lookup functions

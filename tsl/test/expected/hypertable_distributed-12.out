@@ -3,20 +3,10 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add data nodes
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-\ir include/remote_exec.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-CREATE SCHEMA IF NOT EXISTS test;
-psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-GRANT USAGE ON SCHEMA test TO PUBLIC;
-CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
-LANGUAGE C;
--- Support for execute_sql_and_filter_data_node_name_on_error()
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+psql:utils/testsupport.sql:8: NOTICE:  schema "test" already exists, skipping
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
@@ -3289,11 +3279,11 @@ INSERT INTO dist_device VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 09:11', 3, 2.1),
        ('2017-01-01 08:01', 1, 1.2);
-EXPLAIN VERBOSE
+EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM dist_device;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DataNodeScan) on public.dist_device  (cost=100.00..165.83 rows=1861 width=20)
+ Custom Scan (DataNodeScan) on public.dist_device
    Output: dist_device."time", dist_device.dist_device, dist_device.temp
    Data node: data_node_1
    Chunks: _hyper_15_36_dist_chunk
@@ -3307,4 +3297,90 @@ SELECT * FROM dist_device;
  Sun Jan 01 09:11:00 2017 PST |           3 |  2.1
  Sun Jan 01 08:01:00 2017 PST |           1 |  1.2
 (3 rows)
+
+-- Test estimating relation size without stats
+CREATE TABLE hyper_estimate(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('hyper_estimate', 'time', 'device', number_partitions => 3, replication_factor => 1, chunk_time_interval => INTERVAL '7 days');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+            16 | public      | hyper_estimate | t
+(1 row)
+
+-- This will enable us to more easily see estimates per chunk
+SET timescaledb.enable_per_data_node_queries = false;
+-- Estimating chunk progress uses current timestamp so we override it for test purposes 
+SELECT ts_test_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
+ ts_test_override_current_timestamptz 
+--------------------------------------
+ 
+(1 row)
+
+-- Test estimates when backfilling. 3 chunks should be historical and 3 should be considered current when estimating.
+-- Note that estimate numbers are way off since we are using shared buffer size as starting point. This will not be
+-- an issue in 'production' like env since chunk size should be similar to shared buffer size.
+INSERT INTO hyper_estimate VALUES
+       ('2017-01-01 06:01', 1, 1.1),
+       ('2017-01-01 09:11', 1, 2.1),
+       ('2017-01-01 08:01', 1, 1.2),
+       ('2017-01-02 08:01', 1, 1.3),
+       ('2017-01-02 08:01', 2, 1.6),
+       ('2017-01-02 06:01', 2, 1.4),
+       ('2017-01-03 01:01', 3, 2),
+       ('2017-01-03 01:16', 3, 3),
+       ('2017-01-03 01:17', 3, 4),
+       ('2018-01-13 01:01', 1, 2),
+       ('2018-01-13 01:10', 1, 0.4),
+       ('2018-01-13 02:10', 2, 1.4),
+       ('2018-01-13 05:01', 2, 2),
+       ('2018-01-13 05:50', 2, 4),
+       ('2018-01-13 16:01', 3, 2);
+-- Since there are no stats we use shared buffers size to estimate number of rows
+EXPLAIN (COSTS ON)
+SELECT *
+FROM hyper_estimate;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Append  (cost=100.00..166847.40 rows=4118040 width=20)
+   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
+   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
+   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
+   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
+   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
+(7 rows)
+
+-- This will calculate the stats
+ANALYZE hyper_estimate;
+EXPLAIN (COSTS ON)
+SELECT *
+FROM hyper_estimate;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Append  (cost=100.00..606.52 rows=15 width=20)
+   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
+   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
+(7 rows)
+
+-- Let's insert data into a new chunk. This will result in chunk creation.
+INSERT INTO hyper_estimate VALUES ('2019-11-11 06:01', 1, 1.1);
+-- We have stats for previous chunks so we can interpolate number of rows for the new chunk
+EXPLAIN (COSTS ON)
+SELECT *
+FROM hyper_estimate;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Append  (cost=100.00..706.58 rows=17 width=20)
+   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
+   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
+   ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..100.05 rows=2 width=20)
+(8 rows)
 

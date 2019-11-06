@@ -114,8 +114,8 @@ get_memory_cache_size(void)
  */
 #define DEFAULT_CACHE_MEMORY_SLACK 0.9
 
-static inline int64
-calculate_initial_chunk_target_size(void)
+extern inline int64
+ts_chunk_calculate_initial_chunk_target_size(void)
 {
 	return (int64)((double) get_memory_cache_size() * DEFAULT_CACHE_MEMORY_SLACK);
 }
@@ -662,7 +662,7 @@ chunk_target_size_in_bytes(const text *target_size_text)
 		return 0;
 
 	if (pg_strcasecmp(target_size, "estimate") == 0)
-		target_size_bytes = calculate_initial_chunk_target_size();
+		target_size_bytes = ts_chunk_calculate_initial_chunk_target_size();
 	else
 		target_size_bytes = convert_text_memory_amount_to_bytes(target_size);
 
