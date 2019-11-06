@@ -33,14 +33,11 @@
 #include "continuous_aggs/options.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "compat.h"
-#include "hypertable.h"
 
 #include "hypertable.h"
 #include "compression/create.h"
 #include "compression/compress_utils.h"
 #include "compression/segment_meta.h"
-#include "hypertable.h"
-#include "compat.h"
 
 #if PG_VERSION_SUPPORTS_MULTINODE
 #include "data_node.h"

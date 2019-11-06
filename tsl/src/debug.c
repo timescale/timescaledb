@@ -2,7 +2,9 @@
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
- *
+ */
+
+/*
  * The code is partially copied from nodes/print.c and
  * backend/optimizer/path/allpaths.c in the PostgreSQL source code, but we
  * cannot use it out of the box for two reasons:

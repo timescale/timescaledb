@@ -134,7 +134,7 @@ set_connection_settings(TSConnection *conn)
 static bool
 query_is_empty(const char *query)
 {
-	while (*query != '\0')
+	while ((query != NULL) && (*query != '\0'))
 	{
 		if (!isspace(*query))
 			return false;
@@ -153,14 +153,10 @@ split_query_and_execute(TSConnection *conn, const char *server_name, const char 
 	AsyncResponseResult *result;
 	char *sql_copy = pstrdup(sql);
 	char *saveptr = NULL;
-	char *query;
+	char *query = strtok_r(sql_copy, ";", &saveptr);
 
-	query = strtok_r(sql_copy, ";", &saveptr);
-
-	for (; query; query = strtok_r(NULL, ";", &saveptr))
+	for (; !query_is_empty(query); query = strtok_r(NULL, ";", &saveptr))
 	{
-		if (query_is_empty(query))
-			break;
 		elog(NOTICE, "[%s]: %s", server_name, query);
 		result = async_request_wait_ok_result(async_request_send(conn, query));
 		print_result(NOTICE, server_name, async_response_result_get_pg_result(result));
