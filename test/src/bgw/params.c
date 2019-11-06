@@ -14,7 +14,6 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
-#include <utils/tqual.h>
 
 #include "params.h"
 #include "timer_mock.h"
@@ -22,6 +21,10 @@
 #include "scanner.h"
 #include "catalog.h"
 #include "compat.h"
+
+#if PG12_LT
+#include <utils/tqual.h>
+#endif
 
 typedef struct FormData_bgw_dsm_handle
 {
@@ -45,12 +48,12 @@ static void
 params_register_dsm_handle(dsm_handle handle)
 {
 	Relation rel;
-	HeapScanDesc scan;
+	TableScanDesc scan;
 	HeapTuple tuple;
 	FormData_bgw_dsm_handle *fd;
 
-	rel = heap_open(get_dsm_handle_table_oid(), RowExclusiveLock);
-	scan = heap_beginscan(rel, SnapshotSelf, 0, NULL);
+	rel = table_open(get_dsm_handle_table_oid(), RowExclusiveLock);
+	scan = table_beginscan(rel, SnapshotSelf, 0, NULL);
 	tuple = heap_copytuple(heap_getnext(scan, ForwardScanDirection));
 	fd = (FormData_bgw_dsm_handle *) GETSTRUCT(tuple);
 	fd->handle = handle;
@@ -64,13 +67,13 @@ static dsm_handle
 params_load_dsm_handle()
 {
 	Relation rel;
-	HeapScanDesc scan;
+	TableScanDesc scan;
 	HeapTuple tuple;
 	FormData_bgw_dsm_handle *fd;
 	dsm_handle handle;
 
-	rel = heap_open(get_dsm_handle_table_oid(), RowExclusiveLock);
-	scan = heap_beginscan(rel, SnapshotSelf, 0, NULL);
+	rel = table_open(get_dsm_handle_table_oid(), RowExclusiveLock);
+	scan = table_beginscan(rel, SnapshotSelf, 0, NULL);
 	tuple = heap_getnext(scan, ForwardScanDirection);
 	Assert(tuple != NULL);
 	tuple = heap_copytuple(tuple);

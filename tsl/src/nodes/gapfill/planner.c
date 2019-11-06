@@ -13,9 +13,15 @@
 #include <optimizer/paths.h>
 #include <optimizer/planner.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <utils/lsyscache.h>
 #include <parser/parse_func.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 #include "license.h"
 #include "nodes/gapfill/gapfill.h"

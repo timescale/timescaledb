@@ -310,7 +310,7 @@ tablespace_insert(int32 hypertable_id, const char *tspcname)
 	Relation rel;
 	int32 id;
 
-	rel = heap_open(catalog_get_table_id(catalog, TABLESPACE), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, TABLESPACE), RowExclusiveLock);
 	id = tablespace_insert_relation(rel, hypertable_id, tspcname);
 	heap_close(rel, RowExclusiveLock);
 

@@ -7,6 +7,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <catalog/pg_class.h>
+#include <commands/trigger.h>
 #include <nodes/extensible.h>
 
 #include "compat.h"
@@ -41,6 +42,11 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	state->hypertable_cache = hypertable_cache;
 	state->dispatch = ts_chunk_dispatch_create(ht, estate);
 	node->custom_ps = list_make1(ps);
+#if PG12
+	//TODO get from parent using table_slot_callbacks?
+	//TODO should this use ExecInitExtraTupleSlot?
+	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsBufferHeapTupleP);
+#endif
 }
 
 static TupleTableSlot *
@@ -64,11 +70,33 @@ chunk_dispatch_exec(CustomScanState *node)
 		EState *estate = node->ss.ps.state;
 		MemoryContext old;
 		bool cis_changed;
+#if PG12
+		bool should_free_tuple = false;
+#endif
+
+		/*
+		 * If the tts_ops of the slot we return does not match the tts_ops that
+		 * ModifyTable expects, it will try to copy our data into a slot of the
+		 * correct kind. For some kinds of slots (BufferHeapTuple) this will not
+		 * copy over our TupleDesc, causing the executor to choke later on, when
+		 * it realizes it has the wrong TupleDesc in the slot. To prevent this,
+		 * we check that we have the correct tts_ops, and update our slot if
+		 * it's wrong.
+		 */
+		if (state->slot->tts_ops  != state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops)
+		{
+			ExecDropSingleTupleTableSlot(state->slot);
+			state->slot = MakeSingleTupleTableSlot(NULL, state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops);
+		}
 
 		/* Switch to the executor's per-tuple memory context */
 		old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
+#if PG12_LT
 		tuple = ExecFetchSlotTuple(slot);
+#else /* TODO we should try not materialize a tuple if not needed */
+		tuple = ExecFetchSlotHeapTuple(slot, false, &should_free_tuple);
+#endif
 
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = ts_hyperspace_calculate_point(ht->space, tuple, tupdesc);
@@ -86,6 +114,13 @@ chunk_dispatch_exec(CustomScanState *node)
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed);
 		if (cis_changed)
 		{
+			TupleDesc chunk_desc;
+
+			if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
+				chunk_desc = cis->tup_conv_map->outdesc;
+			else
+				chunk_desc = RelationGetDescr(cis->rel);
+
 			/*
 			 * Update the arbiter indexes for ON CONFLICT statements so that they
 			 * match the chunk.
@@ -107,20 +142,23 @@ chunk_dispatch_exec(CustomScanState *node)
 			}
 
 			/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
-
+#if PG12_LT
 			if (state->parent->mt_existing != NULL)
 			{
-				TupleDesc chunk_desc;
-
-				if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
-					chunk_desc = cis->tup_conv_map->outdesc;
-				else
-					chunk_desc = RelationGetDescr(cis->rel);
 				Assert(chunk_desc != NULL);
 				ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
 			}
+#else
+			if (cis->result_relation_info->ri_onConflict != NULL && cis->result_relation_info->ri_onConflict->oc_ProjSlot != NULL)
+			{
+				Assert(chunk_desc != NULL);
+				ExecSetSlotDescriptor(cis->result_relation_info->ri_onConflict->oc_ProjSlot, chunk_desc);
+			}
+
+			ExecSetSlotDescriptor(state->slot, chunk_desc);
+#endif
 		}
-#if defined(USE_ASSERT_CHECKING) && PG11_GE
+#if defined(USE_ASSERT_CHECKING) && PG11
 		if (state->parent->mt_conflproj != NULL)
 		{
 			TupleTableSlot *slot = get_projection_info_slot_compat(
@@ -128,6 +166,32 @@ chunk_dispatch_exec(CustomScanState *node)
 
 			Assert(state->parent->mt_conflproj == slot);
 			Assert(state->parent->mt_existing->tts_tupleDescriptor == RelationGetDescr(cis->rel));
+		}
+#endif
+
+#if PG12 /* from ExecPrepareTupleRouting */
+		if (state->parent->mt_transition_capture != NULL)
+		{
+			/* TODO BEFORE triggers? */
+			// if (partrel->ri_TrigDesc && partrel->ri_TrigDesc->trig_insert_before_row)
+			// {
+			// 	/*
+			// 	* If there are any BEFORE triggers on the partition, we'll have
+			// 	* to be ready to convert their result back to tuplestore format.
+			// 	*/
+			// 	state->parent->mt_transition_capture->tcs_original_insert_tuple = NULL;
+			// 	state->parent->mt_transition_capture->tcs_map =
+			// 		partrouteinfo->pi_PartitionToRootMap;
+			// }
+			// else
+			{
+				/*
+				* Otherwise, just remember the original unconverted tuple, to
+				* avoid a needless round trip conversion.
+				*/
+				state->parent->mt_transition_capture->tcs_original_insert_tuple = slot;
+				state->parent->mt_transition_capture->tcs_map = NULL;
+			}
 		}
 #endif
 
@@ -143,7 +207,47 @@ chunk_dispatch_exec(CustomScanState *node)
 		MemoryContextSwitchTo(old);
 
 		/* Convert the tuple to the chunk's rowtype, if necessary */
-		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, &slot);
+#if PG12_LT
+		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, NULL);
+#else
+
+		Assert(state->slot->tts_tupleDescriptor == RelationGetDescr(cis->rel));
+		if (cis->tup_conv_map != NULL)
+			slot = execute_attr_map_slot(cis->tup_conv_map->attrMap, slot, state->slot);
+		else
+		{
+
+			/* store a virtual tuple in our slot so we have the correct TupleDesc
+			 * based on execute_attr_map_slot
+			 */
+			Datum      *invalues;
+			bool       *inisnull;
+			Datum      *outvalues;
+			bool       *outisnull;
+			int         outnatts = state->slot->tts_tupleDescriptor->natts;
+
+			/* Extract all the values of the in slot. */
+			slot_getallattrs(slot);
+
+			/* Before doing the mapping, clear any old contents from the out slot */
+			ExecClearTuple(state->slot);
+
+			invalues = slot->tts_values;
+			inisnull = slot->tts_isnull;
+			outvalues = state->slot->tts_values;
+			outisnull = state->slot->tts_isnull;
+			memcpy(outvalues, invalues, outnatts * sizeof(*outvalues));
+			memcpy(outisnull, inisnull, outnatts * sizeof(*outisnull));
+
+			ExecStoreVirtualTuple(state->slot);
+
+			slot = state->slot;
+		}
+#endif
+	}
+	else
+	{
+		return NULL;
 	}
 
 	return slot;
@@ -158,6 +262,7 @@ chunk_dispatch_end(CustomScanState *node)
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
 	ts_cache_release(state->hypertable_cache);
+	ExecDropSingleTupleTableSlot(state->slot);
 }
 
 static void
@@ -194,7 +299,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	ModifyTable *mt_plan;
 
 	state->parent = parent;
-#if !PG96 && !PG10
+#if !PG96 && !PG10 && !PG12
 
 	/*
 	 * Several tuple slots are created with static tupledescs when PG thinks
@@ -224,6 +329,35 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 		 */
 		*parent->mt_conflproj = *MakeTupleTableSlot(NULL);
 		ExecSetSlotDescriptor(parent->mt_conflproj, existing);
+	}
+#elif PG12
+	if (parent->resultRelInfo->ri_onConflict != NULL)
+	{
+		if (parent->resultRelInfo->ri_onConflict->oc_Existing != NULL)
+		{
+			TupleDesc existing;
+
+			existing = parent->resultRelInfo->ri_onConflict->oc_Existing->tts_tupleDescriptor;
+			parent->resultRelInfo->ri_onConflict->oc_Existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL, TTSOpsHeapTupleP);
+			ExecSetSlotDescriptor(parent->resultRelInfo->ri_onConflict->oc_Existing, existing);
+		}
+
+		if (parent->resultRelInfo->ri_onConflict->oc_ProjSlot)
+		{
+			TupleDesc existing;
+
+			existing = parent->resultRelInfo->ri_onConflict->oc_ProjSlot->tts_tupleDescriptor;
+
+			/*
+			* in this case we must overwrite mt_conflproj because there are
+			* several pointers to it throughout expressions and other
+			* evaluations, and the original tuple will otherwise be stored to the
+			* old slot, whose pointer is saved there.
+			*/
+			/*FIXME that can't work, the slot is variably-sized*/
+			parent->resultRelInfo->ri_onConflict->oc_ProjSlot = MakeTupleTableSlot(NULL, TTSOpsHeapTupleP);
+			ExecSetSlotDescriptor(parent->resultRelInfo->ri_onConflict->oc_ProjSlot, existing);
+		}
 	}
 #endif
 	state->dispatch->cmd_type = parent->operation;

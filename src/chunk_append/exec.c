@@ -12,11 +12,9 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <nodes/relation.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/plancat.h>
-#include <optimizer/predtest.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
@@ -26,12 +24,21 @@
 
 #include <math.h>
 
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <optimizer/predtest.h>
+#include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#include <optimizer/optimizer.h>
+#endif
+
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/exec.h"
 #include "chunk_append/explain.h"
 #include "chunk_append/planner.h"
 #include "loader/lwlocks.h"
-#include "compat.h"
 
 #define INVALID_SUBPLAN_INDEX -1
 #define NO_MATCHING_SUBPLANS -2
@@ -767,7 +774,7 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 	/*
 	 * We assume the relation has already been safely locked.
 	 */
-	relation = heap_open(relationObjectId, NoLock);
+	relation = table_open(relationObjectId, NoLock);
 
 	constr = relation->rd_att->constr;
 	if (constr != NULL)

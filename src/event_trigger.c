@@ -14,6 +14,7 @@
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
 
+#include "compat.h"
 #include "event_trigger.h"
 
 #define DDL_INFO_NATTS 9
@@ -37,25 +38,30 @@ List *
 ts_event_trigger_ddl_commands(void)
 {
 	ReturnSetInfo rsinfo;
-	FunctionCallInfoData fcinfo;
+	LOCAL_FCINFO(fcinfo, 1);
 	TupleTableSlot *slot;
 	EState *estate = CreateExecutorState();
 	List *objects = NIL;
 
-	InitFunctionCallInfoData(fcinfo, &ddl_commands_fmgrinfo, 1, InvalidOid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo, &ddl_commands_fmgrinfo, 1, InvalidOid, NULL, NULL);
 	MemSet(&rsinfo, 0, sizeof(rsinfo));
 	rsinfo.type = T_ReturnSetInfo;
 	rsinfo.allowedModes = SFRM_Materialize;
 	rsinfo.econtext = CreateExprContext(estate);
-	fcinfo.resultinfo = (fmNodePtr) &rsinfo;
+	FC_SET_NULL(fcinfo, 0);
+	fcinfo->resultinfo = (fmNodePtr) &rsinfo;
 
-	FunctionCallInvoke(&fcinfo);
+	FunctionCallInvoke(fcinfo);
 
-	slot = MakeSingleTupleTableSlot(rsinfo.setDesc);
+	slot = MakeSingleTupleTableSlotCompat(rsinfo.setDesc, TTSOpsMinimalTupleP);
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{
+#if PG12_LT
 		HeapTuple tuple = ExecFetchSlotTuple(slot);
+#else /* TODO we should eventually switch to something that doesn't HeapTuple the data>*/
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+#endif
 		CollectedCommand *cmd;
 		Datum values[DDL_INFO_NATTS];
 		bool nulls[DDL_INFO_NATTS];
@@ -184,25 +190,29 @@ List *
 ts_event_trigger_dropped_objects(void)
 {
 	ReturnSetInfo rsinfo;
-	FunctionCallInfoData fcinfo;
+	LOCAL_FCINFO(fcinfo, 0);
 	TupleTableSlot *slot;
 	EState *estate = CreateExecutorState();
 	List *objects = NIL;
 
-	InitFunctionCallInfoData(fcinfo, &dropped_objects_fmgrinfo, 0, InvalidOid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo, &dropped_objects_fmgrinfo, 0, InvalidOid, NULL, NULL);
 	MemSet(&rsinfo, 0, sizeof(rsinfo));
 	rsinfo.type = T_ReturnSetInfo;
 	rsinfo.allowedModes = SFRM_Materialize;
 	rsinfo.econtext = CreateExprContext(estate);
-	fcinfo.resultinfo = (fmNodePtr) &rsinfo;
+	fcinfo->resultinfo = (fmNodePtr) &rsinfo;
 
-	FunctionCallInvoke(&fcinfo);
+	FunctionCallInvoke(fcinfo);
 
-	slot = MakeSingleTupleTableSlot(rsinfo.setDesc);
+	slot = MakeSingleTupleTableSlotCompat(rsinfo.setDesc, TTSOpsMinimalTupleP);
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{
+#if PG12_LT
 		HeapTuple tuple = ExecFetchSlotTuple(slot);
+#else /* TODO we should eventually switch to something that doesn't HeapTuple the data>*/
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+#endif
 		Datum values[DROPPED_OBJECTS_NATTS];
 		bool nulls[DROPPED_OBJECTS_NATTS];
 		Oid class_id;

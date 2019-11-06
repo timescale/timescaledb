@@ -7,20 +7,26 @@
 #define TIMESCALEDB_SCANNER_H
 
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/relscan.h>
 #include <utils/fmgroids.h>
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
 #include <utils.h>
 
+#include "compat.h"
 #include "export.h"
 
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
 {
 	Relation scanrel;
+	/* TODO in PG12+ we should not materialize a HeapTuple unless needed */
 	HeapTuple tuple;
 	TupleDesc desc;
+#if PG12
+	TupleTableSlot *slot;
+#endif
 	/* return index tuple if it was requested -- only for index scans */
 	IndexTuple ituple;
 	TupleDesc ituple_desc;
@@ -29,7 +35,7 @@ typedef struct TupleInfo
 	 * If the user requested a tuple lock, the result of the lock is passed on
 	 * in lockresult.
 	 */
-	HTSU_Result lockresult;
+	TM_Result lockresult;
 	int count;
 
 	/*
@@ -118,7 +124,7 @@ extern TSDLLEXPORT bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_fo
 typedef union ScanDesc
 {
 	IndexScanDesc index_scan;
-	HeapScanDesc heap_scan;
+	TableScanDesc heap_scan;
 } ScanDesc;
 /*
  * InternalScannerCtx is the context passed to Scanner functions.

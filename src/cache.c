@@ -81,7 +81,7 @@ ts_cache_invalidate(Cache *cache)
  * invalidation events (i.e. AcceptInvalidationMessages() may be called).
  *
  * Invalidation messages may be processed on any internal function that takes a
- * lock (e.g. heap_open).
+ * lock (e.g. table_open).
  *
  * Each call to cache_pin MUST BE paired with a call to cache_release.
  *

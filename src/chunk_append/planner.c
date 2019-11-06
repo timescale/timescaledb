@@ -17,15 +17,21 @@
 #include <optimizer/prep.h>
 #include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <parser/parsetree.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/appendinfo.h>
+#include <optimizer/optimizer.h>
+#endif
 
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
 #include "chunk_append/exec.h"
 #include "chunk_append/transform.h"
 #include "planner_import.h"
-#include "compat.h"
 #include "guc.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,

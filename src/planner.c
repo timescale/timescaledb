@@ -15,7 +15,6 @@
 #include <utils/guc.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
-#include <optimizer/var.h>
 #include <optimizer/restrictinfo.h>
 #include <utils/lsyscache.h>
 #include <executor/nodeAgg.h>
@@ -34,6 +33,12 @@
 #include <catalog/pg_constraint_fn.h>
 #endif
 #include "compat-msvc-exit.h"
+
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 #include "cross_module_fn.h"
 #include "license_guc.h"

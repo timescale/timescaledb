@@ -19,6 +19,7 @@
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
 #include <executor/executor.h>
+/*#include <executor/tuptable.h>*/
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/bufmgr.h>
@@ -60,7 +61,7 @@ typedef struct CopyChunkState
 	union
 	{
 		CopyState cstate;
-		HeapScanDesc scandesc;
+		TableScanDesc scandesc;
 		void *data;
 	} fromctx;
 } CopyChunkState;
@@ -92,7 +93,11 @@ static bool
 next_copy_from(CopyChunkState *ccstate, ExprContext *econtext, Datum *values, bool *nulls,
 			   Oid *tuple_oid)
 {
-	return NextCopyFrom(ccstate->fromctx.cstate, econtext, values, nulls, tuple_oid);
+	return NextCopyFrom(ccstate->fromctx.cstate, econtext, values, nulls
+#if PG12_LT
+		, tuple_oid
+#endif
+	);
 }
 
 /*
@@ -110,6 +115,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
+#if PG12
+	TupleTableSlot *chunkslot = MakeSingleTupleTableSlot(NULL, TTSOpsHeapTupleP);
+#endif
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	ErrorContextCallback errcallback;
@@ -212,9 +220,13 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	estate->es_range_table = range_table;
 
 	/* Set up a tuple slot too */
-	myslot = ExecInitExtraTupleSlotCompat(estate, tupDesc);
+	myslot = ExecInitExtraTupleSlotCompat(estate, tupDesc, TTSOpsHeapTupleP);
+
+/* https://github.com/postgres/postgres/commit/ff11e7f4b9ae017585c3ba146db7ba39c31f209a#diff-aac4247fa1437143e61e9e991418d313 */
+#if PG12_LT
 	/* Triggers might need a slot as well */
-	estate->es_trig_tuple_slot = ExecInitExtraTupleSlotCompat(estate, NULL);
+	estate->es_trig_tuple_slot = ExecInitExtraTupleSlotCompat(estate, NULL, TTSOpsMinimalTupleP);
+#endif
 
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
@@ -241,13 +253,14 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 	for (;;)
 	{
-		TupleTableSlot *slot;
+		TupleTableSlot *slot = chunkslot;
 		bool skip_tuple;
 		Oid loaded_oid = InvalidOid;
 		Point *point;
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
 		bool cis_changed;
+		bool should_free = false;
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -263,8 +276,10 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		/* And now we can form the input tuple. */
 		tuple = heap_form_tuple(tupDesc, values, nulls);
 
+#if PG12_LT
 		if (loaded_oid != InvalidOid)
 			HeapTupleSetOid(tuple, loaded_oid);
+#endif
 
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = ts_hyperspace_calculate_point(ht->space, tuple, tupDesc);
@@ -290,11 +305,16 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		MemoryContextSwitchTo(oldcontext);
 
 		/* Place tuple in tuple slot --- but slot shouldn't free it */
-		slot = myslot;
-		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
+		slot = chunkslot;
 
 		/* Convert the tuple to match the chunk's rowtype */
-		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, &slot);
+		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, NULL);
+		ExecSetSlotDescriptor(chunkslot, RelationGetDescr(cis->result_relation_info->ri_RelationDesc));
+#if PG12_LT
+		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
+#else /* 29c94e */
+		ExecStoreHeapTuple(tuple, slot, false);
+#endif
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -316,12 +336,19 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		/* BEFORE ROW INSERT Triggers */
 		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 		{
-			slot = ExecBRInsertTriggers(estate, resultRelInfo, slot);
+			ExecBRInsertTriggersCompat(estate, resultRelInfo, slot);
 
 			if (slot == NULL) /* "do nothing" */
 				skip_tuple = true;
 			else /* trigger might have changed tuple */
+			{
+#if PG12_LT
 				tuple = ExecMaterializeSlot(slot);
+#else
+				tuple = ExecFetchSlotHeapTuple(slot, true, &should_free);
+#endif
+			}
+
 		}
 
 		if (!skip_tuple)
@@ -336,12 +363,26 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 				/* OK, store the tuple and create index entries for it */
 				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid, hi_options, bistate);
 
+				/* re-store the tuple so the slot's ItemPointer is updated */
+				ExecStoreHeapTuple(tuple, slot, should_free);
+
 				if (resultRelInfo->ri_NumIndices > 0)
 					recheckIndexes =
-						ExecInsertIndexTuples(slot, &(tuple->t_self), estate, false, NULL, NIL);
+						ExecInsertIndexTuples(slot,
+#if PG12_LT
+							&(tuple->t_self),
+#endif
+							estate,
+							false,
+							NULL,
+							NIL);
 
 				/* AFTER ROW INSERT Triggers */
+#if PG12_LT
 				ExecARInsertTriggersCompat(estate, resultRelInfo, tuple, recheckIndexes);
+#else
+				ExecARInsertTriggersCompat(estate, resultRelInfo, slot, recheckIndexes);
+#endif
 
 				list_free(recheckIndexes);
 			}
@@ -414,6 +455,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	 */
 	if (hi_options & HEAP_INSERT_SKIP_WAL)
 		heap_sync(ccstate->rel);
+
+	ExecDropSingleTupleTableSlot(chunkslot);
 
 	return processed;
 }
@@ -622,14 +665,16 @@ static bool
 next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
 							   bool *nulls, Oid *tuple_oid)
 {
-	HeapScanDesc scandesc = ccstate->fromctx.scandesc;
+	TableScanDesc scandesc = ccstate->fromctx.scandesc;
 	HeapTuple tuple = heap_getnext(scandesc, ForwardScanDirection);
 
 	if (!HeapTupleIsValid(tuple))
 		return false;
 
 	heap_deform_tuple(tuple, RelationGetDescr(ccstate->rel), values, nulls);
+#if PG12_LT
 	*tuple_oid = HeapTupleGetOid(tuple);
+#endif
 
 	return true;
 }
@@ -645,7 +690,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 {
 	Relation rel;
 	CopyChunkState *ccstate;
-	HeapScanDesc scandesc;
+	TableScanDesc scandesc;
 	Snapshot snapshot;
 	List *attnums = NIL;
 	List *range_table = NIL;
@@ -666,7 +711,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	};
 	int i;
 
-	rel = heap_open(ht->main_table_relid, lockmode);
+	rel = table_open(ht->main_table_relid, lockmode);
 
 	for (i = 0; i < rel->rd_att->natts; i++)
 	{
@@ -677,7 +722,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 
 	copy_security_check(rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
-	scandesc = heap_beginscan(rel, snapshot, 0, NULL);
+	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, scandesc);
 	timescaledb_CopyFrom(ccstate, range_table, ht);
 	heap_endscan(scandesc);

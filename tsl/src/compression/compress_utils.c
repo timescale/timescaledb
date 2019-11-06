@@ -88,7 +88,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	Datum values[Natts_compression_chunk_size];
 	bool nulls[Natts_compression_chunk_size] = { false };
 
-	rel = heap_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));

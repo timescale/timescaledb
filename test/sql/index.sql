@@ -29,18 +29,18 @@ INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 1, 17.5);
 -- Check that index is also created on chunk
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Create another chunk
 INSERT INTO index_test VALUES ('2017-05-20T09:00:01', 3, 17.5);
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Delete the index on only one chunk
 DROP INDEX _timescaledb_internal._hyper_3_1_chunk_index_test_time_idx;
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Recreate table with new partitioning
 DROP TABLE index_test;
@@ -73,14 +73,14 @@ INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
 -- New index should have been recursed to chunks
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
 
 -- Metadata and index should have changed name
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 DROP INDEX index_test_time_idx2;
 DROP INDEX index_test_time_device_idx;
@@ -88,7 +88,7 @@ DROP INDEX index_test_time_device_idx;
 -- Index should have been dropped
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Create index with long name to see how this is handled on chunks
 CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time, temp);
@@ -135,13 +135,13 @@ SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 -- Constraint indexes are added to chunk_index table.
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 DROP TABLE index_test;
 
 -- Metadata removed
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Create table in a tablespace
 CREATE TABLE index_test(time timestamptz, temp float, device int) TABLESPACE tablespace1;

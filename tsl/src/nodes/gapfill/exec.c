@@ -15,7 +15,6 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <optimizer/clauses.h>
-#include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
@@ -25,6 +24,12 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
+
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/locf.h"
 #include "nodes/gapfill/interpolate.h"
@@ -518,7 +523,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
 	state->subslot = NULL;
-	state->scanslot = MakeSingleTupleTableSlot(tupledesc);
+	state->scanslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(args)))
@@ -616,7 +621,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	state->pi = ExecBuildProjectionInfoCompat(targetlist,
 											  state->csstate.ss.ps.ps_ExprContext,
-											  MakeSingleTupleTableSlot(tupledesc),
+											  MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP),
 											  &state->csstate.ss.ps,
 											  NULL);
 
@@ -923,6 +928,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 	 */
 	if (modified)
 	{
+#if PG12_LT
 		if (state->subslot->tts_shouldFree)
 		{
 			heap_freetuple(state->subslot->tts_tuple);
@@ -936,6 +942,9 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			state->subslot->tts_shouldFreeMin = false;
 		}
 		state->subslot->tts_mintuple = NULL;
+#else
+		state->subslot->tts_ops->clear(state->subslot);
+#endif
 	}
 
 	return state->subslot;

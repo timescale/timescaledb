@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
@@ -113,7 +114,8 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 					 errmsg("reorder policy already exists for hypertable \"%s\"",
 							get_rel_name(ht_oid))));
 
-		if (!DatumGetBool(DirectFunctionCall2(nameeq,
+		if (!DatumGetBool(DirectFunctionCall2Coll(nameeq,
+											  C_COLLATION_OID,
 											  NameGetDatum(&existing->fd.hypertable_index_name),
 											  NameGetDatum(index_name))))
 		{

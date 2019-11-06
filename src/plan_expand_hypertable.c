@@ -16,7 +16,6 @@
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <parser/parse_func.h>
 #include <parser/parsetree.h>
 #include <utils/date.h>
@@ -31,6 +30,12 @@
 #if PG11_GE
 #include <partitioning/partbounds.h>
 #include <optimizer/cost.h>
+#endif
+
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
 #endif
 
 #include "plan_expand_hypertable.h"
@@ -878,7 +883,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	List *inh_oids;
 	ListCell *l;
-	Relation oldrelation = heap_open(parent_oid, NoLock);
+	Relation oldrelation = table_open(parent_oid, NoLock);
 	Query *parse = root->parse;
 	Index rti = rel->relid;
 	List *appinfos = NIL;
@@ -940,7 +945,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 		/* Open rel if needed; we already have required locks */
 		if (child_oid != parent_oid)
-			newrelation = heap_open(child_oid, NoLock);
+			newrelation = table_open(child_oid, NoLock);
 		else
 			newrelation = oldrelation;
 

@@ -9,14 +9,19 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 #include "hypertable.h"
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
-#include "compat.h"
 #include "func_cache.h"
 #include "guc.h"
 

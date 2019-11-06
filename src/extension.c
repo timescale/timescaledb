@@ -155,7 +155,7 @@ ts_extension_schema_oid(void)
 	bool is_null = true;
 	Oid schema = InvalidOid;
 
-	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	rel = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,

@@ -11,6 +11,7 @@
 #include <utils/jsonb.h>
 #include <utils/jsonapi.h>
 
+#include "compat.h"
 #include "export.h"
 
 #include "jsonb_utils.h"
@@ -79,19 +80,17 @@ ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 	 * `jsonb_object_field_text` returns NULL when the field is not found so
 	 * we cannot use `DirectFunctionCall`
 	 */
-	FunctionCallInfoData fcinfo;
+	LOCAL_FCINFO(fcinfo, 2);
 	Datum result;
 
-	InitFunctionCallInfoData(fcinfo, NULL, 2, InvalidOid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo, NULL, 2, InvalidOid, NULL, NULL);
 
-	fcinfo.arg[0] = PointerGetDatum(json);
-	fcinfo.arg[1] = PointerGetDatum(field_name);
-	fcinfo.argnull[0] = false;
-	fcinfo.argnull[1] = false;
+	FC_SET_ARG(fcinfo, 0, PointerGetDatum(json));
+	FC_SET_ARG(fcinfo, 1, PointerGetDatum(field_name));
 
-	result = jsonb_object_field_text(&fcinfo);
+	result = jsonb_object_field_text(fcinfo);
 
-	if (fcinfo.isnull)
+	if (fcinfo->isnull)
 		return NULL;
 
 	return DatumGetTextP(result);

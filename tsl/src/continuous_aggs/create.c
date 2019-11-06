@@ -48,10 +48,14 @@
 #include <utils/syscache.h>
 #include <utils/int8.h>
 
+#include "compat.h"
+#if PG12_GE
+#include <optimizer/optimizer.h>
+#endif
+
 #include "create.h"
 
 #include "catalog.h"
-#include "compat.h"
 #include "continuous_agg.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -221,7 +225,7 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	namestrcpy(&partial_viewnm, partial_view);
 	namestrcpy(&direct_schnm, direct_schema);
 	namestrcpy(&direct_viewnm, direct_view);
-	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
@@ -298,7 +302,7 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 	HeapTuple tuple;
 	bool trg_found = false;
 
-	tgrel = heap_open(TriggerRelationId, AccessShareLock);
+	tgrel = table_open(TriggerRelationId, AccessShareLock);
 	ScanKeyInit(&skey[0],
 				Anum_pg_trigger_tgrelid,
 				BTEqualStrategyNumber,
@@ -557,7 +561,12 @@ get_timebucketfnoid()
 	for (i = 0; i < catlist->n_members; i++)
 	{
 		HeapTuple proctup = &catlist->members[i]->tuple;
+#if PG12
+		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
+		funcoid = procform->oid;
+#else
 		funcoid = ObjectIdGetDatum(HeapTupleGetOid(proctup));
+#endif
 		retlist = lappend_oid(retlist, funcoid);
 	}
 	ReleaseSysCacheList(catlist);

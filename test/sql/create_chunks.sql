@@ -84,7 +84,7 @@ INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.3, 11233, 1)
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.2, 11233, 1);
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.3, 11233, 1), ((-9223372036854775808)::bigint, 23.4, 11233, 1);
 
-SELECT * FROM chunk_test_ends ORDER BY time asc;
+SELECT * FROM chunk_test_ends ORDER BY time asc, tag;
 
 --further tests of set_chunk_time_interval
 CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);

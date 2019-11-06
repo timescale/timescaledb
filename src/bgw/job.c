@@ -344,7 +344,7 @@ get_job_lock_for_delete(int32 job_id)
 	{
 		/* If I couldn't get a lock, try killing the background worker that's running the job.
 		 * This is probably not bulletproof but best-effort is good enough here. */
-		VirtualTransactionId *vxid = GetLockConflicts(&tag, AccessExclusiveLock);
+		VirtualTransactionId *vxid = GetLockConflictsCompat(&tag, AccessExclusiveLock, NULL);
 		PGPROC *proc;
 
 		if (VirtualTransactionIdIsValid(*vxid))
@@ -738,7 +738,7 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
 
-	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);

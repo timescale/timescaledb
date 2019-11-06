@@ -15,9 +15,9 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
-#include <nodes/relation.h>
 #include <parser/parse_coerce.h>
 #include <parser/scansup.h>
 #include <utils/catcache.h>
@@ -30,6 +30,13 @@
 #include "chunk.h"
 #include "utils.h"
 #include "compat.h"
+
+#include <nodes/primnodes.h>
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -429,7 +436,7 @@ ts_inheritance_parent_relid(Oid relid)
 	Oid parent = InvalidOid;
 	HeapTuple tuple;
 
-	catalog = heap_open(InheritsRelationId, AccessShareLock);
+	catalog = table_open(InheritsRelationId, AccessShareLock);
 	ScanKeyInit(&skey,
 				Anum_pg_inherits_inhrelid,
 				BTEqualStrategyNumber,
@@ -516,7 +523,11 @@ ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, 
 			if (rettype)
 				*rettype = procform->prorettype;
 
+#if PG12_LT
 			func = HeapTupleGetOid(proctup);
+#else
+			func = procform->oid;
+#endif
 			break;
 		}
 	}
@@ -545,7 +556,12 @@ ts_get_operator(const char *name, Oid namespace, Oid left, Oid right)
 						  ObjectIdGetDatum(namespace));
 	if (HeapTupleIsValid(tup))
 	{
+#if PG12
+		Form_pg_operator oprform = (Form_pg_operator) GETSTRUCT(tup);
+		opoid = oprform->oid;
+#else
 		opoid = HeapTupleGetOid(tup);
+#endif
 		ReleaseSysCache(tup);
 	}
 

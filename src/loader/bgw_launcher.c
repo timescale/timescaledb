@@ -349,7 +349,7 @@ static void
 populate_database_htab(HTAB *db_htab)
 {
 	Relation rel;
-	HeapScanDesc scan;
+	TableScanDesc scan;
 	HeapTuple tup;
 
 	/*
@@ -359,8 +359,8 @@ populate_database_htab(HTAB *db_htab)
 	StartTransactionCommand();
 	(void) GetTransactionSnapshot();
 
-	rel = heap_open(DatabaseRelationId, AccessShareLock);
-	scan = heap_beginscan_catalog(rel, 0, NULL);
+	rel = table_open(DatabaseRelationId, AccessShareLock);
+	scan = table_beginscan_catalog(rel, 0, NULL);
 
 	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
 	{
@@ -369,8 +369,11 @@ populate_database_htab(HTAB *db_htab)
 		if (!pgdb->datallowconn || pgdb->datistemplate)
 			continue; /* don't bother with dbs that don't allow
 					   * connections or are templates */
-
+#if PG12_LT
 		db_hash_entry_create_if_not_exists(db_htab, HeapTupleGetOid(tup));
+#else
+		db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
+#endif
 	}
 	heap_endscan(scan);
 	heap_close(rel, AccessShareLock);

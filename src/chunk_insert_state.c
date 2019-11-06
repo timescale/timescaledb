@@ -21,6 +21,11 @@
 #include <nodes/makefuncs.h>
 #include <catalog/pg_type.h>
 
+#include "compat.h"
+#if PG12
+#include <optimizer/optimizer.h>
+#endif
+
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
@@ -83,6 +88,25 @@ create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
 		estate->es_range_table = list_copy(estate->es_range_table);
 
 	estate->es_range_table = lappend(estate->es_range_table, rte);
+	Assert(list_length(estate->es_range_table) > estate->es_range_table_size);
+	if (estate->es_range_table_array != NULL)
+	{
+		estate->es_range_table_size = list_length(estate->es_range_table);
+		estate->es_range_table_array = repalloc(estate->es_range_table_array, estate->es_range_table_size * sizeof(*estate->es_range_table_array));
+		estate->es_range_table_array[rti - 1] = rte;
+		if (estate->es_relations != NULL)
+		{
+			estate->es_relations = repalloc(estate->es_relations, estate->es_range_table_size * sizeof(*estate->es_relations));
+			estate->es_relations[rti - 1] = rel;
+			RelationIncrementReferenceCount(rel);
+		}
+	}
+	else
+	{
+		Assert(estate->es_range_table_size == 0);
+		Assert(estate->es_relations == NULL);
+	}
+
 
 	return list_length(estate->es_range_table);
 }
@@ -104,10 +128,14 @@ ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple,
 		/* No conversion needed */
 		return tuple;
 
-	tuple = do_convert_tuple(tuple, state->tup_conv_map);
+	tuple = execute_attr_map_tuple(tuple, state->tup_conv_map);
 
 	ExecSetSlotDescriptor(state->slot, RelationGetDescr(chunkrel));
+#if PG12_LT
 	ExecStoreTuple(tuple, state->slot, InvalidBuffer, true);
+#else
+	ExecStoreHeapTuple(tuple, state->slot, true);
+#endif
 
 	if (NULL != existing_slot)
 		*existing_slot = state->slot;
@@ -201,7 +229,12 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 		rri->ri_onConflict = makeNode(OnConflictSetState);
 		rri->ri_onConflict->oc_ProjInfo = rri_orig->ri_onConflict->oc_ProjInfo;
 		rri->ri_onConflict->oc_WhereClause = rri_orig->ri_onConflict->oc_WhereClause;
+#if PG12
+		rri->ri_onConflict->oc_Existing = rri_orig->ri_onConflict->oc_Existing;
+		rri->ri_onConflict->oc_ProjSlot = rri_orig->ri_onConflict->oc_ProjSlot;
+#else
 		rri->ri_onConflict->oc_ProjTupdesc = rri_orig->ri_onConflict->oc_ProjTupdesc;
+#endif
 	}
 	else
 		rri->ri_onConflict = NULL;
@@ -453,7 +486,7 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 static inline bool
 tuple_conversion_needed(TupleDesc indesc, TupleDesc outdesc)
 {
-	return (indesc->natts != outdesc->natts || indesc->tdhasoid != outdesc->tdhasoid);
+	return (indesc->natts != outdesc->natts || TupleDescHasOids(indesc) != TupleDescHasOids(outdesc));
 }
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
@@ -515,7 +548,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	 */
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
-	rel = heap_open(chunk->table_id, RowExclusiveLock);
+	rel = table_open(chunk->table_id, RowExclusiveLock);
 
 	if (rel->rd_rel->relkind != RELKIND_RELATION)
 		elog(ERROR, "insert is not on a table");
@@ -549,7 +582,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		chunk_insert_state_set_arbiter_indexes(state, dispatch, rel);
 
 	/* Set tuple conversion map, if tuple needs conversion */
-	parent_rel = heap_open(dispatch->hypertable->main_table_relid, AccessShareLock);
+	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
 
 	if (tuple_conversion_needed(RelationGetDescr(parent_rel), RelationGetDescr(rel)))
 	{
@@ -561,7 +594,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)
-		state->slot = MakeTupleTableSlotCompat(NULL);
+		state->slot = MakeTupleTableSlotCompat(NULL, TTSOpsHeapTupleP);
 
 	heap_close(parent_rel, AccessShareLock);
 

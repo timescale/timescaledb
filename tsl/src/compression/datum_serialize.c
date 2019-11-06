@@ -339,7 +339,7 @@ binary_string_get_type(StringInfo buffer)
 
 	namespace_oid = LookupExplicitNamespace(element_type_namespace, false);
 
-	type_oid = GetSysCacheOid2(TYPENAMENSP,
+	type_oid = GetSysCacheOid2Compat(TYPENAMENSP, Anum_pg_type_oid,
 							   PointerGetDatum(element_type_name),
 							   ObjectIdGetDatum(namespace_oid));
 	if (!OidIsValid(type_oid))

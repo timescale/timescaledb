@@ -14,7 +14,6 @@ function(GET_PG_CONFIG var)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
 
-  
   # On Windows, fields that are not recorded will be given the value
   # "not recorded", so we translate this into <var>-NOTFOUND to make
   # it undefined.
@@ -22,7 +21,7 @@ function(GET_PG_CONFIG var)
   # It will then also show as, e.g., "PG_LDFLAGS-NOTFOUND" in any
   # string interpolation, making it obvious that it is an undefined
   # CMake variable.
-  if(${_temp} STREQUAL "not recorded")
+  if("${_temp}" STREQUAL "not recorded")
     set(_temp ${var}-NOTFOUND)
   endif()
 
@@ -224,7 +223,7 @@ endif ()
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 if ((${PG_VERSION} VERSION_LESS "9.6")
-    OR (${PG_VERSION} VERSION_EQUAL "12")
+    # OR (${PG_VERSION} VERSION_EQUAL "12")
     OR (${PG_VERSION} VERSION_GREATER "12"))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10 or 11")
 endif ()

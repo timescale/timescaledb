@@ -60,6 +60,12 @@
 #include "utils.h"
 #include "extension.h"
 
+#include "compat.h"
+
+#if PG12
+#include "optimizer/optimizer.h"
+#endif
+
 typedef struct FirstLastAggInfo
 {
 	MinMaxAggInfo *m_agg_info; /* reusing MinMaxAggInfo to avoid code
@@ -651,7 +657,13 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->tuple_fraction = 1.0;
 	subroot->limit_tuples = 1.0;
 
-	final_rel = query_planner(subroot, tlist, first_last_qp_callback, NULL);
+	final_rel = query_planner(subroot,
+#if PG12_LT
+		/* as of 333ed24 uses subroot->processed_tlist instead  */
+		tlist,
+#endif
+		first_last_qp_callback,
+		NULL);
 
 	/*
 	 * Since we didn't go through subquery_planner() to handle the subquery,

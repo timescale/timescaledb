@@ -17,10 +17,12 @@
 #include <funcapi.h>
 #include <utils/typcache.h>
 
+#include <compat.h>
+
 typedef struct HashMeta
 {
-	FunctionCallInfoData hash_info;
-	FunctionCallInfoData eq_info;
+	FunctionCallInfo hash_info;
+	FunctionCallInfo eq_info;
 } HashMeta;
 
 typedef struct DictionaryHashItem
@@ -50,13 +52,12 @@ static uint32
 datum_hash(dictionary_hash *tb, Datum key)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
-	FunctionCallInfoData *fcinfo = &meta->hash_info;
+	FunctionCallInfo fcinfo = meta->hash_info;
 	Datum value;
 
-	fcinfo->arg[0] = key;
-	fcinfo->argnull[0] = false;
-
+	FC_SET_ARG(fcinfo, 0, key);
 	fcinfo->isnull = false;
+
 	value = FunctionCallInvoke(fcinfo);
 	Assert(!fcinfo->isnull);
 
@@ -67,16 +68,13 @@ static bool
 datum_eq(dictionary_hash *tb, Datum a, Datum b)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
-	FunctionCallInfoData *fcinfo = &meta->eq_info;
+	FunctionCallInfo fcinfo = meta->eq_info;
 	Datum value;
 
-	fcinfo->arg[0] = a;
-	fcinfo->argnull[0] = false;
-
-	fcinfo->arg[1] = b;
-	fcinfo->argnull[1] = false;
-
+	FC_SET_ARG(fcinfo, 0, a);
+	FC_SET_ARG(fcinfo, 1, b);
 	fcinfo->isnull = false;
+
 	value = FunctionCallInvoke(fcinfo);
 	Assert(!fcinfo->isnull);
 
@@ -93,8 +91,11 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 			 "invalid type for dictionary compression, type must have both a hash function and "
 			 "equality function");
 
-	InitFunctionCallInfoData(meta->eq_info, &tentry->eq_opr_finfo, 2, 0, NULL, NULL);
-	InitFunctionCallInfoData(meta->hash_info, &tentry->hash_proc_finfo, 2, 0, NULL, NULL);
+	meta->eq_info = HEAP_FCINFO(2);
+	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, 0, NULL, NULL);
+
+	meta->hash_info = HEAP_FCINFO(2);
+	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, 0, NULL, NULL);
 
 	return dictionary_create(CurrentMemoryContext, 10, meta);
 }

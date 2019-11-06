@@ -18,6 +18,7 @@
 #include <nodes/value.h>
 #include <catalog/namespace.h>
 #include <catalog/indexing.h>
+#include <catalog/pg_collation.h>
 #include <catalog/pg_proc.h>
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
@@ -354,7 +355,7 @@ ts_hypertable_get_all(void)
 								   hypertable_tuple_append,
 								   &result,
 								   -1,
-								   LockTupleKeyShare,
+								   RowExclusiveLock,
 								   false,
 								   CurrentMemoryContext);
 
@@ -697,16 +698,16 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 static ScanTupleResult
 tuple_found_lock(TupleInfo *ti, void *data)
 {
-	HTSU_Result *result = data;
+	TM_Result *result = data;
 
 	*result = ti->lockresult;
 	return SCAN_DONE;
 }
 
-HTSU_Result
+TM_Result
 ts_hypertable_lock_tuple(Oid table_relid)
 {
-	HTSU_Result result;
+	TM_Result result;
 	int num_found;
 
 	num_found = hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
@@ -727,11 +728,11 @@ ts_hypertable_lock_tuple(Oid table_relid)
 bool
 ts_hypertable_lock_tuple_simple(Oid table_relid)
 {
-	HTSU_Result result = ts_hypertable_lock_tuple(table_relid);
+	TM_Result result = ts_hypertable_lock_tuple(table_relid);
 
 	switch (result)
 	{
-		case HeapTupleSelfUpdated:
+		case TM_SelfModified:
 
 			/*
 			 * Updated by the current transaction already. We equate this with
@@ -739,25 +740,25 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 			 * by us.
 			 */
 			return true;
-		case HeapTupleMayBeUpdated:
+		case TM_Ok:
 			/* successfully locked */
 			return true;
-		case HeapTupleUpdated:
+		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("hypertable \"%s\" has already been updated by another transaction",
 							get_rel_name(table_relid)),
 					 errhint("Retry the operation again")));
-		case HeapTupleBeingUpdated:
+		case TM_BeingModified:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("hypertable \"%s\" is being updated by another transaction",
 							get_rel_name(table_relid)),
 					 errhint("Retry the operation again")));
-		case HeapTupleWouldBlock:
+		case TM_WouldBlock:
 			/* Locking would block. Let caller decide what to do */
 			return false;
-		case HeapTupleInvisible:
+		case TM_Invisible:
 			elog(ERROR, "attempted to lock invisible tuple");
 			return false;
 		default:
@@ -860,7 +861,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
-	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel,
 							   hypertable_id,
 							   schema_name,
@@ -1161,7 +1162,7 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 static bool
 relation_has_tuples(Relation rel)
 {
-	HeapScanDesc scandesc = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 	bool hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
 
 	heap_endscan(scandesc);
@@ -1171,7 +1172,7 @@ relation_has_tuples(Relation rel)
 static bool
 table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 {
-	Relation rel = heap_open(table_relid, lockmode);
+	Relation rel = table_open(table_relid, lockmode);
 	bool hastuples = relation_has_tuples(rel);
 
 	heap_close(rel, lockmode);
@@ -1245,7 +1246,7 @@ hypertable_validate_constraints(Oid relid)
 	ScanKeyData scankey;
 	HeapTuple tuple;
 
-	catalog = heap_open(ConstraintRelationId, AccessShareLock);
+	catalog = table_open(ConstraintRelationId, AccessShareLock);
 
 	ScanKeyInit(&scankey,
 				Anum_pg_constraint_conrelid,
@@ -1345,7 +1346,7 @@ old_insert_blocker_trigger_get(Oid relid)
 	HeapTuple tuple;
 	Oid tgoid = InvalidOid;
 
-	tgrel = heap_open(TriggerRelationId, AccessShareLock);
+	tgrel = table_open(TriggerRelationId, AccessShareLock);
 
 	ScanKeyInit(&skey[0],
 				Anum_pg_trigger_tgrelid,
@@ -1368,7 +1369,11 @@ old_insert_blocker_trigger_get(Oid relid)
 					strlen(OLD_INSERT_BLOCKER_NAME)) == 0 &&
 			trig->tgisinternal)
 		{
+#if PG12_LT
 			tgoid = HeapTupleGetOid(tuple);
+#else
+			tgoid = trig->oid;
+#endif
 			break;
 		}
 	}
@@ -1639,7 +1644,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	 * migrating data, then shouldn't have much contention on the table thus
 	 * not worth optimizing.
 	 */
-	rel = heap_open(table_relid, AccessExclusiveLock);
+	rel = table_open(table_relid, AccessExclusiveLock);
 
 	/* recheck after getting lock */
 	if (ts_is_hypertable(table_relid))
@@ -1943,11 +1948,13 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 		return SCAN_CONTINUE;
 
 	if ((accum->schema_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2(nameeq,
+		 DatumGetBool(DirectFunctionCall2Coll(nameeq,
+		 								  C_COLLATION_OID,
 										  NameGetDatum(accum->schema_name),
 										  NameGetDatum(&form->schema_name)))) &&
 		(accum->table_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2(nameeq,
+		 DatumGetBool(DirectFunctionCall2Coll(nameeq,
+		 								  C_COLLATION_OID,
 										  NameGetDatum(accum->table_name),
 										  NameGetDatum(&form->table_name)))))
 		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
@@ -2092,7 +2099,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	ChunkSizingInfo *chunk_sizing_info;
 	Relation rel;
 
-	rel = heap_open(table_relid, AccessExclusiveLock);
+	rel = table_open(table_relid, AccessExclusiveLock);
 	/*
 	 * Check that the user has permissions to make this table to a compressed
 	 * hypertable

@@ -231,10 +231,12 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	tupdesc = rel->rd_att;
 	i = 1;
 
+#if PG12_LT
 	if (rel->rd_rel->relhasoids)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression cannot be used on table with OIDs")));
+#endif
 
 	foreach (lc, segmentby_cols)
 	{
@@ -377,7 +379,7 @@ compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
 	int i;
 	CatalogSecurityContext sec_ctx;
 
-	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE_COMPRESSION), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE_COMPRESSION), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	for (i = 0; i < compress_cols->numcols; i++)
@@ -688,7 +690,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	List *conlist = NIL;
 	ArrayType *arr;
 
-	pg_constr = heap_open(ConstraintRelationId, AccessShareLock);
+	pg_constr = table_open(ConstraintRelationId, AccessShareLock);
 
 	ScanKeyInit(&scankey,
 				Anum_pg_constraint_conrelid,
@@ -727,7 +729,18 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 										RelationGetDescr(pg_constr),
 										&isNull);
 			if (isNull)
-				elog(ERROR, "null conkey for constraint %u", HeapTupleGetOid(tuple));
+			{
+#if PG12
+				Oid oid = heap_getattr(tuple,
+					Anum_pg_constraint_oid,
+					RelationGetDescr(pg_constr),
+					&isNull);
+#else
+				Oid oid = HeapTupleGetOid(tuple);
+#endif
+				elog(ERROR, "null conkey for constraint %u", oid);
+			}
+
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
 			numkeys = ARR_DIMS(arr)[0];
 			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||

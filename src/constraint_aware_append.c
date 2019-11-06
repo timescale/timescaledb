@@ -24,10 +24,16 @@
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 
+#include "compat.h"
+
+#if PG12_GE
+#include <optimizer/appendinfo.h>
+#include <optimizer/optimizer.h>
+#endif
+
 #include "constraint_aware_append.h"
 #include "hypertable.h"
 #include "chunk_append/transform.h"
-#include "compat.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.

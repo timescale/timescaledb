@@ -8,7 +8,14 @@
 
 #include <postgres.h>
 #include <nodes/extensible.h>
+
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
 #include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 								  List *clauses, List *custom_plans);
