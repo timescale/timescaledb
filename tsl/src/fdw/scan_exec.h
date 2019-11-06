@@ -51,8 +51,10 @@ extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es,
 extern DataFetcher *create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode);
 
 #ifdef TS_DEBUG
+
+extern TimestampTz ts_current_timestamp_override_value;
 /* Allow tests to specify the time to push down in place of now() */
-extern void fdw_scan_debug_override_pushdown_timestamp(TimestampTz time);
+extern void fdw_scan_debug_override_current_timestamp(TimestampTz time);
 #endif
 
 #endif /* TIMESCALEDB_TSL_FDW_SCAN_EXEC_H */

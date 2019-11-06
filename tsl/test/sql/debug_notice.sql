@@ -48,6 +48,7 @@ INSERT INTO hyper VALUES
        ('2018-05-20 15:08', 5, 1, 9.4),
        ('2018-05-30 13:02', 3, 2, 9.0);
 
+-- Update table stats
 ANALYZE hyper;
 
 -- Optimizer debug messages shown at debug level 2

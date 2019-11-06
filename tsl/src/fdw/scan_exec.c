@@ -191,7 +191,7 @@ prepare_query_params(PlanState *node, List *fdw_exprs, int num_params, FmgrInfo 
 TimestampTz ts_current_timestamp_override_value = -1;
 
 extern void
-fdw_scan_debug_override_pushdown_timestamp(TimestampTz time)
+fdw_scan_debug_override_current_timestamp(TimestampTz time)
 {
 	ts_current_timestamp_override_value = time;
 }

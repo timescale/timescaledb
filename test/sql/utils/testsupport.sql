@@ -279,3 +279,6 @@ $BODY$
 BEGIN
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION ts_test_override_current_timestamptz(new_value TIMESTAMPTZ) 
+RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz' LANGUAGE C VOLATILE STRICT;

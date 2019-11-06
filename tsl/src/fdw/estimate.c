@@ -103,7 +103,7 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	ce->startup_cost = ofpinfo->rel_startup_cost;
 	ce->startup_cost += aggcosts.transCost.startup;
 	ce->startup_cost += aggcosts.transCost.per_tuple * input_rows;
-	ce->startup_cost += (cpu_operator_cost * num_group_cols) * input_rows;
+	ce->startup_cost += cpu_operator_cost * num_group_cols * input_rows;
 	ce->startup_cost += ptarget->cost.startup;
 
 	/*-----
