@@ -137,8 +137,8 @@ extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
-extern Datum ts_dimension_transform_value(Dimension *dim, Datum value, Oid const_datum_type,
-										  Oid *restype);
+extern Datum ts_dimension_transform_value(Dimension *dim, Oid collation, Datum value,
+										  Oid const_datum_type, Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
 extern TSDLLEXPORT void ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type,
 													const char *caller_name);

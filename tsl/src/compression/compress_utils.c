@@ -88,7 +88,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	Datum values[Natts_compression_chunk_size];
 	bool nulls[Natts_compression_chunk_size] = { false };
 
-	rel = heap_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
@@ -113,7 +113,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static void

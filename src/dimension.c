@@ -629,7 +629,7 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 	Relation rel;
 	int32 dimension_id;
 
-	rel = heap_open(catalog_get_table_id(catalog, DIMENSION), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, DIMENSION), RowExclusiveLock);
 	dimension_id = dimension_insert_relation(rel,
 											 hypertable_id,
 											 colname,
@@ -637,7 +637,7 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 num_slices,
 											 partitioning_func,
 											 interval_length);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
 
@@ -688,10 +688,11 @@ ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
  * the restype parameter.
  */
 Datum
-ts_dimension_transform_value(Dimension *dim, Datum value, Oid const_datum_type, Oid *restype)
+ts_dimension_transform_value(Dimension *dim, Oid collation, Datum value, Oid const_datum_type,
+							 Oid *restype)
 {
 	if (NULL != dim->partitioning)
-		value = ts_partitioning_func_apply(dim->partitioning, value);
+		value = ts_partitioning_func_apply(dim->partitioning, collation, value);
 
 	if (NULL != restype)
 	{

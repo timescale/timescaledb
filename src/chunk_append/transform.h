@@ -8,7 +8,14 @@
 
 #include <postgres.h>
 #include <nodes/extensible.h>
+
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
 #include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 extern Expr *ts_transform_cross_datatype_comparison(Expr *clause);
 

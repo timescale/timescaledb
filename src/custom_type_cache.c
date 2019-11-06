@@ -44,9 +44,10 @@ ts_custom_type_cache_get(CustomType type)
 	if (tinfo->type_oid == InvalidOid)
 	{
 		Oid schema_oid = LookupExplicitNamespace(tinfo->schema_name, false);
-		Oid type_oid = GetSysCacheOid2(TYPENAMENSP,
-									   CStringGetDatum(tinfo->type_name),
-									   ObjectIdGetDatum(schema_oid));
+		Oid type_oid = GetSysCacheOid2Compat(TYPENAMENSP,
+											 Anum_pg_type_oid,
+											 CStringGetDatum(tinfo->type_name),
+											 ObjectIdGetDatum(schema_oid));
 		if (!OidIsValid(type_oid))
 			elog(ERROR, "unknown timescaledb type %s", tinfo->type_name);
 

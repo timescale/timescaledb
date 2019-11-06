@@ -242,8 +242,13 @@ ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 									 * message */
 #if PG96
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_MQ_WAIT_INTERVAL);
-#else
+#elif PG12_LT
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_MQ_WAIT_INTERVAL, WAIT_EVENT_MQ_INTERNAL);
+#else
+		WaitLatch(MyLatch,
+				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+				  BGW_MQ_WAIT_INTERVAL,
+				  WAIT_EVENT_MQ_INTERNAL);
 #endif
 
 		ResetLatch(MyLatch);
@@ -287,9 +292,14 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message,
 		ereport(DEBUG1, (errmsg("TimescaleDB ack message receive failure, retrying")));
 #if PG96
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
-#else
+#elif PG12_LT
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT,
+				  BGW_ACK_WAIT_INTERVAL,
+				  WAIT_EVENT_MQ_INTERNAL);
+#else
+		WaitLatch(MyLatch,
+				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 				  BGW_ACK_WAIT_INTERVAL,
 				  WAIT_EVENT_MQ_INTERNAL);
 #endif
@@ -388,9 +398,14 @@ send_ack(dsm_segment *seg, bool success)
 		ereport(DEBUG1, (errmsg("TimescaleDB ack message send failure, retrying")));
 #if PG96
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
-#else
+#elif PG12_LT
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT,
+				  BGW_ACK_WAIT_INTERVAL,
+				  WAIT_EVENT_MQ_INTERNAL);
+#else
+		WaitLatch(MyLatch,
+				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 				  BGW_ACK_WAIT_INTERVAL,
 				  WAIT_EVENT_MQ_INTERNAL);
 #endif

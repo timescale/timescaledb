@@ -20,17 +20,25 @@
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
 #define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))
 #define is_supported_pg_version_11(version) ((version >= 110000) && (version < 120000))
+#define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
+
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_96(version) || is_supported_pg_version_10(version) ||                 \
-	 is_supported_pg_version_11(version))
+	 is_supported_pg_version_11(version) || is_supported_pg_version_12(version))
 
 #define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
 #define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
 #define PG11 is_supported_pg_version_11(PG_VERSION_NUM)
+#define PG12 is_supported_pg_version_12(PG_VERSION_NUM)
+
 #define PG10_LT PG96
 #define PG10_GE !(PG10_LT)
+
 #define PG11_LT (PG96 || PG10)
 #define PG11_GE !(PG11_LT)
+
+#define PG12_LT (PG96 || PG10 || PG11)
+#define PG12_GE !(PG12_LT)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -238,6 +246,11 @@
 	ExecASInsertTriggers(estate, result_rel_info, NULL)
 #endif
 
+/* execute_attr_map_tuple */
+#if PG12_LT
+#define execute_attr_map_tuple do_convert_tuple
+#endif
+
 /* ExecBuildProjectionInfo */
 #if PG96
 #define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc)                    \
@@ -245,6 +258,20 @@
 #else
 #define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc)                    \
 	ExecBuildProjectionInfo(tl, exprContext, slot, parent, inputdesc)
+#endif
+
+/* https://github.com/postgres/postgres/commit/5db6df0c0117ff2a4e0cd87594d2db408cd5022f */
+#if PG12_LT
+#define TM_Result HTSU_Result
+
+#define TM_Ok HeapTupleMayBeUpdated
+#define TM_SelfModified HeapTupleSelfUpdated
+#define TM_Updated HeapTupleUpdated
+#define TM_BeingModified HeapTupleBeingUpdated
+#define TM_WouldBlock HeapTupleWouldBlock
+#define TM_Invisible HeapTupleInvisible
+
+#define TM_FailureData HeapUpdateFailureData
 #endif
 
 /*
@@ -258,8 +285,15 @@
  * We adopt the PG11 conventions so that we can take advantage of JITing more easily in the future.
  */
 #if PG96 || PG10
+
+#define TupleTableSlotOps void
+#define TTSOpsVirtualP NULL
+#define TTSOpsHeapTupleP NULL
+#define TTSOpsMinimalTupleP NULL
+#define TTSOpsBufferHeapTupleP NULL
+
 static inline TupleTableSlot *
-ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc)
+ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc, void *tts_ops)
 {
 	TupleTableSlot *myslot = ExecInitExtraTupleSlot(estate);
 
@@ -268,6 +302,8 @@ ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc)
 
 	return myslot;
 }
+
+#define MakeSingleTupleTableSlotCompat(tupledesc, tts_ops) MakeSingleTupleTableSlot(tupledesc)
 
 /*
  * ExecSetTupleBound is only available starting with PG11 so we map to a backported version
@@ -278,7 +314,7 @@ ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc)
 #endif
 
 static inline TupleTableSlot *
-MakeTupleTableSlotCompat(TupleDesc tupdesc)
+MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 {
 	TupleTableSlot *myslot = MakeTupleTableSlot();
 
@@ -287,9 +323,105 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc)
 
 	return myslot;
 }
+#elif PG12_LT
+
+#define TupleTableSlotOps void
+#define TTSOpsVirtualP NULL
+#define TTSOpsHeapTupleP NULL
+#define TTSOpsMinimalTupleP NULL
+#define TTSOpsBufferHeapTupleP NULL
+#define ExecInitExtraTupleSlotCompat(estate, tupledesc, tts_ops)                                   \
+	ExecInitExtraTupleSlot(estate, tupledesc)
+#define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc)
+#define MakeSingleTupleTableSlotCompat(tupledesc, tts_ops) MakeSingleTupleTableSlot(tupledesc)
+
 #else
+
+#define TTSOpsVirtualP (&TTSOpsVirtual)
+#define TTSOpsHeapTupleP (&TTSOpsHeapTuple)
+#define TTSOpsMinimalTupleP (&TTSOpsMinimalTuple)
+#define TTSOpsBufferHeapTupleP (&TTSOpsBufferHeapTuple)
 #define ExecInitExtraTupleSlotCompat ExecInitExtraTupleSlot
 #define MakeTupleTableSlotCompat MakeTupleTableSlot
+#define MakeSingleTupleTableSlotCompat MakeSingleTupleTableSlot
+
+#endif
+
+/* ExecBRInsertTriggers */
+#if PG12_LT
+#define ExecBRInsertTriggersCompat(estate, relinfo, slot)                                          \
+	do                                                                                             \
+	{                                                                                              \
+		slot = ExecBRInsertTriggers(estate, relinfo, slot);                                        \
+	} while (0)
+#else
+#define ExecBRInsertTriggersCompat(estate, relinfo, slot) ExecBRInsertTriggers
+#endif
+
+/* fmgr
+ * In a9c35cf postgres changed how it calls SQL functions so that the number of
+ * argument-slots allocated is chosen dynamically, instead of being fixed. This
+ * change was ABI-breaking, so we cannot backport this optimization, however,
+ * we do backport the interface, so that all our code will be compatible with
+ * new versions.
+ */
+#if PG12_LT
+
+/* unlike the pg12 version, this is just a wrapper for FunctionCallInfoData */
+#define LOCAL_FCINFO(name, nargs)                                                                  \
+	union                                                                                          \
+	{                                                                                              \
+		FunctionCallInfoData fcinfo;                                                               \
+	} name##data;                                                                                  \
+	FunctionCallInfo name = &name##data.fcinfo
+
+/* convenience macro to allocate FunctionCallInfoData on the heap */
+#define HEAP_FCINFO(nargs) palloc(sizeof(FunctionCallInfoData))
+
+/* getting arguments has a different API, so these macros unify the versions */
+#define FC_ARG(fcinfo, n) ((fcinfo)->arg[(n)])
+#define FC_NULL(fcinfo, n) ((fcinfo)->argnull[(n)])
+
+#else
+
+/* convenience macro to allocate FunctionCallInfoData on the heap */
+#define HEAP_FCINFO(nargs) palloc(SizeForFunctionCallInfo(nargs))
+
+/* getting arguments has a different API, so these macros unify the versions */
+#define FC_ARG(fcinfo, n) ((fcinfo)->args[(n)].value)
+#define FC_NULL(fcinfo, n) ((fcinfo)->args[(n)].isnull)
+
+#endif
+
+/* convenience setters */
+#define FC_SET_ARG(fcinfo, n, val)                                                                 \
+	do                                                                                             \
+	{                                                                                              \
+		short _n = (n);                                                                            \
+		FunctionCallInfo _fcinfo = (fcinfo);                                                       \
+		FC_ARG(_fcinfo, _n) = (val);                                                               \
+		FC_NULL(_fcinfo, _n) = false;                                                              \
+	} while (0)
+
+#define FC_SET_NULL(fcinfo, n)                                                                     \
+	do                                                                                             \
+	{                                                                                              \
+		short _n = (n);                                                                            \
+		FunctionCallInfo _fcinfo = (fcinfo);                                                       \
+		FC_ARG(_fcinfo, _n) = 0;                                                                   \
+		FC_NULL(_fcinfo, _n) = true;                                                               \
+	} while (0)
+
+/*
+ * In PG12 OID columns were removed changing all OID columns in the catalog to
+ * be regular columns. This necessitates passing in the attnum of said column to
+ * any function that wishes to access these columns. In earlier versions, this
+ * parameter can be safely ignored.
+ */
+#if PG12_LT
+#define GetSysCacheOid2Compat(cacheId, oidcol, key1, key2) GetSysCacheOid2(cacheId, key1, key2)
+#else
+#define GetSysCacheOid2Compat GetSysCacheOid2
 #endif
 
 /*
@@ -443,6 +575,31 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 				 NULL)
 #endif
 
+/* index_get_next
+ *
+ * index_get no longer exists as of c2fe139. As tables are now generalized to
+ * cover non-heap-based things, it is incorrect to return a HeapTuple in the
+ * general case. To allow us to migrate to the new APIs more incrementally, we
+ * provide our own, temporary, implementation of index_get_next, which should be
+ * removed at some point when all our usages are replaced with index_getnext_slot
+ */
+// #if PG12
+
+// #include <access/genam.h>
+
+// static inline HeapTuple
+// index_getnext(IndexScanDesc scan, ScanDirection direction)
+// {
+// 	//FIXME this probably doesn't work
+// 	TupleTableSlot slot;
+// 	bool found = index_getnext_slot(scan, direction, &slot);
+// 	if (!found)
+// 		return false;
+// 	return slot.tts_ops->get_heap_tuple(&slot);
+// }
+
+// #endif
+
 /* InitResultRelInfo */
 #if PG96
 #define InitResultRelInfoCompat(result_rel_info,                                                   \
@@ -526,6 +683,10 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #define PG_RETURN_JSONB_P PG_RETURN_JSONB
 #endif
 
+#if PG12_LT
+#define table_open heap_open
+#endif
+
 /*
  * PG11 introduced a new level of nodes inside of ResultRelInfo for dealing with
  * ON CONFLICT behavior in partitions (see:
@@ -565,6 +726,15 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #define RangeVarGetRelidExtendedCompat RangeVarGetRelidExtended
 #endif
 
+/* RenameRelationInternal
+ */
+#if PG12_LT
+#define RenameRelationInternalCompat(relid, name, is_internal, is_index)                           \
+	RenameRelationInternal(relid, name, is_internal)
+#else
+#define RenameRelationInternalCompat RenameRelationInternal
+#endif
+
 /*
  * TransactionChain -> TransactionBlock
  *
@@ -576,6 +746,21 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  */
 #if PG96 || PG10
 #define PreventInTransactionBlock PreventTransactionChain
+#endif
+
+/*
+ * table_beginscan
+ * PG12 generalizes table scans to those no directly dependant on the heap.
+ * These are the functions we should generally use for version after 12. For
+ * earlier versions, we can assume that all tables are backed by the heap, so
+ * we forward it to heap_beginscan.
+ * see
+ * https://github.com/postgres/postgres/commit/c2fe139c201c48f1133e9fbea2dd99b8efe2fadd#diff-79a1a60cd631a1067199e0296de47ec4
+ */
+#if PG96 || PG10 || PG11
+#define TableScanDesc HeapScanDesc
+#define table_beginscan heap_beginscan
+#define table_beginscan_catalog heap_beginscan_catalog
 #endif
 
 /*
@@ -605,6 +790,12 @@ extern int oid_cmp(const void *p1, const void *p2);
 
 /* create this function for symmetry with above */
 #define pq_getmsgint32(buf) pq_getmsgint(buf, 4)
+
+#if PG12_LT
+#define TupleDescHasOids(desc) (desc)->tdhasoid
+#else
+#define TupleDescHasOids(desc) false
+#endif
 
 #if PG96
 #if __GNUC__ >= 3

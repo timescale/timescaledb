@@ -9,7 +9,14 @@
 #include <postgres.h>
 #include <nodes/bitmapset.h>
 #include <nodes/extensible.h>
+
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
 #include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 typedef struct ParallelChunkAppendState
 {
@@ -65,6 +72,9 @@ typedef struct ChunkAppendState
 	ParallelChunkAppendState *pstate;
 	void (*choose_next_subplan)(struct ChunkAppendState *);
 
+#if PG12
+	TupleTableSlot *slot;
+#endif
 } ChunkAppendState;
 
 extern Node *ts_chunk_append_state_create(CustomScan *cscan);

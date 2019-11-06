@@ -196,7 +196,7 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
  {1,2000,2000,2000,2000,1999,90000}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
+EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Finalize Aggregate
@@ -210,7 +210,7 @@ EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = c
                            Filter: ((i)::double precision = '-1'::double precision)
 (9 rows)
 
-SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
+SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
  histogram 
 -----------
  

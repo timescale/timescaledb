@@ -52,10 +52,14 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "compat.h"
+#if PG12_GE
+#include <optimizer/optimizer.h>
+#endif
+
 #include "create.h"
 
 #include "catalog.h"
-#include "compat.h"
 #include "continuous_agg.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -238,7 +242,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, cha
 	namestrcpy(&partial_viewnm, partial_view);
 	namestrcpy(&direct_schnm, direct_schema);
 	namestrcpy(&direct_viewnm, direct_view);
-	rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
@@ -269,7 +273,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, cha
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 /* create hypertable for the table referred by mat_tbloid
@@ -319,7 +323,7 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 	HeapTuple tuple;
 	bool trg_found = false;
 
-	tgrel = heap_open(TriggerRelationId, AccessShareLock);
+	tgrel = table_open(TriggerRelationId, AccessShareLock);
 	ScanKeyInit(&skey[0],
 				Anum_pg_trigger_tgrelid,
 				BTEqualStrategyNumber,
@@ -338,7 +342,7 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 		}
 	}
 	systable_endscan(tgscan);
-	heap_close(tgrel, AccessShareLock);
+	table_close(tgrel, AccessShareLock);
 	return trg_found;
 }
 

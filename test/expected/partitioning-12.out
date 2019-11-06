@@ -1,0 +1,27 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Should expect an error when creating a hypertable from a partition
+\set ON_ERROR_STOP 0
+CREATE TABLE partitioned_ht_create(time timestamptz, temp float, device int) PARTITION BY RANGE (time);
+SELECT create_hypertable('partitioned_ht_create', 'time');
+ERROR:  table "partitioned_ht_create" is already partitioned
+\set ON_ERROR_STOP 1
+-- Should expect an error when attaching a hypertable to a partition
+\set ON_ERROR_STOP 0
+CREATE TABLE partitioned_attachment_vanilla(time timestamptz, temp float, device int) PARTITION BY RANGE (time);
+CREATE TABLE attachment_hypertable(time timestamptz, temp float, device int);
+SELECT create_hypertable('attachment_hypertable', 'time');
+NOTICE:  adding not-null constraint to column "time"
+         create_hypertable          
+------------------------------------
+ (1,public,attachment_hypertable,t)
+(1 row)
+
+ALTER TABLE partitioned_attachment_vanilla ATTACH PARTITION attachment_hypertable FOR VALUES FROM ('2016-07-01') TO ('2016-08-01');
+ERROR:  hypertables do not support native postgres partitioning
+\set ON_ERROR_STOP 1
+-- Should not expect an error when attaching a normal table to a partition
+CREATE TABLE partitioned_vanilla(time timestamptz, temp float, device int) PARTITION BY RANGE (time);
+CREATE TABLE attachment_vanilla(time timestamptz, temp float, device int);
+ALTER TABLE partitioned_vanilla ATTACH PARTITION attachment_vanilla FOR VALUES FROM ('2016-07-01') TO ('2016-08-01');

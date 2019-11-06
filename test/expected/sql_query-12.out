@@ -1,0 +1,278 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\o /dev/null
+\ir include/insert_two_partitions.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set QUIET off
+BEGIN;
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COMMIT;
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
+\o
+SELECT * FROM PUBLIC."two_Partitions";
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+(12 rows)
+
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+         Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.series_0, _hyper_1_1_chunk.series_1, _hyper_1_1_chunk.series_2, _hyper_1_1_chunk.series_bool
+   ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+         Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.series_0, _hyper_1_2_chunk.series_1, _hyper_1_2_chunk.series_2, _hyper_1_2_chunk.series_bool
+   ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+         Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.series_0, _hyper_1_3_chunk.series_1, _hyper_1_3_chunk.series_2, _hyper_1_3_chunk.series_bool
+   ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+         Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+(9 rows)
+
+\echo "The following queries should NOT scan two_Partitions._hyper_1_1_chunk"
+"The following queries should NOT scan two_Partitions._hyper_1_1_chunk"
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
+   Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+   Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
+(3 rows)
+
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
+   Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+   Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
+(3 rows)
+
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
+   Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+   Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
+(3 rows)
+
+--test integer partition key
+CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
+SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
+NOTICE:  adding not-null constraint to column "time"
+   create_hypertable   
+-----------------------
+ (2,public,int_part,t)
+(1 row)
+
+INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
+INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
+--check that there are two chunks
+SELECT * FROM test.show_subtables('int_part');
+                 Child                  | Tablespace 
+----------------------------------------+------------
+ _timescaledb_internal._hyper_2_5_chunk | 
+ _timescaledb_internal._hyper_2_6_chunk | 
+(2 rows)
+
+SELECT * FROM "int_part" WHERE object_id = 1;
+           time           | object_id | temp 
+--------------------------+-----------+------
+ Fri Jan 20 09:00:01 2017 |         1 | 22.5
+(1 row)
+
+--make sure this touches only one partititon
+EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_2_5_chunk_int_part_object_id_time_idx on _timescaledb_internal._hyper_2_5_chunk
+   Output: _hyper_2_5_chunk."time", _hyper_2_5_chunk.object_id, _hyper_2_5_chunk.temp
+   Index Cond: (_hyper_2_5_chunk.object_id = 1)
+(3 rows)
+
+--TODO: handle this later?
+--EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
+\echo "The following shows non-aggregated queries with time desc using merge append"
+"The following shows non-aggregated queries with time desc using merge append"
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
+         Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
+         Startup Exclusion: false
+         Runtime Exclusion: false
+         ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
+               Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.series_0, _hyper_1_3_chunk.series_1, _hyper_1_3_chunk.series_2, _hyper_1_3_chunk.series_bool
+         ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_chunk
+               Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.series_0, _hyper_1_2_chunk.series_1, _hyper_1_2_chunk.series_2, _hyper_1_2_chunk.series_bool
+         ->  Merge Append
+               Sort Key: _hyper_1_4_chunk."timeCustom" DESC NULLS LAST
+               ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+               ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.series_0, _hyper_1_1_chunk.series_1, _hyper_1_1_chunk.series_2, _hyper_1_1_chunk.series_bool
+(17 rows)
+
+--shows that more specific indexes are used if the WHERE clauses "match", uses the series_1 index here.
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 IS NOT NULL ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
+         Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
+         Startup Exclusion: false
+         Runtime Exclusion: false
+         ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_3_chunk
+               Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.series_0, _hyper_1_3_chunk.series_1, _hyper_1_3_chunk.series_2, _hyper_1_3_chunk.series_bool
+         ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_chunk
+               Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.series_0, _hyper_1_2_chunk.series_1, _hyper_1_2_chunk.series_2, _hyper_1_2_chunk.series_bool
+         ->  Merge Append
+               Sort Key: _hyper_1_4_chunk."timeCustom" DESC NULLS LAST
+               ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+               ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.series_0, _hyper_1_1_chunk.series_1, _hyper_1_1_chunk.series_2, _hyper_1_1_chunk.series_bool
+(17 rows)
+
+--here the "match" is implication series_1 > 1 => series_1 IS NOT NULL
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 > 1 ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+   ->  Custom Scan (ChunkAppend) on public."two_Partitions"
+         Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+         Order: "two_Partitions"."timeCustom" DESC NULLS LAST
+         Startup Exclusion: false
+         Runtime Exclusion: false
+         ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_3_chunk
+               Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.series_0, _hyper_1_3_chunk.series_1, _hyper_1_3_chunk.series_2, _hyper_1_3_chunk.series_bool
+               Index Cond: (_hyper_1_3_chunk.series_1 > '1'::double precision)
+         ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_chunk
+               Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.series_0, _hyper_1_2_chunk.series_1, _hyper_1_2_chunk.series_2, _hyper_1_2_chunk.series_bool
+               Index Cond: (_hyper_1_2_chunk.series_1 > '1'::double precision)
+         ->  Merge Append
+               Sort Key: _hyper_1_4_chunk."timeCustom" DESC NULLS LAST
+               ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+                     Index Cond: (_hyper_1_4_chunk.series_1 > '1'::double precision)
+               ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.series_0, _hyper_1_1_chunk.series_1, _hyper_1_1_chunk.series_2, _hyper_1_1_chunk.series_bool
+                     Index Cond: (_hyper_1_1_chunk.series_1 > '1'::double precision)
+(21 rows)
+
+--note that without time transform things work too
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: "two_Partitions"."timeCustom", (min("two_Partitions".series_0))
+   ->  GroupAggregate
+         Output: "two_Partitions"."timeCustom", min("two_Partitions".series_0)
+         Group Key: "two_Partitions"."timeCustom"
+         ->  Custom Scan (ChunkAppend) on public."two_Partitions"
+               Output: "two_Partitions"."timeCustom", "two_Partitions".series_0
+               Order: "two_Partitions"."timeCustom" DESC NULLS LAST
+               Startup Exclusion: false
+               Runtime Exclusion: false
+               ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
+                     Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+               ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_chunk
+                     Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+               ->  Merge Append
+                     Sort Key: _hyper_1_4_chunk."timeCustom" DESC NULLS LAST
+                     ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_4_chunk
+                           Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+                     ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_chunk
+                           Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+(20 rows)
+
+--TODO: time transform doesn't work
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Limit
+   Output: ((_hyper_1_1_chunk."timeCustom" / 10)), (min(_hyper_1_1_chunk.series_0))
+   ->  Sort
+         Output: ((_hyper_1_1_chunk."timeCustom" / 10)), (min(_hyper_1_1_chunk.series_0))
+         Sort Key: ((_hyper_1_1_chunk."timeCustom" / 10)) DESC NULLS LAST
+         ->  HashAggregate
+               Output: ((_hyper_1_1_chunk."timeCustom" / 10)), min(_hyper_1_1_chunk.series_0)
+               Group Key: (_hyper_1_1_chunk."timeCustom" / 10)
+               ->  Result
+                     Output: (_hyper_1_1_chunk."timeCustom" / 10), _hyper_1_1_chunk.series_0
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                                 Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                                 Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+(19 rows)
+
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Limit
+   Output: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)), (min(_hyper_1_1_chunk.series_0))
+   ->  Sort
+         Output: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)), (min(_hyper_1_1_chunk.series_0))
+         Sort Key: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)) DESC NULLS LAST
+         ->  HashAggregate
+               Output: ((_hyper_1_1_chunk."timeCustom" % '10'::bigint)), min(_hyper_1_1_chunk.series_0)
+               Group Key: (_hyper_1_1_chunk."timeCustom" % '10'::bigint)
+               ->  Result
+                     Output: (_hyper_1_1_chunk."timeCustom" % '10'::bigint), _hyper_1_1_chunk.series_0
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                                 Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                                 Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+(19 rows)
+

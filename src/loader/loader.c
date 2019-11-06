@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <pg_config.h>
 #include <access/xact.h>
+#include <access/heapam.h>
 #include "../compat-msvc-enter.h"
 #include <postmaster/bgworker.h>
 #include <commands/extension.h>
@@ -177,7 +178,7 @@ extension_owner(void)
 	bool is_null = true;
 	Oid extension_owner = InvalidOid;
 
-	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	rel = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
@@ -199,7 +200,7 @@ extension_owner(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (extension_owner == InvalidOid)
 		elog(ERROR, "extension not found while getting owner");

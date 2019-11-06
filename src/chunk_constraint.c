@@ -185,7 +185,7 @@ ts_chunk_constraints_insert_metadata(ChunkConstraints *ccs)
 	Relation rel;
 	int i;
 
-	rel = heap_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
@@ -193,7 +193,7 @@ ts_chunk_constraints_insert_metadata(ChunkConstraints *ccs)
 		chunk_constraint_insert_relation(rel, &ccs->constraints[i]);
 
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 /*
@@ -206,12 +206,12 @@ chunk_constraint_insert(ChunkConstraint *constraint)
 	CatalogSecurityContext sec_ctx;
 	Relation rel;
 
-	rel = heap_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
+	rel = table_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk_constraint_insert_relation(rel, constraint);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static ChunkConstraint *
@@ -584,7 +584,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 
 	ScanKeyInit(&skey, Anum_pg_constraint_conrelid, BTEqualStrategyNumber, F_OIDEQ, hypertable_oid);
 
-	rel = heap_open(ConstraintRelationId, AccessShareLock);
+	rel = table_open(ConstraintRelationId, AccessShareLock);
 	scan = systable_beginscan(rel, ConstraintRelidTypidNameIndexId, true, NULL, 1, &skey);
 
 	while (HeapTupleIsValid(htup = systable_getnext(scan)))
@@ -599,7 +599,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	}
 
 	systable_endscan(scan);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return num_added;
 }

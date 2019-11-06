@@ -17,6 +17,8 @@
 #include "scan_iterator.h"
 #include "utils.h"
 
+#include "compat.h"
+
 static ScanTupleResult
 bgw_policy_compress_chunks_tuple_found(TupleInfo *ti, void *const data)
 {
@@ -111,7 +113,7 @@ ts_bgw_policy_compress_chunks_insert(BgwPolicyCompressChunks *policy)
 	HeapTuple ht_older_than;
 	Catalog *catalog = ts_catalog_get();
 	Relation rel =
-		heap_open(catalog_get_table_id(catalog, BGW_POLICY_COMPRESS_CHUNKS), RowExclusiveLock);
+		table_open(catalog_get_table_id(catalog, BGW_POLICY_COMPRESS_CHUNKS), RowExclusiveLock);
 
 	tupdesc = RelationGetDescr(rel);
 
@@ -129,7 +131,7 @@ ts_bgw_policy_compress_chunks_insert(BgwPolicyCompressChunks *policy)
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(ht_older_than);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 BgwPolicyCompressChunks *

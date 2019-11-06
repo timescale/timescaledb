@@ -1,0 +1,139 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP 0
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=>'1month'::interval);
+ table_name 
+------------
+ conditions
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+ERROR:  must be owner of table conditions
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+ERROR:  permission denied for table conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--now owner tries and succeeds --
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+NOTICE:  adding index _compressed_hypertable_2_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(location, _ts_meta_sequence_num)
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+--try modifying compress properties --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'humidity');
+ERROR:  must be owner of table conditions
+--- compress_chunks and decompress_chunks fail without correct perm --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+ERROR:  must be owner of hypertable "conditions"
+select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+ERROR:  must be owner of hypertable "conditions"
+select add_compress_chunks_policy('conditions', '1day'::interval);
+ERROR:  must be owner of hypertable "conditions"
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select add_compress_chunks_policy('conditions', '1day'::interval);
+ add_compress_chunks_policy 
+----------------------------
+                       1000
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--try dropping policy
+select remove_compress_chunks_policy('conditions', true);
+ERROR:  must be owner of hypertable "conditions"
+--Tests for GRANTS.
+-- as owner grant select , compress chunk and check SELECT works
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+select count(*) from
+(select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL ) as subq;
+ count 
+-------
+     2
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from conditions;
+ count 
+-------
+    31
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT INSERT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+insert into conditions
+select '2019-04-01 00:00+0'::timestamp with time zone, 'NYC', 'klick', 55, 75;
+select count(*) from conditions;
+ count 
+-------
+    32
+(1 row)
+
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone; 
+ERROR:  permission denied for table conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT UPDATE, DELETE on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ NYC
+(1 row)
+
+--NOTE constraint exclusion excludes the other chunks here
+--otherwise update would fail
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ SFO
+(1 row)
+
+--update expected to fail as executor touches all chunks
+update conditions
+set location = 'PNC'
+where location = 'SFO';
+ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compressed
+delete from conditions
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+(0 rows)
+
+--should fail.
+SELECT ch1.schema_name|| '.' || ch1.table_name as "COMPT_NAME"
+FROM _timescaledb_catalog.hypertable ch1, _timescaledb_catalog.hypertable ht where ht.table_name like 'conditions' and ht.compressed_hypertable_id = ch1.id
+\gset
+select count(*) from :COMPT_NAME;
+ERROR:  permission denied for table _compressed_hypertable_2
+CREATE VIEW v2 as select * from conditions;
+select count(*) from v2;
+ count 
+-------
+    31
+(1 row)
+
+--should fail after revoking permissions 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+REVOKE SELECT on conditions FROM :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from v2;
+ERROR:  permission denied for table conditions

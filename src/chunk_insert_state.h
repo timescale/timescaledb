@@ -15,6 +15,7 @@
 #include "chunk.h"
 #include "cache.h"
 #include "chunk_dispatch_state.h"
+#include "compat.h"
 
 typedef struct ChunkInsertState
 {
@@ -32,7 +33,8 @@ typedef struct ChunkDispatch ChunkDispatch;
 
 extern HeapTuple ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple,
 													 TupleTableSlot **existing_slot);
-extern ChunkInsertState *ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
+extern ChunkInsertState *ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch,
+													  const TupleTableSlotOps *const ops);
 extern void ts_chunk_insert_state_switch(ChunkInsertState *state);
 
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);

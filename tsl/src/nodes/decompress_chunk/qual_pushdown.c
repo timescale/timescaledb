@@ -7,20 +7,27 @@
 #include <postgres.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <nodes/relation.h>
 #include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <parser/parsetree.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
 #include "compat.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/qual_pushdown.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <nodes/relation.h>
+#include <optimizer/var.h> /* f09346a */
+#else
+#include <nodes/pathnodes.h>
+#include <optimizer/optimizer.h>
+#endif
+
+#include "decompress_chunk.h"
+#include "qual_pushdown.h"
 #include "hypertable_compression.h"
 #include "compression/create.h"
 #include "custom_type_cache.h"

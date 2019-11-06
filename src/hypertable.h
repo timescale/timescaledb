@@ -88,7 +88,7 @@ extern int ts_hypertable_scan_with_memory_context(const char *schema, const char
 												  tuple_found_func tuple_found, void *data,
 												  LOCKMODE lockmode, bool tuplock,
 												  MemoryContext mctx);
-extern HTSU_Result ts_hypertable_lock_tuple(Oid table_relid);
+extern TM_Result ts_hypertable_lock_tuple(Oid table_relid);
 extern bool ts_hypertable_lock_tuple_simple(Oid table_relid);
 extern int ts_hypertable_update(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);

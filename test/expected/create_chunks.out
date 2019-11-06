@@ -135,7 +135,7 @@ INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.2, 11233, 1)
 INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.3, 11233, 1), (9223372036854775807::bigint, 24.4, 11233, 1);
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.2, 11233, 1);
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.3, 11233, 1), ((-9223372036854775808)::bigint, 23.4, 11233, 1);
-SELECT * FROM chunk_test_ends ORDER BY time asc;
+SELECT * FROM chunk_test_ends ORDER BY time asc, tag;
          time         | temp |  tag  | color 
 ----------------------+------+-------+-------
  -9223372036854775808 | 23.1 | 11233 |     1

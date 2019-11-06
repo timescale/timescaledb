@@ -8,8 +8,15 @@
 
 #include <postgres.h>
 #include <nodes/bitmapset.h>
-#include <nodes/relation.h>
 #include <nodes/extensible.h>
+
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 #include "chunk.h"
 #include "hypertable.h"

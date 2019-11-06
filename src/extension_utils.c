@@ -25,6 +25,10 @@
 #include <catalog/indexing.h>
 
 #include "compat.h"
+#if PG12
+#include <access/genam.h>
+#endif
+
 #include "extension_constants.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
@@ -75,7 +79,7 @@ extension_version(void)
 	bool is_null = true;
 	char *sql_version = NULL;
 
-	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	rel = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
@@ -99,7 +103,7 @@ extension_version(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (sql_version == NULL)
 	{

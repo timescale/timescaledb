@@ -28,17 +28,22 @@
 #include <optimizer/planner.h>
 #include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
-#include <optimizer/var.h>
 #include <parser/parsetree.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/selfuncs.h>
 
-#include "planner_import.h"
 #include "compat.h"
+#if PG12_LT
+#include <optimizer/var.h> /* f09346a */
+#elif PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
-#if (PG11 && PG_VERSION_NUM >= 110002) || (PG10 && PG_VERSION_NUM >= 100007) ||                    \
+#include "planner_import.h"
+
+#if PG12 || (PG11 && PG_VERSION_NUM >= 110002) || (PG10 && PG_VERSION_NUM >= 100007) ||            \
 	(PG96 && PG_VERSION_NUM >= 90612)
 #include <optimizer/paramassign.h>
 #else

@@ -135,7 +135,7 @@ typedef enum MinMaxResult
 static MinMaxResult
 minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
-	HeapScanDesc scan;
+	TableScanDesc scan;
 	HeapTuple tuple;
 	TypeCacheEntry *tce;
 	bool nulls[2] = { true, true };
@@ -146,7 +146,7 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	if (NULL == tce || !OidIsValid(tce->cmp_proc))
 		elog(ERROR, "no comparison function for type %u", atttype);
 
-	scan = heap_beginscan(rel, GetTransactionSnapshot(), 0, NULL);
+	scan = table_beginscan(rel, GetTransactionSnapshot(), 0, NULL);
 
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
@@ -184,28 +184,66 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 {
 	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
 	HeapTuple tuple;
+#if PG12 /* TODO we should not materialize a HeapTuple unless needed */
+	TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
+	bool should_free = false;
+#endif
 	bool isnull;
 	bool nulls[2] = { true, true };
 	int n = 0;
+	bool found_tuple;
 
+#if PG12_LT
 	tuple = index_getnext(scan, BackwardScanDirection);
+	found_tuple = HeapTupleIsValid(tuple);
+#else /* TODO we should not materialize a HeapTuple unless needed */
+	index_rescan(scan, NULL, 0, NULL, 0);
+	found_tuple = index_getnext_slot(scan, BackwardScanDirection, slot);
+	if (found_tuple)
+		tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+#endif
 
-	if (HeapTupleIsValid(tuple))
+	if (found_tuple)
 	{
 		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
 		nulls[n++] = false;
 	}
+
+#if PG12
+	if (should_free)
+	{
+		heap_freetuple(tuple);
+		should_free = false;
+	}
+#endif
 
 	index_rescan(scan, NULL, 0, NULL, 0);
-	tuple = index_getnext(scan, ForwardScanDirection);
 
-	if (HeapTupleIsValid(tuple))
+#if PG12_LT
+	tuple = index_getnext(scan, ForwardScanDirection);
+	found_tuple = HeapTupleIsValid(tuple);
+#else
+	found_tuple = index_getnext_slot(scan, ForwardScanDirection, slot);
+	if (found_tuple)
+		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+#endif
+
+	if (found_tuple)
 	{
 		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
 		nulls[n++] = false;
 	}
 
+#if PG12
+	if (should_free)
+		heap_freetuple(tuple);
+#endif
+
 	index_endscan(scan);
+
+#if PG12
+	ExecDropSingleTupleTableSlot(slot);
+#endif
 
 	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
 }
@@ -250,10 +288,10 @@ static bool
 table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
 {
 	Datum minmax[2];
-	Relation rel = heap_open(relid, AccessShareLock);
+	Relation rel = table_open(relid, AccessShareLock);
 	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attname, attnum, minmax);
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return res != MINMAX_NO_INDEX;
 }
@@ -266,7 +304,7 @@ table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
 static bool
 chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
-	Relation rel = heap_open(relid, AccessShareLock);
+	Relation rel = table_open(relid, AccessShareLock);
 	NameData attname;
 	MinMaxResult res;
 
@@ -285,7 +323,7 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 		res = minmax_heapscan(rel, atttype, attnum, minmax);
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return res == MINMAX_FOUND;
 }

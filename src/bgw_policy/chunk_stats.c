@@ -12,6 +12,8 @@
 #include "utils.h"
 #include "policy.h"
 
+#include "compat.h"
+
 static ScanTupleResult
 bgw_policy_chunk_stats_tuple_found(TupleInfo *ti, void *const data)
 {
@@ -114,10 +116,10 @@ ts_bgw_policy_chunk_stats_insert(BgwPolicyChunkStats *chunk_stats)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel =
-		heap_open(catalog_get_table_id(catalog, BGW_POLICY_CHUNK_STATS), RowExclusiveLock);
+		table_open(catalog_get_table_id(catalog, BGW_POLICY_CHUNK_STATS), RowExclusiveLock);
 
 	ts_bgw_policy_chunk_stats_insert_with_relation(rel, chunk_stats);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 BgwPolicyChunkStats *

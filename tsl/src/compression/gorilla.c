@@ -26,7 +26,7 @@
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 
-#if !(PG10 || PG96 || PG11)
+#if PG12
 #include <port/pg_bitutils.h>
 #endif
 
@@ -127,6 +127,7 @@ typedef struct GorillaDecompressionIterator
  *****  UTILS  *****
  ********************/
 
+#if PG12_LT
 #ifndef pg_leftmost_one_pos64
 static inline int
 pg_leftmost_one_pos64(uint64 word)
@@ -205,7 +206,7 @@ pg_rightmost_one_pos64(uint64 word)
 #endif /* HAVE__BUILTIN_CTZ */
 }
 #endif
-
+#endif /* PG12_LT */
 /********************
  ***  Compressor  ***
  ********************/

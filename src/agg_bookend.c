@@ -121,8 +121,10 @@ polydatum_deserialize_type(StringInfo buf)
 	const char *schema_name = pq_getmsgstring(buf);
 	const char *type_name = pq_getmsgstring(buf);
 	Oid schema_oid = LookupExplicitNamespace(schema_name, false);
-	Oid type_oid =
-		GetSysCacheOid2(TYPENAMENSP, PointerGetDatum(type_name), ObjectIdGetDatum(schema_oid));
+	Oid type_oid = GetSysCacheOid2Compat(TYPENAMENSP,
+										 Anum_pg_type_oid,
+										 PointerGetDatum(type_name),
+										 ObjectIdGetDatum(schema_oid));
 	if (!OidIsValid(type_oid))
 		elog(ERROR, "cache lookup failed for type %s.%s", schema_name, type_name);
 

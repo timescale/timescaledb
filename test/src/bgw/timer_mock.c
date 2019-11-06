@@ -12,7 +12,6 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
-#include <utils/tqual.h>
 
 #include "timer_mock.h"
 #include "log.h"
@@ -21,6 +20,10 @@
 #include "compat.h"
 #include "params.h"
 #include "bgw/launcher_interface.h"
+
+#if PG12_LT
+#include <utils/tqual.h>
+#endif
 
 static BackgroundWorkerHandle *bgw_handle = NULL;
 

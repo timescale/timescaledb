@@ -6,8 +6,14 @@
 #ifndef TIMESCALEDB_PLAN_AGG_BOOKEND_H
 #define TIMESCALEDB_PLAN_AGG_BOOKEND_H
 
+#include "compat.h"
+
+#include <nodes/primnodes.h>
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
 #include <nodes/relation.h>
-#include <nodes/pg_list.h>
+#else
+#include <nodes/pathnodes.h>
+#endif
 
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 #endif /* TIMESCALEDB_PLAN_AGG_BOOKEND_H */

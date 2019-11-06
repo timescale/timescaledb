@@ -12,6 +12,7 @@
 #include <fmgr.h>
 #include <utils/relcache.h>
 
+#include <compat.h>
 #include <export.h>
 
 typedef struct Chunk Chunk;
@@ -92,13 +93,14 @@ chunk_index_columns_changed(int hypertable_natts, bool hypertable_has_oid, Tuple
 	 * attributes differ is because we have removed columns in the base table,
 	 * leaving junk attributes that aren't inherited by the chunk.
 	 */
-	return !(hypertable_natts == chunkdesc->natts && hypertable_has_oid == chunkdesc->tdhasoid);
+	return !(hypertable_natts == chunkdesc->natts &&
+			 hypertable_has_oid == TupleDescHasOids(chunkdesc));
 }
 
 static inline bool
 chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
 {
-	return chunk_index_columns_changed(htdesc->natts, htdesc->tdhasoid, chunkdesc);
+	return chunk_index_columns_changed(htdesc->natts, TupleDescHasOids(htdesc), chunkdesc);
 }
 
 #endif /* TIMESCALEDB_CHUNK_INDEX_H */

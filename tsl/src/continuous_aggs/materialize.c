@@ -201,8 +201,8 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 	caggs = ts_continuous_aggs_find_by_raw_table_id(cagg_data.raw_hypertable_id);
 	drain_invalidation_log(cagg_data.raw_hypertable_id, &invalidations);
 	materialization_invalidation_log_table_relation =
-		heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG),
-				  RowExclusiveLock);
+		table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG),
+				   RowExclusiveLock);
 	insert_materialization_invalidation_logs(caggs,
 											 invalidations,
 											 materialization_invalidation_log_table_relation);
@@ -1118,8 +1118,8 @@ invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold
 		 * above for the rationale
 		 */
 		Relation rel =
-			heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-					  AccessExclusiveLock);
+			table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					   AccessExclusiveLock);
 		TupleDesc desc = RelationGetDescr(rel);
 		Datum values[Natts_continuous_aggs_invalidation_threshold];
 		bool nulls[Natts_continuous_aggs_invalidation_threshold] = { false };
@@ -1533,8 +1533,9 @@ continuous_aggs_completed_threshold_set(int32 materialization_id, int64 complete
 	if (!updated_threshold)
 	{
 		Catalog *catalog = ts_catalog_get();
-		Relation rel = heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_COMPLETED_THRESHOLD),
-								 RowExclusiveLock);
+		Relation rel =
+			table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_COMPLETED_THRESHOLD),
+					   RowExclusiveLock);
 		TupleDesc desc = RelationGetDescr(rel);
 		Datum values[Natts_continuous_aggs_completed_threshold];
 		bool nulls[Natts_continuous_aggs_completed_threshold] = { false };

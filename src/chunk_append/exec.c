@@ -12,11 +12,9 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <nodes/relation.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/plancat.h>
-#include <optimizer/predtest.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
@@ -26,12 +24,21 @@
 
 #include <math.h>
 
+#include "compat.h"
+
+#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#include <optimizer/predtest.h>
+#include <nodes/relation.h>
+#else
+#include <nodes/pathnodes.h>
+#include <optimizer/optimizer.h>
+#endif
+
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/exec.h"
 #include "chunk_append/explain.h"
 #include "chunk_append/planner.h"
 #include "loader/lwlocks.h"
-#include "compat.h"
 
 #define INVALID_SUBPLAN_INDEX -1
 #define NO_MATCHING_SUBPLANS -2
@@ -220,6 +227,16 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->num_subplans = list_length(state->filtered_subplans);
 
+#if PG12
+	ExecInitResultTupleSlotTL(&node->ss.ps, TTSOpsVirtualP);
+
+	/* node returns slots from each of its subnodes, therefore not fixed */
+	node->ss.ps.resultopsset = true;
+	node->ss.ps.resultopsfixed = false;
+
+	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+#endif
+
 	if (state->num_subplans == 0)
 	{
 		state->current = NO_MATCHING_SUBPLANS;
@@ -383,6 +400,15 @@ chunk_append_exec(CustomScanState *node)
 
 		if (!TupIsNull(subslot))
 		{
+#if PG12
+			/* convert to Virtual tuple, so the tts_ops don't conflict */
+			if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
+				ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
+
+			ExecCopySlot(state->slot, subslot);
+			subslot = state->slot;
+#endif
+
 			/*
 			 * If the subplan gave us something check if we need
 			 * to do projection otherwise return as is.
@@ -391,6 +417,7 @@ chunk_append_exec(CustomScanState *node)
 				return subslot;
 
 			ResetExprContext(econtext);
+
 			econtext->ecxt_scantuple = subslot;
 
 #if PG96
@@ -405,6 +432,10 @@ chunk_append_exec(CustomScanState *node)
 			return ExecProject(node->ss.ps.ps_ProjInfo);
 #endif
 		}
+
+#if PG12
+		ExecClearTuple(state->slot);
+#endif
 
 		state->choose_next_subplan(state);
 
@@ -556,6 +587,10 @@ chunk_append_end(CustomScanState *node)
 	{
 		ExecEndNode(state->subplanstates[i]);
 	}
+
+#if PG12
+	ExecDropSingleTupleTableSlot(state->slot);
+#endif
 }
 
 /*
@@ -781,7 +816,8 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 	/*
 	 * We assume the relation has already been safely locked.
 	 */
-	relation = heap_open(relationObjectId, NoLock);
+	// FIXME this lock should not be needed...
+	relation = table_open(relationObjectId, AccessShareLock);
 
 	constr = relation->rd_att->constr;
 	if (constr != NULL)
@@ -863,7 +899,7 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 		}
 	}
 
-	heap_close(relation, NoLock);
+	table_close(relation, NoLock);
 
 	return result;
 }

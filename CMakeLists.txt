@@ -14,7 +14,6 @@ function(GET_PG_CONFIG var)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
 
-  
   # On Windows, fields that are not recorded will be given the value
   # "not recorded", so we translate this into <var>-NOTFOUND to make
   # it undefined.
@@ -202,9 +201,8 @@ endif ()
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 if ((${PG_VERSION} VERSION_LESS "9.6")
-    OR (${PG_VERSION} VERSION_EQUAL "12")
-    OR (${PG_VERSION} VERSION_GREATER "12"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10 or 11")
+    OR (${PG_VERSION} VERSION_GREATER_EQUAL "13"))
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10, 11 or 12")
 endif ()
 
 # Get PostgreSQL configuration from pg_config
