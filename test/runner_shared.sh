@@ -18,7 +18,7 @@ TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
 # if this is a versioned test our name will have version as suffix
 # so we cut off suffix to get base name
 if [[ ${TEST_BASE_NAME} == *-1[0-9] ]]; then
-  TEST_BASE_NAME=${TEST_BASE_NAME::-3}
+  TEST_BASE_NAME=${TEST_BASE_NAME%???}
 fi
 
 #docker doesn't set user
