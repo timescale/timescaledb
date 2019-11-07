@@ -459,9 +459,20 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
  * parameter can be safely ignored.
  */
 #if PG12_LT
-#define GetSysCacheOid2Compat(cacheId, oidcol, key1, key2) GetSysCacheOid2(cacheId, key1, key2)
+#define GetSysCacheOid1Compat(cacheid, oidcol, key1) GetSysCacheOid1(cacheid, key1)
+#define GetSysCacheOid2Compat(cacheid, oidcol, key1, key2) GetSysCacheOid2(cacheid, key1, key2)
+#define GetSysCacheOid3Compat(cacheid, oidcol, key1, key2, key3)                                   \
+	GetSysCacheOid3(cacheid, key1, key2, key3)
+#define GetSysCacheOid4Compat(cacheid, oidcol, key1, key2, key3, key4)                             \
+	GetSysCacheOid4(cacheid, key1, key2, key3, key4)
 #else
-#define GetSysCacheOid2Compat GetSysCacheOid2
+#define GetSysCacheOid1Compat(cacheid, oidcol, key1) GetSysCacheOid1(cacheid, oidcol, key1)
+#define GetSysCacheOid2Compat(cacheid, oidcol, key1, key2)                                         \
+	GetSysCacheOid2(cacheid, oidcol, key1, key2)
+#define GetSysCacheOid3Compat(cacheid, oidcol, key1, key2, key3)                                   \
+	GetSysCacheOid3(cacheid, oidcol, key1, key2, key3)
+#define GetSysCacheOid4Compat(cacheid, oidcol, key1, key2, key3, key4)                             \
+	GetSysCacheOid4(cacheid, oidcol, key1, key2, key3, key4)
 #endif
 
 /*

@@ -62,13 +62,29 @@ FROM show_chunks('chunkapi');
 -- present yet.
 SELECT (_timescaledb_internal.get_chunk_relstats(show_chunks)).*
 FROM show_chunks('chunkapi');
+SELECT (_timescaledb_internal.get_chunk_colstats(show_chunks)).*
+FROM show_chunks('chunkapi');
 
 -- Get the same stats but by giving the hypertable as input
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
+FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
 
 -- Show stats after analyze
 ANALYZE chunkapi;
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
+FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
 
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -85,33 +101,113 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost',
 
 GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
-   TO :ROLE_1;
+   TO :ROLE_1, :ROLE_DEFAULT_PERM_USER;
 
 SET ROLE :ROLE_1;
-CREATE TABLE disttable (time timestamptz, device int, temp float);
+CREATE TABLE disttable (time timestamptz, device int, temp float, color text);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
-INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4),
-                             ('2018-01-01 06:00:00-8', 4, 22.3),
-                             ('2018-01-01 06:00:00-8', 1, 21.1);
+INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4, 'green'),
+                             ('2018-01-01 06:00:00-8', 4, 22.3, NULL),
+                             ('2018-01-01 06:00:00-8', 1, 21.1, 'green');
 
 -- No stats on the local table
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
 
 -- Run ANALYZE on data node 1
 SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
 
--- Stats should now be refreshed locally
+-- Stats should now be refreshed after running get_chunk_{col,rel}stats
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+
+-- Test that user without table permissions can't get column stats
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+SET ROLE :ROLE_1;
 
 -- Run ANALYZE again, but on both nodes
 SELECT * FROM distributed_exec('ANALYZE disttable');
 
 -- Now expect stats from all data node chunks
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+
+-- Check underlying pg_statistics table (looking at all columns except
+-- starelid, which changes depending on how many tests are run before
+-- this)
 RESET ROLE;
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+\c data_node_1
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+\c data_node_2
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_1;
+
+-- Verify plan cost changes as a table is analyzed
+SELECT setseed(1);
+CREATE TABLE costtable(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('costtable', 'time', 'device');
+INSERT INTO costtable
+SELECT t, (abs(timestamp_hash(t::timestamp)) % 40) + 1, random() * 100
+FROM generate_series('2019-01-01'::timestamptz, '2019-01-29'::timestamptz, '1 minute') as t;
+SELECT * FROM distributed_exec('ANALYZE costtable');
+
+-- Cost with stats not yet collected from data nodes
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+
+-- Cost with relstats collected
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('costtable');
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+
+-- Cost with colstats collected
+SELECT chunk_id, hypertable_id, att_num FROM _timescaledb_internal.get_chunk_colstats('costtable');
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+
 -- Clean up
+RESET ROLE;
 TRUNCATE disttable;
+TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
 SELECT * FROM delete_data_node('data_node_2', force => true);
 DROP DATABASE data_node_1;
