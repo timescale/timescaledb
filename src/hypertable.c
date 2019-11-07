@@ -120,20 +120,115 @@ ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 }
 
-static void
-hypertable_fill(Hypertable *h, HeapTuple tuple, TupleDesc desc)
+static Oid
+get_chunk_sizing_func_oid(FormData_hypertable *fd)
 {
-	bool isnull;
-	Datum compress_id;
+	FuncCandidateList func =
+		FuncnameGetCandidates(list_make2(makeString(NameStr(fd->chunk_sizing_func_schema)),
+										 makeString(NameStr(fd->chunk_sizing_func_name))),
+							  3,
+							  NIL,
+							  false,
+							  false,
+							  false);
 
-	memcpy((void *) &h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
-	/* this is valid because NULLS are only at the end of the struct */
-	/* compressed_hypertable_id can be null, so retrieve it */
-	compress_id = heap_getattr(tuple, Anum_hypertable_compressed_hypertable_id, desc, &isnull);
-	if (isnull)
-		h->fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+	if (NULL == func || NULL != func->next)
+		elog(ERROR,
+			 "could not find the adaptive chunking function \"%s.%s\"",
+			 NameStr(fd->chunk_sizing_func_schema),
+			 NameStr(fd->chunk_sizing_func_name));
+
+	return func->oid;
+}
+
+static HeapTuple
+hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
+{
+	Datum values[Natts_hypertable];
+	bool nulls[Natts_hypertable] = { false };
+
+	memset(values, 0, sizeof(Datum) * Natts_hypertable);
+
+	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(fd->id);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(&fd->schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(&fd->table_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] =
+		NameGetDatum(&fd->associated_schema_name);
+	Assert(&fd->associated_table_prefix != NULL);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
+		NameGetDatum(&fd->associated_table_prefix);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] =
+		Int16GetDatum(fd->num_dimensions);
+
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
+		NameGetDatum(&fd->chunk_sizing_func_schema);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
+		NameGetDatum(&fd->chunk_sizing_func_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
+		Int64GetDatum(fd->chunk_target_size);
+
+	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(fd->compressed);
+	if (fd->compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
 	else
-		h->fd.compressed_hypertable_id = DatumGetInt32(compress_id);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
+			Int32GetDatum(fd->compressed_hypertable_id);
+
+	return heap_form_tuple(desc, values, nulls);
+}
+
+static void
+hypertable_formdata_fill(FormData_hypertable *fd, const HeapTuple tuple, const TupleDesc desc)
+{
+	bool nulls[Natts_hypertable];
+	Datum values[Natts_hypertable];
+
+	heap_deform_tuple(tuple, desc, values, nulls);
+
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_table_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]);
+
+	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
+	memcpy(&fd->schema_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)]),
+		   NAMEDATALEN);
+	memcpy(&fd->table_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)]),
+		   NAMEDATALEN);
+	memcpy(&fd->associated_schema_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)]),
+		   NAMEDATALEN);
+	memcpy(&fd->associated_table_prefix,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)]),
+		   NAMEDATALEN);
+
+	fd->num_dimensions =
+		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)]);
+
+	memcpy(&fd->chunk_sizing_func_schema,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)]),
+		   NAMEDATALEN);
+	memcpy(&fd->chunk_sizing_func_name,
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]),
+		   NAMEDATALEN);
+
+	fd->chunk_target_size =
+		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
+	fd->compressed = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)])
+		fd->compressed_hypertable_id = INVALID_CHUNK_ID;
+	else
+		fd->compressed_hypertable_id = DatumGetInt32(
+			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
 }
 
 static Hypertable *
@@ -141,34 +236,14 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 {
 	Oid namespace_oid;
 	Hypertable *h = MemoryContextAllocZero(mctx, sizeof(Hypertable));
-	hypertable_fill(h, tuple, desc);
+	hypertable_formdata_fill(&h->fd, tuple, desc);
 
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
-
-	if (!heap_attisnull_compat(tuple, Anum_hypertable_chunk_sizing_func_schema, desc) &&
-		!heap_attisnull_compat(tuple, Anum_hypertable_chunk_sizing_func_name, desc))
-	{
-		FuncCandidateList func =
-			FuncnameGetCandidates(list_make2(makeString(NameStr(h->fd.chunk_sizing_func_schema)),
-											 makeString(NameStr(h->fd.chunk_sizing_func_name))),
-								  3,
-								  NIL,
-								  false,
-								  false,
-								  false);
-
-		if (NULL == func || NULL != func->next)
-			elog(ERROR,
-				 "could not find the adaptive chunking function \"%s.%s\"",
-				 NameStr(h->fd.chunk_sizing_func_schema),
-				 NameStr(h->fd.chunk_sizing_func_name));
-
-		h->chunk_sizing_func = func->oid;
-	}
+	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 
 	return h;
 }
@@ -181,12 +256,16 @@ ts_hypertable_from_tupleinfo(TupleInfo *ti)
 static ScanTupleResult
 hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 {
-	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
 	Oid *relid = data;
-	Oid schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+	FormData_hypertable fd;
+	Oid schema_oid;
+
+	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
+
+	schema_oid = get_namespace_oid(NameStr(fd.schema_name), true);
 
 	if (OidIsValid(schema_oid))
-		*relid = get_relname_relid(NameStr(form->table_name), schema_oid);
+		*relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
 
 	return SCAN_DONE;
 }
@@ -365,26 +444,8 @@ static ScanTupleResult
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {
 	Hypertable *ht = data;
-	Datum values[Natts_hypertable];
-	bool nulls[Natts_hypertable];
-	HeapTuple copy;
+	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
-
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-
-	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] =
-		NameGetDatum(&ht->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] =
-		NameGetDatum(&ht->fd.associated_schema_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
-		NameGetDatum(&ht->fd.associated_table_prefix);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] =
-		Int16GetDatum(ht->fd.num_dimensions);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
-		Int64GetDatum(ht->fd.chunk_target_size);
-
-	memset(nulls, 0, sizeof(nulls));
 
 	if (OidIsValid(ht->chunk_sizing_func))
 	{
@@ -399,35 +460,18 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 		namestrcpy(&ht->fd.chunk_sizing_func_schema, NameStr(info.func_schema));
 		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
-
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
-			NameGetDatum(&ht->fd.chunk_sizing_func_schema);
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
-			NameGetDatum(&ht->fd.chunk_sizing_func_name);
 	}
 	else
 	{
 		elog(ERROR, "hypertable_tuple_update chunk_sizing_function cannot be NULL");
 	}
-	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(ht->fd.compressed);
-	if (!TS_HYPERTABLE_HAS_COMPRESSION(ht))
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
-	}
-	else
-	{
-		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
-			Int32GetDatum(ht->fd.compressed_hypertable_id);
-	}
 
-	copy = heap_form_tuple(ti->desc, values, nulls);
+	new_tuple = hypertable_formdata_make_tuple(&ht->fd, ti->desc);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, copy);
+	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
-
-	heap_freetuple(copy);
-
+	heap_freetuple(new_tuple);
 	return SCAN_DONE;
 }
 
@@ -655,16 +699,20 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 static ScanTupleResult
 reset_associated_tuple_found(TupleInfo *ti, void *data)
 {
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(tuple);
+	HeapTuple new_tuple;
+	FormData_hypertable fd;
 	CatalogSecurityContext sec_ctx;
 
-	namestrcpy(&form->associated_schema_name, INTERNAL_SCHEMA_NAME);
+	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
+
+	namestrcpy(&fd.associated_schema_name, INTERNAL_SCHEMA_NAME);
+
+	new_tuple = hypertable_formdata_make_tuple(&fd, ti->desc);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update(ti->scanrel, tuple);
+	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 
-	heap_freetuple(tuple);
+	heap_freetuple(new_tuple);
 
 	return SCAN_CONTINUE;
 }
@@ -793,62 +841,17 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
 
 static void
-hypertable_insert_relation(Relation rel, int32 hypertable_id, Name schema_name, Name table_name,
-						   Name associated_schema_name, Name associated_table_prefix,
-						   Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-						   int64 chunk_target_size, int16 num_dimensions, bool compressed)
+hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
 {
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_hypertable];
-	bool nulls[Natts_hypertable] = { false };
-	NameData default_associated_table_prefix;
+	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
 
-	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(schema_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(table_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] =
-		NameGetDatum(associated_schema_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(num_dimensions);
-
-	if (NULL == chunk_sizing_func_schema || NULL == chunk_sizing_func_name)
-		elog(ERROR, "chunk_sizing_function cannot be NULL");
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
-		NameGetDatum(chunk_sizing_func_schema);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
-		NameGetDatum(chunk_sizing_func_name);
-
-	if (chunk_target_size < 0)
-		chunk_target_size = 0;
-
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
-		Int64GetDatum(chunk_target_size);
+	new_tuple = hypertable_formdata_make_tuple(fd, RelationGetDescr(rel));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	if (hypertable_id == INVALID_HYPERTABLE_ID)
-		hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-
-	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(hypertable_id);
-
-	if (NULL != associated_table_prefix)
-		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
-			NameGetDatum(associated_table_prefix);
-	else
-	{
-		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
-		snprintf(NameStr(default_associated_table_prefix),
-				 NAMEDATALEN,
-				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
-				 DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]));
-		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
-			NameGetDatum(&default_associated_table_prefix);
-	}
-	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(compressed);
-	/* associated compressed hypertable id is always NULL when we create a new hypertable*/
-	nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
-
-	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_insert(rel, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
 }
 
 static void
@@ -859,19 +862,51 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
+	FormData_hypertable fd;
+
+	fd.id = hypertable_id;
+	if (fd.id == INVALID_HYPERTABLE_ID)
+	{
+		CatalogSecurityContext sec_ctx;
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+	}
+
+	namestrcpy(&fd.schema_name, NameStr(*schema_name));
+	namestrcpy(&fd.table_name, NameStr(*table_name));
+	namestrcpy(&fd.associated_schema_name, NameStr(*associated_schema_name));
+
+	if (NULL == associated_table_prefix)
+	{
+		NameData default_associated_table_prefix;
+		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
+		snprintf(NameStr(default_associated_table_prefix),
+				 NAMEDATALEN,
+				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
+				 fd.id);
+		namestrcpy(&fd.associated_table_prefix, NameStr(default_associated_table_prefix));
+	}
+	else
+	{
+		namestrcpy(&fd.associated_table_prefix, NameStr(*associated_table_prefix));
+	}
+	fd.num_dimensions = num_dimensions;
+
+	namestrcpy(&fd.chunk_sizing_func_schema, NameStr(*chunk_sizing_func_schema));
+	namestrcpy(&fd.chunk_sizing_func_name, NameStr(*chunk_sizing_func_name));
+
+	fd.chunk_target_size = chunk_target_size;
+	if (fd.chunk_target_size < 0)
+		fd.chunk_target_size = 0;
+
+	fd.compressed = compressed;
+
+	/* when creating a hypertable, there is never an associated compressed dual */
+	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
 
 	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
-	hypertable_insert_relation(rel,
-							   hypertable_id,
-							   schema_name,
-							   table_name,
-							   associated_schema_name,
-							   associated_table_prefix,
-							   chunk_sizing_func_schema,
-							   chunk_sizing_func_name,
-							   chunk_target_size,
-							   num_dimensions,
-							   compressed);
+	hypertable_insert_relation(rel, &fd);
 	heap_close(rel, RowExclusiveLock);
 }
 
@@ -1867,35 +1902,37 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 	const char *old_schema_name = schema_names[0];
 	const char *new_schema_name = schema_names[1];
 	bool updated = false;
+	FormData_hypertable fd;
 
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_hypertable *ht = (FormData_hypertable *) GETSTRUCT(tuple);
+	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
 
 	/*
 	 * Because we are doing a heap scan with no scankey, we don't know which
 	 * schema name to change, if any
 	 */
-	if (namestrcmp(&ht->schema_name, old_schema_name) == 0)
+	if (namestrcmp(&fd.schema_name, old_schema_name) == 0)
 	{
-		namestrcpy(&ht->schema_name, new_schema_name);
+		namestrcpy(&fd.schema_name, new_schema_name);
 		updated = true;
 	}
-	if (namestrcmp(&ht->associated_schema_name, old_schema_name) == 0)
+	if (namestrcmp(&fd.associated_schema_name, old_schema_name) == 0)
 	{
-		namestrcpy(&ht->associated_schema_name, new_schema_name);
+		namestrcpy(&fd.associated_schema_name, new_schema_name);
 		updated = true;
 	}
-	if (namestrcmp(&ht->chunk_sizing_func_schema, old_schema_name) == 0)
+	if (namestrcmp(&fd.chunk_sizing_func_schema, old_schema_name) == 0)
 	{
-		namestrcpy(&ht->chunk_sizing_func_schema, new_schema_name);
+		namestrcpy(&fd.chunk_sizing_func_schema, new_schema_name);
 		updated = true;
 	}
 
 	/* Only update the catalog if we explicitly something */
 	if (updated)
-		ts_catalog_update(ti->scanrel, tuple);
-
-	heap_freetuple(tuple);
+	{
+		HeapTuple new_tuple = hypertable_formdata_make_tuple(&fd, ti->desc);
+		ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+		heap_freetuple(new_tuple);
+	}
 
 	/* Keep going so we can change the name for all hypertables */
 	return SCAN_CONTINUE;
@@ -1931,25 +1968,28 @@ static ScanTupleResult
 hypertable_tuple_match_name(TupleInfo *ti, void *data)
 {
 	Oid relid;
-	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
+	FormData_hypertable fd;
 	AccumHypertable *accum = data;
-	Oid schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+	Oid schema_oid;
+
+	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
+	schema_oid = get_namespace_oid(NameStr(fd.schema_name), true);
 
 	if (!OidIsValid(schema_oid))
 		return SCAN_CONTINUE;
 
-	relid = get_relname_relid(NameStr(form->table_name), schema_oid);
+	relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
 	if (!OidIsValid(relid))
 		return SCAN_CONTINUE;
 
 	if ((accum->schema_name == NULL ||
 		 DatumGetBool(DirectFunctionCall2(nameeq,
 										  NameGetDatum(accum->schema_name),
-										  NameGetDatum(&form->schema_name)))) &&
+										  NameGetDatum(&fd.schema_name)))) &&
 		(accum->table_name == NULL ||
 		 DatumGetBool(DirectFunctionCall2(nameeq,
 										  NameGetDatum(accum->table_name),
-										  NameGetDatum(&form->table_name)))))
+										  NameGetDatum(&fd.table_name)))))
 		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
 
 	return SCAN_CONTINUE;
