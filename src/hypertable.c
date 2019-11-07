@@ -30,6 +30,7 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_type.h>
+#include <parser/parse_func.h>
 #include "compat.h"
 #if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_inherits_fn.h>
@@ -123,22 +124,12 @@ ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 static Oid
 get_chunk_sizing_func_oid(FormData_hypertable *fd)
 {
-	FuncCandidateList func =
-		FuncnameGetCandidates(list_make2(makeString(NameStr(fd->chunk_sizing_func_schema)),
-										 makeString(NameStr(fd->chunk_sizing_func_name))),
-							  3,
-							  NIL,
-							  false,
-							  false,
-							  false);
-
-	if (NULL == func || NULL != func->next)
-		elog(ERROR,
-			 "could not find the adaptive chunking function \"%s.%s\"",
-			 NameStr(fd->chunk_sizing_func_schema),
-			 NameStr(fd->chunk_sizing_func_name));
-
-	return func->oid;
+	Oid argtype[] = { INT4OID, INT8OID, INT8OID };
+	return LookupFuncName(list_make2(makeString(NameStr(fd->chunk_sizing_func_schema)),
+									 makeString(NameStr(fd->chunk_sizing_func_name))),
+						  sizeof(argtype) / sizeof(argtype[0]),
+						  argtype,
+						  false);
 }
 
 static HeapTuple
@@ -225,7 +216,7 @@ hypertable_formdata_fill(FormData_hypertable *fd, const HeapTuple tuple, const T
 	fd->compressed = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)])
-		fd->compressed_hypertable_id = INVALID_CHUNK_ID;
+		fd->compressed_hypertable_id = INVALID_HYPERTABLE_ID;
 	else
 		fd->compressed_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
