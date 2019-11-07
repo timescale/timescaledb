@@ -830,7 +830,6 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 							 CompressionInfo *info, SortInfo *sort_info)
 {
 	Path *compressed_path;
-	List *orig_pathkeys;
 
 	/* create non parallel scan path */
 	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
@@ -843,16 +842,26 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 		Assert(compressed_path->parallel_aware);
 		add_partial_path(compressed_rel, compressed_path);
 	}
+
 	if (sort_info->can_pushdown_sort)
 	{
-		orig_pathkeys = root->query_pathkeys;
+		/*
+		 * If we can push down sort below decompression we temporarily switch
+		 * out root->query_pathkeys to allow matching to pathkeys produces by
+		 * decompression
+		 */
+		List *orig_pathkeys = root->query_pathkeys;
 		build_compressed_scan_pathkeys(sort_info, root, root->query_pathkeys, info);
 		root->query_pathkeys = sort_info->compressed_pathkeys;
-	}
-	check_index_predicates(root, compressed_rel);
-	create_index_paths(root, compressed_rel);
-	if (sort_info->can_pushdown_sort)
+		check_index_predicates(root, compressed_rel);
+		create_index_paths(root, compressed_rel);
 		root->query_pathkeys = orig_pathkeys;
+	}
+	else
+	{
+		check_index_predicates(root, compressed_rel);
+		create_index_paths(root, compressed_rel);
+	}
 }
 
 /*
