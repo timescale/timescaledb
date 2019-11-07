@@ -214,3 +214,9 @@ insert into _timescaledb_catalog.compression_algorithm values
 ( 4, 1, 'COMPRESSION_ALGORITHM_DELTADELTA', 'deltadelta')
 on conflict(id) do update set (version, name, description)
 = (excluded.version, excluded.name, excluded.description);
+
+--NOTE: below added after initial tagging and release; not
+--present in all released versions -- this is also re-executed
+--in the next update.
+CLUSTER  _timescaledb_catalog.hypertable USING hypertable_pkey;
+ALTER TABLE _timescaledb_catalog.hypertable SET WITHOUT CLUSTER;
