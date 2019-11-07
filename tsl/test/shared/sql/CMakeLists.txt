@@ -1,14 +1,10 @@
 set(TEST_FILES_SHARED
+  constraint_exclusion_prepared.sql
 )
 
 set(TEST_TEMPLATES_SHARED
+  ordered_append.sql.in
 )
-
-if (${PG_VERSION_MAJOR} EQUAL "10" OR ${PG_VERSION_MAJOR} GREATER "10")
-  list(APPEND TEST_TEMPLATES_SHARED
-    ordered_append.sql.in
-  )
-endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
