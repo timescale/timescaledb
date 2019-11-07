@@ -11,10 +11,18 @@ TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 
+# PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
+# to get the name of the test (PG 10 and 11 only)
+TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
+
+# if this is a versioned test our name will have version as suffix
+# so we cut off suffix to get base name
+if [[ ${TEST_BASE_NAME} == *-1[0-9] ]]; then
+  TEST_BASE_NAME=${TEST_BASE_NAME::-3}
+fi
+
 #docker doesn't set user
 USER=${USER:-`whoami`}
-
-TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS:-10}
 
 TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER:-super_user}
 TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER:-default_perm_user}
@@ -37,9 +45,9 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
      -v ECHO=all \
+     -v TEST_BASE_NAME=${TEST_BASE_NAME} \
      -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
      -v TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR} \
-     -v TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS} \
      -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
      -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
