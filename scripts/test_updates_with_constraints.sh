@@ -21,7 +21,7 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
 
-TAGS="1.3.0-pg9.6 1.3.1-pg9.6 1.3.2-pg9.6 1.4.0-pg9.6 1.4.1-pg9.6 1.4.2-pg9.6"
+TAGS="1.3.0-pg9.6 1.3.1-pg9.6 1.3.2-pg9.6 1.4.0-pg9.6 1.4.1-pg9.6 1.4.2-pg9.6 1.5.0-pg9.6"
 TEST_VERSION="v3"
 
 TAGS=$TAGS TEST_VERSION=$TEST_VERSION bash ${SCRIPT_DIR}/test_updates.sh
