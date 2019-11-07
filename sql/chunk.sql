@@ -61,3 +61,9 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_chunk_relstats(relid REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, num_pages INTEGER, num_tuples REAL, num_allvisible INTEGER)
 AS '@MODULE_PATHNAME@', 'ts_chunk_get_relstats' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_chunk_colstats(relid REGCLASS)
+RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[],
+slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[],
+slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
+AS '@MODULE_PATHNAME@', 'ts_chunk_get_colstats' LANGUAGE C VOLATILE;

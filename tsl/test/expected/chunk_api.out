@@ -113,6 +113,12 @@ FROM show_chunks('chunkapi');
         2 |             1 |         0 |          0 |              0
 (2 rows)
 
+SELECT (_timescaledb_internal.get_chunk_colstats(show_chunks)).*
+FROM show_chunks('chunkapi');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+(0 rows)
+
 -- Get the same stats but by giving the hypertable as input
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
@@ -120,6 +126,26 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
         1 |             1 |         0 |          0 |              0
         2 |             1 |         0 |          0 |              0
 (2 rows)
+
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+(0 rows)
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+       relname       | reltuples | relpages | relallvisible 
+---------------------+-----------+----------+---------------
+ _hyper_1_1_chunk    |         0 |        0 |             0
+ My_chunk_Table_name |         0 |        0 |             0
+(2 rows)
+
+SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
+FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+ tablename | attname | inherited | null_frac | avg_width | n_distinct 
+-----------+---------+-----------+-----------+-----------+------------
+(0 rows)
 
 -- Show stats after analyze
 ANALYZE chunkapi;
@@ -129,6 +155,32 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
         1 |             1 |         1 |          1 |              0
         2 |             1 |         0 |          0 |              0
 (2 rows)
+
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+        1 |             1 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
+        1 |             1 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
+        1 |             1 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
+(3 rows)
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+       relname       | reltuples | relpages | relallvisible 
+---------------------+-----------+----------+---------------
+ _hyper_1_1_chunk    |         1 |        1 |             0
+ My_chunk_Table_name |         0 |        0 |             0
+(2 rows)
+
+SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
+FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+    tablename     | attname | inherited | null_frac | avg_width | n_distinct 
+------------------+---------+-----------+-----------+-----------+------------
+ _hyper_1_1_chunk | temp    | f         |         0 |         8 |         -1
+ _hyper_1_1_chunk | device  | f         |         0 |         4 |         -1
+ _hyper_1_1_chunk | time    | f         |         0 |         8 |         -1
+(3 rows)
 
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -152,9 +204,9 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost',
 
 GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
-   TO :ROLE_1;
+   TO :ROLE_1, :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_1;
-CREATE TABLE disttable (time timestamptz, device int, temp float);
+CREATE TABLE disttable (time timestamptz, device int, temp float, color text);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
@@ -162,9 +214,9 @@ NOTICE:  adding not-null constraint to column "time"
              2 | public      | disttable  | t
 (1 row)
 
-INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4),
-                             ('2018-01-01 06:00:00-8', 4, 22.3),
-                             ('2018-01-01 06:00:00-8', 1, 21.1);
+INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4, 'green'),
+                             ('2018-01-01 06:00:00-8', 4, 22.3, NULL),
+                             ('2018-01-01 06:00:00-8', 1, 21.1, 'green');
 -- No stats on the local table
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
@@ -173,6 +225,26 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
         4 |             2 |         0 |          0 |              0
 (2 rows)
 
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+(0 rows)
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+        relname        | reltuples | relpages | relallvisible 
+-----------------------+-----------+----------+---------------
+ _hyper_2_3_dist_chunk |         0 |        0 |             0
+ _hyper_2_4_dist_chunk |         0 |        0 |             0
+(2 rows)
+
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+------------------+-------------+-------------------+------------------------+----------------------
+(0 rows)
+
 -- Run ANALYZE on data node 1
 SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
  distributed_exec 
@@ -180,7 +252,22 @@ SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
  
 (1 row)
 
--- Stats should now be refreshed locally
+-- Stats should now be refreshed after running get_chunk_{col,rel}stats
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+        relname        | reltuples | relpages | relallvisible 
+-----------------------+-----------+----------+---------------
+ _hyper_2_3_dist_chunk |         0 |        0 |             0
+ _hyper_2_4_dist_chunk |         0 |        0 |             0
+(2 rows)
+
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+------------------+-------------+-------------------+------------------------+----------------------
+(0 rows)
+
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
@@ -188,6 +275,42 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
         4 |             2 |         0 |          0 |              0
 (2 rows)
 
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
+        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
+        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
+        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
+        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
+(4 rows)
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+        relname        | reltuples | relpages | relallvisible 
+-----------------------+-----------+----------+---------------
+ _hyper_2_3_dist_chunk |         2 |        1 |             0
+ _hyper_2_4_dist_chunk |         0 |        0 |             0
+(2 rows)
+
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+      schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+-----------------------+-----------------------+---------+-----------+-----------+-----------+------------+------------------+-------------------+-----------------------------------------------------------------+-------------+-------------------+------------------------+----------------------
+ _timescaledb_internal | _hyper_2_3_dist_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
+(4 rows)
+
+-- Test that user without table permissions can't get column stats
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+(0 rows)
+
+SET ROLE :ROLE_1;
 -- Run ANALYZE again, but on both nodes
 SELECT * FROM distributed_exec('ANALYZE disttable');
  distributed_exec 
@@ -203,9 +326,240 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
         4 |             2 |         1 |          1 |              0
 (2 rows)
 
+SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
+        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
+        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
+        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
+        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
+        4 |             2 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       4 |        1 |     0 |           0 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+(8 rows)
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+        relname        | reltuples | relpages | relallvisible 
+-----------------------+-----------+----------+---------------
+ _hyper_2_3_dist_chunk |         2 |        1 |             0
+ _hyper_2_4_dist_chunk |         1 |        1 |             0
+(2 rows)
+
+SELECT * FROM pg_stats WHERE tablename IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+ORDER BY 1,2,3;
+      schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+-----------------------+-----------------------+---------+-----------+-----------+-----------+------------+------------------+-------------------+-----------------------------------------------------------------+-------------+-------------------+------------------------+----------------------
+ _timescaledb_internal | _hyper_2_3_dist_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_3_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
+ _timescaledb_internal | _hyper_2_4_dist_chunk | color   | f         |         1 |         0 |          0 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _hyper_2_4_dist_chunk | device  | f         |         0 |         4 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _hyper_2_4_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _hyper_2_4_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+(8 rows)
+
+-- Check underlying pg_statistics table (looking at all columns except
+-- starelid, which changes depending on how many tests are run before
+-- this)
 RESET ROLE;
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+ staattnum | stainherit | stanullfrac | stawidth | stadistinct | stakind1 | stakind2 | stakind3 | stakind4 | stakind5 | staop1 | staop2 | staop3 | staop4 | staop5 | stanumbers1 | stanumbers2 | stanumbers3 | stanumbers4 | stanumbers5 |                           stavalues1                            | stavalues2 | stavalues3 | stavalues4 | stavalues5 
+-----------+------------+-------------+----------+-------------+----------+----------+----------+----------+----------+--------+--------+--------+--------+--------+-------------+-------------+-------------+-------------+-------------+-----------------------------------------------------------------+------------+------------+------------+------------
+         1 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+         1 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |   1322 |   1322 |      0 |      0 |      0 |             | {1}         |             |             |             | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |            |            |            | 
+         2 | f          |           0 |        4 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+         2 | f          |           0 |        4 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     96 |     97 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {1}                                                             |            |            |            | 
+         3 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+         3 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |    672 |    672 |      0 |      0 |      0 |             | {-1}        |             |             |             | {21.1,23.4}                                                     |            |            |            | 
+         4 | f          |           1 |        0 |           0 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+         4 | f          |           0 |        6 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     98 |    664 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {green}                                                         |            |            |            | 
+(8 rows)
+
+\c data_node_1
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+ staattnum | stainherit | stanullfrac | stawidth | stadistinct | stakind1 | stakind2 | stakind3 | stakind4 | stakind5 | staop1 | staop2 | staop3 | staop4 | staop5 | stanumbers1 | stanumbers2 | stanumbers3 | stanumbers4 | stanumbers5 |                           stavalues1                            | stavalues2 | stavalues3 | stavalues4 | stavalues5 
+-----------+------------+-------------+----------+-------------+----------+----------+----------+----------+----------+--------+--------+--------+--------+--------+-------------+-------------+-------------+-------------+-------------+-----------------------------------------------------------------+------------+------------+------------+------------
+         1 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |   1322 |   1322 |      0 |      0 |      0 |             | {1}         |             |             |             | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |            |            |            | 
+         2 | f          |           0 |        4 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     96 |     97 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {1}                                                             |            |            |            | 
+         3 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |    672 |    672 |      0 |      0 |      0 |             | {-1}        |             |             |             | {21.1,23.4}                                                     |            |            |            | 
+         4 | f          |           0 |        6 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     98 |    664 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {green}                                                         |            |            |            | 
+(4 rows)
+
+\c data_node_2
+SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
+FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
+ORDER BY 1, 11;
+ staattnum | stainherit | stanullfrac | stawidth | stadistinct | stakind1 | stakind2 | stakind3 | stakind4 | stakind5 | staop1 | staop2 | staop3 | staop4 | staop5 | stanumbers1 | stanumbers2 | stanumbers3 | stanumbers4 | stanumbers5 | stavalues1 | stavalues2 | stavalues3 | stavalues4 | stavalues5 
+-----------+------------+-------------+----------+-------------+----------+----------+----------+----------+----------+--------+--------+--------+--------+--------+-------------+-------------+-------------+-------------+-------------+------------+------------+------------+------------+------------
+         1 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |            |            |            |            | 
+         2 | f          |           0 |        4 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |            |            |            |            | 
+         3 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |            |            |            |            | 
+         4 | f          |           1 |        0 |           0 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |            |            |            |            | 
+(4 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_1;
+-- Verify plan cost changes as a table is analyzed
+SELECT setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+CREATE TABLE costtable(time timestamptz, device int, temp float);
+SELECT * FROM create_distributed_hypertable('costtable', 'time', 'device');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | costtable  | t
+(1 row)
+
+INSERT INTO costtable
+SELECT t, (abs(timestamp_hash(t::timestamp)) % 40) + 1, random() * 100
+FROM generate_series('2019-01-01'::timestamptz, '2019-01-29'::timestamptz, '1 minute') as t;
+SELECT * FROM distributed_exec('ANALYZE costtable');
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+-- Cost with stats not yet collected from data nodes
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Output: costtable.device, avg(costtable.temp)
+   Group Key: costtable.device
+   ->  Custom Scan (AsyncAppend)
+         Output: costtable.device, costtable.temp
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_1
+                     Output: costtable_1.device, costtable_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_3_5_dist_chunk, _hyper_3_8_dist_chunk, _hyper_3_10_dist_chunk, _hyper_3_12_dist_chunk, _hyper_3_14_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_2
+                     Output: costtable_2.device, costtable_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_3_6_dist_chunk, _hyper_3_7_dist_chunk, _hyper_3_9_dist_chunk, _hyper_3_11_dist_chunk, _hyper_3_13_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+(16 rows)
+
+-- Cost with relstats collected
+SELECT * FROM _timescaledb_internal.get_chunk_relstats('costtable');
+ chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
+----------+---------------+-----------+------------+----------------
+        5 |             3 |         8 |       1118 |              0
+        6 |             3 |         9 |       1282 |              0
+        7 |             3 |        34 |       5282 |              0
+        8 |             3 |        31 |       4798 |              0
+        9 |             3 |        34 |       5235 |              0
+       10 |             3 |        31 |       4845 |              0
+       11 |             3 |        34 |       5318 |              0
+       12 |             3 |        31 |       4762 |              0
+       13 |             3 |        26 |       4015 |              0
+       14 |             3 |        24 |       3666 |              0
+(10 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Output: costtable.device, avg(costtable.temp)
+   Group Key: costtable.device
+   ->  Custom Scan (AsyncAppend)
+         Output: costtable.device, costtable.temp
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_1
+                     Output: costtable_1.device, costtable_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_3_5_dist_chunk, _hyper_3_8_dist_chunk, _hyper_3_10_dist_chunk, _hyper_3_12_dist_chunk, _hyper_3_14_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_2
+                     Output: costtable_2.device, costtable_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_3_6_dist_chunk, _hyper_3_7_dist_chunk, _hyper_3_9_dist_chunk, _hyper_3_11_dist_chunk, _hyper_3_13_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+(16 rows)
+
+-- Cost with colstats collected
+SELECT chunk_id, hypertable_id, att_num FROM _timescaledb_internal.get_chunk_colstats('costtable');
+ chunk_id | hypertable_id | att_num 
+----------+---------------+---------
+        5 |             3 |       1
+        5 |             3 |       2
+        5 |             3 |       3
+        6 |             3 |       1
+        6 |             3 |       2
+        6 |             3 |       3
+        7 |             3 |       1
+        7 |             3 |       2
+        7 |             3 |       3
+        8 |             3 |       1
+        8 |             3 |       2
+        8 |             3 |       3
+        9 |             3 |       1
+        9 |             3 |       2
+        9 |             3 |       3
+       10 |             3 |       1
+       10 |             3 |       2
+       10 |             3 |       3
+       11 |             3 |       1
+       11 |             3 |       2
+       11 |             3 |       3
+       12 |             3 |       1
+       12 |             3 |       2
+       12 |             3 |       3
+       13 |             3 |       1
+       13 |             3 |       2
+       13 |             3 |       3
+       14 |             3 |       1
+       14 |             3 |       2
+       14 |             3 |       3
+(30 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
+   Output: costtable.device, avg(costtable.temp)
+   Group Key: costtable.device
+   ->  Custom Scan (AsyncAppend)
+         Output: costtable.device, costtable.temp
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_1
+                     Output: costtable_1.device, costtable_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_3_5_dist_chunk, _hyper_3_8_dist_chunk, _hyper_3_10_dist_chunk, _hyper_3_12_dist_chunk, _hyper_3_14_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+               ->  Custom Scan (DataNodeScan) on public.costtable costtable_2
+                     Output: costtable_2.device, costtable_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_3_6_dist_chunk, _hyper_3_7_dist_chunk, _hyper_3_9_dist_chunk, _hyper_3_11_dist_chunk, _hyper_3_13_dist_chunk
+                     Remote SQL: SELECT device, temp FROM public.costtable WHERE _timescaledb_internal.chunks_in(public.costtable.*, ARRAY[2, 3, 4, 5, 6]) AND ((temp > 90::double precision)) AND ((device < 10))
+(16 rows)
+
 -- Clean up
+RESET ROLE;
 TRUNCATE disttable;
+TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
  delete_data_node 
 ------------------
@@ -214,6 +568,7 @@ SELECT * FROM delete_data_node('data_node_1', force => true);
 
 SELECT * FROM delete_data_node('data_node_2', force => true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_2"
+WARNING:  new data for hypertable "costtable" will be under-replicated due to deleting data node "data_node_2"
  delete_data_node 
 ------------------
  t

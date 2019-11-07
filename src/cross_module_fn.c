@@ -54,6 +54,7 @@ TS_FUNCTION_INFO_V1(ts_data_node_block_new_chunks);
 TS_FUNCTION_INFO_V1(ts_data_node_allow_new_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_set_default_data_node);
 TS_FUNCTION_INFO_V1(ts_chunk_get_relstats);
+TS_FUNCTION_INFO_V1(ts_chunk_get_colstats);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
@@ -177,6 +178,12 @@ Datum
 ts_chunk_get_relstats(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->get_chunk_relstats(fcinfo));
+}
+
+Datum
+ts_chunk_get_colstats(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->get_chunk_colstats(fcinfo));
 }
 
 Datum
@@ -652,6 +659,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.validate_as_data_node = error_no_default_fn_community,
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
 	.get_chunk_relstats = error_no_default_fn_pg_community,
+	.get_chunk_colstats = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
