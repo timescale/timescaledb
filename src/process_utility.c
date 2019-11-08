@@ -1673,10 +1673,12 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 	/* Start a new transaction for each relation. */
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 #ifdef DEBUG
 	if (info->extended_options.max_chunks == 0)
 	{
+		PopActiveSnapshot();
 		CommitTransactionCommand();
 		return;
 	}
@@ -1751,6 +1753,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 	ts_catalog_restore_user(&sec_ctx);
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 }
 
