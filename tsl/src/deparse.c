@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <utils/rel.h>
 #include <lib/stringinfo.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
@@ -19,6 +20,7 @@
 #include <catalog/indexing.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_index.h>
+#include <catalog/pg_authid.h>
 #include <catalog/pg_proc.h>
 #include <catalog/namespace.h>
 #include <nodes/pg_list.h>
@@ -348,6 +350,115 @@ deparse_get_tabledef(TableInfo *table_info)
 	return table_def;
 }
 
+/*
+ * Append a privilege name to a string if the privilege is set.
+ *
+ * Parameters:
+ *    buf: Buffer to append to.
+ *    pfirst: Pointer to variable to remember if elements are already added.
+ *    privs: Bitmap of privilege flags.
+ *    mask: Mask for privilege to check.
+ *    priv_name: String with name of privilege to add.
+ */
+static void
+append_priv_if_set(StringInfo buf, bool *priv_added, uint32 privs, uint32 mask,
+				   const char *priv_name)
+{
+	if (privs & mask)
+	{
+		if (*priv_added)
+			appendStringInfoString(buf, ", ");
+		else
+			*priv_added = true;
+		appendStringInfoString(buf, priv_name);
+	}
+}
+
+static void
+append_privs_as_text(StringInfo buf, uint32 privs)
+{
+	bool priv_added = false;
+	append_priv_if_set(buf, &priv_added, privs, ACL_INSERT, "INSERT");
+	append_priv_if_set(buf, &priv_added, privs, ACL_SELECT, "SELECT");
+	append_priv_if_set(buf, &priv_added, privs, ACL_UPDATE, "UPDATE");
+	append_priv_if_set(buf, &priv_added, privs, ACL_DELETE, "DELETE");
+	append_priv_if_set(buf, &priv_added, privs, ACL_TRUNCATE, "TRUNCATE");
+	append_priv_if_set(buf, &priv_added, privs, ACL_REFERENCES, "REFERENCES");
+	append_priv_if_set(buf, &priv_added, privs, ACL_TRIGGER, "TRIGGER");
+}
+
+/*
+ * Create grant statements for a relation.
+ *
+ * This will create a list of grant statements, one for each role.
+ */
+static List *
+deparse_grant_commands_for_relid(Oid relid)
+{
+	HeapTuple reltup;
+	Form_pg_class pg_class_tuple;
+	List *cmds = NIL;
+	Datum acl_datum;
+	bool is_null;
+	Oid owner_id;
+	Acl *acl;
+	int i;
+	const AclItem *acldat;
+
+	reltup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(reltup))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+	pg_class_tuple = (Form_pg_class) GETSTRUCT(reltup);
+
+	if (pg_class_tuple->relkind != RELKIND_RELATION)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("\"%s\" is not an ordinary table", NameStr(pg_class_tuple->relname))));
+
+	owner_id = pg_class_tuple->relowner;
+	acl_datum = SysCacheGetAttr(RELOID, reltup, Anum_pg_class_relacl, &is_null);
+
+	if (is_null)
+		acl = acldefault(OBJECT_TABLE, owner_id);
+	else
+		acl = DatumGetAclP(acl_datum);
+
+	acldat = ACL_DAT(acl);
+	for (i = 0; i < ACL_NUM(acl); i++)
+	{
+		const AclItem *aclitem = &acldat[i];
+		Oid role_id = aclitem->ai_grantee;
+		StringInfo grant_cmd;
+		HeapTuple utup;
+
+		/* We skip the owner of the table since she automatically have all
+		 * privileges on the table. */
+		if (role_id == owner_id)
+			continue;
+
+		grant_cmd = makeStringInfo();
+		utup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(role_id));
+
+		if (!HeapTupleIsValid(utup))
+			continue;
+
+		appendStringInfoString(grant_cmd, "GRANT ");
+		append_privs_as_text(grant_cmd, aclitem->ai_privs);
+		appendStringInfo(grant_cmd,
+						 " ON TABLE %s.%s TO %s",
+						 quote_identifier(get_namespace_name(pg_class_tuple->relnamespace)),
+						 quote_identifier(NameStr(pg_class_tuple->relname)),
+						 quote_identifier(NameStr(((Form_pg_authid) GETSTRUCT(utup))->rolname)));
+
+		ReleaseSysCache(utup);
+		cmds = lappend(cmds, grant_cmd->data);
+	}
+
+	ReleaseSysCache(reltup);
+
+	return cmds;
+}
+
 List *
 deparse_get_tabledef_commands(Oid relid)
 {
@@ -487,6 +598,8 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 				lappend(result->dimension_add_commands,
 						(char *) deparse_get_add_dimension_command(ht, &space->dimensions[i]));
 	}
+
+	result->grant_commands = deparse_grant_commands_for_relid(ht->main_table_relid);
 
 	return result;
 }

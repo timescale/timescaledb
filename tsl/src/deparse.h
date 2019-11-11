@@ -32,6 +32,7 @@ typedef struct DeparsedHypertableCommands
 {
 	const char *table_create_command;
 	List *dimension_add_commands;
+	List *grant_commands;
 } DeparsedHypertableCommands;
 
 typedef struct Hypertable Hypertable;

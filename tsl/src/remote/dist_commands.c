@@ -97,10 +97,13 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transac
 	foreach (lc, data_nodes)
 	{
 		const char *node_name = lfirst(lc);
+		AsyncRequest *req;
 		TSConnection *connection =
 			data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT, transactional);
-		AsyncRequest *req = async_request_send(connection, sql);
 
+		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", sql, node_name)));
+
+		req = async_request_send(connection, sql);
 		async_request_attach_user_data(req, (char *) node_name);
 		requests = lappend(requests, req);
 	}
