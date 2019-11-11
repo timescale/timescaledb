@@ -1,0 +1,155 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Need to be super user to create extension and add data nodes
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\unset ECHO
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+DROP TABLE IF EXISTS conditions;
+NOTICE:  table "conditions" does not exist, skipping
+SELECT * FROM add_data_node('data1', host => 'localhost', database => 'data1');
+ node_name |   host    | port  | database | node_created | database_created | extension_created 
+-----------+-----------+-------+----------+--------------+------------------+-------------------
+ data1     | localhost | 15432 | data1    | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data2', host => 'localhost', database => 'data2');
+ node_name |   host    | port  | database | node_created | database_created | extension_created 
+-----------+-----------+-------+----------+--------------+------------------+-------------------
+ data2     | localhost | 15432 | data2    | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data3', host => 'localhost', database => 'data3');
+ node_name |   host    | port  | database | node_created | database_created | extension_created 
+-----------+-----------+-------+----------+--------------+------------------+-------------------
+ data3     | localhost | 15432 | data3    | t            | t                | t
+(1 row)
+
+CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
+GRANT SELECT ON conditions TO :ROLE_1;
+GRANT INSERT, DELETE ON conditions TO :ROLE_2;
+SELECT relname, relacl FROM pg_class WHERE relname = 'conditions';
+  relname   |                                                       relacl                                                       
+------------+--------------------------------------------------------------------------------------------------------------------
+ conditions | {cluster_super_user=arwdDxt/cluster_super_user,test_role_1=r/cluster_super_user,test_role_2=ad/cluster_super_user}
+(1 row)
+
+SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | conditions | t
+(1 row)
+
+SELECT has_table_privilege(:'ROLE_1', 'conditions', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_1', 'conditions', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_1', 'conditions', 'INSERT') AS "INSERT";
+ SELECT | DELETE | INSERT 
+--------+--------+--------
+ t      | f      | f
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
+$$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT has_table_privilege(:'ROLE_2', 'conditions', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'INSERT') AS "INSERT";
+ SELECT | DELETE | INSERT 
+--------+--------+--------
+ f      | t      | t
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT
+------+------+------
+f     |t     |t     
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT
+------+------+------
+f     |t     |t     
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT
+------+------+------
+f     |t     |t     
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80
+FROM generate_series('2019-01-01 00:00:00'::timestamptz, '2019-02-01 00:00:00', '1 min') AS time;
+-- Check that we can actually execute a select as non-owner
+SET ROLE :ROLE_1;
+SELECT COUNT(*) FROM conditions;
+ count 
+-------
+ 44641
+(1 row)
+

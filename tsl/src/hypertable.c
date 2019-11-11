@@ -94,6 +94,9 @@ hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
 	foreach (cell, commands->dimension_add_commands)
 		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
 
+	foreach (cell, commands->grant_commands)
+		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
+
 	return remote_ids;
 }
 

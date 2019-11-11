@@ -92,6 +92,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     deparse_fail.sql
     dist_commands.sql
     dist_ddl.sql
+    dist_grant.sql
     dist_partial_agg.sql
     dist_util.sql
     remote_connection.sql
