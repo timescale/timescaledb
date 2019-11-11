@@ -4,6 +4,24 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.5.1 (2019-11-12)
+
+This maintenance release contains bugfixes since the 1.5.0 release. We deem it low
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address potential
+segfaults and no other security vulnerabilities. The bugfixes are related to bloom
+indexes and updates from previous versions.
+
+**Bugfixes**
+* #1523 Fix bad SQL updates from previous updates
+* #1526 Fix hypertable model
+* #1530 Set active snapshots in multi-xact index create
+
+**Thanks**
+* @84660320 for reporting an issue with bloom indexes
+* @gumshoes @perhamm @jermudgeon @gmisagm for reporting the issue with updates
+
 ## 1.5.0 (2019-10-31)
 
 This release adds major new features and bugfixes since the 1.4.2 release.
