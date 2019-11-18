@@ -1,5 +1,6 @@
 sudo: required
 language: c
+cache: ccache
 os:
   - linux
 services:
