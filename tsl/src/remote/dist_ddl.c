@@ -262,6 +262,8 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	 * Raise an error only if at least one of hypertables is
 	 * distributed. Otherwise this makes query_string unusable for remote
 	 * execution without deparsing.
+	 *
+	 * TODO: Support multiple tables inside statements.
 	 */
 	if (hypertable_list_length > 1)
 		dist_ddl_error_raise_unsupported();
@@ -337,6 +339,13 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			dist_ddl_state.exec_type =
 				dist_ddl_process_vacuum(castNode(VacuumStmt, args->parsetree));
 			break;
+
+		case T_GrantStmt:
+			/* If there is one or more distributed hypertables, we need to do a 2PC. */
+			if (num_dist_hypertables > 0)
+				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+			break;
+
 		case T_TruncateStmt:
 		{
 			TruncateStmt *stmt = (TruncateStmt *) args->parsetree;

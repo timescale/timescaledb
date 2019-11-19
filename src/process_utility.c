@@ -1103,16 +1103,12 @@ static bool
 process_grant_and_revoke(ProcessUtilityArgs *args)
 {
 	GrantStmt *stmt = (GrantStmt *) args->parsetree;
+	bool handled = false;
 
-	/*
-	 * Need to apply the REVOKE first to be able to check remaining
-	 * permissions
-	 */
-	prev_ProcessUtility(args);
-
-	/* We only care about revokes and setting privileges on a specific object */
-	if (stmt->is_grant || stmt->targtype != ACL_TARGET_OBJECT)
-		return true;
+	/* We let the calling function handle anything that is not
+	 * ACL_TARGET_OBJECT (currently only ACL_TARGET_ALL_IN_SCHEMA) */
+	if (stmt->targtype != ACL_TARGET_OBJECT)
+		return false;
 
 	switch (stmt->objtype)
 	{
@@ -1128,13 +1124,47 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 #else
 		case OBJECT_TABLESPACE:
 #endif
+			/*
+			 * If we are granting on a tablespace, we need to apply the REVOKE
+			 * first to be able to check remaining permissions.
+			 */
+			prev_ProcessUtility(args);
 			ts_tablespace_validate_revoke(stmt);
+			handled = true;
 			break;
+#if PG11_LT
+		case ACL_OBJECT_RELATION:
+#else
+		case OBJECT_TABLE:
+#endif
+			/*
+			 * Collect the hypertables in the grant statement. We only need to
+			 * consider those when sending grants to other data nodes.
+			 */
+			{
+				Cache *hcache = ts_hypertable_cache_pin();
+				ListCell *cell;
+
+				foreach (cell, stmt->objects)
+				{
+					RangeVar *relation = lfirst_node(RangeVar, cell);
+					Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
+
+					if (ht)
+					{
+						/* Here we know that there is at least one hypertable */
+						process_add_hypertable(args, ht);
+					}
+				}
+
+				ts_cache_release(hcache);
+				break;
+			}
 		default:
 			break;
 	}
 
-	return true;
+	return handled;
 }
 
 static bool

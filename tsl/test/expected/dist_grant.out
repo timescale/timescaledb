@@ -153,3 +153,70 @@ SELECT COUNT(*) FROM conditions;
  44641
 (1 row)
 
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+GRANT UPDATE ON conditions TO :ROLE_2;
+BEGIN;
+GRANT TRUNCATE ON conditions TO :ROLE_2;
+ROLLBACK;
+-- Should have UPDATE, but not TRUNCATE
+SELECT has_table_privilege(:'ROLE_2', 'conditions', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'INSERT') AS "INSERT"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'UPDATE') AS "UPDATE"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+ SELECT | DELETE | INSERT | UPDATE | TRUNCATE 
+--------+--------+--------+--------+----------
+ f      | t      | t      | t      | f
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
