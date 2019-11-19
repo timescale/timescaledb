@@ -10,10 +10,10 @@
 #include "export.h"
 #include "dist_util.h"
 
-TS_FUNCTION_INFO_V1(test_is_frontend_session);
+TS_FUNCTION_INFO_V1(ts_test_is_frontend_session);
 
 Datum
-test_is_frontend_session(PG_FUNCTION_ARGS)
+ts_test_is_frontend_session(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(dist_util_is_frontend_session());
 }

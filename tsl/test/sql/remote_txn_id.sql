@@ -5,7 +5,7 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE FUNCTION _timescaledb_internal.test_remote_txn_id()
 RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_id'
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_id'
 LANGUAGE C STRICT;
 
 SELECT _timescaledb_internal.test_remote_txn_id();

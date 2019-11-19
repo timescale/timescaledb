@@ -15,7 +15,7 @@
 #include "test_utils.h"
 #include "remote/txn.h"
 
-TS_FUNCTION_INFO_V1(tsl_test_remote_txn_persistent_record);
+TS_FUNCTION_INFO_V1(ts_test_remote_txn_persistent_record);
 
 static void
 test_basic_persistent_record(TSConnectionId cid)
@@ -31,7 +31,7 @@ test_basic_persistent_record(TSConnectionId cid)
 }
 
 Datum
-tsl_test_remote_txn_persistent_record(PG_FUNCTION_ARGS)
+ts_test_remote_txn_persistent_record(PG_FUNCTION_ARGS)
 {
 	Name server_name = DatumGetName(PG_GETARG_DATUM(0));
 	TSConnectionId id =

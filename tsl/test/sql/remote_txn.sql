@@ -17,7 +17,7 @@ LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION test_remote_txn_persistent_record(srv_name name)
 RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_persistent_record'
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_persistent_record'
 LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION add_loopback_server(
@@ -30,7 +30,7 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     bootstrap_database     NAME = 'postgres'
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
                 server_created BOOL, database_created BOOL, extension_created BOOL)
-AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
+AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 
 SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);

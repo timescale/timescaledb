@@ -32,12 +32,12 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 RESET ROLE;
 CREATE FUNCTION _timescaledb_internal.invoke_distributed_commands()
 RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_invoke_distributed_commands'
+AS :TSL_MODULE_PATHNAME, 'ts_invoke_distributed_commands'
 LANGUAGE C STRICT;
 
 CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
 RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
+AS :TSL_MODULE_PATHNAME, 'ts_invoke_faulty_distributed_command'
 LANGUAGE C STRICT;
 SET ROLE :ROLE_1;
 
@@ -78,24 +78,24 @@ SELECT * from disttable2;
 -- with a client connections.
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 
 \c data_node_1
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
 \c data_node_2
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
 \c data_node_3
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'test_is_frontend_session' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER

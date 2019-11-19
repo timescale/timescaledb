@@ -5,7 +5,7 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE OR REPLACE FUNCTION show_data_nodes()
 RETURNS TABLE(data_node_name NAME, host TEXT, port INT, dbname NAME)
-AS :TSL_MODULE_PATHNAME, 'test_data_node_show' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_data_node_show' LANGUAGE C;
 
 -- Fetch the encoding, collation, and ctype as quoted strings into
 -- variables.

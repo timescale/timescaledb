@@ -22,7 +22,7 @@
 #include "test_utils.h"
 #include "node_killer.h"
 
-TS_FUNCTION_INFO_V1(tsl_test_remote_async);
+TS_FUNCTION_INFO_V1(ts_test_remote_async);
 
 #define query_with_params_ok_result(conn, sql_statement, n_values, values)                         \
 	async_response_result_get_pg_result(async_request_wait_ok_result(                              \
@@ -327,7 +327,7 @@ test_multiple_reqests()
 }
 
 Datum
-tsl_test_remote_async(PG_FUNCTION_ARGS)
+ts_test_remote_async(PG_FUNCTION_ARGS)
 {
 	test_prepared_stmts();
 	test_params();

@@ -6,12 +6,12 @@
 
 CREATE FUNCTION _timescaledb_internal.test_remote_connection_cache()
 RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_connection_cache'
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_connection_cache'
 LANGUAGE C STRICT;
 
 CREATE FUNCTION _timescaledb_internal.test_alter_data_node(node_name NAME)
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'tsl_test_alter_data_node'
+AS :TSL_MODULE_PATHNAME, 'ts_test_alter_data_node'
 LANGUAGE C STRICT;
 
 DO $d$
