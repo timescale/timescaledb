@@ -50,3 +50,23 @@ FROM generate_series('2019-01-01 00:00:00'::timestamptz, '2019-02-01 00:00:00', 
 SET ROLE :ROLE_1;
 SELECT COUNT(*) FROM conditions;
 
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+GRANT UPDATE ON conditions TO :ROLE_2;
+BEGIN;
+GRANT TRUNCATE ON conditions TO :ROLE_2;
+ROLLBACK;
+
+-- Should have UPDATE, but not TRUNCATE
+SELECT has_table_privilege(:'ROLE_2', 'conditions', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'INSERT') AS "INSERT"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'UPDATE') AS "UPDATE"
+     , has_table_privilege(:'ROLE_2', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
