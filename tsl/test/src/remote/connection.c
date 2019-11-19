@@ -171,13 +171,13 @@ test_connection_and_result_leaks()
 	remote_connection_stats_reset();
 }
 
-TS_FUNCTION_INFO_V1(tsl_test_bad_remote_query);
+TS_FUNCTION_INFO_V1(ts_test_bad_remote_query);
 
 /* Send a bad query that throws an exception without cleaning up connection or
  * results. Together with get_connection_stats(), this should show that
  * connections and results are automatically cleaned up. */
 Datum
-tsl_test_bad_remote_query(PG_FUNCTION_ARGS)
+ts_test_bad_remote_query(PG_FUNCTION_ARGS)
 {
 	TSConnection *conn;
 	PGresult *result;
@@ -199,10 +199,10 @@ enum Anum_connection_stats
 	Anum_connection_stats_max,
 };
 
-TS_FUNCTION_INFO_V1(tsl_test_get_connection_stats);
+TS_FUNCTION_INFO_V1(ts_test_get_connection_stats);
 
 Datum
-tsl_test_get_connection_stats(PG_FUNCTION_ARGS)
+ts_test_get_connection_stats(PG_FUNCTION_ARGS)
 {
 	TupleDesc tupdesc;
 	RemoteConnectionStats *stats = remote_connection_stats_get();
@@ -230,10 +230,10 @@ tsl_test_get_connection_stats(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
-TS_FUNCTION_INFO_V1(tsl_test_remote_connection);
+TS_FUNCTION_INFO_V1(ts_test_remote_connection);
 
 Datum
-tsl_test_remote_connection(PG_FUNCTION_ARGS)
+ts_test_remote_connection(PG_FUNCTION_ARGS)
 {
 	test_options();
 	test_numbers_associated_with_connections();

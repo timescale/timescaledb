@@ -6,7 +6,7 @@
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_stmt_params_format(binary BOOL)
 RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'tsl_test_stmt_params_format'
+AS :TSL_MODULE_PATHNAME, 'ts_test_stmt_params_format'
 LANGUAGE C STRICT;
 
 -- by default we use binary format

@@ -16,20 +16,20 @@
 #include "export.h"
 #include "deparse.h"
 
-TS_FUNCTION_INFO_V1(tsl_test_get_tabledef);
+TS_FUNCTION_INFO_V1(ts_test_get_tabledef);
 
 Datum
-tsl_test_get_tabledef(PG_FUNCTION_ARGS)
+ts_test_get_tabledef(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_GETARG_OID(0);
 	const char *cmd = deparse_get_tabledef_commands_concat(relid);
 	PG_RETURN_TEXT_P(cstring_to_text(cmd));
 }
 
-TS_FUNCTION_INFO_V1(tsl_test_deparse_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_test_deparse_drop_chunks);
 
 Datum
-tsl_test_deparse_drop_chunks(PG_FUNCTION_ARGS)
+ts_test_deparse_drop_chunks(PG_FUNCTION_ARGS)
 {
 	FmgrInfo flinfo;
 	FunctionCallInfo fcinfo2 = palloc(SizeForFunctionCallInfo(fcinfo->nargs));
@@ -61,10 +61,10 @@ tsl_test_deparse_drop_chunks(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(sql_cmd));
 }
 
-TS_FUNCTION_INFO_V1(tsl_test_deparse_func);
+TS_FUNCTION_INFO_V1(ts_test_deparse_func);
 
 Datum
-tsl_test_deparse_func(PG_FUNCTION_ARGS)
+ts_test_deparse_func(PG_FUNCTION_ARGS)
 {
 	TupleDesc tupdesc;
 	Oid resulttypeid;

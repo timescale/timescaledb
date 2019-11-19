@@ -6,8 +6,8 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 
-CREATE OR REPLACE FUNCTION test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'test_override_pushdown_timestamptz'
+CREATE OR REPLACE FUNCTION ts_test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_override_pushdown_timestamptz'
 LANGUAGE C VOLATILE STRICT;
 
 -- Cleanup from other potential tests that created these databases
@@ -658,7 +658,7 @@ GROUP BY 1, 2
 LIMIT 1;
 
 -- contains whitelisted time expressions
-SELECT test_override_pushdown_timestamptz('2018-06-01 00:00'::timestamptz);
+SELECT ts_test_override_pushdown_timestamptz('2018-06-01 00:00'::timestamptz);
 
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT time, device, avg(temp)
@@ -685,7 +685,7 @@ LIMIT 1;
 EXPLAIN (VERBOSE, COSTS OFF)
 EXECUTE timestamp_pushdown_test;
 
-SELECT test_override_pushdown_timestamptz('2019-10-15 00:00'::timestamptz);
+SELECT ts_test_override_pushdown_timestamptz('2019-10-15 00:00'::timestamptz);
 
 EXPLAIN (VERBOSE, COSTS OFF)
 EXECUTE timestamp_pushdown_test;

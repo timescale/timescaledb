@@ -14,8 +14,8 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
-CREATE OR REPLACE FUNCTION test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'test_override_pushdown_timestamptz'
+CREATE OR REPLACE FUNCTION ts_test_override_pushdown_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_override_pushdown_timestamptz'
 LANGUAGE C VOLATILE STRICT;
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
@@ -2117,9 +2117,9 @@ LIMIT 1;
 (21 rows)
 
 -- contains whitelisted time expressions
-SELECT test_override_pushdown_timestamptz('2018-06-01 00:00'::timestamptz);
- test_override_pushdown_timestamptz 
-------------------------------------
+SELECT ts_test_override_pushdown_timestamptz('2018-06-01 00:00'::timestamptz);
+ ts_test_override_pushdown_timestamptz 
+---------------------------------------
  
 (1 row)
 
@@ -2229,9 +2229,9 @@ EXECUTE timestamp_pushdown_test;
                      Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1, 2, 3]) AND (("time" < (('2018-06-01 00:00:00-07'::timestamptz) - '3 days'::interval))) GROUP BY 1, 2
 (17 rows)
 
-SELECT test_override_pushdown_timestamptz('2019-10-15 00:00'::timestamptz);
- test_override_pushdown_timestamptz 
-------------------------------------
+SELECT ts_test_override_pushdown_timestamptz('2019-10-15 00:00'::timestamptz);
+ ts_test_override_pushdown_timestamptz 
+---------------------------------------
  
 (1 row)
 

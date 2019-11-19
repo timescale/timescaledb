@@ -13,14 +13,14 @@
 #include "data_node.h"
 #include "export.h"
 
-TS_FUNCTION_INFO_V1(test_data_node_show);
-TS_FUNCTION_INFO_V1(tsl_unchecked_add_data_node);
+TS_FUNCTION_INFO_V1(ts_test_data_node_show);
+TS_FUNCTION_INFO_V1(ts_unchecked_add_data_node);
 
 /*
  * Tests the ts_data_node_get_node_name_list() function.
  */
 Datum
-test_data_node_show(PG_FUNCTION_ARGS)
+ts_test_data_node_show(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 
@@ -101,7 +101,7 @@ test_data_node_show(PG_FUNCTION_ARGS)
  * Performs a data node add without setting distributed id or enforcing topolgy constraints.
  */
 Datum
-tsl_unchecked_add_data_node(PG_FUNCTION_ARGS)
+ts_unchecked_add_data_node(PG_FUNCTION_ARGS)
 {
 	return data_node_add_without_dist_id(fcinfo);
 }

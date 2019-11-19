@@ -4,11 +4,11 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION create_records()
 RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_resolve_create_records'
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records'
 LANGUAGE C;
 CREATE OR REPLACE FUNCTION create_records_with_concurrent_heal()
 RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_resolve_create_records_with_concurrent_heal'
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records_with_concurrent_heal'
 LANGUAGE C;
 CREATE OR REPLACE FUNCTION add_loopback_server(
     server_name            NAME,
@@ -20,7 +20,7 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     bootstrap_database     NAME = 'postgres'
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
                 server_created BOOL, database_created BOOL, extension_created BOOL)
-AS :TSL_MODULE_PATHNAME, 'tsl_unchecked_add_data_node'
+AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 SELECT true FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
  bool 

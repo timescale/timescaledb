@@ -5,7 +5,7 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_tabledef(tbl REGCLASS) RETURNS TEXT
-AS :TSL_MODULE_PATHNAME, 'tsl_test_get_tabledef' LANGUAGE C VOLATILE STRICT;
+AS :TSL_MODULE_PATHNAME, 'ts_test_get_tabledef' LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(older_than "any" = NULL,
     table_name  NAME = NULL,
@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(older_than "any" = NULL,
     newer_than "any" = NULL,
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL) RETURNS TEXT
-AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_drop_chunks' LANGUAGE C VOLATILE;
+AS :TSL_MODULE_PATHNAME, 'ts_test_deparse_drop_chunks' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION tsl_test_deparse_scalar_func(
     schema_name NAME = NULL,
@@ -24,7 +24,7 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_scalar_func(
     not_set BOOLEAN = TRUE,
     option BOOLEAN = FALSE
     ) RETURNS BOOLEAN
-AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+AS :TSL_MODULE_PATHNAME, 'ts_test_deparse_func' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION tsl_test_deparse_named_scalar_func(
     schema_name NAME = NULL,
@@ -34,7 +34,7 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_named_scalar_func(
     not_set BOOLEAN = TRUE,
     INOUT option BOOLEAN = FALSE
     )
-AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+AS :TSL_MODULE_PATHNAME, 'ts_test_deparse_func' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION tsl_test_deparse_composite_func(
     schema_name NAME = NULL,
@@ -44,6 +44,6 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_composite_func(
     not_set BOOLEAN = NULL,
     option BOOLEAN = FALSE
     ) RETURNS TABLE (success BOOLEAN, message TEXT)
-AS :TSL_MODULE_PATHNAME, 'tsl_test_deparse_func' LANGUAGE C VOLATILE;
+AS :TSL_MODULE_PATHNAME, 'ts_test_deparse_func' LANGUAGE C VOLATILE;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
