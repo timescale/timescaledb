@@ -109,8 +109,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 h
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
 extern TSDLLEXPORT bool ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
-															 FormData_hypertable *form,
-															 bool nulls[]);
+															 FormData_hypertable *form);
 extern TSDLLEXPORT bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 

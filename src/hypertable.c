@@ -1064,7 +1064,7 @@ hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *
  */
 bool
 ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
-									 FormData_hypertable *form, bool nulls[])
+									 FormData_hypertable *form)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
