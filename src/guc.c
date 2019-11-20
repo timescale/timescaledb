@@ -55,6 +55,7 @@ char *ts_telemetry_cloud = NULL;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
+char *ts_current_timestamp_mock = "";
 #endif
 
 static void
@@ -278,6 +279,17 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
+
+	DefineCustomStringVariable(/* name= */ "timescaledb.current_timestamp_mock",
+							   /* short_dec= */ "set the current timestamp",
+							   /* long_dec= */ "this is for debugging purposes",
+							   /* valueAddr= */ &ts_current_timestamp_mock,
+							   /* bootValue= */ false,
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ NULL,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
 #endif
 }
 

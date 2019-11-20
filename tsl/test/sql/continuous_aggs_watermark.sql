@@ -9,7 +9,8 @@ SELECT _timescaledb_internal.stop_background_workers();
 
 CREATE TABLE continuous_agg_test(time int, data int);
 select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
-
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
 
 -- watermark tabels start out empty
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
@@ -98,6 +99,9 @@ TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- CREATE VIEW creates the invalidation trigger correctly
 CREATE TABLE ca_inval_test(time int);
 SELECT create_hypertable('ca_inval_test', 'time', chunk_time_interval=> 10);
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ca_inval_test $$;
+SELECT set_integer_now_func('ca_inval_test', 'integer_now_test2');
+
 CREATE VIEW cit_view
     WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
     AS SELECT time_bucket('5', time), COUNT(time)
@@ -150,6 +154,8 @@ TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- the view was created
 CREATE TABLE ts_continuous_test(time INTEGER, location INTEGER);
     SELECT create_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10);
+CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ts_continuous_test $$;
+SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test3');
 INSERT INTO ts_continuous_test SELECT i, i FROM
     (SELECT generate_series(0, 29) AS i) AS i;
 CREATE VIEW continuous_view

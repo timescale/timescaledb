@@ -156,6 +156,9 @@ CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_id
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
 
+CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
+
 CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
@@ -227,6 +230,9 @@ DROP TABLE drop_chunks_table CASCADE;
 CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_u_id
     FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
+
+CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
 
 CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
 AS SELECT time_bucket('3', time), COUNT(data)
@@ -336,6 +342,7 @@ SELECT
 FROM metrics
 GROUP BY 1;
 
+SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 

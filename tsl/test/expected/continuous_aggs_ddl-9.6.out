@@ -211,6 +211,13 @@ CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_id
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
 NOTICE:  adding not-null constraint to column "time"
+CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
@@ -358,6 +365,13 @@ CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_u_id
     FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
 NOTICE:  adding not-null constraint to column "time"
+CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
@@ -527,6 +541,7 @@ NOTICE:  adding index _materialized_hypertable_10_const_time_idx ON _timescaledb
 NOTICE:  adding index _materialized_hypertable_10_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(numeric, time)
 NOTICE:  adding index _materialized_hypertable_10_case_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(case, time)
 NOTICE:  adding index _materialized_hypertable_10_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(coalesce, time)
+SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
 INFO:  new materialization range for public.metrics (time column time) (947289600000000)
 INFO:  materializing continuous aggregate public.cagg_expr: new range up to 947289600000000

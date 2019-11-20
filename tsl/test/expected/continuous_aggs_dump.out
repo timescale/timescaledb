@@ -107,9 +107,10 @@ WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_AFTER;
 NOTICE:  adding index _materialized_hypertable_4_location_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(location, bucket)
 --materialize mat_before
+SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_before;
-INFO:  new materialization range for public.conditions_before (time column timec) (1548633600000000)
-INFO:  materializing continuous aggregate public.mat_before: new range up to 1548633600000000
+INFO:  new materialization range for public.conditions_before (time column timec) (1551052800000000)
+INFO:  materializing continuous aggregate public.mat_before: new range up to 1551052800000000
 SELECT count(*) FROM conditions_before;
  count 
 -------
@@ -190,9 +191,10 @@ DROP VIEW mat_after;
 ERROR:  dropping a continous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
 --materialize mat_after
+SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_after;
-INFO:  new materialization range for public.conditions_after (time column timec) (1548633600000000)
-INFO:  materializing continuous aggregate public.mat_after: new range up to 1548633600000000
+INFO:  new materialization range for public.conditions_after (time column timec) (1551052800000000)
+INFO:  materializing continuous aggregate public.mat_after: new range up to 1551052800000000
 SELECT count(*) FROM mat_after;
  count 
 -------

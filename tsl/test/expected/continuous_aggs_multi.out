@@ -19,6 +19,13 @@ NOTICE:  adding not-null constraint to column "timeval"
  (1,public,continuous_agg_test,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 INSERT INTO continuous_agg_test VALUES
     (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
     (15, -4, 22), (16, -4, 23);
@@ -119,7 +126,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 refresh materialized view cagg_1;
-INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
 INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
 select * from cagg_1 order by 1;
  timed | cnt 
@@ -166,7 +173,7 @@ order by 1,2 ;
 (5 rows)
 
 refresh materialized view cagg_2;
-INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
 INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize
 select * from cagg_2 order by 1, 2;
  timed | grp | maxval 
@@ -195,7 +202,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 (1 row)
 
 refresh materialized view cagg_1;
-INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
 INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  count 
@@ -249,6 +256,13 @@ NOTICE:  adding not-null constraint to column "timeval"
  (4,public,continuous_agg_test,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 INSERT INTO continuous_agg_test VALUES
     (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
     (15, -4, 22), (16, -4, 23);
@@ -289,7 +303,7 @@ select * from cagg_2 order by 1;
 --this insert will be processed only by cagg_1 and copied over to cagg_2
 insert into continuous_agg_test values( 14, -2, 100); 
 refresh materialized view cagg_1;
-INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
 INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
 select * from cagg_1 order by 1;
  timed | cnt 
@@ -363,7 +377,7 @@ select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log o
 (2 rows)
 
 refresh materialized view cagg_1;
-INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): no new data
+INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (20)
 INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
 select * from cagg_1 where timed = 18 ;
  timed | cnt 

@@ -74,6 +74,8 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 
 CREATE TABLE test_continuous_agg_table(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
+CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
+SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
 CREATE VIEW test_continuous_agg_view
     WITH ( timescaledb.continuous)
     AS SELECT time_bucket('2', time), SUM(data) as value
@@ -307,6 +309,8 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 --
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
+SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
 GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
 INSERT INTO test_continuous_agg_table_w_grant
     SELECT i, i FROM

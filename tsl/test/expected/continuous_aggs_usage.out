@@ -54,6 +54,7 @@ SELECT * FROM device_summary;
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
 --We alter max_interval_per_job too since we are not using background workers
 ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings (time column observation_time) (1546236000000000)
 INFO:  materializing continuous aggregate public.device_summary: new range up to 1546236000000000
@@ -193,8 +194,9 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
  Sun Dec 30 13:00:00 2018 PST | device_1  | 1546175700 |          1800
 (1 row)
 
+SET timescaledb.current_timestamp_mock = 'Sun Dec 30 13:01:00 2018 PST';
 REFRESH MATERIALIZED VIEW device_summary;
-INFO:  new materialization range not found for public.device_readings (time column observation_time): no new data
+INFO:  new materialization range not found for public.device_readings (time column observation_time): not enough new data past completion threshold (1546207200000000)
 INFO:  materializing continuous aggregate public.device_summary: no new range to materialize
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
@@ -262,7 +264,7 @@ FROM
 GROUP BY bucket, device_id;
 NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
 REFRESH MATERIALIZED VIEW device_summary;
-INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546236000000000)
+INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546196400000000)
 INFO:  new materialization range for public.device_readings (time column observation_time) (1543723200000000)
 INFO:  materializing continuous aggregate public.device_summary: new range up to 1543723200000000
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting

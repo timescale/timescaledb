@@ -785,33 +785,60 @@ cagg_validate_query(Query *query)
 		Dimension *part_dimension = NULL;
 		hcache = ts_hypertable_cache_pin();
 		ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
-		/* get primary partitioning column information */
-		if (ht != NULL)
+
+		if (ht == NULL)
 		{
-			part_dimension = hyperspace_get_open_dimension(ht->space, 0);
-			/* NOTE: if we ever allow custom partitioning functions we'll need to
-			 *       change part_dimension->fd.column_type to partitioning_type
-			 *       below, along with any other fallout
-			 */
-			if (part_dimension->partitioning != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("can create continuous aggregate only on hypertables")));
+		}
+
+		/* there can only be one continuous aggregate per table */
+		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
+		{
+			case HypertableIsMaterialization:
+			case HypertableIsMaterializationAndRaw:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg(
-							 "continuous aggregate do not support custom partitioning functions")));
-			caggtimebucketinfo_init(&ret,
-									ht->fd.id,
-									ht->main_table_relid,
-									part_dimension->column_attno,
-									part_dimension->fd.column_type,
-									part_dimension->fd.interval_length);
+						 errmsg("hypertable is a continuous aggregate materialization table"),
+						 errhint(
+							 "creating continuous aggregates based on continuous aggregates is not "
+							 "yet supported")));
+			case HypertableIsRawTable:
+				break;
+			case HypertableIsNotContinuousAgg:
+				break;
+			default:
+				Assert(false && "unreachable");
 		}
+
+		/* get primary partitioning column information */
+		part_dimension = hyperspace_get_open_dimension(ht->space, 0);
+
+		/* NOTE: if we ever allow custom partitioning functions we'll need to
+		 *       change part_dimension->fd.column_type to partitioning_type
+		 *       below, along with any other fallout
+		 */
+		if (part_dimension->partitioning != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("continuous aggregate do not support custom partitioning functions")));
+		caggtimebucketinfo_init(&ret,
+								ht->fd.id,
+								ht->main_table_relid,
+								part_dimension->column_attno,
+								part_dimension->fd.column_type,
+								part_dimension->fd.interval_length);
+
+		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)) &&
+			(strlen(NameStr(part_dimension->fd.integer_now_func)) == 0 ||
+			 strlen(NameStr(part_dimension->fd.integer_now_func_schema)) == 0))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("continuous aggregate requires integer_now func to be set on "
+							"integer-based hypertables")));
+
 		ts_cache_release(hcache);
-	}
-	if (ht == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("can create continuous aggregate only on hypertables")));
 	}
 
 	/*check row security settings for the table */
@@ -828,14 +855,6 @@ cagg_validate_query(Query *query)
 	Assert(query->groupClause);
 
 	caggtimebucket_validate(&ret, query->groupClause, query->targetList);
-	/*if(
-							opid = distinct_col_search(tle->resno, colnos, opids);
-							if (!OidIsValid(opid) ||
-									!equality_ops_are_compatible(opid, sgc->eqop))
-									break;
-					}
-		}
-	*/
 	return ret;
 }
 
@@ -1740,25 +1759,6 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 	}
 
 	timebucket_exprinfo = cagg_validate_query(query);
-
-	/* there can only be one continuous aggregate per table */
-	switch (ts_continuous_agg_hypertable_status(timebucket_exprinfo.htid))
-	{
-		case HypertableIsMaterialization:
-		case HypertableIsMaterializationAndRaw:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertable is a continuous aggregate materialization table"),
-					 errhint("creating continuous aggregates based on continuous aggregates is not "
-							 "yet supported")));
-			return false;
-		case HypertableIsRawTable:
-			break;
-		case HypertableIsNotContinuousAgg:
-			break;
-		default:
-			Assert(false && "unerachable");
-	}
 
 	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
 	return true;

@@ -103,6 +103,7 @@ AS :QUERY_AFTER;
 
 --materialize mat_before
 
+SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_before;
 
 SELECT count(*) FROM conditions_before;
@@ -146,6 +147,7 @@ DROP VIEW mat_after;
 \set ON_ERROR_STOP 1
 
 --materialize mat_after
+SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_after;
 SELECT count(*) FROM mat_after;
 

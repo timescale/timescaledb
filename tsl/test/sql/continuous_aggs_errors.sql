@@ -317,6 +317,8 @@ group by time_bucket('1week', timec), test_stablefunc(humidity::int);
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
+CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0)::bigint FROM rowsec_tab $$;
+SELECT set_integer_now_func('rowsec_tab', 'integer_now_test');
 alter table rowsec_tab ENABLE ROW LEVEL SECURITY;
 create policy rowsec_tab_allview ON rowsec_tab FOR SELECT USING(true);
 
@@ -397,6 +399,8 @@ CREATE TABLE conditions (
     );
 
 select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+CREATE OR REPLACE FUNCTION integer_now_test_s() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::smallint FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_test_s');
 
 \set ON_ERROR_STOP 0
 create or replace view mat_with_test( timec, minl, sumt , sumh)

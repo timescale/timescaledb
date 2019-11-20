@@ -13,7 +13,8 @@ SELECT _timescaledb_internal.stop_background_workers();
 
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
-
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
 
 INSERT INTO continuous_agg_test VALUES
     (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
@@ -98,6 +99,9 @@ select view_name from timescaledb_information.continuous_aggregates;
 -- they do not meet materialization invalidation threshold for cagg2.
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
+
 
 INSERT INTO continuous_agg_test VALUES
     (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),

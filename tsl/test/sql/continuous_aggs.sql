@@ -36,6 +36,10 @@ insert into foo values( 2 , 14 , 20);
 insert into foo values( 2 , 15 , 20);
 insert into foo values( 2 , 16 , 20);
 
+CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM foo $$;
+SELECT set_integer_now_func('foo', 'integer_now_foo');
+
+
 create or replace view mat_m1( a, countb )
 WITH ( timescaledb.continuous)
 as
@@ -590,6 +594,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_drop_test;
 
 --force invalidation
@@ -683,6 +688,9 @@ CREATE TABLE conditions (
 
 select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
 
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_conditions');
+
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '500', timescaledb.refresh_interval = '2h')
 as
@@ -716,6 +724,9 @@ SELECT create_hypertable(
     chunk_time_interval => 10,
     partitioning_column => 'dev',
     number_partitions => 3);
+
+CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '0') FROM space_table $$;
+SELECT set_integer_now_func('space_table', 'integer_now_space_table');
 
 CREATE VIEW space_view
 WITH (timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
@@ -815,6 +826,9 @@ CREATE TABLE conditions (
     );
 
 select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 
 insert into conditions
 select generate_series(0, 200, 10), 'POR', 55, 75, 40, 70, NULL;
