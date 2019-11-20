@@ -511,17 +511,15 @@ static void
 dist_ddl_add_data_node_list_from_table(const char *schema, const char *name)
 {
 	FormData_hypertable form;
-	bool nulls[Natts_hypertable];
 	List *data_node_list;
 	MemoryContext mctx;
 
-	if (!ts_hypertable_get_attributes_by_name(schema, name, &form, nulls))
+	if (!ts_hypertable_get_attributes_by_name(schema, name, &form))
 		return;
 
 	/* If hypertable is marked as distributed member then ensure this operation is
 	 * executed by frontend session. */
-	if (!nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] &&
-		form.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
+	if (form.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
 	{
 		dist_ddl_check_session();
 	}
