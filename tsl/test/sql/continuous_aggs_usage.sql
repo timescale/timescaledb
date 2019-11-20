@@ -47,6 +47,7 @@ SELECT * FROM device_summary;
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
 --We alter max_interval_per_job too since we are not using background workers
 ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW device_summary;
 
 --Now you can run selects over your view as normal
@@ -108,6 +109,7 @@ INSERT INTO device_readings VALUES ('Sun Dec 30 13:01:00 2018 PST', 'device_1', 
 
 --Change not reflected before materializer runs.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
+SET timescaledb.current_timestamp_mock = 'Sun Dec 30 13:01:00 2018 PST';
 REFRESH MATERIALIZED VIEW device_summary;
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';

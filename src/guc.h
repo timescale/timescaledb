@@ -31,6 +31,7 @@ extern char *ts_telemetry_cloud;
 
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
+extern char *ts_current_timestamp_mock;
 #else
 #define ts_shutdown_bgw false
 #endif

@@ -28,6 +28,13 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  conditions
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 create or replace view mat_refresh_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
@@ -63,6 +70,13 @@ select table_name from create_hypertable('conditions_for_perm_check', 'timec', c
  conditions_for_perm_check
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check $$;
+SELECT set_integer_now_func('conditions_for_perm_check', 'integer_now_test2');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE TABLE conditions_for_perm_check_w_grant (
       timec       INT       NOT NULL,
       location    TEXT              NOT NULL,
@@ -76,6 +90,13 @@ select table_name from create_hypertable('conditions_for_perm_check_w_grant', 't
             table_name             
 -----------------------------------
  conditions_for_perm_check_w_grant
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check_w_grant $$;
+SELECT set_integer_now_func('conditions_for_perm_check_w_grant', 'integer_now_test3');
+ set_integer_now_func 
+----------------------
+ 
 (1 row)
 
 GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;

@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.6
+
+The semantics of the refresh_lag parameter for continuous aggregates has 
+been changed to be relative to the current timestamp instead of the maximum
+value in the table. This change requires that an integer_now func be set on
+hypertables with integer-based time columns to use continuous aggregates on
+this table.
+
 ## 1.5.1 (2019-11-12)
 
 This maintenance release contains bugfixes since the 1.5.0 release. We deem it low

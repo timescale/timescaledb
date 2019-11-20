@@ -82,6 +82,13 @@ NOTICE:  adding not-null constraint to column "time"
  (1,public,test_continuous_agg_table,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
+SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW test_continuous_agg_view
     WITH ( timescaledb.continuous)
     AS SELECT time_bucket('2', time), SUM(data) as value
@@ -520,6 +527,13 @@ NOTICE:  adding not-null constraint to column "time"
                create_hypertable                
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
+SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
 (1 row)
 
 GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;

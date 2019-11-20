@@ -312,14 +312,7 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id = :mat_hypertable_id;
 
-REFRESH MATERIALIZED VIEW test_t_mat_view;
-SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
-SELECT * FROM test_t_mat_view ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
-SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
-    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
-    WHERE materialization_id = :mat_hypertable_id;
-SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+SET timescaledb.current_timestamp_mock = '2019-02-02 5:00 UTC';
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
@@ -330,7 +323,17 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     WHERE materialization_id = :mat_hypertable_id;
 SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
--- increase the last timestamp, so we actually materialize
+REFRESH MATERIALIZED VIEW test_t_mat_view;
+SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
+SELECT * FROM test_t_mat_view ORDER BY 1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
+    FROM _timescaledb_catalog.continuous_aggs_completed_threshold
+    WHERE materialization_id = :mat_hypertable_id;
+SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
+
+-- increase the current timestamp, so we actually materialize
+SET timescaledb.current_timestamp_mock = '2019-02-02 7:00 UTC';
 INSERT INTO continuous_agg_test_t VALUES ('2019-02-02 7:00 UTC', 1);
 SELECT * FROM continuous_agg_test_t ORDER BY 1;
 
@@ -361,6 +364,9 @@ SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timesc
 -- test extremes
 CREATE TABLE continuous_agg_extreme(time BIGINT, data BIGINT);
 SELECT create_hypertable('continuous_agg_extreme', 'time', chunk_time_interval=> 10);
+
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_extreme() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_extreme $$;
+SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_agg_extreme');
 
 -- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
@@ -440,6 +446,9 @@ DROP view extreme_view CASCADE;
 CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
 SELECT create_hypertable('continuous_agg_negative', 'time', chunk_time_interval=> 10);
 
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_negative() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_negative $$;
+SELECT set_integer_now_func('continuous_agg_negative', 'integer_now_continuous_agg_negative');
+
 CREATE VIEW negative_view_5
     WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
@@ -463,6 +472,22 @@ INSERT INTO continuous_agg_negative VALUES (14, 14);
 REFRESH MATERIALIZED VIEW negative_view_5;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
+--inserting a really large value does not work because of max_interval_per_job
+INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
+SET client_min_messages TO error;
+REFRESH MATERIALIZED VIEW negative_view_5;
+RESET client_min_messages;
+SELECT * FROM negative_view_5 ORDER BY 1;
+
+DROP VIEW negative_view_5 CASCADE;
+TRUNCATE continuous_agg_negative;
+
+CREATE VIEW negative_view_5
+            WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
+AS SELECT time_bucket('5', time), COUNT(data) as value
+   FROM continuous_agg_negative
+   GROUP BY 1;
+
 -- we can handle values near max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
 SET client_min_messages TO error;
@@ -483,6 +508,9 @@ DROP TABLE continuous_agg_negative CASCADE;
 -- max_interval_per_job tests
 CREATE TABLE continuous_agg_max_mat(time BIGINT, data BIGINT);
 SELECT create_hypertable('continuous_agg_max_mat', 'time', chunk_time_interval=> 10);
+
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_max_mat() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_max_mat $$;
+SELECT set_integer_now_func('continuous_agg_max_mat', 'integer_now_continuous_agg_max_mat');
 
 -- only allow two time_buckets per run
 CREATE VIEW max_mat_view
@@ -522,6 +550,7 @@ INSERT INTO continuous_agg_max_mat_t
     SELECT i, i FROM
         generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour') AS i;
 
+SET timescaledb.current_timestamp_mock = '2019-09-09 10:00 UTC';
 -- first run create two materializations
 REFRESH MATERIALIZED VIEW max_mat_view_t;
 SELECT * FROM max_mat_view_t ORDER BY 1;
@@ -566,6 +595,8 @@ CREATE VIEW max_mat_view_date
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::DATE, '2019-09-010 10:00', '1 day');
 
+SET timescaledb.current_timestamp_mock = '2019-09-09 01:00 UTC';
+--SET timescaledb.current_timestamp_mock = '2019-09-09 01:01:01 UTC';
 -- first materializes everything
 REFRESH MATERIALIZED VIEW max_mat_view_date;
 SELECT * FROM max_mat_view_date ORDER BY 1;

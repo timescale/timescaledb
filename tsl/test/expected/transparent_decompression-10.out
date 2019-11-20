@@ -47,10 +47,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- compress first and last chunk on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='v0, v1 desc, time', timescaledb.compress_segmentby='device_id,device_id_peer');
 NOTICE:  adding index _compressed_hypertable_5_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id, _ts_meta_sequence_num)
@@ -129,10 +129,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -2316,9 +2316,10 @@ DEALLOCATE param_prep;
 -- test continuous aggs
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
+SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
@@ -5615,9 +5616,10 @@ DEALLOCATE param_prep;
 -- test continuous aggs
 SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
+SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:283: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:283: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------

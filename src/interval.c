@@ -13,6 +13,7 @@
 #include <utils/syscache.h>
 #include <miscadmin.h>
 #include <utils/elog.h>
+#include <utils/builtins.h>
 
 #include "interval.h"
 #include "hypertable.h"
@@ -23,6 +24,7 @@
 #include "utils.h"
 #include "errors.h"
 #include "compat.h"
+#include "guc.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -313,12 +315,51 @@ get_integer_now_func(Dimension *open_dim)
 
 	Assert(IS_INTEGER_TYPE(rettype));
 
+	if (strlen(NameStr(open_dim->fd.integer_now_func)) == 0 &&
+		strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
+		return InvalidOid;
+
 	now_func = ts_lookup_proc_filtered(NameStr(open_dim->fd.integer_now_func_schema),
 									   NameStr(open_dim->fd.integer_now_func),
 									   NULL,
 									   noarg_integer_now_func_filter,
 									   &rettype);
 	return now_func;
+}
+
+int64
+ts_get_now_internal(Dimension *open_dim)
+{
+	Oid dim_post_part_type = ts_dimension_get_partition_type(open_dim);
+
+	if (IS_INTEGER_TYPE(dim_post_part_type))
+	{
+		Datum now_datum;
+		Oid now_func = get_integer_now_func(open_dim);
+		ts_interval_now_func_validate(now_func, dim_post_part_type);
+		now_datum = OidFunctionCall0(now_func);
+		return ts_time_value_to_internal(now_datum, dim_post_part_type);
+	}
+	else
+	{
+#ifdef TS_DEBUG
+		Datum now_datum;
+		if (ts_current_timestamp_mock == NULL || strlen(ts_current_timestamp_mock) == 0)
+		{
+			now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+		}
+		else
+		{
+			now_datum = DirectFunctionCall3(timestamptz_in,
+											CStringGetDatum(ts_current_timestamp_mock),
+											0,
+											Int32GetDatum(-1));
+		}
+#else
+		Datum now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+#endif
+		return ts_time_value_to_internal(now_datum, TIMESTAMPTZOID);
+	}
 }
 
 /*

@@ -680,9 +680,11 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 --------------------+--------------
 (0 rows)
 
+SET timescaledb.current_timestamp_mock = '2019-02-02 5:00 UTC';
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-INFO:  new materialization range for public.continuous_agg_test_t (time column time) (1549072800000000)
-INFO:  materializing continuous aggregate public.test_t_mat_view: new range up to 1549072800000000
+INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold (1549072800000000)
+INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize
+INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
  time_bucket | agg_2_2 | chunk_id 
 -------------+---------+----------
@@ -694,24 +696,21 @@ SELECT * FROM test_t_mat_view ORDER BY 1;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
- materialization_id |    watermark     
---------------------+------------------
-                  6 | 1549072800000000
-(1 row)
+ materialization_id | watermark 
+--------------------+-----------
+(0 rows)
 
 SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id = :mat_hypertable_id;
- materialization_id |      to_timestamp      
---------------------+------------------------
-                  6 | 2019-02-02 02:00:00+00
-(1 row)
+ materialization_id | to_timestamp 
+--------------------+--------------
+(0 rows)
 
 SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id |      to_timestamp      
----------------+------------------------
-             5 | 2019-02-02 02:00:00+00
-(1 row)
+ hypertable_id | to_timestamp 
+---------------+--------------
+(0 rows)
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
 INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold (1549072800000000)
@@ -728,26 +727,24 @@ SELECT * FROM test_t_mat_view ORDER BY 1;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
- materialization_id |    watermark     
---------------------+------------------
-                  6 | 1549072800000000
-(1 row)
+ materialization_id | watermark 
+--------------------+-----------
+(0 rows)
 
 SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id = :mat_hypertable_id;
- materialization_id |      to_timestamp      
---------------------+------------------------
-                  6 | 2019-02-02 02:00:00+00
-(1 row)
+ materialization_id | to_timestamp 
+--------------------+--------------
+(0 rows)
 
 SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id |      to_timestamp      
----------------+------------------------
-             5 | 2019-02-02 02:00:00+00
-(1 row)
+ hypertable_id | to_timestamp 
+---------------+--------------
+(0 rows)
 
--- increase the last timestamp, so we actually materialize
+-- increase the current timestamp, so we actually materialize
+SET timescaledb.current_timestamp_mock = '2019-02-02 7:00 UTC';
 INSERT INTO continuous_agg_test_t VALUES ('2019-02-02 7:00 UTC', 1);
 SELECT * FROM continuous_agg_test_t ORDER BY 1;
           time          | data 
@@ -832,6 +829,13 @@ NOTICE:  adding not-null constraint to column "time"
  (7,public,continuous_agg_extreme,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_extreme() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_extreme $$;
+SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_agg_extreme');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 -- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
 CREATE VIEW extreme_view
@@ -847,7 +851,7 @@ CREATE TRIGGER continuous_agg_insert_trigger
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id=:raw_table_id \gset
 -- EMPTY table should be a nop
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  new materialization range not found for public.continuous_agg_extreme (time column time): no new data
+INFO:  new materialization range not found for public.continuous_agg_extreme (time column time): not enough data in table (-9223372036854775808)
 INFO:  materializing continuous aggregate public.extreme_view: no new range to materialize
 INFO:  materializing continuous aggregate public.extreme_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM extreme_view;
@@ -977,6 +981,13 @@ NOTICE:  adding not-null constraint to column "time"
  (9,public,continuous_agg_negative,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_negative() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_negative $$;
+SELECT set_integer_now_func('continuous_agg_negative', 'integer_now_continuous_agg_negative');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW negative_view_5
     WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
@@ -1012,7 +1023,7 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 -- bucket is finished as normal with the additional value
 INSERT INTO continuous_agg_negative VALUES (14, 14);
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  new materialization range not found for public.continuous_agg_negative (time column time): no new data
+INFO:  new materialization range not found for public.continuous_agg_negative (time column time): not enough new data past completion threshold (15)
 INFO:  materializing continuous aggregate public.negative_view_5: no new range to materialize
 SELECT * FROM negative_view_5 ORDER BY 1;
  time_bucket | value 
@@ -1022,6 +1033,30 @@ SELECT * FROM negative_view_5 ORDER BY 1;
           10 |     5
 (3 rows)
 
+--inserting a really large value does not work because of max_interval_per_job
+INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
+SET client_min_messages TO error;
+REFRESH MATERIALIZED VIEW negative_view_5;
+INFO:  new materialization range for public.continuous_agg_negative larger than allowed in one run, truncating (time column time) (9223372036854775805)
+INFO:  new materialization range for public.continuous_agg_negative (time column time) (115)
+INFO:  materializing continuous aggregate public.negative_view_5: new range up to 115
+RESET client_min_messages;
+SELECT * FROM negative_view_5 ORDER BY 1;
+ time_bucket | value 
+-------------+-------
+           0 |     5
+           5 |     5
+          10 |     5
+(3 rows)
+
+DROP VIEW negative_view_5 CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_27_chunk
+TRUNCATE continuous_agg_negative;
+CREATE VIEW negative_view_5
+            WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
+AS SELECT time_bucket('5', time), COUNT(data) as value
+   FROM continuous_agg_negative
+   GROUP BY 1;
 -- we can handle values near max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
 SET client_min_messages TO error;
@@ -1032,11 +1067,8 @@ RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
      time_bucket     | value 
 ---------------------+-------
-                   0 |     5
-                   5 |     5
-                  10 |     5
  9223372036854775800 |     1
-(4 rows)
+(1 row)
 
 -- even when the subrtraction would make a completion time greater than max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-1, 201);
@@ -1049,22 +1081,26 @@ RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
      time_bucket     | value 
 ---------------------+-------
-                   0 |     5
-                   5 |     5
-                  10 |     5
  9223372036854775800 |     1
-(4 rows)
+(1 row)
 
 DROP TABLE continuous_agg_negative CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_30_chunk
 -- max_interval_per_job tests
 CREATE TABLE continuous_agg_max_mat(time BIGINT, data BIGINT);
 SELECT create_hypertable('continuous_agg_max_mat', 'time', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
- (11,public,continuous_agg_max_mat,t)
+ (12,public,continuous_agg_max_mat,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_max_mat() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_max_mat $$;
+SELECT set_integer_now_func('continuous_agg_max_mat', 'integer_now_continuous_agg_max_mat');
+ set_integer_now_func 
+----------------------
+ 
 (1 row)
 
 -- only allow two time_buckets per run
@@ -1117,7 +1153,7 @@ SELECT * FROM max_mat_view ORDER BY 1;
 (6 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): no new data
+INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold (12)
 INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize
 INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM max_mat_view ORDER BY 1;
@@ -1137,7 +1173,7 @@ SELECT create_hypertable('continuous_agg_max_mat_t', 'time');
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable            
 ----------------------------------------
- (13,public,continuous_agg_max_mat_t,t)
+ (14,public,continuous_agg_max_mat_t,t)
 (1 row)
 
 -- only allow two time_buckets per run
@@ -1149,6 +1185,7 @@ CREATE VIEW max_mat_view_t
 INSERT INTO continuous_agg_max_mat_t
     SELECT i, i FROM
         generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour') AS i;
+SET timescaledb.current_timestamp_mock = '2019-09-09 10:00 UTC';
 -- first run create two materializations
 REFRESH MATERIALIZED VIEW max_mat_view_t;
 INFO:  new materialization range for public.continuous_agg_max_mat_t larger than allowed in one run, truncating (time column time) (1568030400000000)
@@ -1192,7 +1229,7 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 (6 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view_t;
-INFO:  new materialization range not found for public.continuous_agg_max_mat_t (time column time): no new data
+INFO:  new materialization range not found for public.continuous_agg_max_mat_t (time column time): not enough new data past completion threshold (1568030400000000)
 INFO:  materializing continuous aggregate public.max_mat_view_t: no new range to materialize
 INFO:  materializing continuous aggregate public.max_mat_view_t: no new range to materialize or invalidations found, exiting early
 SELECT * FROM max_mat_view_t ORDER BY 1;
@@ -1212,7 +1249,7 @@ SELECT create_hypertable('continuous_agg_max_mat_timestamp', 'time');
 NOTICE:  adding not-null constraint to column "time"
                create_hypertable                
 ------------------------------------------------
- (15,public,continuous_agg_max_mat_timestamp,t)
+ (16,public,continuous_agg_max_mat_timestamp,t)
 (1 row)
 
 CREATE VIEW max_mat_view_timestamp
@@ -1243,7 +1280,7 @@ SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
 NOTICE:  adding not-null constraint to column "time"
              create_hypertable             
 -------------------------------------------
- (17,public,continuous_agg_max_mat_date,t)
+ (18,public,continuous_agg_max_mat_date,t)
 (1 row)
 
 CREATE VIEW max_mat_view_date
@@ -1253,6 +1290,8 @@ CREATE VIEW max_mat_view_date
         GROUP BY 1;
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::DATE, '2019-09-010 10:00', '1 day');
+SET timescaledb.current_timestamp_mock = '2019-09-09 01:00 UTC';
+--SET timescaledb.current_timestamp_mock = '2019-09-09 01:01:01 UTC';
 -- first materializes everything
 REFRESH MATERIALIZED VIEW max_mat_view_date;
 INFO:  new materialization range for public.continuous_agg_max_mat_date (time column time) (1568592000000000)
@@ -1269,10 +1308,10 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
        view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
 ------------------------+------------------------+------------------------+--------+------------+-------------------
- max_mat_view           | 12                     | 12                     |   1003 |            | 
- max_mat_view_t         | 2019-09-09 12:00:00+00 | 2019-09-09 12:00:00+00 |   1004 |            | 
- max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1005 |            | 
- max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1006 |            | 
+ max_mat_view           | 12                     | 12                     |   1004 |            | 
+ max_mat_view_t         | 2019-09-09 12:00:00+00 | 2019-09-09 12:00:00+00 |   1005 |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1006 |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1007 |            | 
 (4 rows)
 
 SELECT view_name, refresh_lag, max_interval_per_job
@@ -1290,10 +1329,10 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
        view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
 ------------------------+------------------------+------------------------+--------+------------+-------------------
- max_mat_view           | 12                     | 12                     |   1003 |            | 
- max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |   1004 |            | 
- max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1005 |            | 
- max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1006 |            | 
+ max_mat_view           | 12                     | 12                     |   1004 |            | 
+ max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |   1005 |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1006 |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1007 |            | 
 (4 rows)
 
 SELECT view_name, refresh_lag, max_interval_per_job

@@ -18,6 +18,13 @@ NOTICE:  adding not-null constraint to column "time"
  (1,public,continuous_agg_test,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM continuous_agg_test $$;
+SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 -- watermark tabels start out empty
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
@@ -206,6 +213,13 @@ NOTICE:  adding not-null constraint to column "time"
  (2,public,ca_inval_test,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ca_inval_test $$;
+SELECT set_integer_now_func('ca_inval_test', 'integer_now_test2');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW cit_view
     WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
     AS SELECT time_bucket('5', time), COUNT(time)
@@ -291,6 +305,13 @@ NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (4,public,ts_continuous_test,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ts_continuous_test $$;
+SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test3');
+ set_integer_now_func 
+----------------------
+ 
 (1 row)
 
 INSERT INTO ts_continuous_test SELECT i, i FROM

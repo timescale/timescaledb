@@ -14,8 +14,6 @@
 #include <executor/spi.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include <miscadmin.h>
-#include <utils/hsearch.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
@@ -25,13 +23,13 @@
 
 #include <scanner.h>
 #include <compat.h>
+#include <interval.h>
 
 #include "chunk.h"
 #include "continuous_agg.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "export.h"
 #include "partitioning.h"
 
 #include "utils.h"
@@ -277,9 +275,7 @@ get_continuous_agg(int32 mat_hypertable_id)
 	return cagg;
 }
 
-static bool hypertable_get_min_and_max(SchemaAndName hypertable, Name time_column,
-									   int64 search_start, Oid time_type, int64 *min_out,
-									   int64 *max_out);
+static int64 hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type);
 
 static int64
 get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materialization_id,
@@ -287,8 +283,6 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 										int64 max_interval_per_job, bool *materializing_new_range,
 										bool *truncated_materialization, bool verbose)
 {
-	int64 start_time = PG_INT64_MIN;
-	int64 end_time = PG_INT64_MIN;
 	Hypertable *raw_table = ts_hypertable_get_by_id(raw_hypertable_id);
 	SchemaAndName hypertable = {
 		.schema = &raw_table->fd.schema_name,
@@ -298,31 +292,19 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	Dimension *time_column = hyperspace_get_open_dimension(raw_table->space, 0);
 	NameData time_column_name = time_column->fd.column_name;
 	Oid time_column_type = ts_dimension_get_partition_type(time_column);
-	bool found_new_tuples = false;
+	int64 now_time = ts_get_now_internal(time_column);
+	int64 end_time, start_time;
 
-	found_new_tuples = hypertable_get_min_and_max(hypertable,
-												  &time_column_name,
-												  old_completed_threshold,
-												  time_column_type,
-												  &start_time,
-												  &end_time);
-
-	if (!found_new_tuples)
+	start_time = old_completed_threshold;
+	if (start_time == PG_INT64_MIN)
 	{
-		if (verbose)
-			elog(INFO,
-				 "new materialization range not found for %s.%s (time column %s): no new data",
-				 NameStr(*hypertable.schema),
-				 NameStr(*hypertable.name),
-				 NameStr(time_column_name));
-		*materializing_new_range = false;
-		return old_completed_threshold;
+		/* If there is no completion threshold yet set, find the minimum value stored in the
+		 * hypertable */
+		start_time = hypertable_get_min(hypertable, &time_column_name, time_column_type);
 	}
 
-	Assert(end_time >= start_time);
-
-	/* check for values which would overflow 64 bit subtraction*/
-	if (refresh_lag >= 0 && end_time <= PG_INT64_MIN + refresh_lag)
+	/* check for values which would overflow 64 bit subtractionb */
+	if (refresh_lag >= 0 && now_time <= PG_INT64_MIN + refresh_lag)
 	{
 		if (verbose)
 			elog(INFO,
@@ -331,23 +313,23 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
-				 end_time);
+				 now_time);
 		*materializing_new_range = false;
 		return old_completed_threshold;
 	}
-	else if (refresh_lag < 0 && end_time >= PG_INT64_MAX + refresh_lag)
+	else if (refresh_lag < 0 && now_time >= PG_INT64_MAX + refresh_lag)
 	{
 		/* note since refresh_lag is negative
 		 * PG_INT64_MAX + refresh_lag is smaller than PG_INT64_MAX
 		 * pick a value so that end_time -= refresh_lag will be
 		 * PG_INT64_MAX, we should materialize everything
 		 */
-		end_time = PG_INT64_MAX + refresh_lag;
+		now_time = PG_INT64_MAX + refresh_lag;
 	}
 
-	end_time -= refresh_lag;
+	end_time = now_time - refresh_lag;
 	end_time = ts_time_bucket_by_type(bucket_width, end_time, time_column_type);
-	if (end_time <= old_completed_threshold || end_time < start_time)
+	if (end_time <= start_time)
 	{
 		if (verbose)
 			elog(INFO,
@@ -392,78 +374,29 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 			 end_time);
 
 	Assert(end_time > old_completed_threshold);
-	Assert(end_time >= start_time);
 
 	*materializing_new_range = true;
 	return end_time;
 }
 
-static bool
-hypertable_get_min_and_max(SchemaAndName hypertable, Name time_column, int64 search_start,
-						   Oid time_type, int64 *min_out, int64 *max_out)
+static int64
+hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type)
 {
-	Datum last_time_value;
-	Datum first_time_value;
+	Datum min_time_datum;
 	bool val_is_null;
-	bool search_start_is_infinite = false;
-	bool found_new_tuples = false;
 	StringInfo command = makeStringInfo();
 	int res;
-
-	Datum search_start_val =
-		internal_to_time_value_or_infinite(search_start, time_type, &search_start_is_infinite);
-
-	if (search_start_is_infinite && search_start > 0)
-	{
-		/* the previous completed time was +infinity, there can be no new ranges */
-		return false;
-	}
+	int64 min_time_internal = PG_INT64_MIN;
 
 	res = SPI_connect();
 	if (res != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI while search for new tuples");
 
-	/* We always SELECT both max and min in the following queries. There are two cases
-	 * 1. there is no index on time: then we want to perform only one seqscan.
-	 * 2. there is a btree index on time: then postgres will transform the query
-	 *    into two index-only scans, which should add very little extra work
-	 *    compared to the materialization.
-	 * Ordered append append also fires, so we never scan beyond the first and last chunks
-	 */
-	if (search_start_is_infinite)
-	{
-		/* previous completed time is -infinity, or does not exist, so we must scan from the
-		 * beginning */
-		appendStringInfo(command,
-						 "SELECT max(%s), min(%s) FROM %s.%s",
-						 quote_identifier(NameStr(*time_column)),
-						 quote_identifier(NameStr(*time_column)),
-						 quote_identifier(NameStr(*hypertable.schema)),
-						 quote_identifier(NameStr(*hypertable.name)));
-	}
-	else
-	{
-		Oid out_fn;
-		bool type_is_varlena;
-		char *search_start_str;
-
-		getTypeOutputInfo(time_type, &out_fn, &type_is_varlena);
-
-		search_start_str = OidOutputFunctionCall(out_fn, search_start_val);
-
-		*min_out = search_start;
-		/* normal case, add a WHERE to take advantage of chunk constraints */
-		/*We handled the +infinity case above*/
-		Assert(!search_start_is_infinite);
-		appendStringInfo(command,
-						 "SELECT max(%s), min(%s) FROM %s.%s WHERE %s >= %s",
-						 quote_identifier(NameStr(*time_column)),
-						 quote_identifier(NameStr(*time_column)),
-						 quote_identifier(NameStr(*hypertable.schema)),
-						 quote_identifier(NameStr(*hypertable.name)),
-						 quote_identifier(NameStr(*time_column)),
-						 quote_literal_cstr(search_start_str));
-	}
+	appendStringInfo(command,
+					 "SELECT min(%s) FROM %s.%s",
+					 quote_identifier(NameStr(*time_column)),
+					 quote_identifier(NameStr(*hypertable.schema)),
+					 quote_identifier(NameStr(*hypertable.name)));
 
 	res = SPI_execute_with_args(command->data,
 								0 /*=nargs*/,
@@ -473,24 +406,23 @@ hypertable_get_min_and_max(SchemaAndName hypertable, Name time_column, int64 sea
 								true /*=read_only*/,
 								0 /*count*/);
 	if (res < 0)
-		elog(ERROR, "could not find new invalidation threshold");
+		elog(ERROR, "could not find the minimum time value for a hypertable");
 
 	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == time_type);
-	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 2) == time_type);
 
-	first_time_value = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &val_is_null);
-	last_time_value = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &val_is_null);
-
-	if (!val_is_null)
+	if (SPI_processed == 1)
 	{
-		*min_out = ts_time_value_to_internal(first_time_value, time_type);
-		*max_out = ts_time_value_to_internal(last_time_value, time_type);
-		found_new_tuples = true;
-	}
+		min_time_datum =
+			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &val_is_null);
 
+		if (!val_is_null)
+		{
+			min_time_internal = ts_time_value_to_internal(min_time_datum, time_type);
+		}
+	}
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
-	return found_new_tuples;
+	return min_time_internal;
 }
 
 /* materialization_invalidation_threshold is used only for materialization_invalidation_log

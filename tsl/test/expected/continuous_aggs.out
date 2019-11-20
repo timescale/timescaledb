@@ -42,6 +42,13 @@ insert into foo values( 1 , 14 , 20);
 insert into foo values( 2 , 14 , 20);
 insert into foo values( 2 , 15 , 20);
 insert into foo values( 2 , 16 , 20);
+CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM foo $$;
+SELECT set_integer_now_func('foo', 'integer_now_foo');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 create or replace view mat_m1( a, countb )
 WITH ( timescaledb.continuous)
 as
@@ -753,6 +760,7 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_drop_test;
 INFO:  new materialization range for public.conditions larger than allowed in one run, truncating (time column timec) (1546041600000000)
 INFO:  new materialization range for public.conditions (time column timec) (1542758400000000)
@@ -939,6 +947,13 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  conditions
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_conditions');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '500', timescaledb.refresh_interval = '2h')
 as
@@ -992,6 +1007,13 @@ NOTICE:  adding not-null constraint to column "time"
  (24,public,space_table,t)
 (1 row)
 
+CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '0') FROM space_table $$;
+SELECT set_integer_now_func('space_table', 'integer_now_space_table');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
 CREATE VIEW space_view
 WITH (timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
 AS SELECT time_bucket('4', time), COUNT(data)
@@ -1038,7 +1060,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (3, 2, 1);
 REFRESH MATERIALIZED VIEW space_view;
-INFO:  new materialization range not found for public.space_table (time column time): no new data
+INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold (12)
 INFO:  materializing continuous aggregate public.space_view: no new range to materialize
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
@@ -1059,7 +1081,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (2, 3, 1);
 REFRESH MATERIALIZED VIEW space_view;
-INFO:  new materialization range not found for public.space_table (time column time): no new data
+INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold (12)
 INFO:  materializing continuous aggregate public.space_view: no new range to materialize
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
@@ -1122,6 +1144,13 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_conditions');
+ set_integer_now_func 
+----------------------
+ 
 (1 row)
 
 insert into conditions
