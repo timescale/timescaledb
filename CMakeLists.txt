@@ -22,7 +22,7 @@ function(GET_PG_CONFIG var)
   # It will then also show as, e.g., "PG_LDFLAGS-NOTFOUND" in any
   # string interpolation, making it obvious that it is an undefined
   # CMake variable.
-  if(${_temp} STREQUAL "not recorded")
+  if("${_temp}" STREQUAL "not recorded")
     set(_temp ${var}-NOTFOUND)
   endif()
 
