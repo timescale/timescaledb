@@ -6,7 +6,13 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
+#include <nodes/pg_list.h>
+#include <nodes/relation.h>
 #include <optimizer/planner.h>
+#include <optimizer/cost.h>
+#include <optimizer/var.h>
+#include <optimizer/tlist.h>
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>
 
@@ -15,15 +21,30 @@
 #include "utils.h"
 
 #define TS_PARTIALFN "partialize_agg"
+
 typedef struct PartializeWalkerState
 {
 	bool found_partialize;
+	bool found_non_partial_agg;
 	bool looking_for_agg;
 	Oid fnoid;
 } PartializeWalkerState;
 
+/*
+ * Look for the partialize function in a target list and mark the wrapped
+ * aggregate as a partial aggregate.
+ *
+ * The partialize function is an expression of the form:
+ *
+ * _timescaledb_internal.partialize_agg(avg(temp))
+ *
+ * where avg(temp) can be replaced by any aggregate that can be partialized.
+ *
+ * When such an expression is found, this function will mark the Aggref node
+ * for the aggregate as partial.
+ */
 static bool
-partialize_function_call_walker(Node *node, PartializeWalkerState *state)
+check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 {
 	if (node == NULL)
 		return false;
@@ -32,21 +53,33 @@ partialize_function_call_walker(Node *node, PartializeWalkerState *state)
 	 * If the last node we saw was partialize, the next one must be aggregate
 	 * we're partializing
 	 */
-	if (state->looking_for_agg)
+	if (state->looking_for_agg && !IsA(node, Aggref))
+		elog(ERROR, "the input to partialize must be an aggregate");
+
+	if (IsA(node, Aggref))
 	{
-		Aggref *agg_ref;
+		Aggref *aggref = castNode(Aggref, node);
 
-		if (!IsA(node, Aggref))
-			elog(ERROR, "The input to partialize must be an aggregate");
+		if (state->looking_for_agg)
+		{
+			state->looking_for_agg = false;
+			aggref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
 
-		agg_ref = castNode(Aggref, node);
-		agg_ref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
-		if (agg_ref->aggtranstype == INTERNALOID && DO_AGGSPLIT_SERIALIZE(AGGSPLIT_INITIAL_SERIAL))
-			agg_ref->aggtype = BYTEAOID;
-		else
-			agg_ref->aggtype = agg_ref->aggtranstype;
+			if (aggref->aggtranstype == INTERNALOID &&
+				DO_AGGSPLIT_SERIALIZE(AGGSPLIT_INITIAL_SERIAL))
+				aggref->aggtype = BYTEAOID;
+			else
+				aggref->aggtype = aggref->aggtranstype;
+		}
 
-		state->looking_for_agg = false;
+		/* We currently cannot handle cases like
+		 *     SELECT sum(i), partialize(sum(i)) ...
+		 *
+		 * We check for non-partial aggs to ensure that if any of the aggregates
+		 * in a statement are partialized, all of them have to be.
+		 */
+		else if (aggref->aggsplit != AGGSPLIT_INITIAL_SERIAL)
+			state->found_non_partial_agg = true;
 	}
 	else if (IsA(node, FuncExpr) && ((FuncExpr *) node)->funcid == state->fnoid)
 	{
@@ -54,64 +87,112 @@ partialize_function_call_walker(Node *node, PartializeWalkerState *state)
 		state->looking_for_agg = true;
 	}
 
-	return expression_tree_walker((Node *) node, partialize_function_call_walker, state);
+	return expression_tree_walker(node, check_for_partialize_function_call, state);
 }
 
-/* We currently cannot handle cases like
- *     SELECT sum(i), partialize(sum(i)) ...
- * instead we use this function to ensure that if any of the aggregates in a statement are
- * partialized, all of them are
- */
 static bool
-ensure_only_partials(Node *node, void *state)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, Aggref) && castNode(Aggref, node)->aggsplit != AGGSPLIT_INITIAL_SERIAL)
-		elog(ERROR, "Cannot mix partialized and non-partialized aggregates in the same statement");
-
-	return expression_tree_walker((Node *) node, ensure_only_partials, state);
-}
-
-void
-ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+has_partialize_function(Query *parse)
 {
 	Oid partialfnoid = InvalidOid;
 	Oid argtyp[] = { ANYELEMENTOID };
-	Query *parse = root->parse;
+
 	PartializeWalkerState state = { .found_partialize = false,
+									.found_non_partial_agg = false,
 									.looking_for_agg = false,
 									.fnoid = InvalidOid };
 	List *name = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(TS_PARTIALFN));
-	ListCell *lc;
 
-	if (CMD_SELECT != parse->commandType)
-		return;
 	partialfnoid = LookupFuncName(name, lengthof(argtyp), argtyp, false);
 	Assert(partialfnoid != InvalidOid);
-
 	state.fnoid = partialfnoid;
-	partialize_function_call_walker((Node *) parse->targetList, &state);
+	check_for_partialize_function_call((Node *) parse->targetList, &state);
 
-	if (state.found_partialize)
+	if (state.found_partialize && state.found_non_partial_agg)
+		elog(ERROR, "cannot mix partialized and non-partialized aggregates in the same statement");
+
+	return state.found_partialize;
+}
+
+/*
+ * Modify all AggPaths in relation to use partial aggregation.
+ */
+static void
+partialize_agg_paths(RelOptInfo *rel)
+{
+	ListCell *lc;
+
+	foreach (lc, rel->pathlist)
 	{
-		ensure_only_partials((Node *) parse->targetList, NULL);
+		Path *path = lfirst(lc);
 
-		foreach (lc, input_rel->pathlist)
-		{
-			Path *path = lfirst(lc);
+		if (IsA(path, AggPath))
+			castNode(AggPath, path)->aggsplit = AGGSPLIT_INITIAL_SERIAL;
+	}
+}
 
-			if (IsA(path, AggPath))
-				((AggPath *) path)->aggsplit = AGGSPLIT_INITIAL_SERIAL;
-		}
+/*
+ * Turn an aggregate relation into a partial aggregate relation if aggregates
+ * are enclosed by the partialize_agg function.
+ *
+ * The partialize_agg function can "manually" partialize an aggregate. For
+ * instance:
+ *
+ *  SELECT time_bucket('1 day', time), device,
+ *  __timescaledb_internal.partialize_agg(avg(temp))
+ *  GROUP BY 1, 2;
+ *
+ * Would compute the partial aggregate of avg(temp).
+ *
+ * The plan to compute the relation must be either entirely non-partial or
+ * entirely partial, so it is not possible to mix partials and
+ * non-partials. Note that aggregates can appear in both the target list and the
+ * HAVING clause, for instance:
+ *
+ *  SELECT time_bucket('1 day', time), device, avg(temp)
+ *  GROUP BY 1, 2
+ *  HAVING avg(temp) > 3;
+ *
+ * Regular partial aggregations executed by the planner (i.e., those not induced
+ * by the partialize_agg function) have their HAVING aggregates transparently
+ * moved to the target list during planning so that the finalize node can use it
+ * when applying the final filter on the resulting groups, obviously omitting
+ * the extra columns in the final output/projection. However, it doesn't make
+ * much sense to transparently do that when partializing with partialize_agg
+ * since it would be odd to return more columns than requested by the
+ * user. Therefore, the caller would have to do that manually. This, in fact, is
+ * also done when materializing continuous aggregates.
+ *
+ * For this reason, HAVING clauses with partialize_agg are blocked, except in
+ * cases where the planner transparently reduces the having expression to a
+ * simple filter (e.g., HAVING device > 3). In such cases, the HAVING clause is
+ * removed and replaced by a filter on the input.
+ */
+void
+ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+{
+	Query *parse = root->parse;
 
-		foreach (lc, output_rel->pathlist)
-		{
-			Path *path = lfirst(lc);
+#if PG10_GE
+	Assert(IS_UPPER_REL(output_rel));
+#endif
 
-			if (IsA(path, AggPath))
-				((AggPath *) path)->aggsplit = AGGSPLIT_INITIAL_SERIAL;
-		}
+	if (CMD_SELECT != parse->commandType || !parse->hasAggs)
+		return;
+
+	if (has_partialize_function(parse))
+	{
+		/* We cannot check root->hasHavingqual here because sometimes the
+		 * planner can replace the HAVING clause with a simple filter. But
+		 * root->hashavingqual stays true to remember that the query had a
+		 * HAVING clause initially. */
+		if (NULL != parse->havingQual)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot partialize aggregate with HAVING clause"),
+					 errhint(
+						 "Any aggregates in a HAVING clause need to be partialized in the output "
+						 "target list.")));
+
+		partialize_agg_paths(output_rel);
 	}
 }

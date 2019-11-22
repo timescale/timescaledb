@@ -182,7 +182,23 @@ select length(_timescaledb_internal.partialize_agg(min(a+1))) from foo;
 \set ON_ERROR_STOP 0
 select length(_timescaledb_internal.partialize_agg(1+min(a))) from foo;
 select length(_timescaledb_internal.partialize_agg(min(a)+min(a))) from foo;
+--non-trivial HAVING clause not allowed with partialize_agg
+select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a))
+from foo
+group by 1
+having avg(a) > 3;
+--mixing partialized and non-partialized aggs is not allowed
+select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a)), sum(a)
+from foo
+group by 1;
 \set ON_ERROR_STOP 1
+
+--partializing works with HAVING when the planner can effectively
+--reduce it. In this case to a simple filter.
+select time_bucket('1 hour', b) as b, toastval, _timescaledb_internal.partialize_agg(avg(a))
+from foo
+group by b, toastval
+having toastval LIKE 'does not exist';
 
 --
 -- TEST FINALIZEFUNC_EXTRA

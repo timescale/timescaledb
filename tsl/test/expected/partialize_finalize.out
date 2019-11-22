@@ -243,10 +243,31 @@ select length(_timescaledb_internal.partialize_agg(min(a+1))) from foo;
 
 \set ON_ERROR_STOP 0
 select length(_timescaledb_internal.partialize_agg(1+min(a))) from foo;
-ERROR:  The input to partialize must be an aggregate
+ERROR:  the input to partialize must be an aggregate
 select length(_timescaledb_internal.partialize_agg(min(a)+min(a))) from foo;
-ERROR:  The input to partialize must be an aggregate
+ERROR:  the input to partialize must be an aggregate
+--non-trivial HAVING clause not allowed with partialize_agg
+select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a))
+from foo
+group by 1
+having avg(a) > 3;
+ERROR:  cannot partialize aggregate with HAVING clause
+--mixing partialized and non-partialized aggs is not allowed
+select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a)), sum(a)
+from foo
+group by 1;
+ERROR:  cannot mix partialized and non-partialized aggregates in the same statement
 \set ON_ERROR_STOP 1
+--partializing works with HAVING when the planner can effectively
+--reduce it. In this case to a simple filter.
+select time_bucket('1 hour', b) as b, toastval, _timescaledb_internal.partialize_agg(avg(a))
+from foo
+group by b, toastval
+having toastval LIKE 'does not exist';
+ b | toastval | partialize_agg 
+---+----------+----------------
+(0 rows)
+
 --
 -- TEST FINALIZEFUNC_EXTRA
 --
