@@ -15,6 +15,7 @@
 #include <utils/guc.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/relation.h>
 #include <optimizer/var.h>
 #include <optimizer/restrictinfo.h>
 #include <utils/lsyscache.h>
@@ -27,6 +28,7 @@
 #include <tcop/tcopprot.h>
 #include <optimizer/plancat.h>
 #include <nodes/nodeFuncs.h>
+
 #include <parser/analyze.h>
 
 #include <catalog/pg_constraint.h>
@@ -745,8 +747,11 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
 
-		/* modify aggregates that need to be partialized */
-		ts_plan_process_partialize_agg(root, input_rel, output_rel);
+		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
+		{
+			/* modify aggregates that need to be partialized */
+			ts_plan_process_partialize_agg(root, input_rel, output_rel);
+		}
 	}
 
 	if (ts_guc_disable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
@@ -758,6 +763,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	if (UPPERREL_GROUP_AGG == stage && output_rel != NULL)
 	{
 		ts_plan_add_hashagg(root, input_rel, output_rel);
+
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 	}
