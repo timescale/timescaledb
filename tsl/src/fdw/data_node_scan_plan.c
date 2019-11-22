@@ -42,6 +42,9 @@
 #include "scan_plan.h"
 #include "data_node_scan_plan.h"
 #include "data_node_scan_exec.h"
+#include "debug.h"
+#include "debug_guc.h"
+#include "fdw_utils.h"
 
 /*
  * DataNodeScan is a custom scan implementation for scanning hypertables on
@@ -272,7 +275,8 @@ add_data_node_scan_paths(PlannerInfo *root, RelOptInfo *baserel)
 									  NULL,
 									  NULL /* no extra plan */,
 									  NIL);
-	add_path(baserel, path);
+
+	fdw_utils_add_path(baserel, path);
 
 	/* Add paths with pathkeys */
 	fdw_add_paths_with_pathkeys_for_rel(root, baserel, NULL, data_node_scan_path_create);
@@ -460,6 +464,11 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 			ts_set_dummy_rel_pathlist(data_node_rel);
 
 		set_cheapest(data_node_rel);
+
+#ifdef TS_DEBUG
+		if (ts_debug_optimizer_flags.show_rel)
+			tsl_debug_log_rel_with_paths(root, data_node_rel, (UpperRelationKind *) NULL);
+#endif
 	}
 
 	Assert(list_length(data_node_rels_list) > 0);

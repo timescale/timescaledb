@@ -18,15 +18,16 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
        chunk_api.c
        process_utility.c
        dist_util.c)
+  
+  # Add test source code in Debug builds
+  if (CMAKE_BUILD_TYPE MATCHES Debug)
+    set(TS_DEBUG 1)
+    set(DEBUG 1)
+    list(APPEND SOURCES
+        debug.c)
+  endif (CMAKE_BUILD_TYPE MATCHES Debug)
+  
 endif()
-
-# Add test source code in Debug builds
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  set(TS_DEBUG 1)
-  set(DEBUG 1)
-  list(APPEND SOURCES
-      debug.c)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TSL_LIBRARY_NAME ${PROJECT_NAME}-tsl)
 

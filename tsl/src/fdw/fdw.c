@@ -31,6 +31,7 @@
 #include "analyze.h"
 #include "debug_guc.h"
 #include "debug.h"
+#include "fdw_utils.h"
 
 /*
  * Parse options from foreign table and apply them to fpinfo.
@@ -115,13 +116,17 @@ get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 											NULL, /* no outer rel either */
 											NULL, /* no extra plan */
 											NIL); /* no fdw_private list */
-	add_path(baserel, path);
+	fdw_utils_add_path(baserel, path);
 
 	/* Add paths with pathkeys */
 	fdw_add_paths_with_pathkeys_for_rel(root,
 										baserel,
 										NULL,
 										(CreatePathFunc) create_foreignscan_path);
+#ifdef TS_DEBUG
+	if (ts_debug_optimizer_flags.show_rel)
+		tsl_debug_log_rel_with_paths(root, baserel, NULL);
+#endif
 }
 
 static ForeignScan *
@@ -410,16 +415,7 @@ get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *
 
 #ifdef TS_DEBUG
 	if (ts_debug_optimizer_flags.show_upper & (1 << stage))
-	{
-		StringInfoData buf;
-		initStringInfo(&buf);
-		tsl_debug_append_rel(&buf, root, output_rel);
-		ereport(DEBUG2,
-				(errmsg_internal("Stage %s in %s:\n%s",
-								 upperrel_stage_name[stage],
-								 __func__,
-								 buf.data)));
-	}
+		tsl_debug_log_rel_with_paths(root, output_rel, &stage);
 #endif
 }
 

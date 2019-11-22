@@ -120,6 +120,8 @@ typedef struct TsFdwRelInfo
 	 */
 	int relation_index;
 	DataNodeChunkAssignment *sca;
+	List *considered_paths; /* shell copies of all the paths that planner has considered. This is
+							   intended to be only used for printing cost debug output */
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
