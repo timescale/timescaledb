@@ -26,6 +26,7 @@
 #include "debug_guc.h"
 #include "async_append.h"
 #include "debug.h"
+#include "fdw/relinfo.h"
 
 #include <math.h>
 
@@ -134,12 +135,7 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 #ifdef TS_DEBUG
 		if (ts_debug_optimizer_flags.show_rel)
-		{
-			StringInfoData buf;
-			initStringInfo(&buf);
-			tsl_debug_append_rel(&buf, root, rel);
-			ereport(DEBUG2, (errmsg_internal("In %s:\n%s", __func__, buf.data)));
-		}
+			tsl_debug_log_rel_with_paths(root, rel, (UpperRelationKind *) NULL);
 #endif
 	}
 

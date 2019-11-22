@@ -3,6 +3,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/relinfo.c
   ${CMAKE_CURRENT_SOURCE_DIR}/estimate.c
   ${CMAKE_CURRENT_SOURCE_DIR}/fdw.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/fdw_utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modify_plan.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modify_exec.c
   ${CMAKE_CURRENT_SOURCE_DIR}/scan_plan.c

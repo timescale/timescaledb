@@ -87,6 +87,17 @@ fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype)
 	return fpinfo;
 }
 
+static char *
+get_relation_qualified_name(Oid relid)
+{
+	StringInfo name = makeStringInfo();
+	const char *relname = get_rel_name(relid);
+	const char *namespace = get_namespace_name(get_rel_namespace(relid));
+	appendStringInfo(name, "%s.%s", quote_identifier(namespace), quote_identifier(relname));
+
+	return name->data;
+}
+
 TsFdwRelInfo *
 fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local_table_id,
 				   TsFdwRelInfoType type)
@@ -94,8 +105,6 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	TsFdwRelInfo *fpinfo;
 	ListCell *lc;
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
-	const char *namespace;
-	const char *relname;
 	const char *refname;
 
 	/*
@@ -103,6 +112,19 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * functions.
 	 */
 	fpinfo = fdw_relinfo_alloc(rel, type);
+
+	/*
+	 * Set the name of relation in fpinfo, while we are constructing it here.
+	 * It will be used to build the string describing the join relation in
+	 * EXPLAIN output. We can't know whether VERBOSE option is specified or
+	 * not, so always schema-qualify the foreign table name.
+	 */
+
+	fpinfo->relation_name = makeStringInfo();
+	refname = rte->eref->aliasname;
+	appendStringInfoString(fpinfo->relation_name, get_relation_qualified_name(rte->relid));
+	if (*refname && strcmp(refname, get_rel_name(rte->relid)) != 0)
+		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 
 	if (type == TS_FDW_RELINFO_HYPERTABLE)
 	{
@@ -205,23 +227,6 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 								&fpinfo->width,
 								&fpinfo->startup_cost,
 								&fpinfo->total_cost);
-
-	/*
-	 * Set the name of relation in fpinfo, while we are constructing it here.
-	 * It will be used to build the string describing the join relation in
-	 * EXPLAIN output. We can't know whether VERBOSE option is specified or
-	 * not, so always schema-qualify the foreign table name.
-	 */
-	fpinfo->relation_name = makeStringInfo();
-	namespace = get_namespace_name(get_rel_namespace(local_table_id));
-	relname = get_rel_name(local_table_id);
-	refname = rte->eref->aliasname;
-	appendStringInfo(fpinfo->relation_name,
-					 "%s.%s",
-					 quote_identifier(namespace),
-					 quote_identifier(relname));
-	if (*refname && strcmp(refname, relname) != 0)
-		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 
 	/* No outer and inner relations. */
 	fpinfo->make_outerrel_subquery = false;

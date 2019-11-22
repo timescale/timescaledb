@@ -5,6 +5,13 @@
  */
 
 /*
+ * This file contains source code that was copied and/or modified from
+ * the PostgreSQL database, which is licensed under the open-source
+ * PostgreSQL License. Please see the NOTICE at the top level
+ * directory for a copy of the PostgreSQL License.
+ */
+
+/*
  * The code is partially copied from nodes/print.c and
  * backend/optimizer/path/allpaths.c in the PostgreSQL source code, but we
  * cannot use it out of the box for two reasons:
@@ -45,6 +52,8 @@
 #include "debug.h"
 
 static void appendExpr(StringInfo buf, const Node *expr, const List *rtable);
+static void tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist,
+									  int indent);
 
 static const char *reloptkind_name[] = {
 	[RELOPT_BASEREL] = "BASEREL",
@@ -60,7 +69,7 @@ static const char *reloptkind_name[] = {
 	[RELOPT_DEADREL] = "DEADREL",
 };
 
-const char *upperrel_stage_name[] = {
+static const char *upperrel_stage_name[] = {
 	[UPPERREL_SETOP] = "SETOP",
 #if PG11_GE
 	[UPPERREL_PARTIAL_GROUP_AGG] = "PARTIAL_GROUP_AGG",
@@ -71,6 +80,10 @@ const char *upperrel_stage_name[] = {
 	[UPPERREL_ORDERED] = "ORDERED",
 	[UPPERREL_FINAL] = "FINAL",
 };
+
+static const char *rel_types[] = { [TS_FDW_RELINFO_HYPERTABLE_DATA_NODE] = "DATA_NODE",
+								   [TS_FDW_RELINFO_HYPERTABLE] = "HYPERTABLE",
+								   [TS_FDW_RELINFO_FOREIGN_TABLE] = "FOREIGN_TABLE" };
 
 static void
 appendVarExpr(StringInfo buf, const Node *expr, const List *rtable)
@@ -228,7 +241,43 @@ appendRelids(StringInfo buf, PlannerInfo *root, Relids relids)
 	}
 }
 
-void
+static void
+appendPathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
+{
+	const ListCell *i;
+
+	appendStringInfoChar(buf, '(');
+	foreach (i, pathkeys)
+	{
+		PathKey *pathkey = (PathKey *) lfirst(i);
+		EquivalenceClass *eclass;
+		ListCell *k;
+		bool first = true;
+
+		eclass = pathkey->pk_eclass;
+		/* chase up, in case pathkey is non-canonical */
+		while (eclass->ec_merged)
+			eclass = eclass->ec_merged;
+
+		appendStringInfoChar(buf, '(');
+		foreach (k, eclass->ec_members)
+		{
+			EquivalenceMember *mem = (EquivalenceMember *) lfirst(k);
+
+			if (first)
+				first = false;
+			else
+				appendStringInfoString(buf, ", ");
+			appendExpr(buf, (Node *) mem->em_expr, rtable);
+		}
+		appendStringInfoChar(buf, ')');
+		if (lnext(i))
+			appendStringInfoString(buf, ", ");
+	}
+	appendStringInfoChar(buf, ')');
+}
+
+static void
 tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 {
 	const char *ptype;
@@ -414,23 +463,33 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 	appendStringInfo(buf, "%s", ptype);
 	if (extra_info)
 		appendStringInfo(buf, " (%s)", extra_info);
+
 	if (path->parent)
 	{
-		appendStringInfoString(buf, " [parents: ");
+		TsFdwRelInfo *fdw_info = fdw_relinfo_get(path->parent);
+		appendStringInfo(buf,
+						 " [rel type: %s, kind: %s",
+						 rel_types[fdw_info->type],
+						 reloptkind_name[path->parent->reloptkind]);
+		appendStringInfoString(buf, ", parent's base rels: ");
 		appendRelids(buf, root, path->parent->relids);
-		appendStringInfoString(buf, "]");
+		appendStringInfoChar(buf, ']');
 	}
+
 	if (path->param_info)
 	{
 		appendStringInfoString(buf, " required_outer (");
 		appendRelids(buf, root, path->param_info->ppi_req_outer);
-		appendStringInfoString(buf, ")");
+		appendStringInfoChar(buf, ')');
 	}
 
 	appendStringInfo(buf, " rows=%.0f", path->rows);
 
 	if (path->pathkeys)
-		appendStringInfoString(buf, " has pathkeys");
+	{
+		appendStringInfoString(buf, " with pathkeys: ");
+		appendPathkeys(buf, path->pathkeys, root->parse->rtable);
+	}
 
 	appendStringInfoString(buf, "\n");
 
@@ -467,7 +526,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 		tsl_debug_append_pathlist(buf, root, subpath_list, indent + 1);
 }
 
-void
+static void
 tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int indent)
 {
 	ListCell *cell;
@@ -476,31 +535,54 @@ tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int
 }
 
 void
-tsl_debug_append_rel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel)
+tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel, UpperRelationKind *upper_stage)
 {
-	appendStringInfo(buf, "RELOPTINFO [%s] (names: ", reloptkind_name[rel->reloptkind]);
-	appendRelids(buf, root, rel->relids);
-	appendStringInfo(buf, "): rows=%.0f width=%d\n", rel->rows, rel->reltarget->width);
+	StringInfo buf = makeStringInfo();
+	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
 
-	appendStringInfoString(buf, "\tpath list:\n");
+	if (upper_stage != NULL)
+		appendStringInfo(buf, "Upper rel stage %s:\n", upperrel_stage_name[*upper_stage]);
+
+	appendStringInfo(buf,
+					 "RELOPTINFO [rel name: %s, type: %s, kind: %s, base rel names: ",
+					 fdw_info->relation_name->data,
+					 rel_types[fdw_info->type],
+					 reloptkind_name[rel->reloptkind]);
+	appendRelids(buf, root, rel->relids);
+	appendStringInfoChar(buf, ']');
+	appendStringInfo(buf, " rows=%.0f width=%d\n", rel->rows, rel->reltarget->width);
+
+	appendStringInfoString(buf, "Path list:\n");
 	tsl_debug_append_pathlist(buf, root, rel->pathlist, 1);
+
+	if (list_length(fdw_info->considered_paths) > 0)
+	{
+		ListCell *cell;
+		appendStringInfoString(buf, "Considered paths:\n");
+		tsl_debug_append_pathlist(buf, root, fdw_info->considered_paths, 1);
+
+		foreach (cell, fdw_info->considered_paths)
+			fdw_utils_free_path(lfirst(cell));
+	}
 
 	if (rel->cheapest_parameterized_paths)
 	{
-		appendStringInfoString(buf, "\n\tcheapest parameterized paths:\n");
+		appendStringInfoString(buf, "\nCheapest parameterized paths:\n");
 		tsl_debug_append_pathlist(buf, root, rel->cheapest_parameterized_paths, 1);
 	}
 
 	if (rel->cheapest_startup_path)
 	{
-		appendStringInfoString(buf, "\n\tcheapest startup path:\n");
+		appendStringInfoString(buf, "\nCheapest startup path:\n");
 		tsl_debug_append_path(buf, root, rel->cheapest_startup_path, 1);
 	}
 
 	if (rel->cheapest_total_path)
 	{
-		appendStringInfoString(buf, "\n\tcheapest total path:\n");
+		appendStringInfoString(buf, "\nCheapest total path:\n");
 		tsl_debug_append_path(buf, root, rel->cheapest_total_path, 1);
 	}
+
 	appendStringInfoString(buf, "\n");
+	ereport(DEBUG2, (errmsg_internal("%s", buf->data)));
 }
