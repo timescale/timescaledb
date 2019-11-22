@@ -24,6 +24,7 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   continuous_aggs_permissions.sql.in
   plan_gapfill.sql.in
+  continuous_aggs_query.sql.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

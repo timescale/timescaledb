@@ -27,6 +27,7 @@
 #include <tcop/tcopprot.h>
 #include <optimizer/plancat.h>
 #include <nodes/nodeFuncs.h>
+#include <parser/analyze.h>
 
 #include <catalog/pg_constraint.h>
 #include "compat.h"
@@ -60,11 +61,19 @@
 void _planner_init(void);
 void _planner_fini(void);
 
+typedef struct TimescaledbWalkerState
+{
+	CmdType cmdtype;
+	Cache *hc;
+} TimescaledbWalkerState;
+
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
 static bool contain_param(Node *node);
+static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List *outer_sortcl,
+										List *outer_tlist);
 
 #define CTE_NAME_HYPERTABLES "hypertable_parent"
 
@@ -89,11 +98,11 @@ is_rte_hypertable(RangeTblEntry *rte)
  * expansion ourselves. This prevents postgres from expanding the inheritance
  * tree itself. We will expand the chunks in timescaledb_get_relation_info_hook. */
 static bool
-turn_off_inheritance_walker(Node *node, Cache *hc)
+timescaledb_query_walker(Node *node, TimescaledbWalkerState *cxt)
 {
 	if (node == NULL)
 		return false;
-
+	Assert(cxt->cmdtype == CMD_INSERT || (cxt->cmdtype == CMD_SELECT));
 	if (IsA(node, Query))
 	{
 		Query *query = (Query *) node;
@@ -103,9 +112,18 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 		foreach (lc, query->rtable)
 		{
 			RangeTblEntry *rte = lfirst(lc);
-
-			if (rte->inh)
+			if (rte->rtekind == RTE_SUBQUERY && cxt->cmdtype == CMD_SELECT &&
+				ts_guc_enable_cagg_reorder_groupby)
 			{
+				/* applicable to selects on continuous aggregates */
+				List *outer_tlist = query->targetList;
+				List *outer_sortcl = query->sortClause;
+				cagg_reorder_groupby_clause(rte, rti, outer_sortcl, outer_tlist);
+			}
+			else if (rte->inh && ts_guc_enable_constraint_exclusion)
+			{
+				/* turn off inheritance on hypertables for inserts and selects*/
+				Cache *hc = cxt->hc;
 				Hypertable *ht = ts_hypertable_cache_get_entry(hc, rte->relid);
 
 				if (NULL != ht && ts_plan_expand_hypertable_valid_hypertable(ht, query, rti, rte))
@@ -117,10 +135,10 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 			rti++;
 		}
 
-		return query_tree_walker(query, turn_off_inheritance_walker, hc, 0);
+		return query_tree_walker(query, timescaledb_query_walker, cxt, 0);
 	}
 
-	return expression_tree_walker(node, turn_off_inheritance_walker, hc);
+	return expression_tree_walker(node, timescaledb_query_walker, cxt);
 }
 
 static PlannedStmt *
@@ -128,22 +146,48 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
-
-	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations &&
-		ts_guc_enable_constraint_exclusion &&
-		(parse->commandType == CMD_INSERT || parse->commandType == CMD_SELECT))
+	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations)
 	{
-		Cache *hc = ts_hypertable_cache_pin();
+		TimescaledbWalkerState cxt;
+		Query *node_arg = NULL;
+		if (ts_guc_enable_cagg_reorder_groupby && (parse->commandType == CMD_UTILITY))
+		{
+			Query *modq = NULL;
+			if ((nodeTag(parse->utilityStmt) == T_ExplainStmt))
+			{
+				modq = (Query *) ((ExplainStmt *) parse->utilityStmt)->query;
+			}
 
-		/*
-		 * turn of inheritance on hypertables we will expand ourselves in
-		 * timescaledb_get_relation_info_hook
-		 */
-		turn_off_inheritance_walker((Node *) parse, hc);
+			if (modq && modq->commandType == CMD_SELECT)
+			{
+				cxt.cmdtype = CMD_SELECT;
+				node_arg = modq;
+			}
+		}
+		else if (parse->commandType == CMD_INSERT && ts_guc_enable_constraint_exclusion)
+		{
+			cxt.cmdtype = CMD_INSERT;
+			node_arg = parse;
+		}
+		else if (parse->commandType == CMD_SELECT &&
+				 (ts_guc_enable_constraint_exclusion || ts_guc_enable_cagg_reorder_groupby))
+		{
+			cxt.cmdtype = CMD_SELECT;
+			node_arg = parse;
+		}
+		if (node_arg)
+		{
+			Cache *hc = ts_hypertable_cache_pin();
+			cxt.hc = hc;
+			/*
+			 * turn of inheritance on hypertables we will expand ourselves in
+			 * timescaledb_get_relation_info_hook
+			 */
+			timescaledb_query_walker((Node *) node_arg, &cxt);
 
-		ts_cache_release(hc);
+			ts_cache_release(hc);
+		}
 	}
-
 	if (prev_planner_hook != NULL)
 		/* Call any earlier hooks */
 		stmt = (prev_planner_hook)(parse, cursor_opts, bound_params);
@@ -487,7 +531,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 	/*
 	 * We expand the hypertable chunks into an append relation. Previously, in
-	 * `turn_off_inheritance_walker` we suppressed this expansion. This hook
+	 * `timescaledb_query_walker` we suppressed this expansion. This hook
 	 * is really the first one that's called after the initial planner setup
 	 * and so it's convenient to do the expansion here. Note that this is
 	 * after the usual expansion happens in `expand_inherited_tables` (called
@@ -735,6 +779,121 @@ static bool
 contain_param(Node *node)
 {
 	return contain_param_exec_walker(node, NULL);
+}
+
+static List *
+fill_missing_groupclause(List *new_groupclause, List *orig_groupclause)
+{
+	if (new_groupclause != NIL)
+	{
+		ListCell *gl;
+		foreach (gl, orig_groupclause)
+		{
+			SortGroupClause *gc = lfirst_node(SortGroupClause, gl);
+
+			if (list_member_ptr(new_groupclause, gc))
+				continue; /* already in list */
+			new_groupclause = lappend(new_groupclause, gc);
+		}
+	}
+	return new_groupclause;
+}
+
+static bool
+check_cagg_view_rte(RangeTblEntry *rte)
+{
+	ContinuousAgg *cagg = NULL;
+	ListCell *rtlc;
+	bool found = false;
+	Query *viewq = rte->subquery;
+	Assert(rte->rtekind == RTE_SUBQUERY);
+
+	if (list_length(viewq->rtable) != 3) /* a view has 3 entries */
+	{
+		return false;
+	}
+
+	// should cache this information for cont. aggregates
+	foreach (rtlc, viewq->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(rtlc);
+		char *schema;
+		char *table;
+
+		if (!OidIsValid(rte->relid))
+			break;
+
+		schema = get_namespace_name(get_rel_namespace(rte->relid));
+		table = get_rel_name(rte->relid);
+		if ((cagg = ts_continuous_agg_find_by_view_name(schema, table)) != NULL)
+			found = true;
+	}
+	return found;
+}
+
+/* Note that it modifies the passed in Query
+* select * from (select a, b, max(c), min(d) from ...
+				 group by a, b)
+  order by b;
+* is transformed as
+* SELECT * from (select a, b, max(c), min(d) from ..
+*                 group by B desc, A  <------ note the change in order here
+*              )
+*  order by b desc;
+*  we transform only if order by is a subset of group-by
+* transformation is applicable only to continuous aggregates
+* Parameters:
+* subq_rte - rte for subquery (inner query that will be modified)
+* outer_sortcl -- outer query's sort clause
+* outer_tlist - outer query's target list
+*/
+static void
+cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List *outer_sortcl,
+							List *outer_tlist)
+{
+	bool not_found = true;
+	Query *subq;
+	ListCell *lc;
+	Assert(subq_rte->rtekind == RTE_SUBQUERY);
+	subq = subq_rte->subquery;
+	if (outer_sortcl && subq->groupClause && subq->sortClause == NIL &&
+		check_cagg_view_rte(subq_rte))
+	{
+		List *new_groupclause = NIL;
+		/* we are going to modify this. so make a copy and use it
+		 if we replace */
+		List *subq_groupclause_copy = copyObject(subq->groupClause);
+		foreach (lc, outer_sortcl)
+		{
+			SortGroupClause *outer_sc = (SortGroupClause *) lfirst(lc);
+			TargetEntry *outer_tle = get_sortgroupclause_tle(outer_sc, outer_tlist);
+			not_found = true;
+			if (IsA(outer_tle->expr, Var) && (((Var *) outer_tle->expr)->varno == rtno))
+			{
+				int outer_attno = ((Var *) outer_tle->expr)->varattno;
+				TargetEntry *subq_tle = list_nth(subq->targetList, outer_attno - 1);
+				if (subq_tle->ressortgroupref > 0)
+				{
+					/* get group clause corresponding to this */
+					SortGroupClause *subq_gclause =
+						get_sortgroupref_clause(subq_tle->ressortgroupref, subq_groupclause_copy);
+					subq_gclause->sortop = outer_sc->sortop;
+					subq_gclause->nulls_first = outer_sc->nulls_first;
+					Assert(subq_gclause->eqop == outer_sc->eqop);
+					new_groupclause = lappend(new_groupclause, subq_gclause);
+					not_found = false;
+				}
+			}
+			if (not_found)
+				break;
+		}
+		/* all order by found in group by clause */
+		if (new_groupclause != NIL && not_found == false)
+		{
+			/* use new groupby clause for this subquery/view */
+			subq->groupClause = fill_missing_groupclause(new_groupclause, subq_groupclause_copy);
+		}
+	}
 }
 
 void
