@@ -5,10 +5,11 @@
 
 ## TimescaleDB
 
-TimescaleDB is an open-source database designed to make SQL scalable for
-time-series data. It is engineered up from PostgreSQL, providing automatic
-partitioning across time and space (partitioning key), as well as full
-SQL support.
+TimescaleDB is an open-source PostgreSQL extension with full SQL support. Being 
+engineered up from PostgreSQL, the database provides a key missing feature from 
+PostgreSQL: scalability for time-series data. Our new time-series scalability provides
+the database with automatic data partitioning across time and space (partitioning key).
+
 
 TimescaleDB is packaged as a PostgreSQL extension.  All code is licensed
 under the Apache-2 open-source license, with the exception of source code
