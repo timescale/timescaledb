@@ -57,7 +57,7 @@ ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings (time column observation_time) (1546236000000000)
-INFO:  materializing continuous aggregate public.device_summary: new range up to 1546236000000000
+INFO:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to 1546236000000000
 --Now you can run selects over your view as normal
 SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, device_id LIMIT 10;
             bucket            | device_id | metric_avg | metric_spread 
@@ -162,7 +162,7 @@ SELECT max(bucket) FROM device_summary;
 ALTER VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings (time column observation_time) (1546246800000000)
-INFO:  materializing continuous aggregate public.device_summary: new range up to 1546246800000000
+INFO:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to 1546246800000000
 SELECT max(observation_time) FROM device_readings;
              max              
 ------------------------------
@@ -197,7 +197,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 SET timescaledb.current_timestamp_mock = 'Sun Dec 30 13:01:00 2018 PST';
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range not found for public.device_readings (time column observation_time): not enough new data past completion threshold (1546207200000000)
-INFO:  materializing continuous aggregate public.device_summary: no new range to materialize
+INFO:  materializing continuous aggregate public.device_summary: processing invalidations, no new range
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
             bucket            | device_id |    metric_avg    | metric_spread 
@@ -266,7 +266,7 @@ NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timesc
 REFRESH MATERIALIZED VIEW device_summary;
 INFO:  new materialization range for public.device_readings larger than allowed in one run, truncating (time column observation_time) (1546196400000000)
 INFO:  new materialization range for public.device_readings (time column observation_time) (1543723200000000)
-INFO:  materializing continuous aggregate public.device_summary: new range up to 1543723200000000
+INFO:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to 1543723200000000
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT min(min_time)::timestamp FROM device_summary;
            min            

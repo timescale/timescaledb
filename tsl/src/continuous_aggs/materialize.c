@@ -24,6 +24,7 @@
 #include <scanner.h>
 #include <compat.h>
 #include <interval.h>
+#include <scan_iterator.h>
 
 #include "chunk.h"
 #include "continuous_agg.h"
@@ -38,6 +39,35 @@
 #include "continuous_aggs/materialize.h"
 
 /***********************
+ * Time ranges
+ ***********************/
+
+typedef struct InternalTimeRange
+{
+	Oid type;
+	int64 start; /* inclusive */
+	int64 end;   /* exclusive */
+} InternalTimeRange;
+
+typedef struct TimeRange
+{
+	Oid type;
+	Datum start;
+	Datum end;
+} TimeRange;
+
+static bool ranges_overlap(InternalTimeRange invalidation_range,
+						   InternalTimeRange new_materialization_range);
+static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
+static bool range_expand_right(InternalTimeRange *range, const InternalTimeRange to_cover,
+							   int64 max_length, int64 bucket_width);
+static void range_check(const InternalTimeRange range, int64 bucket_width);
+static int64 range_length(const InternalTimeRange range);
+static bool range_cut_invalidation_entry_left(const InternalTimeRange invalidation_range_knife,
+											  int64 *lowest_modified_value,
+											  int64 *greatest_modified_value,
+											  bool *delete_entry_out);
+/***********************
  * materialization job *
  ***********************/
 
@@ -45,19 +75,22 @@ static Form_continuous_agg get_continuous_agg(int32 mat_hypertable_id);
 static int64 get_materialization_end_point_for_table(int32 raw_hypertable_id,
 													 int32 materialization_id, int64 refresh_lag,
 													 int64 bucket_width, int64 max_interval_per_job,
+													 int64 completed_threshold,
 													 bool *materializing_new_range,
 													 bool *truncated_materialization, bool verbose);
 static void drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out);
 static void insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 													 Relation rel);
-static void drain_materialization_invalidation_logs(int32 cagg_id,
-													int64 materialization_invalidation_threshold,
-													List **invalidations_out);
 static void invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold);
-static int64 continuous_aggs_completed_threshold_get(int32 materialization_id);
 static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
-
+static InternalTimeRange materialization_invalidation_log_get_range(int32 materialization_id,
+																	Oid type, int64 bucket_width,
+																	int64 max_interval_per_job,
+																	int64 completed_threshold);
+static void materialization_invalidation_log_delete_or_cut(int32 cagg_id,
+														   InternalTimeRange invalidation_range,
+														   int64 completed_threshold);
 /* must be called without a transaction started */
 bool
 continuous_agg_materialize(int32 materialization_id, bool verbose)
@@ -79,10 +112,13 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	int64 materialization_invalidation_threshold;
 	bool materializing_new_range = false;
 	bool truncated_materialization = false;
-	List *invalidations = NIL;
 	SchemaAndName partial_view;
 	List *caggs = NIL;
 	Catalog *catalog;
+	InternalTimeRange invalidation_range;
+	Oid time_column_type;
+	List *invalidations = NIL;
+	int64 completed_threshold;
 
 	/*
 	 * Transaction 1: a) copy the invalidation logs and then
@@ -121,6 +157,8 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	raw_table_oid = raw_hypertable->main_table_relid;
 	raw_table_relation = relation_open(raw_table_oid, AccessShareLock);
 	raw_lock_relid = raw_table_relation->rd_lockInfo.lockRelId;
+	time_column_type =
+		ts_dimension_get_partition_type(hyperspace_get_open_dimension(raw_hypertable->space, 0));
 	LockRelationIdForSession(&raw_lock_relid, AccessShareLock);
 	relation_close(raw_table_relation, NoLock);
 
@@ -145,40 +183,70 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	LockRelationIdForSession(&partial_view_lock_relid, ShareRowExclusiveLock);
 	relation_close(partial_view_relation, NoLock);
 
-	materialization_invalidation_threshold =
-		get_materialization_end_point_for_table(cagg_data.raw_hypertable_id,
-												materialization_id,
-												cagg_data.refresh_lag,
-												cagg_data.bucket_width,
-												cagg_data.max_interval_per_job,
-												&materializing_new_range,
-												&truncated_materialization,
-												verbose);
+	catalog = ts_catalog_get();
 
-	if (verbose)
-	{
-		if (materializing_new_range)
-			elog(INFO,
-				 "materializing continuous aggregate %s.%s: new range up to " INT64_FORMAT,
-				 NameStr(cagg_data.user_view_schema),
-				 NameStr(cagg_data.user_view_name),
-				 materialization_invalidation_threshold);
-		else
-			elog(INFO,
-				 "materializing continuous aggregate %s.%s: no new range to materialize",
-				 NameStr(cagg_data.user_view_schema),
-				 NameStr(cagg_data.user_view_name));
-	}
-
+	/* copy over all the materializations from the raw hypertable to all the continuous aggs */
 	caggs = ts_continuous_aggs_find_by_raw_table_id(cagg_data.raw_hypertable_id);
 	drain_invalidation_log(cagg_data.raw_hypertable_id, &invalidations);
-	catalog = ts_catalog_get();
 	materialization_invalidation_log_table_relation =
 		heap_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG),
 				  RowExclusiveLock);
 	insert_materialization_invalidation_logs(caggs,
 											 invalidations,
 											 materialization_invalidation_log_table_relation);
+
+	completed_threshold = continuous_agg_completed_threshold_get(materialization_id);
+
+	/* decide on the invalidation and new materialization ranges */
+	invalidation_range = materialization_invalidation_log_get_range(materialization_id,
+																	time_column_type,
+																	cagg_data.bucket_width,
+																	cagg_data.max_interval_per_job,
+																	completed_threshold);
+
+	if (range_length(invalidation_range) >= cagg_data.max_interval_per_job)
+	{
+		materializing_new_range = false;
+		truncated_materialization = true;
+		materialization_invalidation_threshold = completed_threshold;
+	}
+	else
+	{
+		materialization_invalidation_threshold =
+			get_materialization_end_point_for_table(cagg_data.raw_hypertable_id,
+													materialization_id,
+													cagg_data.refresh_lag,
+													cagg_data.bucket_width,
+													cagg_data.max_interval_per_job -
+														range_length(invalidation_range),
+													completed_threshold,
+													&materializing_new_range,
+													&truncated_materialization,
+													verbose);
+	}
+
+	if (verbose)
+	{
+		StringInfo msg = makeStringInfo();
+		appendStringInfo(msg,
+						 "materializing continuous aggregate %s.%s: ",
+						 NameStr(cagg_data.user_view_schema),
+						 NameStr(cagg_data.user_view_name));
+
+		if (range_length(invalidation_range) > 0)
+			appendStringInfo(msg, "processing invalidations, ");
+		else
+			appendStringInfo(msg, "nothing to invalidate, ");
+
+		if (materializing_new_range)
+			appendStringInfo(msg,
+							 "new range up to " INT64_FORMAT,
+							 materialization_invalidation_threshold);
+		else
+			appendStringInfo(msg, "no new range");
+		elog(INFO, "%s", msg->data);
+	}
+
 	if (materializing_new_range)
 	{
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
@@ -196,15 +264,18 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	 *                run the materialization, and update completed_threshold
 	 * read per-cagg log for materialization
 	 */
-	invalidations = NIL;
 	StartTransactionCommand();
 	/* we need a snapshot for the SPI commands within continuous_agg_execute_materialization */
 	PushActiveSnapshot(GetTransactionSnapshot());
-	drain_materialization_invalidation_logs(materialization_id,
-											materialization_invalidation_threshold,
-											&invalidations);
+
+	/* adjust the materialization invalidation log to delete or cut any entries that
+	 * will be processed in the invalidation range. This must occur in the second transaction
+	 * so that it shares fate with the query to populate the invalidation range */
+	materialization_invalidation_log_delete_or_cut(materialization_id,
+												   invalidation_range,
+												   completed_threshold);
 	/* if there's nothing to materialize, don't bother with the rest */
-	if (!materializing_new_range && list_length(invalidations) == 0)
+	if (!materializing_new_range && range_length(invalidation_range) == 0)
 	{
 		if (verbose)
 			elog(INFO,
@@ -227,7 +298,8 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 										   cagg_data.raw_hypertable_id,
 										   cagg_data.mat_hypertable_id,
 										   partial_view,
-										   invalidations,
+										   invalidation_range.start,
+										   invalidation_range.end,
 										   materialization_invalidation_threshold);
 
 finish:
@@ -236,6 +308,7 @@ finish:
 	UnlockRelationIdForSession(&raw_lock_relid, AccessShareLock);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
+
 	return !truncated_materialization;
 }
 
@@ -275,12 +348,14 @@ get_continuous_agg(int32 mat_hypertable_id)
 	return cagg;
 }
 
-static int64 hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type);
+static int64 hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type,
+								bool *found);
 
 static int64
 get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materialization_id,
 										int64 refresh_lag, int64 bucket_width,
-										int64 max_interval_per_job, bool *materializing_new_range,
+										int64 max_interval_per_job, int64 old_completed_threshold,
+										bool *materializing_new_range,
 										bool *truncated_materialization, bool verbose)
 {
 	Hypertable *raw_table = ts_hypertable_get_by_id(raw_hypertable_id);
@@ -288,7 +363,6 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		.schema = &raw_table->fd.schema_name,
 		.name = &raw_table->fd.table_name,
 	};
-	int64 old_completed_threshold = continuous_aggs_completed_threshold_get(materialization_id);
 	Dimension *time_column = hyperspace_get_open_dimension(raw_table->space, 0);
 	NameData time_column_name = time_column->fd.column_name;
 	Oid time_column_type = ts_dimension_get_partition_type(time_column);
@@ -300,7 +374,20 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	{
 		/* If there is no completion threshold yet set, find the minimum value stored in the
 		 * hypertable */
-		start_time = hypertable_get_min(hypertable, &time_column_name, time_column_type);
+		bool found;
+		start_time = hypertable_get_min(hypertable, &time_column_name, time_column_type, &found);
+		if (!found)
+		{
+			if (verbose)
+				elog(INFO,
+					 "new materialization range not found for %s.%s (time column %s): no data in "
+					 "table",
+					 NameStr(*hypertable.schema),
+					 NameStr(*hypertable.name),
+					 NameStr(time_column_name));
+			*materializing_new_range = false;
+			return old_completed_threshold;
+		}
 	}
 
 	/* check for values which would overflow 64 bit subtractionb */
@@ -380,13 +467,14 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 }
 
 static int64
-hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type)
+hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type, bool *found)
 {
 	Datum min_time_datum;
 	bool val_is_null;
 	StringInfo command = makeStringInfo();
 	int res;
 	int64 min_time_internal = PG_INT64_MIN;
+	*found = false;
 
 	res = SPI_connect();
 	if (res != SPI_OK_CONNECT)
@@ -415,9 +503,11 @@ hypertable_get_min(SchemaAndName hypertable, Name time_column, Oid time_type)
 		min_time_datum =
 			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &val_is_null);
 
+		/* min on an empty table returns a NULL so only process not-nulls */
 		if (!val_is_null)
 		{
 			min_time_internal = ts_time_value_to_internal(min_time_datum, time_type);
+			*found = true;
 		}
 	}
 	res = SPI_finish();
@@ -458,43 +548,6 @@ scan_take_invalidation_tuple(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
-/* use materialization_invalidation_threshold to filter the logs */
-/* When we have multiple cont aggs:, say cagg1 which keeps the view uptodate
- * and cagg2 which lags. When cagg1 runs, it moves the completed
- * threshold to the max value of the table , say 10 am.
- * if there is an update for 8 am and 9.30 am, both go into the invalidation log.
- * when cagg2 runs, it materialization threshold is 9 am. So it should see only the
- * invalidation for 8 am and not 9.30 am. We filter it here.
- */
-static ScanTupleResult
-scan_del_materialization_invalidation_tuple(TupleInfo *ti, void *data)
-{
-	InvalidationScanState *scan_state = (InvalidationScanState *) data;
-
-	MemoryContext old_ctx = MemoryContextSwitchTo(scan_state->mctx);
-	Form_continuous_aggs_materialization_invalidation_log invalidation_form =
-		((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(ti->tuple));
-	Invalidation *invalidation = palloc(sizeof(*invalidation));
-
-	invalidation->lowest_modified_value = invalidation_form->lowest_modified_value;
-	invalidation->greatest_modified_value = invalidation_form->greatest_modified_value;
-
-	Assert(invalidation->lowest_modified_value <= invalidation->greatest_modified_value);
-	/* this will pick up invalidations where the mat threshold lies inside the
-	 * range. so if we had [1Jan, 20Jan] as the invalidation range and our
-	 * threshold is Jan8. This will pick it up
-	 */
-	if (invalidation->lowest_modified_value < scan_state->materialization_invalidation_threshold)
-	{
-		*scan_state->invalidations = lappend(*scan_state->invalidations, invalidation);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
-	}
-
-	MemoryContextSwitchTo(old_ctx);
-
-	return SCAN_CONTINUE;
-}
-
 static void
 drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out)
 {
@@ -521,32 +574,156 @@ drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out)
 						&scan_state /*=data*/);
 }
 
-/* NOTE: gets invalidations from materialization_invalidation_log table */
-static void
-drain_materialization_invalidation_logs(int32 cagg_id, int64 materialization_invalidation_threshold,
-										List **invalidations_out)
+static InternalTimeRange
+materialization_invalidation_log_get_range(int32 materialization_id, Oid type, int64 bucket_width,
+										   int64 max_interval_per_job, int64 completed_threshold)
 {
-	InvalidationScanState scan_state = {
-		.invalidations = invalidations_out,
-		.materialization_invalidation_threshold = materialization_invalidation_threshold,
-		.mctx = CurrentMemoryContext,
-	};
-	ScanKeyData scankey[1];
+	bool found = false;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+								AccessShareLock,
+								CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX);
+	ts_scan_iterator_scan_key_init(
+		&iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(materialization_id));
 
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(cagg_id));
+	InternalTimeRange invalidation_range;
 
-	ts_catalog_scan_all(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG /*=table*/,
-						CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX /*=indexid*/
-						,
-						scankey /*=scankey*/,
-						1 /*=num_keys*/,
-						scan_del_materialization_invalidation_tuple /*=tuple_found*/,
-						RowExclusiveLock /*=lockmode*/,
-						&scan_state /*=data*/);
+	/*  note: this scan is in ASC order of lowest_modified_value. This logic  depends on that. */
+	ts_scanner_foreach(&iterator)
+	{
+		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
+			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(
+				iterator.tinfo->tuple));
+		InternalTimeRange entry_range = {
+			.type = type,
+			.start = ts_time_bucket_by_type(bucket_width,
+											invalidation_form->lowest_modified_value,
+											type),
+			/* add a bucket width to cover the endpoint */
+			.end = int64_saturating_add(ts_time_bucket_by_type(bucket_width,
+															   invalidation_form
+																   ->greatest_modified_value,
+															   type),
+										bucket_width),
+		};
+
+		/* don't process anything starting after the completed threshold; safe to break because
+		 * order is lowest_modified_value ASC */
+		if (entry_range.start >= completed_threshold)
+			break;
+
+		/* pin the end to the completed threshold; the completion threshold is already bucketted.
+		 * This also guarantees
+		 * that entry_range.end is bucketted even if it is saturated in the add above. */
+		if (entry_range.end > completed_threshold)
+			entry_range.end = completed_threshold;
+
+		if (!found)
+		{
+			found = true;
+			invalidation_range = entry_range;
+			/* force cutting the initial range as well */
+			range_expand_right(&invalidation_range,
+							   entry_range,
+							   max_interval_per_job,
+							   bucket_width);
+		}
+		else
+		{
+			range_expand_right(&invalidation_range,
+							   entry_range,
+							   max_interval_per_job,
+							   bucket_width);
+		}
+		found = true;
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (!found)
+	{
+		/* return an empty range */
+		invalidation_range = (InternalTimeRange){
+			.type = type,
+		};
+		range_check(invalidation_range, bucket_width);
+		return invalidation_range;
+	}
+	range_check(invalidation_range, bucket_width);
+	return invalidation_range;
+}
+
+static void
+materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange invalidation_range,
+											   int64 completed_threshold)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+								RowExclusiveLock,
+								CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX);
+	ts_scan_iterator_scan_key_init(
+		&iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(cagg_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		HeapTuple tuple = heap_copytuple(ts_scan_iterator_tuple(&iterator));
+		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
+			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(tuple));
+		bool delete_entry;
+		bool modify_entry;
+
+		if (invalidation_form->lowest_modified_value >= completed_threshold)
+		{
+			modify_entry = true;
+			delete_entry = true;
+		}
+		else
+		{
+			modify_entry =
+				range_cut_invalidation_entry_left(invalidation_range,
+												  &invalidation_form->lowest_modified_value,
+												  &invalidation_form->greatest_modified_value,
+												  &delete_entry);
+			if (!delete_entry && invalidation_form->greatest_modified_value >= completed_threshold)
+			{
+				/*
+				 * modify the entry if it is higher than the completion threshold
+				 * to only go up to the completion threshold. Nothing above completion
+				 * has yet been materialized and thus does not need invalidation
+				 */
+				invalidation_form->greatest_modified_value =
+					int64_saturating_sub(completed_threshold, 1);
+				modify_entry = true;
+				/* delete the entry if the above modification made it length <= 0*/
+				delete_entry = (invalidation_form->lowest_modified_value >
+								invalidation_form->greatest_modified_value);
+			}
+		}
+
+		/* don't need to modify the entry so continue; don't break because you may still be able to
+		 * delete entries above completion threshold. */
+		if (!modify_entry)
+			continue;
+
+		if (delete_entry)
+			ts_catalog_delete(ts_scan_iterator_tuple_info(&iterator)->scanrel, tuple);
+		else
+			ts_catalog_update(ts_scan_iterator_tuple_info(&iterator)->scanrel, tuple);
+	}
+	ts_scan_iterator_close(&iterator);
 }
 
 /* copy invalidation logs for the other cont. aggs
@@ -594,25 +771,10 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
  * materialization support *
  ***************************/
 
-typedef struct InternalTimeRange
-{
-	Oid type;
-	int64 start;
-	int64 end;
-} InternalTimeRange;
-
-typedef struct TimeRange
-{
-	Oid type;
-	Datum start;
-	Datum end;
-} TimeRange;
-
-static int64 completed_threshold_get(int32 materialization_id);
 static void update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
 									Name time_column_name,
 									InternalTimeRange new_materialization_range, int64 bucket_width,
-									List *invalidations);
+									InternalTimeRange invalidation_range);
 static void spi_update_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
 										TimeRange invalidation_range);
@@ -623,11 +785,6 @@ static void spi_insert_materializations(SchemaAndName partial_view,
 										TimeRange materialization_range);
 static void continuous_aggs_completed_threshold_set(int32 materialization_id,
 													int64 old_completed_threshold);
-static bool get_invalidation_range(List *invalidations, InternalTimeRange *invalidation_range);
-static void time_bucket_range(InternalTimeRange *range, int64 bucket_width);
-static bool ranges_overlap(InternalTimeRange invalidation_range,
-						   InternalTimeRange new_materialization_range);
-static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
 
 /* execute the materialization for the continuous aggregate materialization_id
  * we will re-materialize all values within
@@ -650,22 +807,31 @@ static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
 void
 continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 									   int32 materialization_id, SchemaAndName partial_view,
-									   List *invalidations,
+									   int64 invalidation_range_start, int64 invalidation_range_end,
 									   int64 materialization_invalidation_threshold)
 {
 	CatalogSecurityContext sec_ctx;
 	SchemaAndName materialization_table_name;
-	InternalTimeRange new_materialization_range = {
-		.start = completed_threshold_get(materialization_id),
-		.end = materialization_invalidation_threshold,
-	};
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *raw_table = ts_hypertable_cache_get_entry_by_id(hcache, hypertable_id);
+	Oid time_col_type =
+		ts_dimension_get_partition_type(hyperspace_get_open_dimension(raw_table->space, 0));
+	InternalTimeRange new_materialization_range = {
+		.type = time_col_type,
+		.start = continuous_agg_completed_threshold_get(materialization_id),
+		.end = materialization_invalidation_threshold,
+	};
+	InternalTimeRange new_invalidation_range = {
+		.type = time_col_type,
+		.start = invalidation_range_start,
+		.end = invalidation_range_end,
+	};
 	Hypertable *materialization_table =
 		ts_hypertable_cache_get_entry_by_id(hcache, materialization_id);
 	NameData time_column_name;
 
-	Assert(new_materialization_range.start <= new_materialization_range.end);
+	range_check(new_invalidation_range, bucket_width);
+	range_check(new_materialization_range, bucket_width);
 
 	if (raw_table == NULL)
 		elog(ERROR, "can only materialize continuous aggregates on a hypertable");
@@ -715,7 +881,7 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 							&time_column_name,
 							new_materialization_range,
 							bucket_width,
-							invalidations);
+							new_invalidation_range);
 
 	/* update the completed watermark */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -850,43 +1016,13 @@ completed_threshold_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
-static int64
-completed_threshold_get(int32 materialization_id)
-{
-	int64 threshold = 0;
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_completed_threshold_pkey_materialization_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(materialization_id));
-
-	if (!ts_catalog_scan_one(CONTINUOUS_AGGS_COMPLETED_THRESHOLD /*=table*/,
-							 CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY /*=indexid*/,
-							 scankey /*=scankey*/,
-							 1 /*=num_keys*/,
-							 completed_threshold_tuple_found /*=tuple_found*/,
-							 AccessShareLock /*=lockmode*/,
-							 CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME /*=table_name*/,
-							 &threshold /*=data*/))
-		return PG_INT64_MIN;
-
-	return threshold;
-}
-
 void
 update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
 						Name time_column_name, InternalTimeRange new_materialization_range,
-						int64 bucket_width, List *invalidations)
+						int64 bucket_width, InternalTimeRange invalidation_range)
 {
-	InternalTimeRange invalidation_range = {
-		.type = new_materialization_range.type,
-	};
 	InternalTimeRange combined_materialization_range = new_materialization_range;
-
-	bool needs_invalidation = get_invalidation_range(invalidations, &invalidation_range);
-	bool materialize_invalidations_separately = needs_invalidation;
+	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
 	int res = SPI_connect();
 	if (res != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI in materializer");
@@ -896,16 +1032,14 @@ update_materializations(SchemaAndName partial_view, SchemaAndName materializatio
 	if (new_materialization_range.start > new_materialization_range.end)
 		new_materialization_range.start = new_materialization_range.end;
 
-	if (needs_invalidation)
+	if (range_length(invalidation_range) > 0)
 	{
 		Assert(invalidation_range.start <= invalidation_range.end);
-		/* Align all invalidations to the bucket width */
-		time_bucket_range(&invalidation_range, bucket_width);
 
 		/* we never materialize beyond the new materialization range */
-		invalidation_range.start =
-			int64_min(invalidation_range.start, new_materialization_range.start);
-		invalidation_range.end = int64_min(invalidation_range.end, new_materialization_range.end);
+		if (invalidation_range.start >= new_materialization_range.end ||
+			invalidation_range.end > new_materialization_range.end)
+			elog(ERROR, "internal error: invalidation range ahead of new materialization range");
 
 		/* If the invalidation and new materialization ranges overlap, materialize in one go */
 		materialize_invalidations_separately =
@@ -923,7 +1057,7 @@ update_materializations(SchemaAndName partial_view, SchemaAndName materializatio
 	 * if greatest_invalidated == end_of_new_materialization then we only perform 1 insertion.
 	 * to prevent values from being inserted multiple times.
 	 */
-	if (!needs_invalidation || !materialize_invalidations_separately)
+	if (range_length(invalidation_range) == 0 || !materialize_invalidations_separately)
 	{
 		spi_update_materializations(partial_view,
 									materialization_table,
@@ -950,48 +1084,80 @@ update_materializations(SchemaAndName partial_view, SchemaAndName materializatio
 }
 
 static bool
-get_invalidation_range(List *invalidations, InternalTimeRange *invalidation_range)
-{
-	bool has_invalidations = false;
-	ListCell *lc;
-
-	invalidation_range->start = PG_INT64_MAX;
-	invalidation_range->end = PG_INT64_MIN;
-	foreach (lc, invalidations)
-	{
-		Invalidation *i = (Invalidation *) lfirst(lc);
-		Assert(i->lowest_modified_value <= i->greatest_modified_value);
-		if (i->lowest_modified_value < invalidation_range->start)
-			invalidation_range->start = i->lowest_modified_value;
-		if (i->greatest_modified_value > invalidation_range->end)
-			invalidation_range->end = i->greatest_modified_value;
-
-		has_invalidations = true;
-	}
-
-	return has_invalidations;
-}
-
-static void
-time_bucket_range(InternalTimeRange *range, int64 bucket_width)
-{
-	range->start = ts_time_bucket_by_type(bucket_width, range->start, range->type);
-	range->end = ts_time_bucket_by_type(bucket_width, range->end, range->type);
-
-	if (range->end < PG_INT64_MAX - bucket_width)
-		range->end += bucket_width;
-
-	if (range->start > range->end)
-		range->start = range->end;
-}
-
-static bool
 ranges_overlap(InternalTimeRange invalidation_range, InternalTimeRange new_materialization_range)
 {
 	Assert(invalidation_range.start <= invalidation_range.end);
 	Assert(new_materialization_range.start <= new_materialization_range.end);
 	return !(invalidation_range.end < new_materialization_range.start ||
 			 new_materialization_range.end < invalidation_range.start);
+}
+
+/* Checks to ensure a valid length */
+static void
+range_check(const InternalTimeRange range, int64 bucket_width)
+{
+	if (range.start > range.end)
+		elog(ERROR, "internal error: range start > end");
+
+	/* empty range does not need to be time-bucketed */
+	if (range_length(range) == 0)
+		return;
+
+	if (range.start != PG_INT64_MIN &&
+		range.start != ts_time_bucket_by_type(bucket_width, range.start, range.type))
+		elog(ERROR, "internal error: range start not aligned on bucket boundary");
+
+	if (range.end != ts_time_bucket_by_type(bucket_width, range.end, range.type))
+		elog(ERROR, "internal error: range end not aligned on bucket boundary");
+}
+
+static int64
+range_length(const InternalTimeRange range)
+{
+	Assert(range.end >= range.start);
+
+	return int64_saturating_sub(range.end, range.start);
+}
+
+/* Expand the range `range` to the right so that it covers as much of
+ * `to_cover` as possible while still obeying `max_length` */
+static bool
+range_expand_right(InternalTimeRange *range, const InternalTimeRange to_cover, int64 max_length,
+				   int64 bucket_width)
+{
+	int64 max_end = ts_time_bucket_by_type(bucket_width,
+										   int64_saturating_add(range->start, max_length),
+										   range->type);
+
+	Assert(range->start <= to_cover.start);
+	if (max_end > to_cover.start)
+	{
+		range->end = int64_min(to_cover.end, max_end);
+		Assert(range_length(*range) <= max_length);
+		return true;
+	}
+	return false;
+}
+
+static bool
+range_cut_invalidation_entry_left(const InternalTimeRange invalidation_range_knife,
+								  int64 *lowest_modified_value, int64 *greatest_modified_value,
+								  bool *delete_entry_out)
+{
+	if (invalidation_range_knife.start > *lowest_modified_value)
+		elog(ERROR, "internal error: cannot cut invalidation entry from the right");
+
+	if (invalidation_range_knife.end <= *lowest_modified_value)
+		return false;
+
+	if (invalidation_range_knife.end > *greatest_modified_value)
+	{
+		*delete_entry_out = true;
+		return true;
+	}
+	*delete_entry_out = false;
+	*lowest_modified_value = invalidation_range_knife.end;
+	return true;
 }
 
 static Datum
@@ -1167,6 +1333,7 @@ scan_update_completed_threshold(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+/* everything up to (but not including) the completion threshold has been materialized */
 static void
 continuous_aggs_completed_threshold_set(int32 materialization_id, int64 completed_threshold)
 {
@@ -1209,8 +1376,9 @@ continuous_aggs_completed_threshold_set(int32 materialization_id, int64 complete
 	}
 }
 
-static int64
-continuous_aggs_completed_threshold_get(int32 materialization_id)
+/* The completion threshold is exclusive (everything less than it has been materialized) */
+int64
+continuous_agg_completed_threshold_get(int32 materialization_id)
 {
 	int64 threshold = 0;
 	ScanKeyData scankey[1];
