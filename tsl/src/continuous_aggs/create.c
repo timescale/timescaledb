@@ -55,6 +55,7 @@
 #include "continuous_agg.h"
 #include "dimension.h"
 #include "extension_constants.h"
+#include "func_cache.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "continuous_aggs/job.h"
@@ -199,6 +200,8 @@ static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 							   MatTableColumnInfo *mattblinfo);
 static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											 ObjectAddress *mattbladdress);
+
+static bool is_valid_bucketing_function(Oid funcid);
 
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
@@ -544,27 +547,6 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	return address;
 }
 
-/* return list of Oid for time_bucket */
-static List *
-get_timebucketfnoid()
-{
-	List *retlist = NIL;
-	Oid funcoid;
-	const char *funcname = TIMEBUCKETFN;
-	CatCList *catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
-	int i;
-
-	for (i = 0; i < catlist->n_members; i++)
-	{
-		HeapTuple proctup = &catlist->members[i]->tuple;
-		funcoid = ObjectIdGetDatum(HeapTupleGetOid(proctup));
-		retlist = lappend_oid(retlist, funcoid);
-	}
-	ReleaseSysCacheList(catlist);
-	Assert(retlist != NIL);
-	return retlist;
-}
-
 /* initialize caggtimebucket */
 static void
 caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
@@ -586,7 +568,6 @@ static void
 caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList)
 {
 	ListCell *l;
-	List *timefnoids = get_timebucketfnoid();
 	bool found = false;
 	foreach (l, groupClause)
 	{
@@ -595,22 +576,12 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 		if (IsA(tle->expr, FuncExpr))
 		{
 			FuncExpr *fe = ((FuncExpr *) tle->expr);
-			ListCell *lc;
 			Const *width_arg;
 			Node *col_arg;
-			Oid funcid = fe->funcid;
-			bool match = false;
-			foreach (lc, timefnoids)
-			{
-				Oid tbfnoid = lfirst_oid(lc);
-				if (tbfnoid == funcid)
-				{
-					match = true;
-					break;
-				}
-			}
-			if (!match)
+
+			if (!is_valid_bucketing_function(fe->funcid))
 				continue;
+
 			if (found)
 				elog(ERROR,
 					 "multiple time_bucket functions not permitted in continuous aggregate "
@@ -624,13 +595,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				elog(ERROR,
 					 "time_bucket function for continuous aggregate query should be called "
 					 "on the dimension column of the hypertable ");
-			if (!(list_length(fe->args) == 2))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("time_bucket function for continuous aggregate query cannot use "
-								"optional arguments")));
-			}
 			if (!IsA(linitial(fe->args), Const))
 			{
 				ereport(ERROR,
@@ -645,8 +609,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	}
 	if (!found)
 	{
-		elog(ERROR,
-			 "time_bucket function missing from GROUP BY clause for continuous aggregate query");
+		elog(ERROR, "no valid bucketing function found for continuous aggregate query");
 	}
 }
 
@@ -1079,22 +1042,17 @@ get_partialize_funcexpr(Aggref *agg)
 	return partialize_fnexpr;
 }
 
+/*
+ * check if the supplied oid belongs to a valid bucket function
+ * for continuous aggregates
+ * We only support 2-arg variants of time_bucket
+ */
 static bool
-is_timebucket_expr(Oid funcid)
+is_valid_bucketing_function(Oid funcid)
 {
-	ListCell *lc;
-	List *timefnoids = get_timebucketfnoid();
-	bool match = false;
-	foreach (lc, timefnoids)
-	{
-		Oid tbfnoid = lfirst_oid(lc);
-		if (tbfnoid == funcid)
-		{
-			match = true;
-			break;
-		}
-	}
-	return match;
+	FuncInfo *finfo = ts_func_cache_get_bucketing_func(funcid);
+
+	return finfo != NULL && finfo->is_timescaledb_func && finfo->nargs == 2;
 }
 
 /*initialize MatTableColumnInfo */
@@ -1157,7 +1115,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			bool timebkt_chk = false;
 
 			if (IsA(tle->expr, FuncExpr))
-				timebkt_chk = is_timebucket_expr(((FuncExpr *) tle->expr)->funcid);
+				timebkt_chk = is_valid_bucketing_function(((FuncExpr *) tle->expr)->funcid);
 
 			if (tle->resname)
 				colname = pstrdup(tle->resname);
