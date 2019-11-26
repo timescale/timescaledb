@@ -51,6 +51,11 @@
 
 #define ERRCODE_DUPLICATE_DATABASE_STR "42P04"
 
+static void data_node_validate_database(TSConnection *conn, const char *database,
+										const char *expected_encoding,
+										const char *expected_chartype,
+										const char *expected_collation);
+
 /*
  * get_database_info - given a database OID, look up info about the database
  *
@@ -359,11 +364,13 @@ data_node_bootstrap_database(TSConnection *conn, const char *dbname, const char 
 		 * In this case, we will log a notice and proceed since it is not an
 		 * error if the database already existed on the remote node. */
 		elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
+
+		data_node_validate_database(conn, dbname, encoding, chartype, collation);
 	}
 }
 
 static void
-data_node_validate_database(TSConnection *conn, const char *expected_encoding,
+data_node_validate_database(TSConnection *conn, const char *database, const char *expected_encoding,
 							const char *expected_chartype, const char *expected_collation)
 {
 	PGresult *res;
@@ -373,7 +380,8 @@ data_node_validate_database(TSConnection *conn, const char *expected_encoding,
 
 	res = remote_connection_execf(conn,
 								  "SELECT PG_ENCODING_TO_CHAR(encoding), datcollate, datctype "
-								  "FROM pg_database WHERE datname = current_database()");
+								  "FROM pg_database WHERE datname = %s",
+								  quote_literal_cstr(database));
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
@@ -621,7 +629,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		}
 		else
 		{
-			data_node_validate_database(conn, encoding, chartype, collation);
+			data_node_validate_database(conn, dbname, encoding, chartype, collation);
 			data_node_validate_extension(conn);
 			data_node_validate_as_data_node(conn);
 		}
