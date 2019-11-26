@@ -284,7 +284,7 @@ _guc_init(void)
 							   /* short_dec= */ "set the current timestamp",
 							   /* long_dec= */ "this is for debugging purposes",
 							   /* valueAddr= */ &ts_current_timestamp_mock,
-							   /* bootValue= */ false,
+							   /* bootValue= */ NULL,
 							   /* context= */ PGC_USERSET,
 							   /* flags= */ 0,
 							   /* check_hook= */ NULL,

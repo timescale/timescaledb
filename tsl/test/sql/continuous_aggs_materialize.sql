@@ -113,7 +113,7 @@ SELECT -9223372036854775808	 as big_int_min \gset
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, :big_int_max);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, :big_int_max-1);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO continuous_agg_test VALUES
@@ -534,6 +534,49 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 REFRESH MATERIALIZED VIEW max_mat_view;
 SELECT * FROM max_mat_view ORDER BY 1;
+
+--one invalidation covered by max_interval refreshed right away
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 3) AS i;
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+--nothing to do
+REFRESH MATERIALIZED VIEW max_mat_view;
+
+--one invalidation too big for max_interval will be split
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 6) AS i;
+REFRESH MATERIALIZED VIEW max_mat_view;
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+--nothing to do
+REFRESH MATERIALIZED VIEW max_mat_view;
+
+--many invalidation too big for max_interval will be split
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 1) AS i;
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(2, 3) AS i;
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(4, 5) AS i;
+REFRESH MATERIALIZED VIEW max_mat_view;
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+--nothing to do
+REFRESH MATERIALIZED VIEW max_mat_view;
+
+
+--one invalidation + new entries  requires two refreshes if the refresh budget taken up by invalidation
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 3) AS i;
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(11, 12) AS i;
+REFRESH MATERIALIZED VIEW max_mat_view;
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+--nothing to do
+REFRESH MATERIALIZED VIEW max_mat_view;
+
+--one invalidation + new entries  done in one refresh if the refresh budget allows
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 1) AS i;
+INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(14, 15) AS i;
+REFRESH MATERIALIZED VIEW max_mat_view;
+SELECT * FROM max_mat_view ORDER BY 1;
+--nothing to do.
+REFRESH MATERIALIZED VIEW max_mat_view;
 
 -- time type
 CREATE TABLE continuous_agg_max_mat_t(time TIMESTAMPTZ, data TIMESTAMPTZ);

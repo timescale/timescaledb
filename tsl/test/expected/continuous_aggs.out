@@ -764,7 +764,7 @@ SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_drop_test;
 INFO:  new materialization range for public.conditions larger than allowed in one run, truncating (time column timec) (1546041600000000)
 INFO:  new materialization range for public.conditions (time column timec) (1542758400000000)
-INFO:  materializing continuous aggregate public.mat_drop_test: new range up to 1542758400000000
+INFO:  materializing continuous aggregate public.mat_drop_test: nothing to invalidate, new range up to 1542758400000000
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 --force invalidation
 insert into conditions
@@ -1040,7 +1040,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 REFRESH MATERIALIZED VIEW space_view;
 INFO:  new materialization range for public.space_table (time column time) (12)
-INFO:  materializing continuous aggregate public.space_view: new range up to 12
+INFO:  materializing continuous aggregate public.space_view: nothing to invalidate, new range up to 12
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1061,7 +1061,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 INSERT INTO space_table VALUES (3, 2, 1);
 REFRESH MATERIALIZED VIEW space_view;
 INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold (12)
-INFO:  materializing continuous aggregate public.space_view: no new range to materialize
+INFO:  materializing continuous aggregate public.space_view: processing invalidations, no new range
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1082,7 +1082,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 INSERT INTO space_table VALUES (2, 3, 1);
 REFRESH MATERIALIZED VIEW space_view;
 INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold (12)
-INFO:  materializing continuous aggregate public.space_view: no new range to materialize
+INFO:  materializing continuous aggregate public.space_view: processing invalidations, no new range
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1163,7 +1163,7 @@ from conditions
 group by time_bucket(100, timec);
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
 INFO:  new materialization range for public.conditions (time column timec) (400)
-INFO:  materializing continuous aggregate public.mat_ffunc_test: new range up to 400
+INFO:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_ffunc_test;
 WARNING:  type integer text
 WARNING:  type integer text
@@ -1185,7 +1185,7 @@ from conditions
 group by time_bucket(100, timec);
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
 INFO:  new materialization range for public.conditions (time column timec) (400)
-INFO:  materializing continuous aggregate public.mat_ffunc_test: new range up to 400
+INFO:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_ffunc_test;
 WARNING:  type integer bigint
 WARNING:  type integer bigint
@@ -1211,7 +1211,7 @@ insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 INFO:  new materialization range for public.conditions (time column timec) (400)
-INFO:  materializing continuous aggregate public.mat_refresh_test: new range up to 400
+INFO:  materializing continuous aggregate public.mat_refresh_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_refresh_test order by 1,2 ;
  location | max 
 ----------+-----

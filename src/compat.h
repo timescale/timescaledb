@@ -616,4 +616,64 @@ extern int oid_cmp(const void *p1, const void *p2);
 #endif
 #endif
 
+/* backport pg_add_s64_overflow/pg_sub_s64_overflow */
+#if PG11_LT
+static inline bool
+pg_add_s64_overflow(int64 a, int64 b, int64 *result)
+{
+#if defined(HAVE__BUILTIN_OP_OVERFLOW)
+	return __builtin_add_overflow(a, b, result);
+#elif defined(HAVE_INT128)
+	int128 res = (int128) a + (int128) b;
+
+	if (res > PG_INT64_MAX || res < PG_INT64_MIN)
+	{
+		*result = 0x5EED; /* to avoid spurious warnings */
+		return true;
+	}
+	*result = (int64) res;
+	return false;
+#else
+	if ((a > 0 && b > 0 && a > PG_INT64_MAX - b) || (a < 0 && b < 0 && a < PG_INT64_MIN - b))
+	{
+		*result = 0x5EED; /* to avoid spurious warnings */
+		return true;
+	}
+	*result = a + b;
+	return false;
+#endif
+}
+
+/*
+ * If a - b overflows, return true, otherwise store the result of a - b into
+ * *result. The content of *result is implementation defined in case of
+ * overflow.
+ */
+static inline bool
+pg_sub_s64_overflow(int64 a, int64 b, int64 *result)
+{
+#if defined(HAVE__BUILTIN_OP_OVERFLOW)
+	return __builtin_sub_overflow(a, b, result);
+#elif defined(HAVE_INT128)
+	int128 res = (int128) a - (int128) b;
+
+	if (res > PG_INT64_MAX || res < PG_INT64_MIN)
+	{
+		*result = 0x5EED; /* to avoid spurious warnings */
+		return true;
+	}
+	*result = (int64) res;
+	return false;
+#else
+	if ((a < 0 && b > 0 && a < PG_INT64_MIN + b) || (a > 0 && b < 0 && a > PG_INT64_MAX + b))
+	{
+		*result = 0x5EED; /* to avoid spurious warnings */
+		return true;
+	}
+	*result = a - b;
+	return false;
+#endif
+}
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

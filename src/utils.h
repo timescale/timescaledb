@@ -15,6 +15,11 @@
 #include <utils/datetime.h>
 
 #include "export.h"
+#include "compat.h"
+
+#if PG11_GE
+#include <common/int.h>
+#endif
 
 /* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */
 #define TS_SET_LOCKTAG_ADVISORY(tag, id1, id2, id3)                                                \
@@ -103,6 +108,26 @@ int64_min(int64 a, int64 b)
 	if (a <= b)
 		return a;
 	return b;
+}
+
+static inline int64
+int64_saturating_add(int64 a, int64 b)
+{
+	int64 result;
+	bool overflowed = pg_add_s64_overflow(a, b, &result);
+	if (overflowed)
+		result = a < 0 ? PG_INT64_MIN : PG_INT64_MAX;
+	return result;
+}
+
+static inline int64
+int64_saturating_sub(int64 a, int64 b)
+{
+	int64 result;
+	bool overflowed = pg_sub_s64_overflow(a, b, &result);
+	if (overflowed)
+		result = b < 0 ? PG_INT64_MAX : PG_INT64_MIN;
+	return result;
 }
 
 #endif /* TIMESCALEDB_UTILS_H */

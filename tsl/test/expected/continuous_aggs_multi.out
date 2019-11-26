@@ -55,7 +55,7 @@ from timescaledb_information.continuous_aggregates;
 --TEST1: cagg_1 is materialized, not cagg_2.
 refresh materialized view cagg_1;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
-INFO:  materializing continuous aggregate public.cagg_1: new range up to 18
+INFO:  materializing continuous aggregate public.cagg_1: nothing to invalidate, new range up to 18
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -84,7 +84,7 @@ select * from cagg_2 order by 1,2;
 
 refresh materialized view cagg_2;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
-INFO:  materializing continuous aggregate public.cagg_2: new range up to 18
+INFO:  materializing continuous aggregate public.cagg_2: nothing to invalidate, new range up to 18
 select * from cagg_2 order by 1,2;
  timed | grp | maxval 
 -------+-----+--------
@@ -127,7 +127,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 refresh materialized view cagg_1;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
-INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_1: processing invalidations, no new range
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -174,7 +174,7 @@ order by 1,2 ;
 
 refresh materialized view cagg_2;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
-INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_2: processing invalidations, no new range
 select * from cagg_2 order by 1, 2;
  timed | grp | maxval 
 -------+-----+--------
@@ -203,7 +203,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 
 refresh materialized view cagg_1;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
-INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_1: processing invalidations, no new range
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  count 
 -------
@@ -280,7 +280,7 @@ AS
     GROUP BY 1;
 refresh materialized view cagg_1;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (18)
-INFO:  materializing continuous aggregate public.cagg_1: new range up to 18
+INFO:  materializing continuous aggregate public.cagg_1: nothing to invalidate, new range up to 18
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -292,7 +292,7 @@ select * from cagg_1 order by 1;
 
 refresh materialized view cagg_2;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (14)
-INFO:  materializing continuous aggregate public.cagg_2: new range up to 14
+INFO:  materializing continuous aggregate public.cagg_2: nothing to invalidate, new range up to 14
 select * from cagg_2 order by 1;
  timed | maxval 
 -------+--------
@@ -304,7 +304,7 @@ select * from cagg_2 order by 1;
 insert into continuous_agg_test values( 14, -2, 100); 
 refresh materialized view cagg_1;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (18)
-INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_1: processing invalidations, no new range
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -316,7 +316,7 @@ select * from cagg_1 order by 1;
 
 refresh materialized view cagg_2;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (14)
-INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_2: nothing to invalidate, no new range
 INFO:  materializing continuous aggregate public.cagg_2: no new range to materialize or invalidations found, exiting early
 select * from cagg_2 order by 1;
  timed | maxval 
@@ -335,8 +335,7 @@ select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order 
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
-                  6 |                    14 |                      14
-(1 row)
+(0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --this insert will be processed only by cagg_1 and cagg_2 will process the previous
@@ -344,7 +343,7 @@ select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_
 insert into continuous_agg_test values( 18, -2, 200); 
 refresh materialized view cagg_1;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (20)
-INFO:  materializing continuous aggregate public.cagg_1: new range up to 20
+INFO:  materializing continuous aggregate public.cagg_1: nothing to invalidate, new range up to 20
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -357,7 +356,7 @@ select * from cagg_1 order by 1;
 
 refresh materialized view cagg_2;
 INFO:  new materialization range for public.continuous_agg_test (time column timeval) (16)
-INFO:  materializing continuous aggregate public.cagg_2: new range up to 16
+INFO:  materializing continuous aggregate public.cagg_2: nothing to invalidate, new range up to 16
 select * from cagg_2 order by 1;
  timed | maxval 
 -------+--------
@@ -378,7 +377,7 @@ select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log o
 
 refresh materialized view cagg_1;
 INFO:  new materialization range not found for public.continuous_agg_test (time column timeval): not enough new data past completion threshold (20)
-INFO:  materializing continuous aggregate public.cagg_1: no new range to materialize
+INFO:  materializing continuous aggregate public.cagg_1: processing invalidations, no new range
 select * from cagg_1 where timed = 18 ;
  timed | cnt 
 -------+-----
