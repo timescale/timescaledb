@@ -65,7 +65,7 @@ ERROR:  SELECT query for continuous aggregate should have at least 1 aggregate f
 create  view mat_m1 WITH ( timescaledb.continuous)
 as
 select count(*) from conditions group by location;
-ERROR:  time_bucket function missing from GROUP BY clause for continuous aggregate query
+ERROR:  no valid bucketing function found for continuous aggregate query
 -- with valid query in a CTE
 create  view mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -128,7 +128,7 @@ AS
 Select max(temperature)
 from conditions
  group by time_bucket( INTERVAL '5 minutes', timec, INTERVAL '-2.5 minutes') , location;
-ERROR:  time_bucket function for continuous aggregate query cannot use optional arguments
+ERROR:  no valid bucketing function found for continuous aggregate query
 --time_bucket using non-const for first argument
 create  view mat_m1 WITH ( timescaledb.continuous)
 AS
