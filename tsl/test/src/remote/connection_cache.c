@@ -52,17 +52,17 @@ test_basic_cache()
 							 GetUserId());
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_1 = remote_connecton_get_remote_pid(conn_1);
+	pid_1 = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
 	conn_2 = remote_connection_cache_get_connection(id_2);
-	pid_2 = remote_connecton_get_remote_pid(conn_2);
+	pid_2 = remote_connection_get_remote_pid(conn_2);
 	TestAssertTrue(pid_2 != 0);
 
 	TestAssertTrue(pid_1 != pid_2);
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 == pid_prime);
 }
 
@@ -145,7 +145,7 @@ test_invalidate_server()
 							 GetUserId());
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_1 = remote_connecton_get_remote_pid(conn_1);
+	pid_1 = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
 	/* simulate an invalidation in another backend */
@@ -154,13 +154,13 @@ test_invalidate_server()
 	/* Should get a different connection since we invalidated the foreign
 	 * server and didn't yet start a transaction on the remote node. */
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
 
 	/* Test that connections remain despite invalidations during ongoing
 	 * remote transaction */
 	pid_1 = pid_prime;
-	original_application_name = remote_connecton_get_application_name(conn_1);
+	original_application_name = remote_connection_get_application_name(conn_1);
 	BeginInternalSubTransaction("sub1");
 
 	/* Start a remote transaction on the connection */
@@ -168,20 +168,20 @@ test_invalidate_server()
 	invalidate_server();
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 
 	/* Connection should be the same despite invalidation since we're in a
 	 * transaction */
 	TestAssertTrue(pid_1 == pid_prime);
 	TestAssertTrue(
-		strcmp(original_application_name, remote_connecton_get_application_name(conn_1)) == 0);
+		strcmp(original_application_name, remote_connection_get_application_name(conn_1)) == 0);
 
 	RollbackAndReleaseCurrentSubTransaction();
 
 	/* After rollback, we're still in a remote transaction. Connection should
 	 * be the same. */
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 == pid_prime);
 	pid_1 = pid_prime;
 }
@@ -199,14 +199,14 @@ test_remove()
 							 GetUserId());
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_1 = remote_connecton_get_remote_pid(conn_1);
+	pid_1 = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
 	remote_connection_cache_remove(id_1);
 
 	/* even using the same pin, get new connection */
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
 
 	pid_1 = pid_prime;
@@ -215,7 +215,7 @@ test_remove()
 	remote_connection_cache_remove(id_1);
 
 	conn_1 = remote_connection_cache_get_connection(id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	pid_prime = remote_connection_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
 }
 

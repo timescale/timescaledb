@@ -12,7 +12,7 @@
 #include <remote/connection.h>
 
 extern TSConnection *get_connection(void);
-extern pid_t remote_connecton_get_remote_pid(TSConnection *conn);
-extern char *remote_connecton_get_application_name(TSConnection *conn);
+extern pid_t remote_connection_get_remote_pid(const TSConnection *conn);
+extern char *remote_connection_get_application_name(const TSConnection *conn);
 
 #endif /* TIMESCALEDB_TSL_TEST_REMOTE_CONNECTION_H */

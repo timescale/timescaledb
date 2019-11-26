@@ -244,7 +244,7 @@ ts_test_remote_connection(PG_FUNCTION_ARGS)
 }
 
 pid_t
-remote_connecton_get_remote_pid(TSConnection *conn)
+remote_connection_get_remote_pid(const TSConnection *conn)
 {
 	PGresult *res;
 	char *pid_string;
@@ -255,8 +255,8 @@ remote_connecton_get_remote_pid(TSConnection *conn)
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		return 0;
 
-	TestAssertTrue(1 == PQntuples(res));
-	TestAssertTrue(1 == PQnfields(res));
+	Assert(1 == PQntuples(res));
+	Assert(1 == PQnfields(res));
 
 	pid_string = PQgetvalue(res, 0, 0);
 	pid_long = strtol(pid_string, NULL, 10);
@@ -266,7 +266,7 @@ remote_connecton_get_remote_pid(TSConnection *conn)
 }
 
 char *
-remote_connecton_get_application_name(TSConnection *conn)
+remote_connection_get_application_name(const TSConnection *conn)
 {
 	PGresult *res;
 	char *app_name;
@@ -276,8 +276,8 @@ remote_connecton_get_application_name(TSConnection *conn)
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		return 0;
 
-	TestAssertTrue(1 == PQntuples(res));
-	TestAssertTrue(1 == PQnfields(res));
+	Assert(1 == PQntuples(res));
+	Assert(1 == PQnfields(res));
 
 	app_name = pstrdup(PQgetvalue(res, 0, 0));
 

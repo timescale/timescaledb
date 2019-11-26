@@ -662,7 +662,7 @@ remote_connection_xact_is_transitioning(const TSConnection *conn)
 }
 
 PGconn *
-remote_connection_get_pg_conn(TSConnection *conn)
+remote_connection_get_pg_conn(const TSConnection *conn)
 {
 	Assert(conn != NULL);
 	return conn->pg_conn;

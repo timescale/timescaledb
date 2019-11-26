@@ -73,7 +73,7 @@ extern bool remote_connection_check_extension(TSConnection *conn, const char **o
 extern void remote_validate_extension_version(TSConnection *conn, const char *data_node_version);
 
 extern bool remote_connection_cancel_query(TSConnection *conn);
-extern PGconn *remote_connection_get_pg_conn(TSConnection *conn);
+extern PGconn *remote_connection_get_pg_conn(const TSConnection *conn);
 extern bool remote_connection_is_processing(const TSConnection *conn);
 extern void remote_connection_set_processing(TSConnection *conn, bool processing);
 extern bool remote_connection_configure_if_changed(TSConnection *conn);

@@ -21,6 +21,7 @@
 #include "connection.h"
 #include "test_utils.h"
 #include "node_killer.h"
+#include "remote/dist_txn.h"
 
 TS_FUNCTION_INFO_V1(ts_test_remote_async);
 
@@ -204,13 +205,13 @@ test_node_death()
 	AsyncResponse *response;
 	PGresult *pg_res;
 	AsyncRequestSet *set;
-	RemoteNodeKiller *rnk;
+	RemoteNodeKiller rnk;
 
 	/* killed node causes an error response, then a communication error */
-	rnk = remote_node_killer_init(conn);
+	remote_node_killer_init(&rnk, conn, DTXN_EVENT_ANY);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
-	remote_node_killer_kill(rnk);
+	remote_node_killer_kill(&rnk);
 	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
 	result = (AsyncResponseResult *) response;
@@ -233,10 +234,10 @@ test_node_death()
 
 	/* test error throwing in async_request_set_wait_any_result */
 	conn = get_connection();
-	rnk = remote_node_killer_init(conn);
+	remote_node_killer_init(&rnk, conn, DTXN_EVENT_ANY);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
-	remote_node_killer_kill(rnk);
+	remote_node_killer_kill(&rnk);
 
 	/* first we get error result */
 	TestAssertTrue(NULL != async_request_set_wait_any_result(set));
@@ -244,18 +245,19 @@ test_node_death()
 
 	/* do cancel query before first response */
 	conn = get_connection();
-	rnk = remote_node_killer_init(conn);
+	remote_node_killer_init(&rnk, conn, DTXN_EVENT_ANY);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
-	remote_node_killer_kill(rnk);
+
+	remote_node_killer_kill(&rnk);
 	TestAssertTrue(false == remote_connection_cancel_query(conn));
 
 	/* do cancel query after seeing error */
 	conn = get_connection();
-	rnk = remote_node_killer_init(conn);
+	remote_node_killer_init(&rnk, conn, DTXN_EVENT_ANY);
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
-	remote_node_killer_kill(rnk);
+	remote_node_killer_kill(&rnk);
 
 	/* first we get error result */
 	TestEnsureError(async_request_set_wait_ok_result(set));
