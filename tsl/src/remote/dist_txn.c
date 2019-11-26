@@ -20,16 +20,56 @@
 
 #ifdef DEBUG
 
-void (*testing_callback_call_hook)(const char *event) = NULL;
+static const DistTransactionEventHandler *event_handler = NULL;
+static const char *eventnames[MAX_DTXN_EVENT] = {
+	[DTXN_EVENT_ANY] = "any",
+	[DTXN_EVENT_PRE_COMMIT] = "pre-commit",
+	[DTXN_EVENT_WAIT_COMMIT] = "waiting-commit",
+	[DTXN_EVENT_PRE_ABORT] = "pre-abort",
+	[DTXN_EVENT_PRE_PREPARE] = "pre-prepare-transaction",
+	[DTXN_EVENT_WAIT_PREPARE] = "waiting-prepare-transaction",
+	[DTXN_EVENT_POST_PREPARE] = "post-prepare-transaction",
+	[DTXN_EVENT_PRE_COMMIT_PREPARED] = "pre-commit-prepared",
+	[DTXN_EVENT_WAIT_COMMIT_PREPARED] = "waiting-commit-prepared",
+	[DTXN_EVENT_SUB_XACT_ABORT] = "subxact-abort",
+};
 
-#define testing_callback_call(event)                                                               \
-	do                                                                                             \
-	{                                                                                              \
-		if (testing_callback_call_hook != NULL)                                                    \
-			testing_callback_call_hook(event);                                                     \
-	} while (0)
+void
+remote_dist_txn_set_event_handler(const DistTransactionEventHandler *handler)
+{
+	event_handler = handler;
+}
+
+static inline void
+eventcallback(const DistTransactionEvent event)
+{
+	if (NULL != event_handler && NULL != event_handler->handler)
+		event_handler->handler(event, event_handler->data);
+}
+
+DistTransactionEvent
+remote_dist_txn_event_from_name(const char *eventname)
+{
+	int i;
+
+	for (i = 0; i < MAX_DTXN_EVENT; i++)
+	{
+		if (strcmp(eventname, eventnames[i]) == 0)
+			return i;
+	}
+
+	elog(ERROR, "invalid event name");
+	pg_unreachable();
+}
+
+const char *
+remote_dist_txn_event_name(const DistTransactionEvent event)
+{
+	return eventnames[event];
+}
+
 #else
-#define testing_callback_call(event)                                                               \
+#define eventcallback(event)                                                                       \
 	do                                                                                             \
 	{                                                                                              \
 	} while (0)
@@ -88,7 +128,7 @@ dist_txn_xact_callback_1pc_pre_commit()
 	RemoteTxn *remote_txn;
 	AsyncRequestSet *ars = async_request_set_create();
 
-	testing_callback_call("pre-commit");
+	eventcallback(DTXN_EVENT_PRE_COMMIT);
 
 	/* send a commit to all connections */
 	remote_txn_store_foreach(store, remote_txn)
@@ -99,7 +139,7 @@ dist_txn_xact_callback_1pc_pre_commit()
 		async_request_set_add(ars, remote_txn_async_send_commit(remote_txn));
 	}
 
-	testing_callback_call("waiting-commit");
+	eventcallback(DTXN_EVENT_WAIT_COMMIT);
 
 	/* async collect all the replies */
 	async_request_set_wait_all_ok_commands(ars);
@@ -112,7 +152,7 @@ dist_txn_xact_callback_abort()
 {
 	RemoteTxn *remote_txn;
 
-	testing_callback_call("pre-abort");
+	eventcallback(DTXN_EVENT_PRE_ABORT);
 
 	remote_txn_store_foreach(store, remote_txn)
 	{
@@ -245,7 +285,7 @@ dist_txn_send_prepare_transaction()
 	AsyncResponse *error_response = NULL;
 	AsyncResponse *res;
 
-	testing_callback_call("pre-prepare-transaction");
+	eventcallback(DTXN_EVENT_PRE_PREPARE);
 
 	/* send a prepare transaction to all connections */
 	remote_txn_store_foreach(store, remote_txn)
@@ -257,7 +297,7 @@ dist_txn_send_prepare_transaction()
 		async_request_set_add(ars, req);
 	}
 
-	testing_callback_call("waiting-prepare-transaction");
+	eventcallback(DTXN_EVENT_WAIT_PREPARE);
 
 	/*
 	 * async collect the replies. Since errors in PREPARE TRANSACTION are not
@@ -303,7 +343,7 @@ dist_txn_send_prepare_transaction()
 	if (error_response != NULL)
 		async_response_report_error(error_response, ERROR);
 
-	testing_callback_call("post-prepare-transaction");
+	eventcallback(DTXN_EVENT_POST_PREPARE);
 }
 
 static void
@@ -332,7 +372,7 @@ dist_txn_send_commit_prepared_transaction()
 		async_request_set_add(ars, req);
 	}
 
-	testing_callback_call("waiting-commit-prepared");
+	eventcallback(DTXN_EVENT_WAIT_COMMIT_PREPARED);
 
 	/* async collect the replies */
 	while ((res = async_request_set_wait_any_response(ars)))
@@ -397,7 +437,7 @@ dist_txn_xact_callback_2pc(XactEvent event, void *arg)
 			break;
 		case XACT_EVENT_PARALLEL_COMMIT:
 		case XACT_EVENT_COMMIT:
-			testing_callback_call("pre-commit-prepared");
+			eventcallback(DTXN_EVENT_PRE_COMMIT_PREPARED);
 
 			/*
 			 * We send a commit here so that future commands on this
@@ -461,7 +501,7 @@ dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 		reject_transactions_with_incomplete_transitions();
 
 	if (event == SUBXACT_EVENT_ABORT_SUB)
-		testing_callback_call("subxact-abort");
+		eventcallback(DTXN_EVENT_SUB_XACT_ABORT);
 
 	curlevel = GetCurrentTransactionNestLevel();
 
