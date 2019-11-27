@@ -177,11 +177,11 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 
 				fetcher->state.eof = true;
 				async_response_result_close(response);
+				response = NULL;
 				break;
 			}
 
 			Assert(PQresultStatus(res) == PGRES_SINGLE_TUPLE);
-
 			/* Allow creating tuples in alternative memory context if user has set
 			 * it explicitly, otherwise same as batch_mctx */
 			MemoryContextSwitchTo(fetcher->state.tuple_mctx);
@@ -190,11 +190,10 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 				tuplefactory_make_tuple(fetcher->state.tf, res, 0, PQbinaryTuples(res));
 
 			async_response_result_close(response);
+			response = NULL;
 		}
 		/* We need to manually reset the context since we've turned off per tuple reset */
 		tuplefactory_reset_mctx(fetcher->state.tf);
-
-		MemoryContextSwitchTo(fetcher->state.batch_mctx);
 
 		fetcher->state.num_tuples = i;
 		fetcher->state.next_tuple_idx = 0;
@@ -229,8 +228,6 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 
 	MemoryContextSwitchTo(oldcontext);
 	pfree(fetch_req_wrapper);
-
-	data_fetcher_request_data_async(&fetcher->state);
 
 	return fetcher->state.num_tuples;
 }
