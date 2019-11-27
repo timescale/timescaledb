@@ -1,0 +1,27 @@
+name: Test
+on:
+  pull_request:
+    branches:
+      - master
+jobs:
+  build:
+    name: ${{ matrix.build_type }} [${{ matrix.os }}] [PG${{ matrix.pg }}]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        build_type: [ Debug, Release ]
+        os: [ macOS-latest ]
+        pg: [ 11 ]
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v1
+    - name: Install PostgreSQL
+      run: brew install postgresql@${{ matrix.pg }}
+    - name: Configure [${{ matrix.build_type }}]
+      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_OPENSSL=True -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DREGRESS_CHECKS=OFF
+    - name: Build
+      run: cmake --build ${{ matrix.build_type }} -- -j4
+    - name: Install
+      run: cmake --install ${{ matrix.build_type }}
+    - name: Test
+      run: cmake --build ${{ matrix.build_type }} --target installcheck
