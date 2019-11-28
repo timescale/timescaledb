@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include "libpq-fe.h"
 #include <postgres.h>
 #include <access/xact.h>
 #include <utils/builtins.h>
@@ -299,28 +300,35 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 {
 	PGresult *res;
 	char *count_string;
+	ExecStatusType status;
 
 	if (PQTRANS_IDLE != PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)))
 		return;
 
 	res = remote_connection_exec(entry->conn, "SELECT count(*) FROM pg_prepared_statements");
 
-	if (PQresultStatus(res) == PGRES_TUPLES_OK)
+	status = PQresultStatus(res);
+
+	switch (status)
 	{
-		if (PQntuples(res) == 1 && PQnfields(res) == 1)
-		{
-			count_string = PQgetvalue(res, 0, 0);
-			if (strcmp("0", count_string) != 0)
-				elog(WARNING, "leak check: connection leaked prepared statement");
-		}
-		else
-		{
-			remote_result_close(res);
-			elog(ERROR, "leak check: incorrect number of rows or columns returned");
-		}
+		case PGRES_TUPLES_OK:
+			if (PQntuples(res) == 1 && PQnfields(res) == 1)
+			{
+				count_string = PQgetvalue(res, 0, 0);
+				if (strcmp("0", count_string) != 0)
+					elog(WARNING, "leak check: connection leaked prepared statement");
+			}
+			else
+				elog(ERROR, "leak check: unexpected number of rows or columns returned");
+			break;
+		case PGRES_FATAL_ERROR:
+		case PGRES_NONFATAL_ERROR:
+			elog(WARNING, "leak check: ERROR [\"%s\"]", PQresultErrorMessage(res));
+			break;
+		default:
+			elog(WARNING, "leak check: unexpected result state %u", status);
+			break;
 	}
-	else
-		elog(WARNING, "leak check: unexpected result \"%s\"", PQresultErrorMessage(res));
 
 	remote_result_close(res);
 }

@@ -25,10 +25,6 @@
 #include "test_utils.h"
 #include "connection.h"
 
-static const char *sql_get_backend_pid = "SELECT pg_backend_pid()";
-static const char *sql_get_application_name =
-	"SELECT application_name from  pg_stat_activity where pid = pg_backend_pid()";
-
 TSConnection *
 get_connection()
 {
@@ -250,10 +246,10 @@ remote_connection_get_remote_pid(const TSConnection *conn)
 	char *pid_string;
 	unsigned long pid_long;
 
-	res = PQexec(remote_connection_get_pg_conn(conn), sql_get_backend_pid);
+	res = PQexec(remote_connection_get_pg_conn(conn), "SELECT pg_backend_pid()");
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-		return 0;
+		return -1;
 
 	Assert(1 == PQntuples(res));
 	Assert(1 == PQnfields(res));
@@ -271,7 +267,10 @@ remote_connection_get_application_name(const TSConnection *conn)
 	PGresult *res;
 	char *app_name;
 
-	res = PQexec(remote_connection_get_pg_conn(conn), sql_get_application_name);
+	res = PQexec(remote_connection_get_pg_conn(conn),
+				 "SELECT application_name "
+				 "FROM pg_stat_activity "
+				 "WHERE pid = pg_backend_pid()");
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		return 0;

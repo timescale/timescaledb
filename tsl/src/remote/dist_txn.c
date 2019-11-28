@@ -146,7 +146,16 @@ dist_txn_xact_callback_1pc_pre_commit()
 	dist_txn_deallocate_prepared_stmts_if_needed();
 }
 
-/* On abort on the frontend send aborts to all of the remote endpoints */
+/*
+ * Abort on the access node.
+ *
+ * The access node needs to send aborts to all of the remote endpoints. This
+ * code should not throw errors itself, since we are already in abort due to a
+ * previous error. Instead, we try to emit errors as warnings. For safety, we
+ * should probaby try-catch and swallow any potential lower-layer errors given
+ * that we're doing remote calls over the network. But the semantics for
+ * capturing and proceeding after such recursive errors are unclear.
+ */
 static void
 dist_txn_xact_callback_abort()
 {
@@ -493,15 +502,19 @@ dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 	if (store == NULL)
 		return;
 
-	/* Nothing to do at subxact start, nor after commit. */
-	if (!(event == SUBXACT_EVENT_PRE_COMMIT_SUB || event == SUBXACT_EVENT_ABORT_SUB))
-		return;
-
-	if (event == SUBXACT_EVENT_PRE_COMMIT_SUB)
-		reject_transactions_with_incomplete_transitions();
-
-	if (event == SUBXACT_EVENT_ABORT_SUB)
-		eventcallback(DTXN_EVENT_SUB_XACT_ABORT);
+	switch (event)
+	{
+		case SUBXACT_EVENT_START_SUB:
+		case SUBXACT_EVENT_COMMIT_SUB:
+			/* Nothing to do at subxact start, nor after commit. */
+			return;
+		case SUBXACT_EVENT_PRE_COMMIT_SUB:
+			reject_transactions_with_incomplete_transitions();
+			break;
+		case SUBXACT_EVENT_ABORT_SUB:
+			eventcallback(DTXN_EVENT_SUB_XACT_ABORT);
+			break;
+	}
 
 	curlevel = GetCurrentTransactionNestLevel();
 

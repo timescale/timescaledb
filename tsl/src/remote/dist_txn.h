@@ -45,7 +45,7 @@ extern void remote_dist_txn_set_event_handler(const DistTransactionEventHandler 
 extern DistTransactionEvent remote_dist_txn_event_from_name(const char *eventname);
 extern const char *remote_dist_txn_event_name(const DistTransactionEvent event);
 
-#endif
+#endif /* DEBUG */
 
 void _remote_dist_txn_init(void);
 void _remote_dist_txn_fini(void);
