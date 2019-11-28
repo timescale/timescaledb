@@ -51,9 +51,14 @@ void
 remote_node_killer_init(RemoteNodeKiller *rnk, const TSConnection *conn,
 						const DistTransactionEvent event)
 {
+	int remote_pid = remote_connection_get_remote_pid(conn);
+
+	if (remote_pid == -1)
+		elog(ERROR, "could not get PID of remote backend process");
+
 	MemSet(rnk, 0, sizeof(*rnk));
 	rnk->conn = conn;
-	rnk->pid = remote_connection_get_remote_pid(conn);
+	rnk->pid = remote_pid;
 	rnk->killevent = event;
 }
 
@@ -118,10 +123,12 @@ remote_node_killer_kill(RemoteNodeKiller *rnk)
 				elog(WARNING, "timeout while waiting for killed backend to exit");
 				break;
 			}
-
 			wait_count--;
 			pg_usleep(100L);
 		}
+		/* Once PG registered the backend as gone, wait some additional time
+		 * for it to really exit */
+		pg_usleep(500L);
 	}
 }
 
