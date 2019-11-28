@@ -51,10 +51,15 @@
 
 #define ERRCODE_DUPLICATE_DATABASE_STR "42P04"
 
-static void data_node_validate_database(TSConnection *conn, const char *database,
-										const char *expected_encoding,
-										const char *expected_chartype,
-										const char *expected_collation);
+typedef struct DbInfo
+{
+	NameData name;
+	int32 encoding;
+	NameData chartype;
+	NameData collation;
+} DbInfo;
+
+static void data_node_validate_database(TSConnection *conn, const DbInfo *database);
 
 /*
  * get_database_info - given a database OID, look up info about the database
@@ -63,12 +68,10 @@ static void data_node_validate_database(TSConnection *conn, const char *database
  *  True if a record for the OID was found, false otherwise.
  */
 static bool
-get_database_info(Oid dbid, const char **encoding, const char **chartype, const char **collation)
+get_database_info(Oid dbid, DbInfo *database)
 {
 	HeapTuple dbtuple;
 	Form_pg_database dbrecord;
-
-	Assert(encoding && chartype && collation);
 
 	dbtuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(dbid));
 
@@ -77,9 +80,9 @@ get_database_info(Oid dbid, const char **encoding, const char **chartype, const 
 
 	dbrecord = (Form_pg_database) GETSTRUCT(dbtuple);
 
-	*encoding = pg_encoding_to_char(dbrecord->encoding);
-	*collation = pstrdup(NameStr(dbrecord->datcollate));
-	*chartype = pstrdup(NameStr(dbrecord->datctype));
+	database->encoding = dbrecord->encoding;
+	database->collation = dbrecord->datcollate;
+	database->chartype = dbrecord->datctype;
 
 	ReleaseSysCache(dbtuple);
 	return true;
@@ -329,14 +332,13 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 }
 
 static void
-data_node_bootstrap_database(TSConnection *conn, const char *dbname, const char *encoding,
-							 const char *chartype, const char *collation)
+data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 {
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 
 	PGresult *res;
 
-	Assert(NULL != dbname);
+	Assert(database);
 
 	/* Create the database with the user as owner. This command might fail
 	 * if the database already exists, but we catch the error and continue
@@ -344,10 +346,10 @@ data_node_bootstrap_database(TSConnection *conn, const char *dbname, const char 
 	res = remote_connection_execf(conn,
 								  "CREATE DATABASE %s ENCODING %s LC_COLLATE %s LC_CTYPE %s "
 								  "TEMPLATE template0 OWNER %s",
-								  quote_identifier(dbname),
-								  quote_identifier(encoding),
-								  quote_literal_cstr(collation),
-								  quote_literal_cstr(chartype),
+								  quote_identifier(NameStr(database->name)),
+								  quote_identifier(pg_encoding_to_char(database->encoding)),
+								  quote_literal_cstr(NameStr(database->collation)),
+								  quote_literal_cstr(NameStr(database->chartype)),
 								  quote_identifier(username));
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -363,25 +365,25 @@ data_node_bootstrap_database(TSConnection *conn, const char *dbname, const char 
 		 *
 		 * In this case, we will log a notice and proceed since it is not an
 		 * error if the database already existed on the remote node. */
-		elog(NOTICE, "database \"%s\" already exists on data node, skipping", dbname);
-
-		data_node_validate_database(conn, dbname, encoding, chartype, collation);
+		elog(NOTICE,
+			 "database \"%s\" already exists on data node, skipping",
+			 NameStr(database->name));
+		data_node_validate_database(conn, database);
 	}
 }
 
 static void
-data_node_validate_database(TSConnection *conn, const char *database, const char *expected_encoding,
-							const char *expected_chartype, const char *expected_collation)
+data_node_validate_database(TSConnection *conn, const DbInfo *database)
 {
 	PGresult *res;
-	const char *actual_encoding;
+	uint32 actual_encoding;
 	const char *actual_chartype;
 	const char *actual_collation;
 
 	res = remote_connection_execf(conn,
-								  "SELECT PG_ENCODING_TO_CHAR(encoding), datcollate, datctype "
+								  "SELECT encoding, datcollate, datctype "
 								  "FROM pg_database WHERE datname = %s",
-								  quote_literal_cstr(database));
+								  quote_literal_cstr(NameStr(database->name)));
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
@@ -391,34 +393,35 @@ data_node_validate_database(TSConnection *conn, const char *database, const char
 	 * very very strange. */
 	Assert(PQntuples(res) > 0 && PQnfields(res) > 2);
 
-	actual_encoding = PQgetvalue(res, 0, 0);
-	Assert(actual_encoding != NULL);
-	if (strcmp(actual_encoding, expected_encoding) != 0)
+	actual_encoding = atoi(PQgetvalue(res, 0, 0));
+	if (actual_encoding != database->encoding)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database encoding mismatch"),
-				 errdetail("Expected database encoding to be \"%s\" but it was \"%s\"",
-						   expected_encoding,
+				 errdetail("Expected database encoding to be \"%s\" (%u) but it was \"%s\" (%u)",
+						   pg_encoding_to_char(database->encoding),
+						   database->encoding,
+						   pg_encoding_to_char(actual_encoding),
 						   actual_encoding)));
 
 	actual_collation = PQgetvalue(res, 0, 1);
 	Assert(actual_collation != NULL);
-	if (strcmp(actual_collation, expected_collation) != 0)
+	if (strcmp(actual_collation, NameStr(database->collation)) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database collation mismatch"),
 				 errdetail("Expected collation \"%s\" but it was \"%s\"",
-						   expected_collation,
+						   NameStr(database->collation),
 						   actual_collation)));
 
 	actual_chartype = PQgetvalue(res, 0, 2);
 	Assert(actual_chartype != NULL);
-	if (strcmp(actual_chartype, expected_chartype) != 0)
+	if (strcmp(actual_chartype, NameStr(database->chartype)) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database LC_CTYPE mismatch"),
 				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\"",
-						   expected_chartype,
+						   NameStr(database->chartype),
 						   actual_chartype)));
 }
 
@@ -540,10 +543,9 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool database_created = false;
 	bool extension_created = false;
 	bool result;
+	DbInfo database;
 
-	const char *encoding;
-	const char *collation;
-	const char *chartype;
+	namestrcpy(&database.name, dbname);
 
 	if (host == NULL)
 		ereport(ERROR,
@@ -571,7 +573,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 				 (errmsg("invalid port"),
 				  errhint("The port number must be between 1 and %u", PG_UINT16_MAX))));
 
-	result = get_database_info(MyDatabaseId, &encoding, &chartype, &collation);
+	result = get_database_info(MyDatabaseId, &database);
 	Assert(result);
 
 	/*
@@ -603,7 +605,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 			node_options = create_data_node_options(host, port, bootstrap_database, username);
 			conn = remote_connection_open_with_options(node_name, node_options, false);
 
-			data_node_bootstrap_database(conn, dbname, encoding, chartype, collation);
+			data_node_bootstrap_database(conn, &database);
 			database_created = true;
 
 			remote_connection_close(conn);
@@ -629,7 +631,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		}
 		else
 		{
-			data_node_validate_database(conn, dbname, encoding, chartype, collation);
+			data_node_validate_database(conn, &database);
 			data_node_validate_extension(conn);
 			data_node_validate_as_data_node(conn);
 		}
