@@ -13,6 +13,29 @@ DROP DATABASE IF EXISTS frontend_2;
 SET client_min_messages TO NOTICE;
 
 ----------------------------------------------------------------
+-- Test version compability function
+
+CREATE OR REPLACE FUNCTION compatible_version(version CSTRING, reference CSTRING)
+RETURNS TABLE(is_compatible BOOLEAN, is_old_version BOOLEAN)
+AS :TSL_MODULE_PATHNAME, 'ts_test_compatible_version'
+LANGUAGE C VOLATILE;
+
+SELECT * FROM compatible_version('2.0.0-beta3.19', reference => '2.0.0-beta3.19');
+SELECT * FROM compatible_version('2.0.0', reference => '2.0.0');
+SELECT * FROM compatible_version('1.9.9', reference => '2.0.0-beta3.19');
+SELECT * FROM compatible_version('1.9.9', reference => '2.0.0');
+SELECT * FROM compatible_version('2.0.9', reference => '2.0.0-beta3.19');
+SELECT * FROM compatible_version('2.0.9', reference => '2.0.0');
+SELECT * FROM compatible_version('2.1.9', reference => '2.0.0-beta3.19');
+SELECT * FROM compatible_version('2.1.0', reference => '2.1.19-beta3.19');
+
+-- These should not parse and instead generate an error.
+\set ON_ERROR_STOP 0
+SELECT * FROM compatible_version('2.1.*', reference => '2.1.19-beta3.19');
+SELECT * FROM compatible_version('2.1.0', reference => '2.1.*');
+\set ON_ERROR_STOP 1
+
+----------------------------------------------------------------
 -- Create two distributed databases
 
 CREATE DATABASE frontend_1;
