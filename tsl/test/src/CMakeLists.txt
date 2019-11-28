@@ -8,6 +8,7 @@ set(SOURCES
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND SOURCES
+       test_dist_util.c
        data_node.c
        deparse.c)
 endif ()

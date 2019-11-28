@@ -296,27 +296,54 @@ validate_data_node_settings(void)
 						   MaxConnections)));
 }
 
-int
-dist_util_version_compare(const char *lhs, const char *rhs)
+/*
+ * Check that the data node version is compatible with the version on this
+ * node by checking that all of the following are true:
+ *
+ * - The major version is identical on the data node and the access node.
+ * - The minor version on the data node is before or the same as on the access
+ *   node.
+ *
+ * We explicitly do *not* check the patch version since changes between patch
+ * versions will only fix bugs and there should be no problem using an older
+ * patch version of the extension on the data node.
+ *
+ * We also check if the version on the data node is older and set
+ * `old_version` to `true` or `false` so that caller can print a warning.
+ */
+bool
+dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,
+								bool *is_old_version)
 {
-	unsigned int lhs_major, lhs_minor, lhs_patch;
-	unsigned int rhs_major, rhs_minor, rhs_patch;
+	unsigned int data_node_major, data_node_minor, data_node_patch;
+	unsigned int access_node_major, access_node_minor, access_node_patch;
 
-	if (sscanf(lhs, "%u.%u.%u", &lhs_major, &lhs_minor, &lhs_patch) != 3)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("invalid version %s", lhs)));
+	Assert(is_old_version);
 
-	if (sscanf(rhs, "%u.%u.%u", &rhs_major, &rhs_minor, &rhs_patch) != 3)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("invalid version %s", rhs)));
+	if (sscanf(data_node_version,
+			   "%u.%u.%u",
+			   &data_node_major,
+			   &data_node_minor,
+			   &data_node_patch) != 3)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid data node version %s", data_node_version)));
+	if (sscanf(access_node_version,
+			   "%u.%u.%u",
+			   &access_node_major,
+			   &access_node_minor,
+			   &access_node_patch) != 3)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid access node version %s", access_node_version)));
 
-	if (lhs_major == rhs_major)
-	{
-		if (lhs_minor == rhs_minor)
-		{
-			if (lhs_patch == rhs_patch)
-				return 0;
-			return (lhs_patch < rhs_patch) ? -1 : 1;
-		}
-		return (lhs_minor < rhs_minor) ? -1 : 1;
-	}
-	return (lhs_major < rhs_major) ? -1 : 1;
+	if (data_node_major == access_node_major)
+		if (data_node_minor == access_node_minor)
+			*is_old_version = (data_node_patch < access_node_patch);
+		else
+			*is_old_version = (data_node_minor < access_node_minor);
+	else
+		*is_old_version = (data_node_major < access_node_major);
+
+	return (data_node_major == access_node_major) && (data_node_minor <= access_node_minor);
 }

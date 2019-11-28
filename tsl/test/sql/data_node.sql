@@ -620,16 +620,9 @@ CREATE EXTENSION timescaledb VERSION '0.0.0';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
+\set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
                             bootstrap => false);
-
-GRANT USAGE ON FOREIGN SERVER data_node_1 TO :ROLE_1;
-
-SET ROLE :ROLE_1;
-CREATE TABLE test_disttable(time timestamptz);
-
-\set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('test_disttable', 'time');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
