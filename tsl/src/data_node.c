@@ -50,6 +50,7 @@
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
 #define ERRCODE_DUPLICATE_DATABASE_STR "42P04"
+#define ERRCODE_DUPLICATE_SCHEMA_STR "42P06"
 
 typedef struct DbInfo
 {
@@ -331,7 +332,7 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }
 
-static void
+static bool
 data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 {
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
@@ -370,6 +371,8 @@ data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 			 NameStr(database->name));
 		data_node_validate_database(conn, database);
 	}
+
+	return (PQresultStatus(res) == PGRES_COMMAND_OK);
 }
 
 static void
@@ -473,24 +476,69 @@ data_node_validate_as_data_node(TSConnection *conn)
 /*
  * Bootstrap the extension and associated objects.
  */
-static void
+static bool
 data_node_bootstrap_extension(TSConnection *conn)
 {
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
-
 	const char *schema_name = ts_extension_schema_name();
 	const char *schema_name_quoted = quote_identifier(schema_name);
 	Oid schema_oid = get_namespace_oid(schema_name, true);
 
-	if (schema_oid != PG_PUBLIC_NAMESPACE)
-		remote_connection_cmdf_ok(conn,
-								  "CREATE SCHEMA %s AUTHORIZATION %s",
-								  schema_name_quoted,
-								  quote_identifier(username));
+	/* We only count the number of tuples in the code below, but having the
+	 * name and version are useful for debugging purposes. */
+	PGresult *res =
+		remote_connection_execf(conn,
+								"SELECT extname, extversion FROM pg_extension WHERE extname = %s",
+								quote_literal_cstr(EXTENSION_NAME));
 
-	remote_connection_cmdf_ok(conn,
-							  "CREATE EXTENSION " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
-							  schema_name_quoted);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	if (PQntuples(res) == 0)
+	{
+		if (schema_oid != PG_PUBLIC_NAMESPACE)
+		{
+			PGresult *res = remote_connection_execf(conn,
+													"CREATE SCHEMA %s AUTHORIZATION %s",
+													schema_name_quoted,
+													quote_identifier(username));
+			if (PQresultStatus(res) != PGRES_COMMAND_OK)
+			{
+				const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
+				bool schema_exists =
+					(sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_SCHEMA_STR) == 0);
+				if (!schema_exists)
+					remote_result_elog(res, ERROR);
+				/* If the schema already existed on the remote node, we got a
+				 * duplicate schema error and the schema was not created. In
+				 * that case, we log an error with a hint on how to fix the
+				 * issue. */
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_SCHEMA),
+						 errmsg("schema \"%s\" already exists in database, aborting", schema_name),
+						 errhint("Please make sure that the data node does not contain any "
+								 "existing objects prior to adding it.")));
+			}
+		}
+
+		remote_connection_cmdf_ok(conn,
+								  "CREATE EXTENSION " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
+								  schema_name_quoted);
+		return true;
+	}
+	else
+	{
+		ereport(NOTICE,
+				(errmsg("extension \"%s\" already exists on data node, skipping",
+						PQgetvalue(res, 0, 0)),
+				 errdetail("TimescaleDB extension version on %s:%s was %s.",
+						   PQhost(remote_connection_get_pg_conn(conn)),
+						   PQport(remote_connection_get_pg_conn(conn)),
+						   PQgetvalue(res, 0, 1))));
+		data_node_validate_extension(conn);
+		return false;
+	}
 }
 
 static void
@@ -605,9 +653,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 			node_options = create_data_node_options(host, port, bootstrap_database, username);
 			conn = remote_connection_open_with_options(node_name, node_options, false);
 
-			data_node_bootstrap_database(conn, &database);
-			database_created = true;
-
+			database_created = data_node_bootstrap_database(conn, &database);
 			remote_connection_close(conn);
 		}
 
@@ -625,10 +671,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		remote_connection_cmd_ok(conn, "BEGIN");
 
 		if (bootstrap)
-		{
-			data_node_bootstrap_extension(conn);
-			extension_created = true;
-		}
+			extension_created = data_node_bootstrap_extension(conn);
 		else
 		{
 			data_node_validate_database(conn, &database);

@@ -58,7 +58,7 @@ DROP DATABASE bootstrap_test;
 -- bootstrapping does not find any problems.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-       	      	            database => 'bootstrap_test', bootstrap => true);
+                            database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM show_data_nodes();
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -86,6 +86,26 @@ DROP DATABASE bootstrap_test;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
 
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => false);
+
+SELECT * FROM delete_data_node('bootstrap_test');
+DROP DATABASE bootstrap_test;
+
+----------------------------------------------------------------------
+-- Do a manual bootstrap of the data node and check that it can be
+-- added even when bootstrap is true. This is to check that we can
+-- bootstrap a database with an extension already installed.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
+
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO ERROR;
 CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
@@ -94,7 +114,7 @@ SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-                            database => 'bootstrap_test', bootstrap => false);
+                            database => 'bootstrap_test', bootstrap => true);
 
 SELECT * FROM delete_data_node('bootstrap_test');
 DROP DATABASE bootstrap_test;
@@ -113,7 +133,7 @@ CREATE DATABASE bootstrap_test
 
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
-       	      	            database => 'bootstrap_test', bootstrap => true);
+                            database => 'bootstrap_test', bootstrap => true);
 \set ON_ERROR_STOP 1
 
 DROP DATABASE bootstrap_test;
@@ -220,7 +240,7 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
 --
 -- Check that adding the data node and not bootstrapping will fail
 -- indicating that the extension is missing.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -238,9 +258,49 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
 
 DROP DATABASE bootstrap_test;
 
+-----------------------------------------------------------------------
+-- Create a new access node manually so that we can set a specific
+-- schema for the access node and then bootstrap a data node partially
+-- with a non-public schema so that we can see that an error is
+-- generated.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+CREATE DATABASE access_node OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c access_node :ROLE_CLUSTER_SUPERUSER
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+SET client_min_messages TO NOTICE;
+
+-- Show the schema for the extension to verify that it is not public.
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
+
+\c bootstrap_test :ROLE_CLUSTER_SUPERUSER
+SET client_min_messages TO ERROR;
+CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+SET client_min_messages TO NOTICE;
+
+\c access_node :ROLE_CLUSTER_SUPERUSER
+
+-- Add data node and delete it under error suppression. We want to
+-- avoid later tests to have random failures because the add succeeds.
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_catalog.add_data_node(
+       'bootstrap_test', host => 'localhost',
+       database => 'bootstrap_test', bootstrap => true);
+SELECT * FROM _timescaledb_catalog.delete_data_node('bootstrap_test');
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE bootstrap_test;
+DROP DATABASE access_node;
+
 ----------------------------------------------------------------------
 -- Test for ongoing transaction
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 BEGIN;
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
