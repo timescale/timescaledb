@@ -130,7 +130,8 @@ SET client_min_messages TO NOTICE;
 \c frontend_1 :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'frontend_2', bootstrap => true);
 NOTICE:  database "frontend_2" already exists on data node, skipping
-ERROR:  [invalid_data_node]: extension "timescaledb" has already been loaded with another version
+NOTICE:  extension "timescaledb" already exists on data node, skipping
+ERROR:  [invalid_data_node]: database is already a member of a distributed database
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'frontend_2', bootstrap => false);
 ERROR:  invalid_data_node is not valid as data node
 ----------------------------------------------------------------
@@ -138,7 +139,8 @@ ERROR:  invalid_data_node is not valid as data node
 \c frontend_1 :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'backend_2_1', bootstrap => true);
 NOTICE:  database "backend_2_1" already exists on data node, skipping
-ERROR:  [invalid_data_node]: extension "timescaledb" has already been loaded with another version
+NOTICE:  extension "timescaledb" already exists on data node, skipping
+ERROR:  [invalid_data_node]: database is already a member of a distributed database
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'backend_2_1', bootstrap => false);
 ERROR:  invalid_data_node is not valid as data node
 ----------------------------------------------------------------
@@ -153,7 +155,8 @@ ERROR:  unable to assign data nodes from an existing distributed database
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'frontend_1', bootstrap => true);
 NOTICE:  database "frontend_1" already exists on data node, skipping
-ERROR:  [invalid_data_node]: extension "timescaledb" has already been loaded with another version
+NOTICE:  extension "timescaledb" already exists on data node, skipping
+ERROR:  [invalid_data_node]: database is already a member of a distributed database
 SELECT * FROM add_data_node('invalid_data_node', host => 'localhost', database => 'frontend_1', bootstrap => false);
 ERROR:  invalid_data_node is not valid as data node
 \set ON_ERROR_STOP 1
