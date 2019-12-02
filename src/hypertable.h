@@ -63,13 +63,10 @@ enum Anum_create_hypertable
 
 #define Natts_create_hypertable (_Anum_create_hypertable_max - 1)
 
-extern int ts_number_of_user_hypertables(void);
-
-extern int ts_number_compressed_hypertables(void);
-
 typedef struct HypertablesStat
 {
-	int num_hypertables_regular;
+	int num_hypertables_user;
+	int num_hypertables_compressed;
 	int num_hypertables_distributed_members;
 	int num_hypertables_distributed;
 	int num_hypertables_distributed_and_replicated;
