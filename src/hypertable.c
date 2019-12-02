@@ -391,49 +391,20 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 	return ts_scanner_scan(&scanctx);
 }
 
-/* Number of user-created hypertables (doesn't count internal hypertables for compression or
- * continuous aggs) */
-int
-ts_number_of_user_hypertables()
+/* Is a user hypertable without compression or continuous aggs */
+static bool
+hypertable_is_user_table(Hypertable *ht)
 {
-	int count = 0;
-	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE, AccessExclusiveLock, CurrentMemoryContext);
+	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
-
-		if (!hypertable_is_compressed_or_materialization(ht))
-			count++;
-	}
-	return count;
-}
-
-/* Number of hypertables with compression enabled */
-int
-ts_number_compressed_hypertables()
-{
-	int count = 0;
-	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE, AccessExclusiveLock, CurrentMemoryContext);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
-
-		if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
-			count++;
-	}
-	return count;
+	return !ht->fd.compressed && status != HypertableIsMaterialization;
 }
 
 static ScanTupleResult
 hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 {
 	HypertablesStat *stat = data;
+	Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
 	bool isnull;
 	Datum datum;
 
@@ -453,6 +424,7 @@ hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 				break;
 			default:
 				Assert(replication_factor >= 1);
+				Assert(!ht->fd.compressed);
 				stat->num_hypertables_distributed++;
 				if (replication_factor > 1)
 					stat->num_hypertables_distributed_and_replicated++;
@@ -461,8 +433,15 @@ hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 	}
 	else
 	{
-		stat->num_hypertables_regular++;
+		/* Number of user-created hypertables (doesn't count internal hypertables
+		 * for compression or continuous aggs) */
+		if (hypertable_is_user_table(ht))
+			stat->num_hypertables_user++;
 	}
+
+	/* Number of hypertables with compression enabled */
+	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+		stat->num_hypertables_compressed++;
 
 	return SCAN_CONTINUE;
 }
