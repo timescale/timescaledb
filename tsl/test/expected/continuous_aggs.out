@@ -1221,3 +1221,40 @@ SELECT * FROM mat_refresh_test order by 1,2 ;
  POR      |  75
 (4 rows)
 
+-- test for bug when group by is not in project list
+create view conditions_grpby_view with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+select time_bucket(100, timec),  sum(humidity) 
+from conditions 
+group by time_bucket(100, timec), location;
+NOTICE:  adding index _materialized_hypertable_30_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_30 USING BTREE(grp_3_3, time_bucket)
+REFRESH MATERIALIZED VIEW conditions_grpby_view;
+INFO:  new materialization range for public.conditions (time column timec) (400)
+INFO:  materializing continuous aggregate public.conditions_grpby_view: nothing to invalidate, new range up to 400
+select * from conditions_grpby_view order by 1, 2;
+ time_bucket | sum 
+-------------+-----
+           0 | 450
+           0 | 750
+         100 | 750
+         200 |  75
+(4 rows)
+
+create view conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+select time_bucket(100, timec), sum(humidity)
+from conditions
+group by time_bucket(100, timec), location  
+having avg(temperature) > 0
+;
+NOTICE:  adding index _materialized_hypertable_31_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_31 USING BTREE(grp_3_3, time_bucket)
+REFRESH MATERIALIZED VIEW conditions_grpby_view2;
+INFO:  new materialization range for public.conditions (time column timec) (400)
+INFO:  materializing continuous aggregate public.conditions_grpby_view2: nothing to invalidate, new range up to 400
+select * from conditions_grpby_view2 order by 1, 2;
+ time_bucket | sum 
+-------------+-----
+           0 | 450
+           0 | 750
+         100 | 750
+         200 |  75
+(4 rows)
+
