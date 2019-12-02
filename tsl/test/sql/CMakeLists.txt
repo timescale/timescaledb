@@ -1,7 +1,5 @@
 set(TEST_FILES
-  continuous_aggs_dump.sql
   continuous_aggs_errors.sql
-  continuous_aggs_usage.sql
   continuous_aggs_watermark.sql
   edition.sql
   gapfill.sql
@@ -15,18 +13,26 @@ set(TEST_FILES_DEBUG
   bgw_reorder_drop_chunks.sql
   continuous_aggs.sql
   continuous_aggs_bgw.sql
+  continuous_aggs_dump.sql
   continuous_aggs_materialize.sql
   continuous_aggs_multi.sql
+  continuous_aggs_usage.sql
   ddl_hook.sql
   tsl_tables.sql
 )
 
 set(TEST_TEMPLATES
-  # parallel plans are different between postgres versions
-  continuous_aggs_ddl.sql.in
   continuous_aggs_permissions.sql.in
   plan_gapfill.sql.in
 )
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_TEMPLATES
+    # parallel plans are different between postgres versions
+    continuous_aggs_ddl.sql.in
+    )
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
 
 #compression only for PG > 9
 if (${PG_VERSION_MAJOR} GREATER "9")
@@ -45,8 +51,12 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 
   list(APPEND TEST_TEMPLATES
     compression_permissions.sql.in
-    transparent_decompression.sql.in
   )
+  if (CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_TEMPLATES
+      transparent_decompression.sql.in
+      )
+  endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

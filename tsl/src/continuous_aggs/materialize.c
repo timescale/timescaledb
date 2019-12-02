@@ -579,6 +579,7 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 										   int64 max_interval_per_job, int64 completed_threshold)
 {
 	bool found = false;
+	InternalTimeRange invalidation_range;
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 								AccessShareLock,
@@ -592,8 +593,6 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 		BTEqualStrategyNumber,
 		F_INT4EQ,
 		Int32GetDatum(materialization_id));
-
-	InternalTimeRange invalidation_range;
 
 	/*  note: this scan is in ASC order of lowest_modified_value. This logic  depends on that. */
 	ts_scanner_foreach(&iterator)
@@ -682,7 +681,7 @@ materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange 
 		HeapTuple tuple = heap_copytuple(ts_scan_iterator_tuple(&iterator));
 		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
 			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(tuple));
-		bool delete_entry;
+		bool delete_entry = false;
 		bool modify_entry;
 
 		if (invalidation_form->lowest_modified_value >= completed_threshold)
