@@ -872,3 +872,20 @@ select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test order by 1,2 ;
+
+-- test for bug when group by is not in project list
+create view conditions_grpby_view with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+select time_bucket(100, timec),  sum(humidity) 
+from conditions 
+group by time_bucket(100, timec), location;
+REFRESH MATERIALIZED VIEW conditions_grpby_view;
+select * from conditions_grpby_view order by 1, 2;
+
+create view conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+select time_bucket(100, timec), sum(humidity)
+from conditions
+group by time_bucket(100, timec), location  
+having avg(temperature) > 0
+;
+REFRESH MATERIALIZED VIEW conditions_grpby_view2;
+select * from conditions_grpby_view2 order by 1, 2;

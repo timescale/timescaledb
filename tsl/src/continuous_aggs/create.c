@@ -1145,10 +1145,15 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			colcollation = exprCollation((Node *) tle->expr);
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
 			part_te = (TargetEntry *) copyObject(input);
+			/*need to project all the partial entries so that materialization table is filled */
+			part_te->resjunk = false;
 			if (timebkt_chk)
 			{
 				col->is_not_null = true;
-				part_te->resjunk = false; /* always project time_bucket column*/
+			}
+			if (part_te->resname == NULL)
+			{
+				part_te->resname = pstrdup(colname);
 			}
 		}
 		break;
