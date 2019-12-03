@@ -940,3 +940,17 @@ DROP TABLE disttable2;
 
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+
+-- Make sure table qualified name is used in chunks_in function. Otherwise having a table name same as a column name might yield an error
+CREATE TABLE dist_device(time timestamptz, dist_device int, temp float);
+SELECT * FROM create_distributed_hypertable('dist_device', 'time');
+
+INSERT INTO dist_device VALUES
+       ('2017-01-01 06:01', 1, 1.1),
+       ('2017-01-01 09:11', 3, 2.1),
+       ('2017-01-01 08:01', 1, 1.2);
+
+EXPLAIN VERBOSE
+SELECT * FROM dist_device;
+
+SELECT * FROM dist_device;
