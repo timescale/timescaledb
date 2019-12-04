@@ -374,6 +374,13 @@ as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec);
+create or replace view mat_with_test_no_inval( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h',
+               timescaledb.ignore_invalidation_older_than='0')
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec);
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
@@ -397,7 +404,7 @@ ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET(timescaledb.refresh_lag = '
 ERROR:  cannot alter the internal view of a continuous aggregate
 \set ON_ERROR_STOP 1
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 4 other objects
 --test WITH using a hypertable with an integer time dimension
 CREATE TABLE conditions (
       timec       SMALLINT       NOT NULL,
@@ -452,6 +459,21 @@ select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
 ERROR:  parameter timescaledb.max_interval_per_job must be at least the size of the time_bucket width
+--ignore_invalidation_older_than must be positive
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='-10')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
+ERROR:  parameter timescaledb.ignore_invalidation_older_than must not be negative
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='1 hour')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
+ERROR:  parameter timescaledb.ignore_invalidation_older_than must be an integer for hypertables with integer time values
 \set ON_ERROR_STOP 1
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647', timescaledb.refresh_interval = '2h')
@@ -484,7 +506,7 @@ CREATE TABLE text_time(time TEXT);
 NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
- (8,public,text_time,t)
+ (9,public,text_time,t)
 (1 row)
 
 \set ON_ERROR_STOP 0

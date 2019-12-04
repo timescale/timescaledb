@@ -12,6 +12,14 @@ value in the table. This change requires that an integer_now func be set on
 hypertables with integer-based time columns to use continuous aggregates on
 this table.
 
+We added a timescaledb.ignore_invalidation_older_than parameter for continuous 
+aggregatess. This parameter accept a time-interval (e.g. 1 month). if set, 
+it limits the amount of time for which to process invalidation. Thus, if
+timescaledb.ignore_invalidation_older_than = '1 month', then any modifications
+for data older than 1 month from the current timestamp at modification time may 
+not cause continuous aggregate to be updated. This limits the amount of work
+that a backfill can trigger. By default, all invalidations are processed.
+
 ## 1.5.1 (2019-11-12)
 
 This maintenance release contains bugfixes since the 1.5.0 release. We deem it low

@@ -366,6 +366,14 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec);
 
+create or replace view mat_with_test_no_inval( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h',
+               timescaledb.ignore_invalidation_older_than='0')
+as
+select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec);
+
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
        partial_view_name as "PART_VIEW_NAME",
@@ -433,6 +441,22 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
+
+--ignore_invalidation_older_than must be positive
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='-10')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
+
+create or replace view mat_with_test( timec, minl, sumt , sumh)
+        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='1 hour')
+as
+select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket(100, timec);
+
 \set ON_ERROR_STOP 1
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)

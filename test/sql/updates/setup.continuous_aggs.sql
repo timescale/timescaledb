@@ -27,7 +27,7 @@ INSERT INTO conditions_before
 SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL, NULL, 8, true;
 
 CREATE VIEW mat_before
-WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
 AS
   SELECT time_bucket('1week', timec) as bucket,
     location,

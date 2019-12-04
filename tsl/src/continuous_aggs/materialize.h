@@ -18,6 +18,7 @@ typedef struct SchemaAndName
 
 typedef struct Invalidation
 {
+	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } Invalidation;

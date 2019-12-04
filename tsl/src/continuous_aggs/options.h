@@ -13,6 +13,9 @@
 
 extern int64 continuous_agg_parse_refresh_lag(Oid column_type,
 											  WithClauseResult *with_clause_options);
+extern int64
+continuous_agg_parse_ignore_invalidation_older_than(Oid column_type,
+													WithClauseResult *with_clause_options);
 
 extern int64 continuous_agg_parse_max_interval_per_job(Oid column_type,
 													   WithClauseResult *with_clause_options,

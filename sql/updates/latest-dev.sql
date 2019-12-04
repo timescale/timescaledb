@@ -22,3 +22,59 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+
+ALTER TABLE  _timescaledb_catalog.continuous_agg
+    ADD COLUMN  ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807';
+UPDATE _timescaledb_catalog.continuous_agg SET ignore_invalidation_older_than = BIGINT '9223372036854775807';
+
+CLUSTER  _timescaledb_catalog.continuous_agg USING continuous_agg_pkey;
+ALTER TABLE _timescaledb_catalog.continuous_agg SET WITHOUT CLUSTER;
+
+CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
+      ON _timescaledb_catalog.continuous_agg(raw_hypertable_id);
+
+
+--Add modification_time column
+CREATE TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log_tmp AS SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+DROP TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+(
+    hypertable_id              INTEGER NOT NULL,
+    modification_time BIGINT  NOT NULL, --time at which the raw table was modified
+    lowest_modified_value      BIGINT  NOT NULL,
+    greatest_modified_value    BIGINT  NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log', '');
+--modification_time == INT_MIN to cause these invalidations to be processed
+INSERT INTO _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+    SELECT hypertable_id, BIGINT '-9223372036854775808', lowest_modified_value, greatest_modified_value
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log_tmp;
+DROP TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log_tmp;
+CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx
+    ON _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (hypertable_id, lowest_modified_value ASC);
+GRANT SELECT ON  _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log TO PUBLIC;
+
+--Add modification_time column
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp AS SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+(
+    materialization_id         INTEGER
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id)
+            ON DELETE CASCADE,
+    modification_time BIGINT NOT NULL, --time at which the raw table was modified
+    lowest_modified_value      BIGINT NOT NULL,
+    greatest_modified_value    BIGINT NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_invalidation_log', '');
+--modification_time == INT_MIN to cause these invalidations to be processed
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    SELECT materialization_id, BIGINT '-9223372036854775808', lowest_modified_value, greatest_modified_value
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp;
+DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp;
+CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
+    ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
+GRANT SELECT ON  _timescaledb_catalog.continuous_aggs_materialization_invalidation_log TO PUBLIC;

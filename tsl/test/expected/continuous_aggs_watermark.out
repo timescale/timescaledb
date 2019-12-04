@@ -32,8 +32,8 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
 -- inserting into a table that does not have continuous_agg_insert_trigger doesn't change the watermark
@@ -44,10 +44,22 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE continuous_agg_test_mat(time int);
+select create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable           
+--------------------------------------
+ (2,public,continuous_agg_test_mat,t)
+(1 row)
+
+INSERT INTO _timescaledb_config.bgw_job VALUES (2, '','continuous_aggregate',interval '1s', interval '1s',0, interval '1s');
+INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,2,0,'','',0, bigint '10000000');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- create the trigger
 CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON continuous_agg_test
@@ -63,8 +75,8 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
 -- set the continuous_aggs_invalidation_threshold to 15, any insertions below that value need an invalidation
@@ -79,9 +91,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
 (1 row)
 
 -- INSERTs only above the continuous_aggs_invalidation_threshold won't change the continuous_aggs_hypertable_invalidation_log
@@ -93,9 +105,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
 (1 row)
 
 -- INSERTs only below the continuous_aggs_invalidation_threshold will change the continuous_aggs_hypertable_invalidation_log
@@ -107,10 +119,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
 (2 rows)
 
 -- test INSERTing other values
@@ -122,11 +134,11 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
-             1 |                     1 |                      51
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
+             1 |                22 |                     1 |                      51
 (3 rows)
 
 -- INSERT after dropping a COLUMN
@@ -139,12 +151,12 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
-             1 |                     1 |                      51
-             1 |                    -4 |                      -1
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
+             1 |                22 |                     1 |                      51
+             1 |                51 |                    -4 |                      -1
 (4 rows)
 
 INSERT INTO continuous_agg_test VALUES (100);
@@ -155,12 +167,12 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
-             1 |                     1 |                      51
-             1 |                    -4 |                      -1
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
+             1 |                22 |                     1 |                      51
+             1 |                51 |                    -4 |                      -1
 (4 rows)
 
 -- INSERT after adding a COLUMN
@@ -173,13 +185,13 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
-             1 |                     1 |                      51
-             1 |                    -4 |                      -1
-             1 |                    -7 |                      -3
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
+             1 |                22 |                     1 |                      51
+             1 |                51 |                    -4 |                      -1
+             1 |               100 |                    -7 |                      -3
 (5 rows)
 
 INSERT INTO continuous_agg_test VALUES (120, false), (200, true);
@@ -190,15 +202,19 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             1 |                    10 |                      22
-             1 |                    10 |                      11
-             1 |                     1 |                      51
-             1 |                    -4 |                      -1
-             1 |                    -7 |                      -3
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             1 |                22 |                    10 |                      22
+             1 |                22 |                    10 |                      11
+             1 |                22 |                     1 |                      51
+             1 |                51 |                    -4 |                      -1
+             1 |               100 |                    -7 |                      -3
 (5 rows)
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_agg where mat_hypertable_id =  2;
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP TABLE continuous_agg_test CASCADE;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -210,7 +226,7 @@ SELECT create_hypertable('ca_inval_test', 'time', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
- (2,public,ca_inval_test,t)
+ (3,public,ca_inval_test,t)
 (1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ca_inval_test $$;
@@ -232,37 +248,37 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 15);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (3, 15);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------
-             2 |        15
+             3 |        15
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             2 |                     5 |                      15
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             3 |                 5 |                     5 |                      15
 (1 row)
 
 INSERT INTO ca_inval_test SELECT generate_series(16, 20);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------
-             2 |        15
+             3 |        15
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             2 |                     5 |                      15
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             3 |                 5 |                     5 |                      15
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -279,16 +295,16 @@ UPDATE ca_inval_test SET time = 17 WHERE time = 19;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------
-             2 |        15
+             3 |        15
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             2 |                     5 |                       6
-             2 |                     5 |                       7
-             2 |                    14 |                      17
-             2 |                    12 |                      16
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             3 |                20 |                     5 |                       6
+             3 |                20 |                     5 |                       7
+             3 |                20 |                    14 |                      17
+             3 |                20 |                    12 |                      16
 (4 rows)
 
 DROP TABLE ca_inval_test CASCADE;
@@ -304,7 +320,7 @@ CREATE TABLE ts_continuous_test(time INTEGER, location INTEGER);
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
- (4,public,ts_continuous_test,t)
+ (5,public,ts_continuous_test,t)
 (1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ts_continuous_test $$;
@@ -327,24 +343,24 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (0 rows)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (4, 2);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, 2);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ts_continuous_test VALUES (1, 1);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------
-             4 |         2
+             5 |         2
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             4 |                     1 |                       1
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             5 |                29 |                     1 |                       1
 (1 row)
 
 -- aborts don't get written
@@ -354,13 +370,13 @@ ABORT;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
  hypertable_id | watermark 
 ---------------+-----------
-             4 |         2
+             5 |         2
 (1 row)
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             4 |                     1 |                       1
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             5 |                29 |                     1 |                       1
 (1 row)
 
 DROP TABLE ts_continuous_test CASCADE;

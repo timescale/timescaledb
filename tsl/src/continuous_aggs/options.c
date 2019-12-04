@@ -72,6 +72,28 @@ continuous_agg_parse_refresh_lag(Oid column_type, WithClauseResult *with_clause_
 }
 
 int64
+continuous_agg_parse_ignore_invalidation_older_than(Oid column_type,
+													WithClauseResult *with_clause_options)
+{
+	char *value;
+	int64 ret;
+
+	Assert(!with_clause_options[ContinuousViewOptionIgnoreInvalidationOlderThan].is_default);
+
+	value = TextDatumGetCString(
+		with_clause_options[ContinuousViewOptionIgnoreInvalidationOlderThan].parsed);
+
+	ret = parse_interval(value, column_type, "ignore_invalidation_older_than");
+
+	if (ret < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "parameter timescaledb.ignore_invalidation_older_than must not be negative")));
+	return ret;
+}
+
+int64
 continuous_agg_parse_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options,
 										  int64 bucket_width)
 {
@@ -161,6 +183,41 @@ update_max_interval_per_job(ContinuousAgg *agg, int64 new_max)
 	ts_scan_iterator_close(&iterator);
 }
 
+static void
+update_ignore_invalidation_older_than(ContinuousAgg *agg, int64 new_ignore_invalidation_older_than)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_PKEY);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_pkey_mat_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(agg->data.mat_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool nulls[Natts_continuous_agg];
+		Datum values[Natts_continuous_agg];
+		bool repl[Natts_continuous_agg] = { false };
+		HeapTuple new;
+
+		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] = true;
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] =
+			Int64GetDatum(new_ignore_invalidation_older_than);
+
+		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+
+		ts_catalog_update(ti->scanrel, new);
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
 void
 continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_options)
 {
@@ -189,6 +246,19 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 															  with_clause_options,
 															  agg->data.bucket_width);
 		update_max_interval_per_job(agg, max);
+		ts_cache_release(hcache);
+	}
+
+	if (!with_clause_options[ContinuousViewOptionIgnoreInvalidationOlderThan].is_default)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, agg->data.raw_hypertable_id);
+		Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
+		int64 ignore_invalidation_older_than =
+			continuous_agg_parse_ignore_invalidation_older_than(ts_dimension_get_partition_type(
+																	time_dimension),
+																with_clause_options);
+		update_ignore_invalidation_older_than(agg, ignore_invalidation_older_than);
 		ts_cache_release(hcache);
 	}
 

@@ -56,6 +56,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(true),
 		},
+		[ContinuousViewOptionIgnoreInvalidationOlderThan] = {
+			.arg_name = "ignore_invalidation_older_than",
+			.type_id = TEXTOID,
+		},
 };
 
 WithClauseResult *
@@ -75,6 +79,19 @@ init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertabl
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(mat_hypertable_id));
+}
+
+static void
+init_scan_by_raw_hypertable_id(ScanIterator *iterator, const int32 raw_hypertable_id)
+{
+	iterator->ctx.index =
+		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(raw_hypertable_id));
 }
 
 static void
@@ -145,13 +162,8 @@ number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
 	int32 count = 0;
 
-	ts_scanner_foreach(&iterator)
-	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
-		if (data->raw_hypertable_id == raw_hypertable_id)
-			count++;
-	}
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator) { count++; }
 	return count;
 }
 
@@ -259,14 +271,13 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 	List *continuous_aggs = NIL;
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
 		ContinuousAgg *ca;
 		Form_continuous_agg data =
 			(Form_continuous_agg) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
-
-		if (data->raw_hypertable_id != raw_hypertable_id)
-			continue;
 
 		ca = palloc0(sizeof(*ca));
 		continuous_agg_init(ca, data);
@@ -274,6 +285,48 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 	}
 
 	return continuous_aggs;
+}
+
+TSDLLEXPORT int64
+ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	int64 ignore_invalidation_older_than = -1;
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		Form_continuous_agg data =
+			(Form_continuous_agg) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+
+		if (ignore_invalidation_older_than < data->ignore_invalidation_older_than)
+			ignore_invalidation_older_than = data->ignore_invalidation_older_than;
+	}
+
+	return ignore_invalidation_older_than;
+}
+
+/* returns the inclusive value for the minimum time to invalidate */
+TSDLLEXPORT int64
+ts_continuous_aggs_get_minimum_invalidation_time(int64 modification_time,
+												 int64 ignore_invalidation_older_than)
+{
+	if (ignore_invalidation_older_than == PG_INT64_MAX ||
+		ignore_invalidation_older_than > modification_time)
+	{
+		/* invalidate everything */
+		return PG_INT64_MIN;
+	}
+	else if (ignore_invalidation_older_than == 0)
+	{
+		/* don't invalidate anything */
+		return PG_INT64_MAX;
+	}
+	else
+	{
+		return modification_time - ignore_invalidation_older_than;
+	}
 }
 
 ContinuousAgg *
