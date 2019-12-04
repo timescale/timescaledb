@@ -8,6 +8,17 @@ setup
     SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test');
     INSERT INTO ts_continuous_test SELECT i, i FROM
         (SELECT generate_series(0, 29) AS i) AS i;
+}
+
+teardown {
+    DROP FUNCTION lock_mattable( text );
+    DROP TABLE ts_continuous_test CASCADE;
+}
+
+#needed to avoid "SQL step too long" error in setup
+session "SetupContinue"
+step "Setup2"
+{
     CREATE VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours')
         AS SELECT time_bucket('5', time), COUNT(val)
@@ -21,11 +32,6 @@ setup
     CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
-}
-
-teardown {
-    DROP FUNCTION lock_mattable( text );
-    DROP TABLE ts_continuous_test CASCADE;
 }
 
 session "I"
@@ -62,11 +68,11 @@ session "CVddl"
 step "AlterLag1" { alter view continuous_view_1 set (timescaledb.refresh_lag = 10); }
  
 #refresh1, refresh2 can run concurrently
-permutation "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1"
+permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1"
 
 #refresh1 and refresh2 run concurrently and see the correct invalidation
 #test1 - both see the same invalidation
-permutation "Refresh1" "Refresh2" "LockCompleted" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+permutation "Setup2" "Refresh1" "Refresh2" "LockCompleted" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 ##test2 - continuous_view_2 should see results from insert but not the other one.
 ## Refresh2 will complete first due to LockMat1 and write the invalidation logs out. 
-permutation "AlterLag1" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+permutation "Setup2" "AlterLag1" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
