@@ -839,6 +839,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_max_interval_per_job,
+	Anum_continuous_agg_ignore_invalidation_older_than,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -858,6 +859,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	int64 max_interval_per_job;
+	int64 ignore_invalidation_older_than;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
@@ -868,6 +870,7 @@ enum
 	CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY,
 	CONTINUOUS_AGG_PKEY,
 	CONTINUOUS_AGG_USER_VIEW_SCHEMA_USER_VIEW_NAME_KEY,
+	CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX,
 	_MAX_CONTINUOUS_AGG_INDEX,
 };
 typedef enum Anum_continuous_agg_job_id_key
@@ -905,6 +908,15 @@ typedef enum Anum_continuous_agg_user_view_schema_user_view_name_key
 
 #define Natts_continuous_agg_user_view_schema_user_view_name_key                                   \
 	(_Anum_continuous_agg_user_view_schema_user_view_name_key_max - 1)
+
+typedef enum Anum_continuous_agg_raw_hypertable_id_idx
+{
+	Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id = 1,
+	_Anum_continuous_agg_raw_hypertable_id_idx_max,
+} Anum_continuous_agg_raw_hypertable_id_idx;
+
+#define Natts_continuous_agg_raw_hypertable_id_idx                                                 \
+	(_Anum_continuous_agg_raw_hypertable_id_idx_max - 1)
 
 /****** CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE definitions*/
 #define CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME "continuous_aggs_completed_threshold"
@@ -946,6 +958,7 @@ typedef enum Anum_continuous_aggs_completed_threshold_pkey
 typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 {
 	Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id = 1,
+	Anum_continuous_aggs_hypertable_invalidation_log_modification_time,
 	Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
 	_Anum_continuous_aggs_hypertable_invalidation_log_max,
@@ -957,6 +970,7 @@ typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 typedef struct FormData_continuous_aggs_hypertable_invalidation_log
 {
 	int32 hypertable_id;
+	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } FormData_continuous_aggs_hypertable_invalidation_log;
@@ -1020,6 +1034,7 @@ typedef enum Anum_continuous_aggs_invalidation_threshold_pkey
 typedef enum Anum_continuous_aggs_materialization_invalidation_log
 {
 	Anum_continuous_aggs_materialization_invalidation_log_materialization_id = 1,
+	Anum_continuous_aggs_materialization_invalidation_log_modification_time,
 	Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
 	_Anum_continuous_aggs_materialization_invalidation_log_max,
@@ -1031,6 +1046,7 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log
 typedef struct FormData_continuous_aggs_materialization_invalidation_log
 {
 	int32 materialization_id;
+	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } FormData_continuous_aggs_materialization_invalidation_log;

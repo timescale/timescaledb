@@ -333,8 +333,8 @@ select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order 
 (1 row)
 
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -369,10 +369,10 @@ select * from cagg_2 order by 1;
 insert into continuous_agg_test values( 18, -2, 100); 
 insert into continuous_agg_test values( 18, -2, 100); 
 select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             4 |                    18 |                      18
-             4 |                    18 |                      18
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             4 |                18 |                    18 |                      18
+             4 |                18 |                    18 |                      18
 (2 rows)
 
 refresh materialized view cagg_1;
@@ -386,10 +386,238 @@ select * from cagg_1 where timed = 18 ;
 
 --copied over for cagg_2 to process later?
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
-                  6 |                    18 |                      18
-                  6 |                    18 |                      18
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  6 |                18 |                    18 |                      18
+                  6 |                18 |                    18 |                      18
 (2 rows)
 
+--test the ignore_invalidation_older_than setting
+CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);
+select create_hypertable('continuous_agg_test_ignore_invalidation_older_than', 'timeval', chunk_time_interval=> 2);
+NOTICE:  adding not-null constraint to column "timeval"
+                        create_hypertable                        
+-----------------------------------------------------------------
+ (7,public,continuous_agg_test_ignore_invalidation_older_than,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test_ignore_invalidation_older_than $$;
+SELECT set_integer_now_func('continuous_agg_test_ignore_invalidation_older_than', 'integer_now_test2');
+ set_integer_now_func 
+----------------------
  
+(1 row)
+
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+(10, - 4, 1), (11, - 3, 5), (12, -3, 7);
+CREATE VIEW cagg_iia1( timed, cnt )
+        WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 5 )
+AS
+SELECT time_bucket( 2, timeval), COUNT(col1)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+CREATE VIEW cagg_iia2( timed, maxval)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 10)
+AS
+SELECT time_bucket(2, timeval), max(col2)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+CREATE VIEW cagg_iia3( timed, maxval)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 0)
+AS
+SELECT time_bucket(2, timeval), max(col2)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+refresh materialized view cagg_iia1;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (14)
+INFO:  materializing continuous aggregate public.cagg_iia1: nothing to invalidate, new range up to 14
+select * from cagg_iia1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   2
+    12 |   1
+(2 rows)
+
+refresh materialized view cagg_iia2;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (14)
+INFO:  materializing continuous aggregate public.cagg_iia2: nothing to invalidate, new range up to 14
+select * from cagg_iia2 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      7
+(2 rows)
+
+refresh materialized view cagg_iia3;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (14)
+INFO:  materializing continuous aggregate public.cagg_iia3: nothing to invalidate, new range up to 14
+select * from cagg_iia3 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      7
+(2 rows)
+
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+(1, -4, 1), (5, -3, 5), (10, -3, 9), (12,3,19);
+--modification happened at time 12
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             7 |                12 |                     5 |                      12
+(1 row)
+
+--move the time up (40), but invalidation logic should apply to old time (12)
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES (32,4,2),(36,5,5),(40,3,9);
+refresh materialized view cagg_iia1;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (42)
+INFO:  materializing continuous aggregate public.cagg_iia1: processing invalidations, new range up to 42
+--should see change to the 12, 10 bucket but not the 4 or 1 bucket
+select * from cagg_iia1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   3
+    12 |   2
+    32 |   1
+    36 |   1
+    40 |   1
+(5 rows)
+
+--should see change to the 12, 10 and 4 bucket but not the 1 bucket
+refresh materialized view cagg_iia2;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (42)
+INFO:  materializing continuous aggregate public.cagg_iia2: processing invalidations, new range up to 42
+select * from cagg_iia2 order by 1;
+ timed | maxval 
+-------+--------
+     4 |      5
+    10 |      9
+    12 |     19
+    32 |      2
+    36 |      5
+    40 |      9
+(6 rows)
+
+--sees no changes
+refresh materialized view cagg_iia3;
+INFO:  new materialization range for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval) (42)
+INFO:  materializing continuous aggregate public.cagg_iia3: nothing to invalidate, new range up to 42
+select * from cagg_iia3 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      7
+    32 |      2
+    36 |      5
+    40 |      9
+(5 rows)
+
+--tes UPDATES
+UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=200 where timeval=32;
+UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=120 where timeval=36;
+refresh materialized view cagg_iia1;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia1: processing invalidations, no new range
+--should see change only for the 36 bucket not 32
+select * from cagg_iia1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   3
+    12 |   2
+    32 |   1
+    36 |   0
+    40 |   1
+(5 rows)
+
+--should see change to the 36 and 32
+refresh materialized view cagg_iia2;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia2: processing invalidations, no new range
+select * from cagg_iia2 order by 1;
+ timed | maxval 
+-------+--------
+     4 |      5
+    10 |      9
+    12 |     19
+    32 |    200
+    36 |    120
+    40 |      9
+(6 rows)
+
+--sees no changes
+refresh materialized view cagg_iia3;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia3: nothing to invalidate, no new range
+INFO:  materializing continuous aggregate public.cagg_iia3: no new range to materialize or invalidations found, exiting early
+select * from cagg_iia3 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      7
+    32 |      2
+    36 |      5
+    40 |      9
+(5 rows)
+
+--test DELETE
+DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 32;
+DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 36;
+refresh materialized view cagg_iia1;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia1: processing invalidations, no new range
+--should see change only for the 36 bucket not 32
+select * from cagg_iia1 order by 1;
+ timed | cnt 
+-------+-----
+    10 |   3
+    12 |   2
+    32 |   1
+    40 |   1
+(4 rows)
+
+--should see change to the 36 and 32
+refresh materialized view cagg_iia2;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia2: processing invalidations, no new range
+select * from cagg_iia2 order by 1;
+ timed | maxval 
+-------+--------
+     4 |      5
+    10 |      9
+    12 |     19
+    40 |      9
+(4 rows)
+
+--sees no changes
+refresh materialized view cagg_iia3;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia3: nothing to invalidate, no new range
+INFO:  materializing continuous aggregate public.cagg_iia3: no new range to materialize or invalidations found, exiting early
+select * from cagg_iia3 order by 1;
+ timed | maxval 
+-------+--------
+    10 |      5
+    12 |      7
+    32 |      2
+    36 |      5
+    40 |      9
+(5 rows)
+
+--change the parameter
+ALTER VIEW cagg_iia3 set (timescaledb.ignore_invalidation_older_than = 100);
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+ (10, -3, 20);
+--sees the change now
+refresh materialized view cagg_iia3;
+INFO:  new materialization range not found for public.continuous_agg_test_ignore_invalidation_older_than (time column timeval): not enough new data past completion threshold (42)
+INFO:  materializing continuous aggregate public.cagg_iia3: processing invalidations, no new range
+select * from cagg_iia3 order by 1;
+ timed | maxval 
+-------+--------
+    10 |     20
+    12 |      7
+    32 |      2
+    36 |      5
+    40 |      9
+(5 rows)
+

@@ -534,6 +534,7 @@ scan_take_invalidation_tuple(TupleInfo *ti, void *data)
 		((Form_continuous_aggs_hypertable_invalidation_log) GETSTRUCT(ti->tuple));
 	Invalidation *invalidation = palloc(sizeof(*invalidation));
 
+	invalidation->modification_time = invalidation_form->modification_time;
 	invalidation->lowest_modified_value = invalidation_form->lowest_modified_value;
 	invalidation->greatest_modified_value = invalidation_form->greatest_modified_value;
 
@@ -600,6 +601,7 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
 			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(
 				iterator.tinfo->tuple));
+
 		InternalTimeRange entry_range = {
 			.type = type,
 			.start = ts_time_bucket_by_type(bucket_width,
@@ -728,6 +730,17 @@ materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange 
 /* copy invalidation logs for the other cont. aggs
  * rel is the relation of the table which has already been opened.
  * the caller opens and closes the relation.
+ *
+ * We avoid copying over logs that will never be processed because of the
+ * `ignore_invalidation_older_than` setting. This is done by applying this
+ * setting to the modification_time (current time of the modifying txn). Thus,
+ * this setting is logically applied to the time of modification as opposed
+ * to the current time during materialization. This is semantics we want to
+ * expose to users. So for example if we are doing an insert on Dec 4 of ROW 1
+ * with values( 'Nov 30',  .... ) and ROW 2 with values( 'Sep 30', ...) and the
+ * ignore_invalidation_older_than setting is 30 days, then ROW 1 will cause an
+ * invalidation (Dec 4 - Nov 30) <= 30 days and ROW 2 will not, independent of
+ * when we materialize.
  */
 static void
 insert_materialization_invalidation_logs(List *caggs, List *invalidations,
@@ -738,7 +751,6 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_continuous_aggs_materialization_invalidation_log] = { false };
 	ListCell *lc, *lc2;
-
 	if (caggs == NIL)
 		return;
 
@@ -747,12 +759,25 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 	{
 		ContinuousAgg *ca = lfirst(lc);
 		int32 cagg_id = ca->data.mat_hypertable_id;
+		int64 ignore_invalidation_older_than = ca->data.ignore_invalidation_older_than;
 		foreach (lc2, invalidations)
 		{
 			Invalidation *entry = (Invalidation *) lfirst(lc2);
+			int64 minimum_invalidation_time =
+				ts_continuous_aggs_get_minimum_invalidation_time(entry->modification_time,
+																 ignore_invalidation_older_than);
+			if (entry->greatest_modified_value < minimum_invalidation_time)
+				continue;
+
+			if (entry->lowest_modified_value < minimum_invalidation_time)
+				entry->lowest_modified_value = minimum_invalidation_time;
+
 			values[AttrNumberGetAttrOffset(
 				Anum_continuous_aggs_materialization_invalidation_log_materialization_id)] =
 				ObjectIdGetDatum(cagg_id);
+			values[AttrNumberGetAttrOffset(
+				Anum_continuous_aggs_materialization_invalidation_log_modification_time)] =
+				Int64GetDatum(entry->modification_time);
 			values[AttrNumberGetAttrOffset(
 				Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value)] =
 				Int64GetDatum(entry->lowest_modified_value);

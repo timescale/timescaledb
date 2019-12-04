@@ -22,6 +22,13 @@ INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE continuous_agg_test_mat(time int);
+select create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
+INSERT INTO _timescaledb_config.bgw_job VALUES (2, '','continuous_aggregate',interval '1s', interval '1s',0, interval '1s');
+INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,2,0,'','',0, bigint '10000000');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 -- create the trigger
 CREATE TRIGGER continuous_agg_insert_trigger
     AFTER INSERT ON continuous_agg_test
@@ -90,6 +97,11 @@ INSERT INTO continuous_agg_test VALUES (120, false), (200, true);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DELETE FROM _timescaledb_catalog.continuous_agg where mat_hypertable_id =  2;
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 DROP TABLE continuous_agg_test CASCADE;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -114,7 +126,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (2, 15);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (3, 15);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
@@ -168,7 +180,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (4, 2);
+INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, 2);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO ts_continuous_test VALUES (1, 1);

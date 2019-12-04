@@ -89,7 +89,7 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag FROM _timescaledb_catalog.continuous_agg;
+SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag, ignore_invalidation_older_than FROM _timescaledb_catalog.continuous_agg;
 SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
 
 -- job was created

@@ -207,8 +207,9 @@ static bool is_valid_bucketing_function(Oid funcid);
 static void
 create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
 						 char *partial_schema, char *partial_view, int64 bucket_width,
-						 int64 refresh_lag, int64 max_interval_per_job, int32 job_id,
-						 char *direct_schema, char *direct_view)
+						 int64 refresh_lag, int64 max_interval_per_job,
+						 int64 ignore_invalidation_older_than, int32 job_id, char *direct_schema,
+						 char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -247,6 +248,8 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] =
 		Int64GetDatum(max_interval_per_job);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] =
+		Int64GetDatum(ignore_invalidation_older_than);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -633,6 +636,14 @@ get_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options,
 	return continuous_agg_parse_max_interval_per_job(column_type,
 													 with_clause_options,
 													 bucket_width);
+}
+
+static int64
+get_ignore_invalidation_older_than(Oid column_type, WithClauseResult *with_clause_options)
+{
+	if (with_clause_options[ContinuousViewOptionIgnoreInvalidationOlderThan].is_default)
+		return PG_INT64_MAX;
+	return continuous_agg_parse_ignore_invalidation_older_than(column_type, with_clause_options);
 }
 
 static bool
@@ -1600,6 +1611,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	int64 max_interval_per_job = get_max_interval_per_job(origquery_ht->htpartcoltype,
 														  with_clause_options,
 														  origquery_ht->bucket_width);
+	int64 ignore_invalidation_older_than =
+		get_ignore_invalidation_older_than(origquery_ht->htpartcoltype, with_clause_options);
 
 	/* assign the column_name aliases in CREATE VIEW to the query. No other modifications to
 	 * panquery */
@@ -1670,6 +1683,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 							 origquery_ht->bucket_width,
 							 refresh_lag,
 							 max_interval_per_job,
+							 ignore_invalidation_older_than,
 							 job_id,
 							 dum_rel->schemaname,
 							 dum_rel->relname);

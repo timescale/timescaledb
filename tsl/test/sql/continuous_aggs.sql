@@ -889,3 +889,46 @@ having avg(temperature) > 0
 ;
 REFRESH MATERIALIZED VIEW conditions_grpby_view2;
 select * from conditions_grpby_view2 order by 1, 2;
+
+
+--test ignore_invalidation_older_than on timestamps-based ht
+
+DROP TABLE conditions CASCADE;
+CREATE TABLE conditions (
+                            time       TIMESTAMPTZ       NOT NULL,
+                            temperature DOUBLE PRECISION  NULL
+);
+
+select table_name from create_hypertable( 'conditions', 'time');
+
+create or replace view mat_test5( timec, maxt)
+        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='30 day', timescaledb.refresh_lag='-1day',
+               timescaledb.max_interval_per_job='260 day')
+as
+select time_bucket('1day', time), max(temperature)
+from conditions
+group by time_bucket('1day', time);
+
+SET timescaledb.current_timestamp_mock = '2001-03-11';
+insert into conditions values('2001-03-10', '1');
+insert into conditions values('2001-03-10', '2');
+
+REFRESH MATERIALIZED VIEW mat_test5;
+SELECT * FROM mat_test5;
+
+insert into conditions values('2001-02-15', '1');
+insert into conditions values('2001-01-15', '1');
+
+REFRESH MATERIALIZED VIEW mat_test5;
+--will see the feb but not the january change
+SELECT * FROM mat_test5;
+
+--what matters is the time at insertion not materialization
+SET timescaledb.current_timestamp_mock = '2001-03-11';
+--will see this change
+insert into conditions values('2001-02-15', '3');
+SET timescaledb.current_timestamp_mock = '2001-05-11';
+--but not this one
+insert into conditions values('2001-02-20', '4');
+REFRESH MATERIALIZED VIEW mat_test5;
+SELECT * FROM mat_test5;

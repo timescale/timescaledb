@@ -149,4 +149,97 @@ refresh materialized view cagg_1;
 select * from cagg_1 where timed = 18 ;
 --copied over for cagg_2 to process later?
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
- 
+
+
+--test the ignore_invalidation_older_than setting
+CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);
+select create_hypertable('continuous_agg_test_ignore_invalidation_older_than', 'timeval', chunk_time_interval=> 2);
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test_ignore_invalidation_older_than $$;
+SELECT set_integer_now_func('continuous_agg_test_ignore_invalidation_older_than', 'integer_now_test2');
+
+
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+(10, - 4, 1), (11, - 3, 5), (12, -3, 7);
+
+CREATE VIEW cagg_iia1( timed, cnt )
+        WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 5 )
+AS
+SELECT time_bucket( 2, timeval), COUNT(col1)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+
+CREATE VIEW cagg_iia2( timed, maxval)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 10)
+AS
+SELECT time_bucket(2, timeval), max(col2)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+
+CREATE VIEW cagg_iia3( timed, maxval)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 0)
+AS
+SELECT time_bucket(2, timeval), max(col2)
+FROM continuous_agg_test_ignore_invalidation_older_than
+GROUP BY 1;
+
+refresh materialized view cagg_iia1;
+select * from cagg_iia1 order by 1;
+refresh materialized view cagg_iia2;
+select * from cagg_iia2 order by 1;
+refresh materialized view cagg_iia3;
+select * from cagg_iia3 order by 1;
+
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+(1, -4, 1), (5, -3, 5), (10, -3, 9), (12,3,19);
+
+--modification happened at time 12
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+--move the time up (40), but invalidation logic should apply to old time (12)
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES (32,4,2),(36,5,5),(40,3,9);
+
+refresh materialized view cagg_iia1;
+--should see change to the 12, 10 bucket but not the 4 or 1 bucket
+select * from cagg_iia1 order by 1;
+--should see change to the 12, 10 and 4 bucket but not the 1 bucket
+refresh materialized view cagg_iia2;
+select * from cagg_iia2 order by 1;
+--sees no changes
+refresh materialized view cagg_iia3;
+select * from cagg_iia3 order by 1;
+
+--tes UPDATES
+UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=200 where timeval=32;
+UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=120 where timeval=36;
+
+refresh materialized view cagg_iia1;
+--should see change only for the 36 bucket not 32
+select * from cagg_iia1 order by 1;
+--should see change to the 36 and 32
+refresh materialized view cagg_iia2;
+select * from cagg_iia2 order by 1;
+--sees no changes
+refresh materialized view cagg_iia3;
+select * from cagg_iia3 order by 1;
+
+--test DELETE
+DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 32;
+DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 36;
+
+refresh materialized view cagg_iia1;
+--should see change only for the 36 bucket not 32
+select * from cagg_iia1 order by 1;
+--should see change to the 36 and 32
+refresh materialized view cagg_iia2;
+select * from cagg_iia2 order by 1;
+--sees no changes
+refresh materialized view cagg_iia3;
+select * from cagg_iia3 order by 1;
+
+--change the parameter
+ALTER VIEW cagg_iia3 set (timescaledb.ignore_invalidation_older_than = 100);
+INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
+ (10, -3, 20);
+--sees the change now
+refresh materialized view cagg_iia3;
+select * from cagg_iia3 order by 1;

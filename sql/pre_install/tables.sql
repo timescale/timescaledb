@@ -250,9 +250,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     direct_view_schema NAME NOT NULL,
     direct_view_name NAME NOT NULL,
     max_interval_per_job BIGINT NOT NULL,
+    ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807',
     UNIQUE(user_view_schema, user_view_name),
     UNIQUE(partial_view_schema, partial_view_name)
 );
+
+CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
+    ON _timescaledb_catalog.continuous_agg(raw_hypertable_id);
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_threshold(
@@ -273,6 +278,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 -- table are performance critical
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log(
     hypertable_id INTEGER NOT NULL,
+    modification_time BIGINT NOT NULL, --now time for txn when the raw table was modified
     lowest_modified_value BIGINT NOT NULL,
     greatest_modified_value BIGINT NOT NULL
 );
@@ -286,6 +292,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_
     materialization_id INTEGER
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
         ON DELETE CASCADE,
+    modification_time BIGINT NOT NULL, --now time for txn when the raw table was modified
     lowest_modified_value BIGINT NOT NULL,
     greatest_modified_value BIGINT NOT NULL
 );

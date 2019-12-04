@@ -235,6 +235,7 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
+	h->max_ignore_invalidation_older_than = -1;
 
 	return h;
 }
@@ -429,6 +430,19 @@ ts_hypertable_get_all(void)
 								   CurrentMemoryContext);
 
 	return result;
+}
+
+/* Lazy-load the maximum ignore_invalidation_older_than setting from all associated continuous aggs
+ */
+TSDLLEXPORT int64
+ts_hypertable_get_max_ignore_invalidation_older_than(Hypertable *ht)
+{
+	if (ht->max_ignore_invalidation_older_than < 0)
+		ht->max_ignore_invalidation_older_than =
+			ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id);
+
+	Assert(ht->max_ignore_invalidation_older_than >= 0);
+	return ht->max_ignore_invalidation_older_than;
 }
 
 static ScanTupleResult

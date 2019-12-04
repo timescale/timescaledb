@@ -24,6 +24,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionRefreshInterval,
 	ContinuousViewOptionMaxIntervalPerRun,
 	ContinuousViewOptionCreateGroupIndex,
+	ContinuousViewOptionIgnoreInvalidationOlderThan,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType
@@ -54,6 +55,11 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id);
 extern void ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks,
 													  Size num_chunks);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
+extern TSDLLEXPORT int64
+ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id);
+extern TSDLLEXPORT int64 ts_continuous_aggs_get_minimum_invalidation_time(
+	int64 modification_time, int64 ignore_invalidation_older_than);
+
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name);
 

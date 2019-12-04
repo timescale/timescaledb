@@ -20,6 +20,8 @@
 #include <access/xact.h>
 
 #include <scanner.h>
+#include <interval.h>
+#include <continuous_agg.h>
 
 #include "chunk.h"
 #include "dimension.h"
@@ -57,10 +59,13 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int32 hypertable_id;
 	Oid hypertable_relid;
 	Dimension hypertable_open_dimension;
+	int64 modification_time;
+	int64 minimum_invalidation_time; /* inclusive */
 
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
 
+	bool value_is_set;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
@@ -128,6 +133,7 @@ static inline void
 cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
+	int64 ignore_invalidation_older_than;
 	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
 	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
@@ -140,7 +146,15 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 		*open_dim_part_info = *cache_entry->hypertable_open_dimension.partitioning;
 		cache_entry->hypertable_open_dimension.partitioning = open_dim_part_info;
 	}
+	cache_entry->modification_time = ts_get_now_internal(&cache_entry->hypertable_open_dimension);
+	ignore_invalidation_older_than = ts_hypertable_get_max_ignore_invalidation_older_than(ht);
+	Assert(ignore_invalidation_older_than >= 0);
+	cache_entry->minimum_invalidation_time =
+		ts_continuous_aggs_get_minimum_invalidation_time(cache_entry->modification_time,
+														 ignore_invalidation_older_than);
+
 	cache_entry->previous_chunk_relid = InvalidOid;
+	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = PG_INT64_MAX;
 	cache_entry->greatest_modified_value = PG_INT64_MIN;
 	ts_cache_release(ht_cache);
@@ -166,6 +180,10 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 static inline void
 update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 {
+	if (timeval < cache_entry->minimum_invalidation_time)
+		return;
+
+	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
 		cache_entry->lowest_modified_value = timeval;
 	if (timeval > cache_entry->greatest_modified_value)
@@ -244,6 +262,10 @@ static void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 {
 	int64 liv;
+
+	if (!entry->value_is_set)
+		return;
+
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entires in
@@ -402,6 +424,9 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)] =
 		ObjectIdGetDatum(hypertable_id);
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_modification_time)] =
+		Int64GetDatum(entry->modification_time);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)] =
 		Int64GetDatum(entry->lowest_modified_value);

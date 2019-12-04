@@ -786,9 +786,9 @@ INSERT INTO continuous_agg_test_t VALUES
     ('2019-02-02 4:00 UTC', 1),
     ('2019-02-02 5:00 UTC', 1);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
- hypertable_id | lowest_modified_value | greatest_modified_value 
----------------+-----------------------+-------------------------
-             5 |      1549072800000000 |        1549083600000000
+ hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
+---------------+-------------------+-----------------------+-------------------------
+             5 |  1549090800000000 |      1549072800000000 |        1549083600000000
 (1 row)
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;

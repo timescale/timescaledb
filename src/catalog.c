@@ -213,6 +213,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY] = "continuous_agg_partial_view_schema_partial_view_name_key",
 			[CONTINUOUS_AGG_PKEY] = "continuous_agg_pkey",
 			[CONTINUOUS_AGG_USER_VIEW_SCHEMA_USER_VIEW_NAME_KEY] = "continuous_agg_user_view_schema_user_view_name_key",
+			[CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX] = "continuous_agg_raw_hypertable_id_idx"
 		},
 	},
 	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = {
@@ -704,6 +705,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			break;
 		case HYPERTABLE:
 		case DIMENSION:
+		case CONTINUOUS_AGG:
 			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;
