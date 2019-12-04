@@ -1,6 +1,21 @@
-Parsed test spec with 8 sessions
+Parsed test spec with 9 sessions
 
-starting permutation: LockCompleted LockMat1 Refresh1 Refresh2 UnlockCompleted UnlockMat1
+starting permutation: Setup2 LockCompleted LockMat1 Refresh1 Refresh2 UnlockCompleted UnlockMat1
+step Setup2: 
+    CREATE VIEW continuous_view_1( bkt, cnt)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), COUNT(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE VIEW continuous_view_2(bkt, maxl)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), max(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
+    BEGIN EXECUTE format( 'lock table %s', name);
+    END; $$ LANGUAGE plpgsql;
+
 step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE;
 step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
 
@@ -18,7 +33,22 @@ INFO:  new materialization range for public.ts_continuous_test (time column time
 INFO:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 30
 step Refresh1: <... completed>
 
-starting permutation: Refresh1 Refresh2 LockCompleted LockMat1 I1 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+starting permutation: Setup2 Refresh1 Refresh2 LockCompleted LockMat1 I1 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+step Setup2: 
+    CREATE VIEW continuous_view_1( bkt, cnt)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), COUNT(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE VIEW continuous_view_2(bkt, maxl)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), max(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
+    BEGIN EXECUTE format( 'lock table %s', name);
+    END; $$ LANGUAGE plpgsql;
+
 INFO:  new materialization range for public.ts_continuous_test (time column time) (30)
 INFO:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 30
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1;
@@ -51,7 +81,22 @@ bkt            maxl
 
 0              100            
 
-starting permutation: AlterLag1 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockCompleted LockMat1 I2 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+starting permutation: Setup2 AlterLag1 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockCompleted LockMat1 I2 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+step Setup2: 
+    CREATE VIEW continuous_view_1( bkt, cnt)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), COUNT(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE VIEW continuous_view_2(bkt, maxl)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours')
+        AS SELECT time_bucket('5', time), max(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
+    BEGIN EXECUTE format( 'lock table %s', name);
+    END; $$ LANGUAGE plpgsql;
+
 step AlterLag1: alter view continuous_view_1 set (timescaledb.refresh_lag = 10);
 INFO:  new materialization range for public.ts_continuous_test (time column time) (15)
 INFO:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 15
