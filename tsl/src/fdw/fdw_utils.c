@@ -11,22 +11,25 @@
 #include "fdw_utils.h"
 #include "fdw/relinfo.h"
 
-#ifdef TS_DEBUG
+#if TS_DEBUG
+
 /*
- * This is shallow Path copy that includes deep copy of few fields of interest for printing debug
- * information. Doing deep copy of Path seems to be a lot of work and we only need few fields
- * anyhow. Casting or doing any work with incomplete Path copy is unsafe and should be avoided as
- * there will be memory errors.
+ * Copy a path.
  *
- * Copied path is intended to only be used in debug.c.
+ * The returned path is a shallow copy that includes deep copies of a few
+ * fields of interest when printing debug information. Doing a deep copy of a
+ * Path is a lot of work so we only copy the fields we need.
  *
- * PostgreSQL function copyObject does not support copying Path(s) so we have our own copy function.
+ * The copied path is intended to be used only in debug.c.
+ *
+ * Note that PostgreSQL's copyObject does not support copying Path(s) so we
+ * have our own copy function.
  */
 static Path *
 copy_path(Path *in)
 {
-	Path *path_copy;
-	RelOptInfo *parent = palloc(sizeof(RelOptInfo));
+	Path *path;
+	RelOptInfo *parent = makeNode(RelOptInfo);
 
 	*parent = *in->parent;
 
@@ -34,56 +37,68 @@ copy_path(Path *in)
 	{
 		case T_CustomPath:
 		{
-			CustomPath *cp_copy = palloc(sizeof(CustomPath));
+			CustomPath *cp_copy = makeNode(CustomPath);
 			CustomPath *cp = castNode(CustomPath, in);
 			ListCell *lc;
-			cp_copy->custom_paths = NIL;
 
 			*cp_copy = *cp;
+			cp_copy->custom_paths = NIL;
+
 			foreach (lc, cp->custom_paths)
 			{
-				Path *p = lfirst_node(Path, lc);
-				Path *c = copy_path(p);
-				cp_copy->custom_paths = lappend(cp_copy->custom_paths, c);
+				Path *p = copy_path(lfirst_node(Path, lc));
+				cp_copy->custom_paths = lappend(cp_copy->custom_paths, p);
 			}
-			path_copy = (Path *) cp_copy;
+			path = &cp_copy->path;
 			break;
 		}
-
-		default:
+		case T_ForeignPath:
 		{
-			path_copy = palloc(sizeof(Path));
-			*path_copy = *in;
+			ForeignPath *fp = makeNode(ForeignPath);
+			*fp = *castNode(ForeignPath, in);
+			path = &fp->path;
+			break;
 		}
+		default:
+			/* Not supported */
+			Assert(false);
+			pg_unreachable();
+			return in;
 	}
-	path_copy->parent = parent;
 
-	return path_copy;
+	path->parent = parent;
+
+	return path;
 }
-#endif /* TS_DEBUG */
+
+static ConsideredPath *
+create_considered_path(Path *path)
+{
+	ConsideredPath *cp = palloc(sizeof(ConsideredPath));
+
+	cp->path = copy_path(path);
+	cp->origin = (uintptr_t) path;
+
+	return cp;
+}
 
 void
 fdw_utils_add_path(RelOptInfo *rel, Path *new_path)
 {
-#ifdef TS_DEBUG
 	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
-	Path *path_copy;
+	ConsideredPath *cp = create_considered_path(new_path);
 
 	/* Since add_path will deallocate thrown paths we need to create a copy here so we can print it
 	 * later on */
-	path_copy = copy_path(new_path);
-	fdw_info->considered_paths = lappend(fdw_info->considered_paths, path_copy);
-#endif
+	fdw_info->considered_paths = lappend(fdw_info->considered_paths, cp);
 	add_path(rel, new_path);
 }
 
-/*
- * Deallocate path copy
- */
-void
-fdw_utils_free_path(Path *path)
+static void
+free_path(Path *path)
 {
 	pfree(path->parent);
+
 	if (nodeTag(path) == T_CustomPath)
 	{
 		CustomPath *cp = (CustomPath *) path;
@@ -93,8 +108,20 @@ fdw_utils_free_path(Path *path)
 		{
 			Path *p = lfirst(lc);
 			cp->custom_paths = list_delete_ptr(cp->custom_paths, p);
-			fdw_utils_free_path(p);
+			free_path(p);
 		}
 	}
 	pfree(path);
 }
+
+/*
+ * Deallocate path copy
+ */
+void
+fdw_utils_free_path(ConsideredPath *cpath)
+{
+	free_path(cpath->path);
+	pfree(cpath);
+}
+
+#endif /* TS_DEBUG */

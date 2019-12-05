@@ -37,9 +37,9 @@
 #include <postgres.h>
 #include <foreign/fdwapi.h>
 
-#include "compat.h"
 #include <access/printtup.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/pg_list.h>
 #include <optimizer/clauses.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
@@ -49,11 +49,14 @@
 #endif
 #include <nodes/extensible.h>
 
+#include <compat.h>
+#include "fdw/relinfo.h"
+#include "fdw/fdw_utils.h"
 #include "debug.h"
 
-static void appendExpr(StringInfo buf, const Node *expr, const List *rtable);
-static void tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist,
-									  int indent);
+static void append_expr(StringInfo buf, const Node *expr, const List *rtable);
+static void tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int indent,
+									  bool isconsidered);
 
 static const char *reloptkind_name[] = {
 	[RELOPT_BASEREL] = "BASEREL",
@@ -81,12 +84,14 @@ static const char *upperrel_stage_name[] = {
 	[UPPERREL_FINAL] = "FINAL",
 };
 
-static const char *rel_types[] = { [TS_FDW_RELINFO_HYPERTABLE_DATA_NODE] = "DATA_NODE",
-								   [TS_FDW_RELINFO_HYPERTABLE] = "HYPERTABLE",
-								   [TS_FDW_RELINFO_FOREIGN_TABLE] = "FOREIGN_TABLE" };
+static const char *fdw_rel_type_names[] = {
+	[TS_FDW_RELINFO_HYPERTABLE_DATA_NODE] = "DATA_NODE",
+	[TS_FDW_RELINFO_HYPERTABLE] = "HYPERTABLE",
+	[TS_FDW_RELINFO_FOREIGN_TABLE] = "FOREIGN_TABLE",
+};
 
 static void
-appendVarExpr(StringInfo buf, const Node *expr, const List *rtable)
+append_var_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	const Var *var = (const Var *) expr;
 	char *relname, *attname;
@@ -120,7 +125,7 @@ appendVarExpr(StringInfo buf, const Node *expr, const List *rtable)
 }
 
 static void
-appendConstExpr(StringInfo buf, const Node *expr, const List *rtable)
+append_const_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	const Const *c = (const Const *) expr;
 	Oid typoutput;
@@ -141,25 +146,25 @@ appendConstExpr(StringInfo buf, const Node *expr, const List *rtable)
 }
 
 static void
-appendOpExpr(StringInfo buf, const Node *expr, const List *rtable)
+append_op_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	const OpExpr *e = (const OpExpr *) expr;
 	char *opname = get_opname(e->opno);
 	if (list_length(e->args) > 1)
 	{
-		appendExpr(buf, get_leftop((const Expr *) e), rtable);
+		append_expr(buf, get_leftop((const Expr *) e), rtable);
 		appendStringInfo(buf, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
-		appendExpr(buf, get_rightop((const Expr *) e), rtable);
+		append_expr(buf, get_rightop((const Expr *) e), rtable);
 	}
 	else
 	{
 		appendStringInfo(buf, "%s ", ((opname != NULL) ? opname : "(invalid operator)"));
-		appendExpr(buf, get_leftop((const Expr *) e), rtable);
+		append_expr(buf, get_leftop((const Expr *) e), rtable);
 	}
 }
 
 static void
-appendFuncExpr(StringInfo buf, const Node *expr, const List *rtable)
+append_func_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	const FuncExpr *e = (const FuncExpr *) expr;
 	char *funcname = get_func_name(e->funcid);
@@ -168,7 +173,7 @@ appendFuncExpr(StringInfo buf, const Node *expr, const List *rtable)
 	appendStringInfo(buf, "%s(", ((funcname != NULL) ? funcname : "(invalid function)"));
 	foreach (l, e->args)
 	{
-		appendExpr(buf, lfirst(l), rtable);
+		append_expr(buf, lfirst(l), rtable);
 		if (lnext(l))
 			appendStringInfoString(buf, ", ");
 	}
@@ -176,7 +181,7 @@ appendFuncExpr(StringInfo buf, const Node *expr, const List *rtable)
 }
 
 static void
-appendExpr(StringInfo buf, const Node *expr, const List *rtable)
+append_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	if (expr == NULL)
 	{
@@ -187,19 +192,19 @@ appendExpr(StringInfo buf, const Node *expr, const List *rtable)
 	switch (nodeTag(expr))
 	{
 		case T_Var:
-			appendVarExpr(buf, expr, rtable);
+			append_var_expr(buf, expr, rtable);
 			break;
 
 		case T_Const:
-			appendConstExpr(buf, expr, rtable);
+			append_const_expr(buf, expr, rtable);
 			break;
 
 		case T_OpExpr:
-			appendOpExpr(buf, expr, rtable);
+			append_op_expr(buf, expr, rtable);
 			break;
 
 		case T_FuncExpr:
-			appendFuncExpr(buf, expr, rtable);
+			append_func_expr(buf, expr, rtable);
 			break;
 
 		default:
@@ -209,7 +214,7 @@ appendExpr(StringInfo buf, const Node *expr, const List *rtable)
 }
 
 static void
-appendRestrictClauses(StringInfo buf, PlannerInfo *root, List *clauses)
+append_restrict_clauses(StringInfo buf, PlannerInfo *root, List *clauses)
 {
 	ListCell *cell;
 
@@ -217,14 +222,14 @@ appendRestrictClauses(StringInfo buf, PlannerInfo *root, List *clauses)
 	{
 		RestrictInfo *c = lfirst(cell);
 
-		appendExpr(buf, (Node *) c->clause, root->parse->rtable);
+		append_expr(buf, (Node *) c->clause, root->parse->rtable);
 		if (lnext(cell))
 			appendStringInfoString(buf, ", ");
 	}
 }
 
 static void
-appendRelids(StringInfo buf, PlannerInfo *root, Relids relids)
+append_relids(StringInfo buf, PlannerInfo *root, Relids relids)
 {
 	int x = -1;
 	bool first = true;
@@ -242,7 +247,7 @@ appendRelids(StringInfo buf, PlannerInfo *root, Relids relids)
 }
 
 static void
-appendPathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
+append_pathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
 {
 	const ListCell *i;
 
@@ -268,13 +273,53 @@ appendPathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
 				first = false;
 			else
 				appendStringInfoString(buf, ", ");
-			appendExpr(buf, (Node *) mem->em_expr, rtable);
+			append_expr(buf, (Node *) mem->em_expr, rtable);
 		}
 		appendStringInfoChar(buf, ')');
 		if (lnext(i))
 			appendStringInfoString(buf, ", ");
 	}
 	appendStringInfoChar(buf, ')');
+}
+
+/*
+ * Return a relation's name.
+ *
+ * This function guarantees the return of a valid name string for a
+ * relation. For relations that have no unique name we return "-".
+ */
+static const char *
+get_relation_name(PlannerInfo *root, RelOptInfo *rel)
+{
+	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
+
+	if (NULL != fdw_info)
+		return fdw_info->relation_name->data;
+
+	if (rel->reloptkind == RELOPT_BASEREL)
+	{
+		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+		return get_rel_name(rte->relid);
+	}
+
+	return "-";
+}
+
+/*
+ * Return a string name for the FDW type of a relation.
+ *
+ * For relations that are not an FDW relation we simply return "-".
+ */
+static const char *
+get_fdw_relation_typename(RelOptInfo *rel)
+{
+	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
+
+	if (NULL != fdw_info)
+		return fdw_rel_type_names[fdw_info->type];
+
+	return "-";
 }
 
 static void
@@ -466,20 +511,19 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 
 	if (path->parent)
 	{
-		TsFdwRelInfo *fdw_info = fdw_relinfo_get(path->parent);
 		appendStringInfo(buf,
 						 " [rel type: %s, kind: %s",
-						 rel_types[fdw_info->type],
+						 get_fdw_relation_typename(path->parent),
 						 reloptkind_name[path->parent->reloptkind]);
 		appendStringInfoString(buf, ", parent's base rels: ");
-		appendRelids(buf, root, path->parent->relids);
+		append_relids(buf, root, path->parent->relids);
 		appendStringInfoChar(buf, ']');
 	}
 
 	if (path->param_info)
 	{
 		appendStringInfoString(buf, " required_outer (");
-		appendRelids(buf, root, path->param_info->ppi_req_outer);
+		append_relids(buf, root, path->param_info->ppi_req_outer);
 		appendStringInfoChar(buf, ')');
 	}
 
@@ -488,7 +532,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 	if (path->pathkeys)
 	{
 		appendStringInfoString(buf, " with pathkeys: ");
-		appendPathkeys(buf, path->pathkeys, root->parse->rtable);
+		append_pathkeys(buf, path->pathkeys, root->parse->rtable);
 	}
 
 	appendStringInfoString(buf, "\n");
@@ -500,7 +544,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 		for (i = 0; i < indent; i++)
 			appendStringInfoString(buf, "\t");
 		appendStringInfoString(buf, "  clauses: ");
-		appendRestrictClauses(buf, root, jp->joinrestrictinfo);
+		append_restrict_clauses(buf, root, jp->joinrestrictinfo);
 		appendStringInfoString(buf, "\n");
 
 		if (IsA(path, MergePath))
@@ -523,52 +567,106 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 	if (subpath)
 		tsl_debug_append_path(buf, root, subpath, indent + 1);
 	if (subpath_list)
-		tsl_debug_append_pathlist(buf, root, subpath_list, indent + 1);
+		tsl_debug_append_pathlist(buf, root, subpath_list, indent + 1, false);
 }
 
 static void
-tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int indent)
+tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int indent,
+						  bool isconsidered)
 {
 	ListCell *cell;
 	foreach (cell, pathlist)
-		tsl_debug_append_path(buf, root, lfirst(cell), indent);
+	{
+		Path *path = isconsidered ? ((ConsideredPath *) lfirst(cell))->path : lfirst(cell);
+		tsl_debug_append_path(buf, root, path, indent);
+	}
+}
+
+/*
+ * Check whether a path is the origin of a considered path.
+ *
+ * It is not possible to do a simple memcmp() of paths here because a path
+ * could be a (semi-)shallow copy. Therefore we use the origin of the
+ * ConsideredPath object.
+ */
+static bool
+path_is_origin(const Path *p1, const ConsideredPath *p2)
+{
+	return p2->origin == (uintptr_t) p1;
+}
+
+/*
+ * Print paths that were pruned during planning.
+ *
+ * The pruned paths are those that have been considered but are not in the
+ * rel's pathlist.
+ */
+static void
+tsl_debug_append_pruned_pathlist(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, int indent)
+{
+	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
+	ListCell *lc1;
+
+	if (NULL == fdw_info || fdw_info->considered_paths == NIL)
+		return;
+
+	foreach (lc1, rel->pathlist)
+	{
+		Path *p1 = (Path *) lfirst(lc1);
+		ListCell *lc2, *prev = NULL;
+
+		foreach (lc2, fdw_info->considered_paths)
+		{
+			ConsideredPath *p2 = (ConsideredPath *) lfirst(lc2);
+
+			if (path_is_origin(p1, p2))
+			{
+				fdw_info->considered_paths =
+					list_delete_cell(fdw_info->considered_paths, lc2, prev);
+				fdw_utils_free_path(p2);
+				break;
+			}
+			prev = lc2;
+		}
+	}
+
+	if (fdw_info->considered_paths == NIL)
+		return;
+
+	appendStringInfoString(buf, "Pruned paths:\n");
+	tsl_debug_append_pathlist(buf, root, fdw_info->considered_paths, indent, true);
+
+	foreach (lc1, fdw_info->considered_paths)
+		fdw_utils_free_path(lfirst(lc1));
+
+	fdw_info->considered_paths = NIL;
 }
 
 void
 tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel, UpperRelationKind *upper_stage)
 {
 	StringInfo buf = makeStringInfo();
-	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
 
 	if (upper_stage != NULL)
 		appendStringInfo(buf, "Upper rel stage %s:\n", upperrel_stage_name[*upper_stage]);
 
 	appendStringInfo(buf,
 					 "RELOPTINFO [rel name: %s, type: %s, kind: %s, base rel names: ",
-					 fdw_info->relation_name->data,
-					 rel_types[fdw_info->type],
+					 get_relation_name(root, rel),
+					 get_fdw_relation_typename(rel),
 					 reloptkind_name[rel->reloptkind]);
-	appendRelids(buf, root, rel->relids);
+	append_relids(buf, root, rel->relids);
 	appendStringInfoChar(buf, ']');
 	appendStringInfo(buf, " rows=%.0f width=%d\n", rel->rows, rel->reltarget->width);
 
 	appendStringInfoString(buf, "Path list:\n");
-	tsl_debug_append_pathlist(buf, root, rel->pathlist, 1);
-
-	if (list_length(fdw_info->considered_paths) > 0)
-	{
-		ListCell *cell;
-		appendStringInfoString(buf, "Considered paths:\n");
-		tsl_debug_append_pathlist(buf, root, fdw_info->considered_paths, 1);
-
-		foreach (cell, fdw_info->considered_paths)
-			fdw_utils_free_path(lfirst(cell));
-	}
+	tsl_debug_append_pathlist(buf, root, rel->pathlist, 1, false);
+	tsl_debug_append_pruned_pathlist(buf, root, rel, 1);
 
 	if (rel->cheapest_parameterized_paths)
 	{
 		appendStringInfoString(buf, "\nCheapest parameterized paths:\n");
-		tsl_debug_append_pathlist(buf, root, rel->cheapest_parameterized_paths, 1);
+		tsl_debug_append_pathlist(buf, root, rel->cheapest_parameterized_paths, 1, false);
 	}
 
 	if (rel->cheapest_startup_path)
