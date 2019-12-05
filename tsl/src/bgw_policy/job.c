@@ -13,6 +13,7 @@
 #include <utils/lsyscache.h>
 #include <hypertable_cache.h>
 #include <utils/snapmgr.h>
+#include <continuous_agg.h>
 
 #include "bgw/timer.h"
 #include "bgw/job.h"
@@ -194,7 +195,7 @@ execute_drop_chunks_policy(int32 job_id)
 				 errmsg("could not run drop_chunks policy #%d because no args in policy table",
 						job_id)));
 
-	table_relid = ts_hypertable_id_to_relid(args->fd.hypertable_id);
+	table_relid = ts_hypertable_id_to_relid(args->hypertable_id);
 	hcache = ts_hypertable_cache_pin();
 	hypertable = ts_hypertable_cache_get_entry(hcache, table_relid);
 	/* First verify that the hypertable corresponds to a valid table */
@@ -207,12 +208,12 @@ execute_drop_chunks_policy(int32 job_id)
 
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
 	ts_chunk_do_drop_chunks(table_relid,
-							ts_interval_subtract_from_now(&args->fd.older_than, open_dim),
+							ts_interval_subtract_from_now(&args->older_than, open_dim),
 							(Datum) 0,
 							ts_dimension_get_partition_type(open_dim),
 							InvalidOid,
-							args->fd.cascade,
-							args->fd.cascade_to_materializations,
+							args->cascade,
+							args->cascade_to_materializations,
 							LOG);
 
 	ts_cache_release(hcache);
@@ -232,6 +233,7 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 	bool started = false;
 	int32 materialization_id;
 	bool finshed_all_materialization;
+	ContinuousAggMatOptions mat_options;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -246,7 +248,13 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 	CommitTransactionCommand();
 
 	/* always materialize verbosely for now */
-	finshed_all_materialization = continuous_agg_materialize(materialization_id, true);
+	mat_options = (ContinuousAggMatOptions){
+		.verbose = true,
+		.within_single_transaction = false,
+		.process_only_invalidation = false,
+		.invalidate_prior_to_time = PG_INT64_MAX,
+	};
+	finshed_all_materialization = continuous_agg_materialize(materialization_id, &mat_options);
 
 	StartTransactionCommand();
 

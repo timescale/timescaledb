@@ -61,6 +61,7 @@ static bool ranges_overlap(InternalTimeRange invalidation_range,
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
 static bool range_expand_right(InternalTimeRange *range, const InternalTimeRange to_cover,
 							   int64 max_length, int64 bucket_width);
+static void range_clamp_end(InternalTimeRange *range, int64 end_value, int64 bucket_width);
 static void range_check(const InternalTimeRange range, int64 bucket_width);
 static int64 range_length(const InternalTimeRange range);
 static bool range_cut_invalidation_entry_left(const InternalTimeRange invalidation_range_knife,
@@ -87,13 +88,14 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 static InternalTimeRange materialization_invalidation_log_get_range(int32 materialization_id,
 																	Oid type, int64 bucket_width,
 																	int64 max_interval_per_job,
-																	int64 completed_threshold);
+																	int64 completed_threshold,
+																	int64 invalidate_prior_to_time);
 static void materialization_invalidation_log_delete_or_cut(int32 cagg_id,
 														   InternalTimeRange invalidation_range,
 														   int64 completed_threshold);
-/* must be called without a transaction started */
+/* must be called without a transaction started if !options->within_single_transaction */
 bool
-continuous_agg_materialize(int32 materialization_id, bool verbose)
+continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *options)
 {
 	Hypertable *raw_hypertable;
 	Oid raw_table_oid;
@@ -120,14 +122,25 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	List *invalidations = NIL;
 	int64 completed_threshold;
 
+	/* validate the options */
+	if (options->within_single_transaction)
+	{
+		/* if not using multiple txns, should not change the invalidation
+		 * threshold and thus cannot only do invalidations */
+		Assert(options->process_only_invalidation);
+	}
+
 	/*
 	 * Transaction 1: a) copy the invalidation logs and then
 	 *                b) discover the new range in the raw table we will materialize
 	 *                and update the invalidation threshold to it, if needed
 	 */
-	StartTransactionCommand();
-	/* we need a snapshot for the SPI commands in get_materialization_end_point_for_table */
-	PushActiveSnapshot(GetTransactionSnapshot());
+	if (!options->within_single_transaction)
+	{
+		StartTransactionCommand();
+		/* we need a snapshot for the SPI commands in get_materialization_end_point_for_table */
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
 
 	cagg = get_continuous_agg(materialization_id);
 	if (cagg == NULL)
@@ -195,19 +208,23 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 											 invalidations,
 											 materialization_invalidation_log_table_relation);
 
-	completed_threshold = continuous_agg_completed_threshold_get(materialization_id);
+	completed_threshold = ts_continuous_agg_get_completed_threshold(materialization_id);
 
 	/* decide on the invalidation and new materialization ranges */
-	invalidation_range = materialization_invalidation_log_get_range(materialization_id,
-																	time_column_type,
-																	cagg_data.bucket_width,
-																	cagg_data.max_interval_per_job,
-																	completed_threshold);
+	invalidation_range =
+		materialization_invalidation_log_get_range(materialization_id,
+												   time_column_type,
+												   cagg_data.bucket_width,
+												   cagg_data.max_interval_per_job,
+												   completed_threshold,
+												   options->invalidate_prior_to_time);
 
 	if (range_length(invalidation_range) >= cagg_data.max_interval_per_job)
+		truncated_materialization = true;
+
+	if (options->process_only_invalidation || truncated_materialization)
 	{
 		materializing_new_range = false;
-		truncated_materialization = true;
 		materialization_invalidation_threshold = completed_threshold;
 	}
 	else
@@ -222,10 +239,10 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 													completed_threshold,
 													&materializing_new_range,
 													&truncated_materialization,
-													verbose);
+													options->verbose);
 	}
 
-	if (verbose)
+	if (options->verbose)
 	{
 		StringInfo msg = makeStringInfo();
 		appendStringInfo(msg,
@@ -256,17 +273,24 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	}
 
 	relation_close(materialization_invalidation_log_table_relation, NoLock);
-	PopActiveSnapshot();
-	CommitTransactionCommand();
+
+	if (!options->within_single_transaction)
+	{
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
 
 	/*
 	 * Transaction 2:
 	 *                run the materialization, and update completed_threshold
 	 * read per-cagg log for materialization
 	 */
-	StartTransactionCommand();
-	/* we need a snapshot for the SPI commands within continuous_agg_execute_materialization */
-	PushActiveSnapshot(GetTransactionSnapshot());
+	if (!options->within_single_transaction)
+	{
+		StartTransactionCommand();
+		/* we need a snapshot for the SPI commands within continuous_agg_execute_materialization */
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
 
 	/* adjust the materialization invalidation log to delete or cut any entries that
 	 * will be processed in the invalidation range. This must occur in the second transaction
@@ -277,7 +301,7 @@ continuous_agg_materialize(int32 materialization_id, bool verbose)
 	/* if there's nothing to materialize, don't bother with the rest */
 	if (!materializing_new_range && range_length(invalidation_range) == 0)
 	{
-		if (verbose)
+		if (options->verbose)
 			elog(INFO,
 				 "materializing continuous aggregate %s.%s: no new range to materialize or "
 				 "invalidations found, exiting early",
@@ -306,8 +330,12 @@ finish:
 	UnlockRelationIdForSession(&partial_view_lock_relid, ShareRowExclusiveLock);
 	UnlockRelationIdForSession(&materialization_lock_relid, ShareRowExclusiveLock);
 	UnlockRelationIdForSession(&raw_lock_relid, AccessShareLock);
-	PopActiveSnapshot();
-	CommitTransactionCommand();
+
+	if (!options->within_single_transaction)
+	{
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
 
 	return !truncated_materialization;
 }
@@ -577,7 +605,8 @@ drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out)
 
 static InternalTimeRange
 materialization_invalidation_log_get_range(int32 materialization_id, Oid type, int64 bucket_width,
-										   int64 max_interval_per_job, int64 completed_threshold)
+										   int64 max_interval_per_job, int64 completed_threshold,
+										   int64 invalidate_prior_to_time)
 {
 	bool found = false;
 	InternalTimeRange invalidation_range;
@@ -620,11 +649,32 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 		if (entry_range.start >= completed_threshold)
 			break;
 
-		/* pin the end to the completed threshold; the completion threshold is already bucketted.
+		/* clamp the end to the completed threshold; the completion threshold is already bucketed.
 		 * This also guarantees
-		 * that entry_range.end is bucketted even if it is saturated in the add above. */
+		 * that entry_range.end is bucketed even if it is saturated in the add above. */
+		range_clamp_end(&entry_range, completed_threshold, bucket_width);
+
+		/* if invalidate_prior_to_time is set that means invalidations should process buckets cover
+		 * all points up to but excluding invalidate_prior_to_time. The last bucket should cover
+		 * those points and is allowed to go over. */
+		if (invalidate_prior_to_time != PG_INT64_MAX)
+		{
+			int64 prior_to_time_bucketed =
+				ts_time_bucket_by_type(bucket_width, invalidate_prior_to_time, type);
+			/* the last bucket should cover prior_to_time */
+			if (prior_to_time_bucketed != invalidate_prior_to_time)
+				prior_to_time_bucketed = int64_saturating_add(prior_to_time_bucketed, bucket_width);
+
+			Assert(prior_to_time_bucketed >= invalidate_prior_to_time);
+
+			range_clamp_end(&entry_range, prior_to_time_bucketed, bucket_width);
+		}
+
 		if (entry_range.end > completed_threshold)
 			entry_range.end = completed_threshold;
+
+		if (range_length(entry_range) == 0)
+			continue;
 
 		if (!found)
 		{
@@ -708,7 +758,7 @@ materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange 
 				invalidation_form->greatest_modified_value =
 					int64_saturating_sub(completed_threshold, 1);
 				modify_entry = true;
-				/* delete the entry if the above modification made it length <= 0*/
+				/* delete the entry if the above modification made it length <= 0 */
 				delete_entry = (invalidation_form->lowest_modified_value >
 								invalidation_form->greatest_modified_value);
 			}
@@ -842,7 +892,7 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 		ts_dimension_get_partition_type(hyperspace_get_open_dimension(raw_table->space, 0));
 	InternalTimeRange new_materialization_range = {
 		.type = time_col_type,
-		.start = continuous_agg_completed_threshold_get(materialization_id),
+		.start = ts_continuous_agg_get_completed_threshold(materialization_id),
 		.end = materialization_invalidation_threshold,
 	};
 	InternalTimeRange new_invalidation_range = {
@@ -1032,14 +1082,6 @@ invalidation_threshold_get(int32 hypertable_id)
 	return threshold;
 }
 
-static ScanTupleResult
-completed_threshold_tuple_found(TupleInfo *ti, void *data)
-{
-	int64 *threshold = data;
-	*threshold = ((Form_continuous_aggs_completed_threshold) GETSTRUCT(ti->tuple))->watermark;
-	return SCAN_CONTINUE;
-}
-
 void
 update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
 						Name time_column_name, InternalTimeRange new_materialization_range,
@@ -1161,6 +1203,29 @@ range_expand_right(InternalTimeRange *range, const InternalTimeRange to_cover, i
 		return true;
 	}
 	return false;
+}
+
+static void
+range_clamp_end(InternalTimeRange *range, int64 clamp_end, int64 bucket_width)
+{
+	if (clamp_end == PG_INT64_MAX)
+		return;
+
+	/* the end value has to be bucketed, we don't bucket here since sometimes you want to round down
+	 * or round up and the caller should decide. */
+	Assert(clamp_end == ts_time_bucket_by_type(bucket_width, clamp_end, range->type));
+	if (clamp_end < range->start)
+	{
+		/* make an empty range */
+		range->start = clamp_end;
+		range->end = clamp_end;
+		Assert(range_length(*range) == 0);
+	}
+	else if (range->end > clamp_end)
+	{
+		range->end = clamp_end;
+	}
+	range_check(*range, bucket_width);
 }
 
 static bool
@@ -1398,30 +1463,4 @@ continuous_aggs_completed_threshold_set(int32 materialization_id, int64 complete
 		ts_catalog_insert_values(rel, desc, values, nulls);
 		relation_close(rel, NoLock);
 	}
-}
-
-/* The completion threshold is exclusive (everything less than it has been materialized) */
-int64
-continuous_agg_completed_threshold_get(int32 materialization_id)
-{
-	int64 threshold = 0;
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_completed_threshold_pkey_materialization_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(materialization_id));
-
-	if (!ts_catalog_scan_one(CONTINUOUS_AGGS_COMPLETED_THRESHOLD /*=table*/,
-							 CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY /*=indexid*/,
-							 scankey /*=scankey*/,
-							 1 /*=num_keys*/,
-							 completed_threshold_tuple_found /*=tuple_found*/,
-							 AccessShareLock /*=lockmode*/,
-							 CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME /*=table_name*/,
-							 &threshold /*=data*/))
-		return PG_INT64_MIN;
-
-	return threshold;
 }

@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <nodes/pg_list.h>
+#include "continuous_agg.h"
 
 typedef struct SchemaAndName
 {
@@ -24,8 +25,7 @@ typedef struct Invalidation
 } Invalidation;
 
 int64 invalidation_threshold_get(int32 raw_hypertable_id);
-int64 continuous_agg_completed_threshold_get(int32 materialization_id);
-bool continuous_agg_materialize(int32 materialization_id, bool verbose);
+bool continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *options);
 void continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 											int32 materialization_id, SchemaAndName partial_view,
 											int64 invalidation_range_start,

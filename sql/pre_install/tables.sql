@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
     hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
 	cascade					    BOOLEAN                 NOT NULL,
-    cascade_to_materializations BOOLEAN                 NOT NULL,
+    cascade_to_materializations BOOLEAN,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_completed_thresh
     materialization_id INTEGER PRIMARY KEY
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
         ON DELETE CASCADE,
-    watermark BIGINT NOT NULL
+    watermark BIGINT NOT NULL --exclusive (everything up to but not including watermark is done)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_completed_threshold', '');
 

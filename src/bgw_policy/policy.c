@@ -27,7 +27,7 @@ ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id)
 	policy = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable_id);
 
 	if (policy)
-		ts_bgw_job_delete_by_id(((BgwPolicyDropChunks *) policy)->fd.job_id);
+		ts_bgw_job_delete_by_id(((BgwPolicyDropChunks *) policy)->job_id);
 }
 
 /* This function does NOT cascade deletes to the bgw_job table. */

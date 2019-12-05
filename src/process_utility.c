@@ -2958,6 +2958,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	NameData view_name;
 	NameData view_schema;
 	bool cagg_fullrange;
+	ContinuousAggMatOptions mat_options;
 
 	if (!OidIsValid(view_relid))
 		return false;
@@ -2995,7 +2996,13 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
-	cagg_fullrange = ts_cm_functions->continuous_agg_materialize(materialization_id, true);
+	mat_options = (ContinuousAggMatOptions){
+		.verbose = true,
+		.within_single_transaction = false,
+		.process_only_invalidation = false,
+		.invalidate_prior_to_time = PG_INT64_MAX,
+	};
+	cagg_fullrange = ts_cm_functions->continuous_agg_materialize(materialization_id, &mat_options);
 	if (!cagg_fullrange)
 	{
 		elog(WARNING,

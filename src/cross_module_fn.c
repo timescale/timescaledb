@@ -290,7 +290,7 @@ bgw_policy_job_execute_default_fn(BgwJob *job)
 }
 
 static bool
-cagg_materialize_default_fn(int32 materialization_id, bool verbose)
+cagg_materialize_default_fn(int32 materialization_id, ContinuousAggMatOptions *options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();

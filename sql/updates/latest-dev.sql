@@ -78,3 +78,8 @@ DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 GRANT SELECT ON  _timescaledb_catalog.continuous_aggs_materialization_invalidation_log TO PUBLIC;
+
+ALTER TABLE _timescaledb_config.bgw_policy_drop_chunks ALTER COLUMN cascade_to_materializations DROP NOT NULL;
+
+UPDATE _timescaledb_config.bgw_policy_drop_chunks SET cascade_to_materializations = NULL WHERE cascade_to_materializations = false;
+

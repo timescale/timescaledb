@@ -90,8 +90,8 @@ ts_interval_from_tuple(Datum interval)
  * represent an interval on hypertable with oid `relid`
  */
 FormData_ts_interval *
-ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, char *parameter_name,
-						   char *caller_name)
+ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const char *parameter_name,
+						   const char *caller_name)
 {
 	Hypertable *hypertable;
 	Cache *hcache;

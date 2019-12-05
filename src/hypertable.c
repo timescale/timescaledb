@@ -439,7 +439,7 @@ ts_hypertable_get_max_ignore_invalidation_older_than(Hypertable *ht)
 {
 	if (ht->max_ignore_invalidation_older_than < 0)
 		ht->max_ignore_invalidation_older_than =
-			ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id);
+			ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, NULL);
 
 	Assert(ht->max_ignore_invalidation_older_than >= 0);
 	return ht->max_ignore_invalidation_older_than;
