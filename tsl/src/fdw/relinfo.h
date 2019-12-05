@@ -37,6 +37,16 @@ typedef enum
 	TS_FDW_RELINFO_FOREIGN_TABLE,
 } TsFdwRelInfoType;
 
+#if TS_DEBUG
+/* A path considered during planning but which may have been pruned. Used for
+ * debugging purposes. */
+typedef struct ConsideredPath
+{
+	Path *path;
+	uintptr_t origin; /* The pointer value of the original path */
+} ConsideredPath;
+#endif /* TS_DEBUG */
+
 typedef struct TsFdwRelInfo
 {
 	TsFdwRelInfoType type;
@@ -120,8 +130,12 @@ typedef struct TsFdwRelInfo
 	 */
 	int relation_index;
 	DataNodeChunkAssignment *sca;
-	List *considered_paths; /* shell copies of all the paths that planner has considered. This is
-							   intended to be only used for printing cost debug output */
+#if TS_DEBUG
+	List *considered_paths; /* List of ConsideredPath objects of all the paths
+							   that planner has considered. This is intended
+							   to be only used for printing cost debug
+							   output */
+#endif
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
