@@ -14,8 +14,8 @@
 TSDLLEXPORT FormData_ts_interval *ts_interval_from_tuple(Datum ts_interval_datum);
 TSDLLEXPORT FormData_ts_interval *ts_interval_from_sql_input(Oid relid, Datum interval,
 															 Oid interval_type,
-															 char *parameter_name,
-															 char *caller_name);
+															 const char *parameter_name,
+															 const char *caller_name);
 TSDLLEXPORT HeapTuple ts_interval_form_heaptuple(FormData_ts_interval *invl);
 TSDLLEXPORT bool ts_interval_equal(FormData_ts_interval *invl1, FormData_ts_interval *invl2);
 TSDLLEXPORT void ts_interval_now_func_validate(Oid now_func_oid, Oid open_dim_type);

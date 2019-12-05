@@ -167,6 +167,27 @@ number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 	return count;
 }
 
+TSDLLEXPORT
+int64
+ts_continuous_agg_get_completed_threshold(int32 materialization_id)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
+													AccessShareLock,
+													CurrentMemoryContext);
+	int64 threshold = PG_INT64_MIN;
+	int count = 0;
+
+	init_completed_threshold_scan_by_mat_id(&iterator, materialization_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		threshold = ((Form_continuous_aggs_completed_threshold) GETSTRUCT(ti->tuple))->watermark;
+		count++;
+	}
+	Assert(count <= 1);
+	return threshold;
+}
+
 static void
 completed_threshold_delete(int32 materialization_id)
 {
@@ -288,7 +309,8 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 }
 
 TSDLLEXPORT int64
-ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id)
+ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id,
+													  FormData_continuous_agg *entry)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
@@ -297,14 +319,40 @@ ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id)
 	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		Form_continuous_agg data =
-			(Form_continuous_agg) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
 
 		if (ignore_invalidation_older_than < data->ignore_invalidation_older_than)
 			ignore_invalidation_older_than = data->ignore_invalidation_older_than;
+		if (entry != NULL)
+			memcpy(entry, data, sizeof(*entry));
 	}
 
 	return ignore_invalidation_older_than;
+}
+
+TSDLLEXPORT int64
+ts_continuous_aggs_min_completed_threshold(int32 raw_hypertable_id, FormData_continuous_agg *entry)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	int64 min_threshold = PG_INT64_MAX;
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		int64 completed_threshold =
+			ts_continuous_agg_get_completed_threshold(data->mat_hypertable_id);
+
+		if (min_threshold > completed_threshold)
+			min_threshold = completed_threshold;
+		if (entry != NULL)
+			memcpy(entry, data, sizeof(*entry));
+	}
+
+	return min_threshold;
 }
 
 /* returns the inclusive value for the minimum time to invalidate */

@@ -35,26 +35,30 @@ bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 
 	*policy = MemoryContextAllocZero(ti->mctx, sizeof(BgwPolicyDropChunks));
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)]);
-	(*policy)->fd.job_id =
+	(*policy)->job_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)]);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)]);
-	(*policy)->fd.hypertable_id =
+	(*policy)->hypertable_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)]);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
 
-	(*policy)->fd.older_than = *ts_interval_from_tuple(
+	(*policy)->older_than = *ts_interval_from_tuple(
 		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
-	(*policy)->fd.cascade =
+	(*policy)->cascade =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
 
-	Assert(
-		!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)]);
-	(*policy)->fd.cascade_to_materializations = DatumGetBool(
-		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)]);
+	if (nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)])
+		(*policy)->cascade_to_materializations = CASCADE_TO_MATERIALIZATION_UNKNOWN;
+	else
+		(*policy)->cascade_to_materializations =
+			(DatumGetBool(values[AttrNumberGetAttrOffset(
+				 Anum_bgw_policy_drop_chunks_cascade_to_materializations)]) ?
+				 CASCADE_TO_MATERIALIZATION_TRUE :
+				 CASCADE_TO_MATERIALIZATION_FALSE);
 
 	return SCAN_CONTINUE;
 }
@@ -145,19 +149,29 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 	tupdesc = RelationGetDescr(rel);
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)] =
-		Int32GetDatum(policy->fd.job_id);
+		Int32GetDatum(policy->job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_hypertable_id)] =
-		Int32GetDatum(policy->fd.hypertable_id);
+		Int32GetDatum(policy->hypertable_id);
 
-	ht_older_than = ts_interval_form_heaptuple(&policy->fd.older_than);
+	ht_older_than = ts_interval_form_heaptuple(&policy->older_than);
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)] =
 		HeapTupleGetDatum(ht_older_than);
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)] =
-		BoolGetDatum(policy->fd.cascade);
-	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
-		BoolGetDatum(policy->fd.cascade_to_materializations);
+		BoolGetDatum(policy->cascade);
+	if (policy->cascade_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
+			true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
+			BoolGetDatum((policy->cascade_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE ?
+							  true :
+							  false));
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);

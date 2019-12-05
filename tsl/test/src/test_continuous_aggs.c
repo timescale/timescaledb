@@ -13,6 +13,7 @@
 #include <hypertable_cache.h>
 #include <utils.h>
 #include <time_bucket.h>
+#include <continuous_agg.h>
 
 TS_FUNCTION_INFO_V1(ts_run_continuous_agg_materialization);
 
@@ -52,7 +53,7 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 	if (partial_view.name == NULL)
 		elog(ERROR, "view cannot be NULL");
 	invalidation_threshold = invalidation_threshold_get(hypertable_id);
-	completed_threshold = continuous_agg_completed_threshold_get(materialization_id);
+	completed_threshold = ts_continuous_agg_get_completed_threshold(materialization_id);
 
 	if (lmv > completed_threshold)
 	{

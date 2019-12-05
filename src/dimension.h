@@ -141,7 +141,7 @@ extern Datum ts_dimension_transform_value(Dimension *dim, Datum value, Oid const
 										  Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
 extern TSDLLEXPORT void ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type,
-													char *caller_name);
+													const char *caller_name);
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
 																Datum interval, Oid interval_type,

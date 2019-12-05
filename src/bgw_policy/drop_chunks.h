@@ -9,10 +9,15 @@
 
 #include "catalog.h"
 #include "export.h"
+#include "chunk.h"
 
 typedef struct BgwPolicyDropChunks
 {
-	FormData_bgw_policy_drop_chunks fd;
+	int32 job_id;
+	int32 hypertable_id;
+	FormData_ts_interval older_than;
+	bool cascade;
+	CascadeToMaterializationOption cascade_to_materializations;
 } BgwPolicyDropChunks;
 
 extern TSDLLEXPORT BgwPolicyDropChunks *ts_bgw_policy_drop_chunks_find_by_job(int32 job_id);

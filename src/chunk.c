@@ -1128,6 +1128,39 @@ chunks_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim, StrategyNumb
 	return ctx;
 }
 
+/* Convert endpoint specifiers such as older than and newer than to an absolute time. The rules
+ * for conversion are as follows:
+ *    For PG INTERVAL input return now()-interval (this is the correct interpretation for both older
+ * and newer than) For TIMESTAMP(TZ)/DATE/INTEGERS return the internal time representation
+ *    Otherwise, ERROR
+ */
+static int64
+get_internal_time_from_endpoint_specifiers(Oid hypertable_relid, Dimension *time_dim,
+										   Datum endpoint_datum, Oid endpoint_type,
+										   const char *parameter_name, const char *caller_name)
+{
+	Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
+	ts_dimension_open_typecheck(endpoint_type, partitioning_type, caller_name);
+	FormData_ts_interval *ts_interval;
+
+	Assert(OidIsValid(endpoint_type));
+
+	if (endpoint_type == INTERVALOID)
+	{
+		ts_interval = ts_interval_from_sql_input(hypertable_relid,
+												 endpoint_datum,
+												 endpoint_type,
+												 parameter_name,
+												 caller_name);
+		return ts_time_value_to_internal(ts_interval_subtract_from_now(ts_interval, time_dim),
+										 partitioning_type);
+	}
+	else
+	{
+		return ts_time_value_to_internal(endpoint_datum, endpoint_type);
+	}
+}
+
 static ChunkScanCtx *
 chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim,
 											 Datum older_than_datum, Oid older_than_type,
@@ -1136,7 +1169,6 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 											 uint64 *num_found)
 {
 	ChunkScanCtx *chunk_ctx = NULL;
-	FormData_ts_interval *invl;
 
 	int64 older_than = -1;
 	int64 newer_than = -1;
@@ -1152,47 +1184,23 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 
 	if (older_than_type != InvalidOid)
 	{
-		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
-		ts_dimension_open_typecheck(older_than_type, partitioning_type, caller_name);
-
-		if (older_than_type == INTERVALOID)
-		{
-			invl = ts_interval_from_sql_input(hs->main_table_relid,
-											  older_than_datum,
-											  older_than_type,
-											  "older_than",
-											  caller_name);
-			older_than = ts_time_value_to_internal(ts_interval_subtract_from_now(invl, time_dim),
-												   partitioning_type);
-		}
-		else
-		{
-			older_than = ts_time_value_to_internal(older_than_datum, older_than_type);
-		}
-
+		older_than = get_internal_time_from_endpoint_specifiers(hs->main_table_relid,
+																time_dim,
+																older_than_datum,
+																older_than_type,
+																"older_than",
+																caller_name);
 		end_strategy = BTLessStrategyNumber;
 	}
 
 	if (newer_than_type != InvalidOid)
 	{
-		Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
-		ts_dimension_open_typecheck(newer_than_type, partitioning_type, caller_name);
-
-		if (newer_than_type == INTERVALOID)
-		{
-			invl = ts_interval_from_sql_input(hs->main_table_relid,
-											  newer_than_datum,
-											  newer_than_type,
-											  "newer_than",
-											  caller_name);
-			newer_than = ts_time_value_to_internal(ts_interval_subtract_from_now(invl, time_dim),
-												   partitioning_type);
-		}
-		else
-		{
-			newer_than = ts_time_value_to_internal(newer_than_datum, newer_than_type);
-		}
-
+		newer_than = get_internal_time_from_endpoint_specifiers(hs->main_table_relid,
+																time_dim,
+																newer_than_datum,
+																newer_than_type,
+																"newer_than",
+																caller_name);
 		start_strategy = BTGreaterEqualStrategyNumber;
 	}
 
@@ -2157,10 +2165,127 @@ ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level)
 	performDeletion(&objaddr, behavior, 0);
 }
 
+static void
+ts_chunk_drop_process_materialization(Oid hypertable_relid,
+									  CascadeToMaterializationOption cascade_to_materializations,
+									  Datum older_than_datum, Oid older_than_type,
+									  Oid newer_than_type, Chunk *chunks, int num_chunks)
+{
+	Dimension *time_dimension;
+	int64 older_than_time;
+	int64 ignore_invalidation_older_than;
+	int64 minimum_invalidation_time;
+	int64 lowest_completion_time;
+	List *continuous_aggs;
+	ListCell *lc;
+	Cache *hcache;
+	Hypertable *ht;
+	int i;
+
+	FormData_continuous_agg cagg;
+
+	/* nothing to do if also dropping materializations */
+	if (cascade_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
+		return;
+
+	Assert(cascade_to_materializations == CASCADE_TO_MATERIALIZATION_FALSE);
+
+	if (OidIsValid(newer_than_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot use newer_than parameter to drop_chunks with "
+						"cascade_to_materializations")));
+
+	if (!OidIsValid(older_than_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("must use older_than parameter to drop_chunks with "
+						"cascade_to_materializations")));
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid);
+	if (!ht)
+		elog(ERROR, "can only call drop_chunks on hypertables");
+
+	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
+	older_than_time = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
+																 time_dimension,
+																 older_than_datum,
+																 older_than_type,
+																 "older_than",
+																 "drop_chunks");
+	ignore_invalidation_older_than =
+		ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, &cagg);
+	minimum_invalidation_time =
+		ts_continuous_aggs_get_minimum_invalidation_time(ts_get_now_internal(time_dimension),
+														 ignore_invalidation_older_than);
+
+	/* minimum_invalidation_time is inclusive; older_than_time is exclusive */
+	if (minimum_invalidation_time < older_than_time)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("older_than must be greater than the ignore_invalidation_older_than "
+						"parameter of %s.%s",
+						cagg.user_view_schema.data,
+						cagg.user_view_name.data)));
+
+	/* error for now, maybe better as a warning and ignoring the chunks? */
+	/* We cannot move a completion threshold up transactionally without taking locks
+	 * that would block the system. So, just bail. The completion threshold
+	 * should be much higher than this anyway */
+	lowest_completion_time = ts_continuous_aggs_min_completed_threshold(ht->fd.id, &cagg);
+	if (lowest_completion_time < older_than_time)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("the continuous aggregate %s.%s is too far behind",
+						cagg.user_view_schema.data,
+						cagg.user_view_name.data)));
+
+	/* Lock all chunks in Exclusive mode, blocking everything but selects on the table. We have to
+	 * block all modifications so that we cant get new invalidation entries. This makes sure that
+	 * all future modifying txns on this data region will have a now() that higher than ours and
+	 * thus will not invalidate. Otherwise, we could have an old txn with a now() in the past that
+	 * all of a sudden decides to to insert data right after we process_invalidations. */
+	for (i = 0; i < num_chunks; i++)
+	{
+		LockRelationOid(chunks[i].table_id, ExclusiveLock);
+	}
+
+	continuous_aggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
+	foreach (lc, continuous_aggs)
+	{
+		ContinuousAgg *ca = lfirst(lc);
+		ContinuousAggMatOptions mat_options = {
+			.verbose = true,
+			.within_single_transaction = true,
+			.process_only_invalidation = true,
+			.invalidate_prior_to_time = older_than_time,
+		};
+		bool finished_all_invalidation = false;
+
+		/* This will loop until all invalidations are done, each iteration of the loop will do
+		 * max_interval_per_job's worth of data. We don't want to ignore max_interval_per_job here
+		 * to avoid large sorts. */
+		while (!finished_all_invalidation)
+		{
+			elog(NOTICE,
+				 "making sure all invalidations for %s.%s have been processed prior to dropping "
+				 "chunks",
+				 NameStr(ca->data.user_view_schema),
+				 NameStr(ca->data.user_view_name));
+			finished_all_invalidation =
+				ts_cm_functions->continuous_agg_materialize(ca->data.mat_hypertable_id,
+															&mat_options);
+		}
+	}
+	ts_cache_release(hcache);
+}
+
 List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,
-						bool cascades_to_materializations, int32 log_level)
+						CascadeToMaterializationOption cascades_to_materializations,
+						int32 log_level)
 {
 	uint64 i = 0;
 	uint64 num_chunks = 0;
@@ -2168,6 +2293,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	List *dropped_chunk_names = NIL;
 	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
+	bool has_continuous_aggs;
+
+	Assert(OidIsValid(table_relid));
 
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
@@ -2176,15 +2304,20 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		case HypertableIsMaterialization:
 		case HypertableIsMaterializationAndRaw:
 			elog(ERROR, "cannot drop_chunks on a continuous aggregate materialization table");
+			break;
 		case HypertableIsRawTable:
-			if (!cascades_to_materializations)
+			if (cascades_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("cannot drop_chunks on hypertable that has a continuous aggregate "
-								"without cascade_to_materializations set to true")));
+						 errmsg("cascade_to_materializations options must be set explicitly"),
+						 errhint("Hypertables with continuous aggs must have the "
+								 "cascade_to_materializations option set to either true or false "
+								 "explicitly.")));
+			has_continuous_aggs = true;
 			break;
 		default:
-			cascades_to_materializations = false;
+			has_continuous_aggs = false;
+			cascades_to_materializations = CASCADE_TO_MATERIALIZATION_TRUE;
 			break;
 	}
 
@@ -2196,6 +2329,15 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 											"drop_chunks",
 											CurrentMemoryContext,
 											&num_chunks);
+
+	if (has_continuous_aggs)
+		ts_chunk_drop_process_materialization(table_relid,
+											  cascades_to_materializations,
+											  older_than_datum,
+											  older_than_type,
+											  newer_than_type,
+											  chunks,
+											  num_chunks);
 
 	for (; i < num_chunks; i++)
 	{
@@ -2215,7 +2357,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		ts_chunk_drop(chunks + i, (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
 	}
 
-	if (cascades_to_materializations)
+	if (cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
 		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, &chunks, num_chunks);
 
 	return dropped_chunk_names;
@@ -2278,7 +2420,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Datum older_than_datum, newer_than_datum;
 
 	Oid older_than_type, newer_than_type;
-	bool cascade, verbose, cascades_to_materializations;
+	bool cascade, verbose;
+	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
 
 	/*
@@ -2298,7 +2441,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
 	cascade = PG_GETARG_BOOL(3);
 	verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
-	cascades_to_materializations = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
+	cascades_to_materializations =
+		(PG_ARGISNULL(6) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
+						   (PG_GETARG_BOOL(6) ? CASCADE_TO_MATERIALIZATION_TRUE :
+												CASCADE_TO_MATERIALIZATION_FALSE));
 	elevel = verbose ? INFO : DEBUG2;
 
 	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))

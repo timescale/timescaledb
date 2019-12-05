@@ -23,6 +23,7 @@
 #include "license.h"
 #include "utils.h"
 #include "interval.h"
+#include "chunk.h"
 
 /* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
@@ -47,7 +48,10 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	Datum older_than_datum = PG_GETARG_DATUM(1);
 	bool cascade = PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_GETARG_BOOL(3);
-	bool cascade_to_materializations = PG_GETARG_BOOL(4);
+	CascadeToMaterializationOption cascade_to_materializations =
+		(PG_ARGISNULL(4) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
+						   (PG_GETARG_BOOL(4) ? CASCADE_TO_MATERIALIZATION_TRUE :
+												CASCADE_TO_MATERIALIZATION_FALSE));
 	Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	BgwPolicyDropChunks policy;
 	Hypertable *hypertable;
@@ -95,9 +99,8 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 							get_rel_name(ht_oid))));
 		}
 
-		if (ts_interval_equal(&existing->fd.older_than, older_than) &&
-			existing->fd.cascade == cascade &&
-			existing->fd.cascade_to_materializations == cascade_to_materializations)
+		if (ts_interval_equal(&existing->older_than, older_than) && existing->cascade == cascade &&
+			existing->cascade_to_materializations == cascade_to_materializations)
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
@@ -128,13 +131,13 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 										DEFAULT_MAX_RETRIES,
 										DEFAULT_RETRY_PERIOD);
 
-	policy = (BgwPolicyDropChunks){ .fd = {
-										.job_id = job_id,
-										.hypertable_id = ts_hypertable_relid_to_id(ht_oid),
-										.older_than = *older_than,
-										.cascade = cascade,
-										.cascade_to_materializations = cascade_to_materializations,
-									} };
+	policy = (BgwPolicyDropChunks){
+		.job_id = job_id,
+		.hypertable_id = ts_hypertable_relid_to_id(ht_oid),
+		.older_than = *older_than,
+		.cascade = cascade,
+		.cascade_to_materializations = cascade_to_materializations,
+	};
 
 	/* Now, insert a new row in the drop_chunks args table */
 	ts_bgw_policy_drop_chunks_insert(&policy);
@@ -171,7 +174,7 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 		}
 	}
 
-	ts_bgw_job_delete_by_id(policy->fd.job_id);
+	ts_bgw_job_delete_by_id(policy->job_id);
 
 	PG_RETURN_NULL();
 }

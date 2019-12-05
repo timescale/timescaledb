@@ -101,7 +101,7 @@ ts_bgw_job_owner(BgwJob *job)
 			if (policy == NULL)
 				elog(ERROR, "drop_chunks policy for job with id \"%d\" not found", job->fd.id);
 
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
+			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->hypertable_id));
 		}
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 		{
