@@ -507,9 +507,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 
 		ts_plan_expand_hypertable_chunks(ht, root, relation_objectid, inhparent, rel);
-#if PG11_GE
-		setup_append_rel_array(root);
-#endif
 
 		ts_cache_release(hcache);
 	}
