@@ -13,11 +13,16 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
+#include <nodes/parsenodes.h>
 #include <storage/lmgr.h>
 #include <trigger.h>
 #include <utils/elog.h>
 #include <utils/builtins.h>
+#include <libpq-fe.h>
 
+#include <remote/dist_commands.h>
+#include "compat.h"
+#include "cache.h"
 #include "chunk.h"
 #include "errors.h"
 #include "hypertable.h"
@@ -311,28 +316,112 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 }
 
 bool
-tsl_compress_chunk_wrapper(Oid chunk_relid, bool if_not_compressed)
+tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
 {
-	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
-	if (srcchunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		ereport((if_not_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk_relid))));
+				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
 		return false;
 	}
 
-	compress_chunk_impl(srcchunk->hypertable_relid, chunk_relid);
+	compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 	return true;
 }
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+
+/*
+ * Helper for remote invocation of chunk compression and decompression.
+ */
+static bool
+invoke_compression_func_remotely(FunctionCallInfo fcinfo, const Chunk *chunk)
+{
+	List *datanodes;
+	DistCmdResult *distres;
+	bool isnull_result = true;
+	Size i;
+
+	Assert(chunk->relkind == RELKIND_FOREIGN_TABLE);
+	Assert(chunk->data_nodes != NIL);
+	datanodes = ts_chunk_get_data_node_name_list(chunk);
+	distres = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, datanodes);
+
+	for (i = 0; i < ts_dist_cmd_response_count(distres); i++)
+	{
+		const char *node_name;
+		bool isnull;
+		Datum PG_USED_FOR_ASSERTS_ONLY d;
+
+		d = ts_dist_cmd_get_single_scalar_result_by_index(distres, i, &isnull, &node_name);
+
+		/* Make sure data nodes either (1) all return NULL, or (2) all return
+		 * a non-null result. */
+		if (i > 0 && isnull_result != isnull)
+			elog(ERROR, "inconsistent result from data node \"%s\"", node_name);
+
+		isnull_result = isnull;
+
+		if (!isnull)
+		{
+			Assert(OidIsValid(DatumGetObjectId(d)));
+		}
+	}
+
+	ts_dist_cmd_close_response(distres);
+
+	return !isnull_result;
+}
+
+static bool
+compress_remote_chunk(FunctionCallInfo fcinfo, const Chunk *chunk, bool if_not_compressed)
+{
+	bool success = invoke_compression_func_remotely(fcinfo, chunk);
+
+	if (!success)
+		ereport((if_not_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
+
+	return success;
+}
+
+static bool
+decompress_remote_chunk(FunctionCallInfo fcinfo, const Chunk *chunk, bool if_compressed)
+{
+	bool success = invoke_compression_func_remotely(fcinfo, chunk);
+
+	if (!success)
+		ereport((if_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("chunk \"%s\" is not compressed", get_rel_name(chunk->table_id))));
+
+	return success;
+}
+
+#endif /* PG_VERSION_SUPPORTS_MULTINODE */
 
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-	if (!tsl_compress_chunk_wrapper(uncompressed_chunk_id, if_not_compressed))
+	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		if (!compress_remote_chunk(fcinfo, chunk, if_not_compressed))
+			PG_RETURN_NULL();
+
+		PG_RETURN_OID(uncompressed_chunk_id);
+	}
+#endif
+
+	if (!tsl_compress_chunk_wrapper(chunk, if_not_compressed))
 		PG_RETURN_NULL();
+
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
@@ -342,12 +431,24 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+	if (uncompressed_chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		if (!decompress_remote_chunk(fcinfo, uncompressed_chunk, if_compressed))
+			PG_RETURN_NULL();
+
+		PG_RETURN_OID(uncompressed_chunk_id);
+	}
+#endif
 
 	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
 							   uncompressed_chunk_id,
 							   if_compressed))
 		PG_RETURN_NULL();
+
 	PG_RETURN_OID(uncompressed_chunk_id);
 }

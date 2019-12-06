@@ -7,12 +7,13 @@
 #include <utils/builtins.h>
 #include <utils/guc.h>
 #include <catalog/namespace.h>
-
+#include <funcapi.h>
 #include <libpq-fe.h>
 
-#include "remote/dist_commands.h"
-#include "remote/dist_txn.h"
-#include "remote/connection_cache.h"
+#include "dist_commands.h"
+#include "dist_txn.h"
+#include "connection_cache.h"
+#include "async.h"
 #include "data_node.h"
 #include "dist_util.h"
 #include "miscadmin.h"
@@ -34,6 +35,11 @@ typedef struct DistCmdResponse
 typedef struct DistCmdResult
 {
 	Size num_responses;
+	TypeFuncClass funcclass; /* Function class of invoked function, if any */
+	Oid typeid;				 /* Expected result type, or InvalidOid */
+	TupleDesc tupdesc;		 /* Tuple descriptor of invoked function
+							  * result. Set if typeid is valid and has a
+							  * composite return value */
 	DistCmdResponse responses[FLEXIBLE_ARRAY_MEMBER];
 } DistCmdResult;
 
@@ -44,7 +50,7 @@ ts_dist_cmd_collect_responses(List *requests)
 	AsyncResponseResult *ar;
 	ListCell *lc;
 	DistCmdResult *results =
-		palloc(sizeof(DistCmdResult) + requests->length * sizeof(DistCmdResponse));
+		palloc0(sizeof(DistCmdResult) + requests->length * sizeof(DistCmdResponse));
 	int i = 0;
 
 	foreach (lc, requests)
@@ -110,6 +116,7 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transac
 
 	results = ts_dist_cmd_collect_responses(requests);
 	list_free(requests);
+	Assert(ts_dist_cmd_response_count(results) == list_length(data_nodes));
 
 	return results;
 }
@@ -161,10 +168,18 @@ ts_dist_cmd_invoke_on_all_data_nodes(const char *sql)
 DistCmdResult *
 ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes)
 {
+	DistCmdResult *result;
+
 	if (NIL == data_nodes)
 		data_nodes = data_node_get_node_name_list();
 
-	return ts_dist_cmd_invoke_on_data_nodes(deparse_func_call(fcinfo), data_nodes, true);
+	result = ts_dist_cmd_invoke_on_data_nodes(deparse_func_call(fcinfo), data_nodes, true);
+
+	/* Initialize result conversion info in case caller wants to convert the
+	 * result to datums. */
+	result->funcclass = get_call_result_type(fcinfo, &result->typeid, &result->tupdesc);
+
+	return result;
 }
 
 DistCmdResult *
@@ -226,6 +241,66 @@ ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index, const char 
 		*node_name = rsp->data_node;
 
 	return async_response_result_get_pg_result(rsp->result);
+}
+
+/*
+ * Get the number of responses in a distributed command result.
+ */
+Size
+ts_dist_cmd_response_count(DistCmdResult *result)
+{
+	return result->num_responses;
+}
+
+/*
+ * Convert an expected scalar return value.
+ *
+ * Convert the result of a remote function invokation returning a single
+ * scalar value. For example, a function returning a bool.
+ */
+Datum
+ts_dist_cmd_get_single_scalar_result_by_index(DistCmdResult *result, Size index, bool *isnull,
+											  const char **node_name_out)
+{
+	PGresult *pgres;
+	Oid typioparam;
+	Oid typinfunc;
+	const char *node_name;
+
+	if (!OidIsValid(result->typeid))
+		elog(ERROR, "invalid result type of distributed command");
+
+	if (result->funcclass != TYPEFUNC_SCALAR)
+		elog(ERROR, "distributed command result is not scalar");
+
+	pgres = ts_dist_cmd_get_result_by_index(result, index, &node_name);
+
+	if (NULL == pgres)
+		elog(ERROR, "invalid index for distributed command result");
+
+	if (node_name_out)
+		*node_name_out = node_name;
+
+	if (PQresultStatus(pgres) != PGRES_TUPLES_OK || PQntuples(pgres) != 1 || PQnfields(pgres) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_UNEXPECTED),
+				 errmsg("unexpected response from data node \"%s\"", node_name)));
+
+	if (PQgetisnull(pgres, 0, 0))
+	{
+		if (isnull)
+			*isnull = true;
+
+		return (Datum) 0;
+	}
+
+	if (isnull)
+		*isnull = false;
+
+	getTypeInputInfo(result->typeid, &typinfunc, &typioparam);
+	Assert(OidIsValid(typinfunc));
+
+	return OidInputFunctionCall(typinfunc, PQgetvalue(pgres, 0, 0), typioparam, -1);
 }
 
 void

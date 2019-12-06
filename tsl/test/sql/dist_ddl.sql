@@ -130,7 +130,6 @@ ALTER INDEX disttable_description_idx RENAME to disttable_descr_idx;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 ALTER TABLE disttable SET SCHEMA some_schema;
 
-
 DROP TABLE non_disttable1, disttable;
 DROP TABLE disttable, non_disttable2;
 DROP TABLE disttable, disttable;
@@ -238,6 +237,19 @@ ROLLBACK;
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
 DROP TABLE some_dist_table;
+
+-- DDL with multiple sub-commands (ALTER)
+BEGIN;
+CREATE TABLE some_dist_table(time timestamptz, device int);
+SELECT * FROM create_distributed_hypertable('some_dist_table', 'time');
+\set ON_ERROR_STOP 0
+-- Mixing SET and other options not supported. This is to protect
+-- against mixing custom (compression) options with other
+-- sub-commands.
+ALTER TABLE some_dist_table SET (fillfactor = 10),
+ADD CONSTRAINT device_check CHECK (device > 0);
+\set ON_ERROR_STOP 1
+ROLLBACK;
 
 -- Multi-statement transactions
 
@@ -375,14 +387,19 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
+
 ALTER TABLE disttable DROP CONSTRAINT color_check;
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
+
 SELECT * FROM test.remote_exec(NULL, $$
 SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
 $$);
 DROP TABLE disttable;
 

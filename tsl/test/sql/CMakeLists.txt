@@ -88,6 +88,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     deparse.sql
     deparse_fail.sql
     dist_commands.sql
+    dist_compression.sql
     dist_ddl.sql
     dist_grant.sql
     dist_partial_agg.sql
