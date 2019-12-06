@@ -12,6 +12,7 @@
 #include <guc.h>
 #include "hypertable_data_node.h"
 #include "chunk_index.h"
+#include "chunk_api.h"
 #include "process_utility.h"
 #include "event_trigger.h"
 #include "remote/dist_commands.h"
@@ -154,9 +155,7 @@ dist_ddl_check_session(void)
 }
 
 /*
- * Process distributed VACUUM.  We want to forward VACUUM to data nodes, but
- * analyze is handled locally via FDW which reaches out to data nodes
- * separately.
+ * Process distributed VACUUM/ANALYZE.
  */
 static DistDDLExecType
 dist_ddl_process_vacuum(VacuumStmt *stmt)
@@ -414,6 +413,20 @@ dist_ddl_execute(bool transactional)
 	dist_ddl_reset();
 }
 
+/* Update stats after ANALYZE execution */
+static void
+dist_ddl_get_analyze_stats(ProcessUtilityArgs *args, VacuumStmt *stmt)
+{
+	Oid relid = linitial_oid(args->hypertable_list);
+
+	if (!(get_vacuum_options(stmt) & VACOPT_ANALYZE))
+		return;
+
+	/* Refresh the local chunk stats by fetching stats
+	 * from remote data nodes. */
+	chunk_api_update_distributed_hypertable_stats(relid);
+}
+
 void
 dist_ddl_start(ProcessUtilityArgs *args)
 {
@@ -446,6 +459,10 @@ dist_ddl_start(ProcessUtilityArgs *args)
 			break;
 		case DIST_DDL_EXEC_ON_START_NO_2PC:
 			dist_ddl_execute(false);
+			/* Import distributed hypertable stats after executing
+			 * ANALYZE command. */
+			if (IsA(args->parsetree, VacuumStmt))
+				dist_ddl_get_analyze_stats(args, castNode(VacuumStmt, args->parsetree));
 			break;
 		case DIST_DDL_EXEC_ON_END:
 		case DIST_DDL_EXEC_NONE:

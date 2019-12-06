@@ -121,30 +121,10 @@ INSERT INTO disttable VALUES
        ('2018-07-01 09:11', 90, 2.7),
        ('2018-07-01 08:01', 29, 1.5);
 
--- Test distributed VACUUM ANALYZE support. First show no statistics
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass;
-$$);
+-- Test distributed ANALYZE.
+--
 
-VACUUM (FULL, ANALYZE) disttable;
-
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass;
-$$);
-
-VACUUM FULL disttable;
-VACUUM disttable;
-
-\set ON_ERROR_STOP 0
--- VACUUM VERBOSE is not supported at the moment
-VACUUM VERBOSE disttable;
-\set ON_ERROR_STOP 1
-
--- Test ANALYZE. First show no statistics
+-- First show no statistics
 SELECT relname, relkind, reltuples, relpages
 FROM pg_class
 WHERE oid = 'disttable'::regclass;
@@ -163,6 +143,16 @@ WHERE oid = 'disttable'::regclass;
 SELECT relname, relkind, reltuples, relpages
 FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
 WHERE cl.oid = ch.chunk::regclass;
+
+-- Test distributed VACUUM.
+--
+VACUUM (FULL, ANALYZE) disttable;
+VACUUM FULL disttable;
+VACUUM disttable;
+\set ON_ERROR_STOP 0
+-- VACUUM VERBOSE is not supported at the moment
+VACUUM VERBOSE disttable;
+\set ON_ERROR_STOP 1
 
 -- Test prepared statement
 PREPARE dist_insert (timestamptz, int, float) AS

@@ -28,7 +28,6 @@
 #include "modify_plan.h"
 #include "modify_exec.h"
 #include "data_node_scan_plan.h"
-#include "analyze.h"
 #include "debug_guc.h"
 #include "debug.h"
 #include "fdw_utils.h"
@@ -311,57 +310,6 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 	return fdw_plan_foreign_modify(root, plan, result_relation, subplan_index);
 }
 
-/* The fetch size is arbitrary, but shouldn't be enormous. */
-#define DEFAULT_ANALYZE_FETCH_SIZE 100
-
-static int
-acquire_sample_rows(Relation rel, int elevel, HeapTuple *rows, int targrows, double *totalrows,
-					double *totaldeadrows)
-{
-	ForeignTable *table;
-	ForeignServer *server;
-	int fetch_size = DEFAULT_ANALYZE_FETCH_SIZE;
-
-	/*
-	 * Get the connection to use.  We do the remote access as the table's
-	 * owner, even if the ANALYZE was started by some other user.
-	 */
-	table = GetForeignTable(RelationGetRelid(rel));
-	server = GetForeignServer(table->serverid);
-
-	option_get_from_options_list_int(server->options, "fetch_size", &fetch_size);
-	option_get_from_options_list_int(table->options, "fetch_size", &fetch_size);
-
-	return fdw_acquire_sample_rows(rel,
-								   table->serverid,
-								   fetch_size,
-								   elevel,
-								   rows,
-								   targrows,
-								   totalrows,
-								   totaldeadrows);
-}
-
-static bool
-analyze_foreign_table(Relation rel, AcquireSampleRowsFunc *func, BlockNumber *totalpages)
-{
-	ForeignTable *table;
-
-	/* Return the row-analysis function pointer */
-	*func = acquire_sample_rows;
-
-	/*
-	 * Now we have to get the number of pages.  It's annoying that the ANALYZE
-	 * API requires us to return that now, because it forces some duplication
-	 * of effort between this routine and acquire_sample_rows. But it's
-	 * probably not worth redefining that API at this point.
-	 */
-
-	table = GetForeignTable(RelationGetRelid(rel));
-
-	return fdw_analyze_table(rel, table->serverid, totalpages);
-}
-
 #if PG12_LT
 static Path *
 create_foreign_upper_path(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
@@ -442,7 +390,7 @@ static FdwRoutine timescaledb_fdw_routine = {
 	/* explain/analyze */
 	.ExplainForeignScan = explain_foreign_scan,
 	.ExplainForeignModify = explain_foreign_modify,
-	.AnalyzeForeignTable = analyze_foreign_table,
+	.AnalyzeForeignTable = NULL,
 };
 
 TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);

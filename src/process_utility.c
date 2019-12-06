@@ -716,14 +716,14 @@ process_vacuum(ProcessUtilityArgs *args)
 				process_add_hypertable(args, ht);
 
 				/* Exclude distributed hypertables from the list of relations
-				 * to vacuum since they contain no local tuples. */
+				 * to vacuum and analyze since they contain no local tuples.
+				 *
+				 * Support for VACUUM/ANALYZE operations on a distributed hypertable
+				 * is implemented as a part of distributed ddl and remote
+				 * statistics import functions.
+				 */
 				if (hypertable_is_distributed(ht))
-				{
-					int opts = get_vacuum_options(stmt);
-
-					if (opts & VACOPT_VACUUM)
-						continue;
-				}
+					continue;
 
 				ctx.ht_vacuum_rel = vacuum_rel;
 				foreach_chunk(ht, add_chunk_to_vacuum, &ctx);

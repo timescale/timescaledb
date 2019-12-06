@@ -207,108 +207,9 @@ INSERT INTO disttable VALUES
        ('2018-07-01 06:01', 13, 1.4),
        ('2018-07-01 09:11', 90, 2.7),
        ('2018-07-01 08:01', 29, 1.5);
--- Test distributed VACUUM ANALYZE support. First show no statistics
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass;
-$$);
-NOTICE:  [data_node_1]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_1]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_1_dist_chunk|r      |        0|       0
-_hyper_1_4_dist_chunk|r      |        0|       0
-(2 rows)
-
-
-NOTICE:  [data_node_2]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_2]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_3_dist_chunk|r      |        0|       0
-_hyper_1_5_dist_chunk|r      |        0|       0
-(2 rows)
-
-
-NOTICE:  [data_node_3]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_3]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_2_dist_chunk|r      |        0|       0
-_hyper_1_6_dist_chunk|r      |        0|       0
-(2 rows)
-
-
- remote_exec 
--------------
- 
-(1 row)
-
-VACUUM (FULL, ANALYZE) disttable;
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass;
-$$);
-NOTICE:  [data_node_1]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_1]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_1_dist_chunk|r      |        2|       1
-_hyper_1_4_dist_chunk|r      |        1|       1
-(2 rows)
-
-
-NOTICE:  [data_node_2]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_2]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_3_dist_chunk|r      |        1|       1
-_hyper_1_5_dist_chunk|r      |        1|       1
-(2 rows)
-
-
-NOTICE:  [data_node_3]: 
-SELECT relname, relkind, reltuples, relpages
-FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
-WHERE cl.oid = ch.chunk::regclass
-NOTICE:  [data_node_3]:
-relname              |relkind|reltuples|relpages
----------------------+-------+---------+--------
-_hyper_1_2_dist_chunk|r      |        1|       1
-_hyper_1_6_dist_chunk|r      |        2|       1
-(2 rows)
-
-
- remote_exec 
--------------
- 
-(1 row)
-
-VACUUM FULL disttable;
-VACUUM disttable;
-\set ON_ERROR_STOP 0
--- VACUUM VERBOSE is not supported at the moment
-VACUUM VERBOSE disttable;
-ERROR:  operation not supported on distributed hypertable
-\set ON_ERROR_STOP 1
--- Test ANALYZE. First show no statistics
+-- Test distributed ANALYZE.
+--
+-- First show no statistics
 SELECT relname, relkind, reltuples, relpages
 FROM pg_class
 WHERE oid = 'disttable'::regclass;
@@ -353,6 +254,16 @@ WHERE cl.oid = ch.chunk::regclass;
  _hyper_1_6_dist_chunk | f       |         2 |        1
 (6 rows)
 
+-- Test distributed VACUUM.
+--
+VACUUM (FULL, ANALYZE) disttable;
+VACUUM FULL disttable;
+VACUUM disttable;
+\set ON_ERROR_STOP 0
+-- VACUUM VERBOSE is not supported at the moment
+VACUUM VERBOSE disttable;
+ERROR:  operation not supported on distributed hypertable
+\set ON_ERROR_STOP 1
 -- Test prepared statement
 PREPARE dist_insert (timestamptz, int, float) AS
 INSERT INTO disttable VALUES ($1, $2, $3);
