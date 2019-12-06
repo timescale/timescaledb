@@ -874,6 +874,25 @@ some_dist_table_time_idx|{time} |    |f     |f      |f        |
 (1 row)
 
 DROP TABLE some_dist_table;
+-- DDL with multiple sub-commands (ALTER)
+BEGIN;
+CREATE TABLE some_dist_table(time timestamptz, device int);
+SELECT * FROM create_distributed_hypertable('some_dist_table', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name |   table_name    | created 
+---------------+-------------+-----------------+---------
+             9 | public      | some_dist_table | t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Mixing SET and other options not supported. This is to protect
+-- against mixing custom (compression) options with other
+-- sub-commands.
+ALTER TABLE some_dist_table SET (fillfactor = 10),
+ADD CONSTRAINT device_check CHECK (device > 0);
+ERROR:  ALTER TABLE <hypertable> SET does not support multiple clauses
+\set ON_ERROR_STOP 1
+ROLLBACK;
 -- Multi-statement transactions
 -- BEGIN/COMMIT
 CREATE TABLE some_dist_table(time timestamptz, device int);
@@ -881,7 +900,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             9 | public      | some_dist_table | t
+            10 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -974,7 +993,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            10 | public      | some_dist_table | t
+            11 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1060,7 +1079,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            11 | public      | some_dist_table | t
+            12 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1155,7 +1174,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            12 | public      | some_dist_table | t
+            13 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1247,7 +1266,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            13 | public      | some_dist_table | t
+            14 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1335,7 +1354,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            14 | public      | some_dist_table | t
+            15 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1424,7 +1443,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            15 | public      | some_dist_table | t
+            16 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1518,14 +1537,14 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            16 | public      | disttable  | t
+            17 | public      | disttable  | t
 (1 row)
 
 INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
                  show_chunks                  
 ----------------------------------------------
- _timescaledb_internal._hyper_16_1_dist_chunk
+ _timescaledb_internal._hyper_17_1_dist_chunk
 (1 row)
 
 SELECT * FROM test.show_constraints('disttable');
@@ -1534,7 +1553,8 @@ SELECT * FROM test.show_constraints('disttable');
  color_check | c    | {color} | -     | (color > 0) | f          | f        | t
 (1 row)
 
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
   Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 --------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  color_check  | c    | {color} | -     | (color > 0)                                                                                                                                    | f          | f        | t
@@ -1547,7 +1567,8 @@ SELECT * FROM test.show_constraints('disttable');
 ------------+------+---------+-------+------+------------+----------+-----------
 (0 rows)
 
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
   Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 --------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  constraint_1 | c    | {time}  | -     | (("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone)) | f          | f        | t
@@ -1556,14 +1577,15 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chun
 SELECT * FROM test.remote_exec(NULL, $$
 SELECT show_chunks('disttable');
 SELECT * FROM test.show_constraints('disttable');
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk');
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk;
 $$);
 NOTICE:  [data_node_1]: 
 SELECT show_chunks('disttable')
 NOTICE:  [data_node_1]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_16_1_dist_chunk
+_timescaledb_internal._hyper_17_1_dist_chunk
 (1 row)
 
 
@@ -1576,7 +1598,8 @@ Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 
 
 NOTICE:  [data_node_1]: 
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk')
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_1]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
@@ -1589,7 +1612,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_2]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_16_1_dist_chunk
+_timescaledb_internal._hyper_17_1_dist_chunk
 (1 row)
 
 
@@ -1602,7 +1625,8 @@ Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 
 
 NOTICE:  [data_node_2]: 
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk')
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_2]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
@@ -1615,7 +1639,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_3]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_16_1_dist_chunk
+_timescaledb_internal._hyper_17_1_dist_chunk
 (1 row)
 
 
@@ -1628,7 +1652,8 @@ Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 
 
 NOTICE:  [data_node_3]: 
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_1_dist_chunk')
+SELECT (test.show_constraints(chunk)).*
+FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_3]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
@@ -1671,7 +1696,7 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            17 | public      | disttable  | t
+            18 | public      | disttable  | t
 (1 row)
 
 CREATE INDEX disttable_device_idx ON disttable (device);

@@ -8,6 +8,7 @@
 #include <utils/guc.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
+#include <nodes/parsenodes.h>
 
 #include <guc.h>
 #include "hypertable_data_node.h"
@@ -50,6 +51,38 @@ typedef struct
 static DistDDLState dist_ddl_state;
 
 #define dist_ddl_scheduled_for_execution() (dist_ddl_state.exec_type != DIST_DDL_EXEC_NONE)
+
+/*
+ * Set the exec type for a distributed command, i.e., whether to forward the
+ * DDL statement before or after PostgreSQL has processed it locally.
+ *
+ * In multi-command statements (e.g., ALTER), it should not be possible to
+ * have a mix of sub-commands that require both START and END processing. Such
+ * mixing would require splitting the original ALTER across both START and END
+ * processing, which would prevent simply forwarding the original statement to
+ * the data nodes. For instance, consider:
+ *
+ * ALTER TABLE foo SET (newoption = true), ADD CONSTRAINT mycheck CHECK (count > 0);
+ *
+ * which contains two sub-commands (SET and ADD CONSTRAINT), where the first
+ * command (SET) is handled at START, while the latter is handled at
+ * END. While we could always distribute commands at START, this would prevent
+ * local validation by PostgreSQL.
+ */
+static void
+set_dist_exec_type(DistDDLExecType type)
+{
+	if (dist_ddl_state.exec_type != DIST_DDL_EXEC_NONE && dist_ddl_state.exec_type != type)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("incompatible sub-commands in single statement"),
+				 errdetail("The statement contains sub-commands that require different "
+						   "handling to distribute to data nodes and can therefore not "
+						   "be mixed in a single statement."),
+				 errhint("Try executing the sub-commands in separate statements.")));
+
+	dist_ddl_state.exec_type = type;
+}
 
 void
 dist_ddl_init(void)
@@ -202,7 +235,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			DropStmt *stmt = (DropStmt *) args->parsetree;
 
 			if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
+				set_dist_exec_type(DIST_DDL_EXEC_ON_END);
 		}
 
 		return;
@@ -222,7 +255,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			 */
 			case T_AlterObjectSchemaStmt:
 			case T_RenameStmt:
-				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
+				set_dist_exec_type(DIST_DDL_EXEC_ON_END);
 				dist_ddl_state.relid = relid;
 				return;
 
@@ -295,7 +328,20 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 					case AT_DropConstraint:
 					case AT_DropConstraintRecurse:
 					case AT_AddIndex:
-						/* supported commands */
+					case AT_ReplaceRelOptions:
+					case AT_ResetRelOptions:
+						set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+						break;
+					case AT_SetRelOptions:
+						/* Custom TimescaleDB options (e.g.,
+						 * compression-related options) are not recognized by
+						 * PostgreSQL and thus cannot mix with other (PG)
+						 * options. As a consequence, custom reloptions are
+						 * not forwarded/handled by PostgreSQL and thus never
+						 * reach END processing. Therefore, to distributed
+						 * SetRelOptions to other nodes, it needs to happen at
+						 * START. */
+						set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 						break;
 					default:
 						dist_ddl_error_raise_unsupported();
@@ -303,7 +349,6 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 				}
 			}
 
-			dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
 			break;
 		}
 		case T_DropStmt:
@@ -319,14 +364,13 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			 * combination with table or schema drop.
 			 */
 			Assert(((DropStmt *) args->parsetree)->removeType == OBJECT_INDEX);
-
-			dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_END;
+			set_dist_exec_type(DIST_DDL_EXEC_ON_END);
 			break;
 
 		case T_IndexStmt:
 			/* Since we have custom CREATE INDEX implementation, currently it
 			 * does not support ddl_command_end trigger. */
-			dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			break;
 
 		case T_CreateTrigStmt:
@@ -342,9 +386,8 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 		case T_GrantStmt:
 			/* If there is one or more distributed hypertables, we need to do a 2PC. */
 			if (num_dist_hypertables > 0)
-				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+				set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			break;
-
 		case T_TruncateStmt:
 		{
 			TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
@@ -362,7 +405,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			 * sets of nodes. */
 			if (num_dist_hypertables == 1 && num_regular_tables == 0 && num_hypertables == 0 &&
 				num_dist_hypertable_members == 0)
-				dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+				set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			else
 				dist_ddl_error_raise_unsupported();
 			break;
@@ -373,7 +416,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 		case T_ClusterStmt:
 			/* Those commands are also targets for execute_on_start in since they
 			 * are not supported by event triggers. */
-			dist_ddl_state.exec_type = DIST_DDL_EXEC_ON_START;
+			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 
 			/* fall through */
 		default:

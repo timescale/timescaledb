@@ -912,9 +912,10 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
-Note:
- caller should check security permissions
-*/
+ * Note: caller should check security permissions
+ *
+ * Return true if compression was enabled, false otherwise.
+ */
 bool
 tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 						   WithClauseResult *with_clause_options)
@@ -979,6 +980,14 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	{
 		/* compression is enabled */
 		drop_existing_compression_table(ht);
+	}
+
+	if (hypertable_is_distributed(ht))
+	{
+		/* On a distributed hypertable, there's no data locally, so don't
+		 * create local compression tables and data but let the DDL pass on to
+		 * data nodes. */
+		return true;
 	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);

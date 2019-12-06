@@ -349,7 +349,8 @@ execute_compress_chunks_policy(BgwJob *job)
 	else
 	{
 		chunk = ts_chunk_get_by_id(chunkid, true);
-		tsl_compress_chunk_wrapper(chunk->table_id, false);
+		tsl_compress_chunk_wrapper(chunk, false);
+
 		elog(LOG,
 			 "completed compressing chunk %s.%s",
 			 NameStr(chunk->fd.schema_name),

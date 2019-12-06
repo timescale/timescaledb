@@ -860,6 +860,22 @@ chunk_assign_data_nodes(Chunk *chunk, Hypertable *ht)
 	return chunk_data_nodes;
 }
 
+List *
+ts_chunk_get_data_node_name_list(const Chunk *chunk)
+{
+	List *datanodes = NULL;
+	ListCell *lc;
+
+	foreach (lc, chunk->data_nodes)
+	{
+		ChunkDataNode *cdn = lfirst(lc);
+
+		datanodes = lappend(datanodes, NameStr(cdn->fd.node_name));
+	}
+
+	return datanodes;
+}
+
 static inline const char *
 get_chunk_name_suffix(const char relkind)
 {

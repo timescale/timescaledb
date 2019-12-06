@@ -170,6 +170,7 @@ extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);
 extern List *ts_chunk_data_nodes_copy(Chunk *chunk);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \

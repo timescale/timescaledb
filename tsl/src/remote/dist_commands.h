@@ -22,11 +22,14 @@ extern DistCmdResult *ts_dist_cmd_invoke_on_all_data_nodes(const char *sql);
 extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_all_data_nodes(FunctionCallInfo fcinfo);
 extern DistCmdResult *ts_dist_cmd_invoke_func_call_on_data_nodes(FunctionCallInfo fcinfo,
 																 List *data_nodes);
+extern Datum ts_dist_cmd_get_single_scalar_result_by_index(DistCmdResult *result, Size index,
+														   bool *isnull, const char **node_name);
 extern void ts_dist_cmd_func_call_on_data_nodes(FunctionCallInfo fcinfo, List *data_nodes);
 extern PGresult *ts_dist_cmd_get_result_by_node_name(DistCmdResult *response,
 													 const char *node_name);
 extern PGresult *ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index,
 												 const char **node_name);
+extern Size ts_dist_cmd_response_count(DistCmdResult *result);
 
 extern void ts_dist_cmd_close_response(DistCmdResult *response);
 
