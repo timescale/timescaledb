@@ -1,5 +1,4 @@
 set(SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/analyze.c
   ${CMAKE_CURRENT_SOURCE_DIR}/relinfo.c
   ${CMAKE_CURRENT_SOURCE_DIR}/estimate.c
   ${CMAKE_CURRENT_SOURCE_DIR}/fdw.c
