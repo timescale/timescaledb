@@ -437,7 +437,7 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 	ts_scanner_foreach(&iterator)
 	{
 		Hyperspace *hs = ctx->space;
-		Chunk *chunk;
+		ChunkStub *stub;
 		ChunkScanEntry *entry;
 		bool found;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -457,20 +457,20 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 
 		if (!found)
 		{
-			chunk = ts_chunk_create_stub(chunk_id, hs->num_dimensions);
-			chunk->cube = ts_hypercube_alloc(hs->num_dimensions);
-			entry->chunk = chunk;
+			stub = ts_chunk_stub_create(chunk_id, hs->num_dimensions);
+			stub->cube = ts_hypercube_alloc(hs->num_dimensions);
+			entry->stub = stub;
 		}
 		else
-			chunk = entry->chunk;
+			stub = entry->stub;
 
-		chunk_constraints_add_from_tuple(chunk->constraints, ti);
+		chunk_constraints_add_from_tuple(stub->constraints, ti);
 
-		ts_hypercube_add_slice(chunk->cube, slice);
+		ts_hypercube_add_slice(stub->cube, slice);
 
-		/* A chunk is complete when we've added slices for all its dimensions,
+		/* A stub is complete when we've added slices for all its dimensions,
 		 * i.e., a complete hypercube */
-		if (chunk_is_complete(chunk, ctx->space))
+		if (chunk_stub_is_complete(stub, ctx->space))
 		{
 			ctx->num_complete_chunks++;
 
