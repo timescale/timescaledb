@@ -108,7 +108,6 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     list(APPEND TEST_TEMPLATES
       dist_query.sql.in
       hypertable_distributed.sql.in
-      partitionwise_distributed.sql.in
     )
   endif ()
 endif ()

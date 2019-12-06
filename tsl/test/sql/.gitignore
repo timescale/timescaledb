@@ -7,7 +7,6 @@
 /compression_permissions-*.sql
 /compression_qualpushdown-*.sql
 /hypertable_distributed-*.sql
-/partitionwise_distributed-*.sql
 /dist_query-*.sql
 /move-*.sql
 /reorder-*.sql
