@@ -46,6 +46,16 @@ typedef struct Chunk
 	ChunkConstraints *constraints;
 } Chunk;
 
+/* This structure is used during the join of the chunk constraints to find
+ * chunks that match all constraints. It is a stripped down version of the chunk
+ * since we don't want to fill in all the fields until we find a match. */
+typedef struct ChunkStub
+{
+	int32 id;
+	Hypercube *cube;
+	ChunkConstraints *constraints;
+} ChunkStub;
+
 /*
  * ChunkScanCtx is used to scan for chunks in a hypertable's N-dimensional
  * hyperspace.
@@ -64,11 +74,11 @@ typedef struct ChunkScanCtx
 	void *data;
 } ChunkScanCtx;
 
-/* Returns true if the chunk has a full set of constraints, otherwise
- * false. Used to find a chunk matching a point in an N-dimensional
+/* Returns true if the stub has a full set of constraints, otherwise
+ * false. Used to find a stub matching a point in an N-dimensional
  * hyperspace. */
 static inline bool
-chunk_is_complete(Chunk *chunk, Hyperspace *space)
+chunk_stub_is_complete(ChunkStub *chunk, Hyperspace *space)
 {
 	return space->num_dimensions == chunk->constraints->num_dimension_constraints;
 }
@@ -77,11 +87,12 @@ chunk_is_complete(Chunk *chunk, Hyperspace *space)
 typedef struct ChunkScanEntry
 {
 	int32 chunk_id;
-	Chunk *chunk;
+	ChunkStub *stub;
 } ChunkScanEntry;
 
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
-extern TSDLLEXPORT Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
+extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
+extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
 extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);

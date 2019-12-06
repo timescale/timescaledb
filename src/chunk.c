@@ -71,15 +71,16 @@ typedef enum ChunkResult
 	CHUNK_PROCESSED
 } ChunkResult;
 
-typedef ChunkResult (*on_chunk_func)(ChunkScanCtx *ctx, Chunk *chunk);
+typedef ChunkResult (*on_chunk_stub_func)(ChunkScanCtx *ctx, ChunkStub *stub);
 static void chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
-static int chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 limit);
-static Chunk **chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum,
-											  Datum newer_than_datum, Oid older_than_type,
-											  Oid newer_than_type, char *caller_name,
-											  MemoryContext mctx, uint64 *num_chunks_returned);
+static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
+											 uint16 limit);
+static Chunk *chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum,
+											 Datum newer_than_datum, Oid older_than_type,
+											 Oid newer_than_type, char *caller_name,
+											 MemoryContext mctx, uint64 *num_chunks_returned);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 
@@ -229,7 +230,7 @@ chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
  * slice in an aligned dimension, we cut to not overlap with that slice.
  */
 static ChunkResult
-do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
+do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	Hypercube *cube = scanctx->data;
 	Hyperspace *space = scanctx->space;
@@ -246,10 +247,10 @@ do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
 			continue;
 
 		/*
-		 * The chunk might not have a slice for each dimension, so we cannot
+		 * The stub might not have a slice for each dimension, so we cannot
 		 * use array indexing. Fetch slice by dimension ID instead.
 		 */
-		chunk_slice = ts_hypercube_get_slice_by_dimension_id(chunk->cube, dim->fd.id);
+		chunk_slice = ts_hypercube_get_slice_by_dimension_id(stub->cube, dim->fd.id);
 
 		if (NULL == chunk_slice)
 			continue;
@@ -333,21 +334,20 @@ calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
  * fully collide. We resolve those collisions by cutting the hypercube.
  */
 static ChunkResult
-do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
+do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	Hypercube *cube = scanctx->data;
 	Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
 
-	if (chunk->cube->num_slices != space->num_dimensions ||
-		!ts_hypercubes_collide(cube, chunk->cube))
+	if (stub->cube->num_slices != space->num_dimensions || !ts_hypercubes_collide(cube, stub->cube))
 		return CHUNK_IGNORED;
 
 	for (i = 0; i < space->num_dimensions; i++)
 	{
 		DimensionSlice *cube_slice = cube->slices[i];
-		DimensionSlice *chunk_slice = chunk->cube->slices[i];
+		DimensionSlice *chunk_slice = stub->cube->slices[i];
 		int64 coord = scanctx->point->coordinates[i];
 
 		/*
@@ -364,12 +364,12 @@ do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
 			 * Redo the collision check after each cut since cutting in one
 			 * dimension might have resolved the collision in another
 			 */
-			if (!ts_hypercubes_collide(cube, chunk->cube))
+			if (!ts_hypercubes_collide(cube, stub->cube))
 				return res;
 		}
 	}
 
-	Assert(!ts_hypercubes_collide(cube, chunk->cube));
+	Assert(!ts_hypercubes_collide(cube, stub->cube));
 
 	return res;
 }
@@ -431,13 +431,13 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 	scanctx.data = cube;
 
 	/* Cut the hypercube in any aligned dimensions */
-	chunk_scan_ctx_foreach_chunk(&scanctx, do_dimension_alignment, 0);
+	chunk_scan_ctx_foreach_chunk_stub(&scanctx, do_dimension_alignment, 0);
 
 	/*
 	 * If there are any remaining collisions with chunks, then cut-to-fit to
 	 * resolve those collisions
 	 */
-	chunk_scan_ctx_foreach_chunk(&scanctx, do_collision_resolution, 0);
+	chunk_scan_ctx_foreach_chunk_stub(&scanctx, do_collision_resolution, 0);
 
 	chunk_scan_ctx_destroy(&scanctx);
 }
@@ -660,7 +660,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk = ts_chunk_create_stub(ts_catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
 	ts_catalog_restore_user(&sec_ctx);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
@@ -726,8 +726,22 @@ ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix
 	return chunk;
 }
 
+ChunkStub *
+ts_chunk_stub_create(int32 id, int16 num_constraints)
+{
+	ChunkStub *stub;
+
+	stub = palloc0(sizeof(*stub));
+	stub->id = id;
+
+	if (num_constraints > 0)
+		stub->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
+
+	return stub;
+}
+
 Chunk *
-ts_chunk_create_stub(int32 id, int16 num_constraints)
+ts_chunk_create_base(int32 id, int16 num_constraints)
 {
 	Chunk *chunk;
 
@@ -750,20 +764,25 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	return SCAN_DONE;
 }
 
-/* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
+/* Fill in a chunk stub. The stub data structure needs the stub ID and constraints set.
  * The rest of the fields will be filled in from the table data. */
 static Chunk *
-chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
+chunk_fill_from_stub(Chunk *result, ChunkStub *chunk_stub, bool tuplock)
 {
 	ScanKeyData scankey[1];
 	Catalog *catalog = ts_catalog_get();
 	int num_found;
-	ScannerCtx	ctx = {
+	ScannerCtx ctx;
+
+	result->fd.id = chunk_stub->id;
+	result->constraints = chunk_stub->constraints;
+	result->cube = chunk_stub->cube;
+	ctx = (ScannerCtx) {
         .table = catalog_get_table_id(catalog, CHUNK),
         .index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
         .nkeys = 1,
         .scankey = scankey,
-        .data = chunk_stub,
+        .data = result,
         .tuple_found = chunk_tuple_found,
         .lockmode = AccessShareLock,
         .tuplock = {
@@ -780,25 +799,31 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 				Anum_chunk_idx_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(chunk_stub->fd.id));
+				Int32GetDatum(chunk_stub->id));
 
 	num_found = ts_scanner_scan(&ctx);
 
 	if (num_found != 1)
-		elog(ERROR, "no chunk found with ID %d", chunk_stub->fd.id);
+		elog(ERROR, "no chunk found with ID %d", chunk_stub->id);
 
-	if (NULL == chunk_stub->cube)
-		chunk_stub->cube =
-			ts_hypercube_from_constraints(chunk_stub->constraints, CurrentMemoryContext);
+	if (NULL == result->cube)
+		result->cube = ts_hypercube_from_constraints(result->constraints, CurrentMemoryContext);
 	else
 
 		/*
 		 * The hypercube slices were filled in during the scan. Now we need to
 		 * sort them in dimension order.
 		 */
-		ts_hypercube_slice_sort(chunk_stub->cube);
+		ts_hypercube_slice_sort(result->cube);
 
-	return chunk_stub;
+	return result;
+}
+
+static Chunk *
+make_chunk_from_stub(ChunkStub *chunk_stub, bool tuplock)
+{
+	Chunk *result = palloc(sizeof(*result));
+	return chunk_fill_from_stub(result, chunk_stub, tuplock);
 }
 
 /*
@@ -914,7 +939,7 @@ chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube)
 }
 
 /*
- * Apply a function to each chunk in the scan context's hash table. If the limit
+ * Apply a function to each stub in the scan context's hash table. If the limit
  * is greater than zero only a limited number of chunks will be processed.
  *
  * The chunk handler function (on_chunk_func) should return CHUNK_PROCESSED if
@@ -926,7 +951,7 @@ chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube)
  * Returns the number of processed chunks.
  */
 static int
-chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 limit)
+chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk, uint16 limit)
 {
 	HASH_SEQ_STATUS status;
 	ChunkScanEntry *entry;
@@ -936,7 +961,7 @@ chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 l
 
 	for (entry = hash_seq_search(&status); entry != NULL; entry = hash_seq_search(&status))
 	{
-		switch (on_chunk(ctx, entry->chunk))
+		switch (on_chunk(ctx, entry->stub))
 		{
 			case CHUNK_DONE:
 				num_processed++;
@@ -960,11 +985,11 @@ chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 l
 }
 
 static ChunkResult
-set_complete_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
+set_complete_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
-	if (chunk_is_complete(chunk, scanctx->space))
+	if (chunk_stub_is_complete(stub, scanctx->space))
 	{
-		scanctx->data = chunk;
+		scanctx->data = stub;
 #ifdef USE_ASSERT_CHECKING
 		return CHUNK_PROCESSED;
 #else
@@ -975,12 +1000,11 @@ set_complete_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
 }
 
 static ChunkResult
-chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
+chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
-	Chunk **chunks = (Chunk **) scanctx->data;
+	Chunk *chunks = (Chunk *) scanctx->data;
 
-	chunk_fill_stub(chunk, false);
-	*chunks = chunk;
+	chunk_fill_from_stub(chunks, stub, false);
 	scanctx->data = chunks + 1;
 	return CHUNK_PROCESSED;
 }
@@ -988,19 +1012,19 @@ chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
 /* Finds the first chunk that has a complete set of constraints. There should be
  * only one such chunk in the scan context when scanning for the chunk that
  * holds a particular tuple/point. */
-static Chunk *
+static ChunkStub *
 chunk_scan_ctx_get_chunk(ChunkScanCtx *ctx)
 {
 	ctx->data = NULL;
 
 #ifdef USE_ASSERT_CHECKING
 	{
-		int n = chunk_scan_ctx_foreach_chunk(ctx, set_complete_chunk, 0);
+		int n = chunk_scan_ctx_foreach_chunk_stub(ctx, set_complete_chunk, 0);
 
 		Assert(n == 0 || n == 1);
 	}
 #else
-	chunk_scan_ctx_foreach_chunk(ctx, set_complete_chunk, 1);
+	chunk_scan_ctx_foreach_chunk_stub(ctx, set_complete_chunk, 1);
 #endif
 
 	return ctx->data;
@@ -1016,7 +1040,7 @@ chunk_scan_ctx_get_chunk(ChunkScanCtx *ctx)
  * 2) For each dimension slice:
  *	  - Find all chunk constraints matching the dimension slice
  * 3) For each matching chunk constraint
- *	  - Insert a (stub) chunk in a hash table and add the constraint to the chunk
+ *	  - Insert a chunk stub into a hash table and add the constraint to the chunk
  *	  - If chunk already exists in hash table, add the constraint to the chunk
  * 4) At the end of the scan, only one chunk in the hash table should have
  *	  N number of constraints. This is the matching chunk.
@@ -1030,7 +1054,8 @@ chunk_scan_ctx_get_chunk(ChunkScanCtx *ctx)
 Chunk *
 ts_chunk_find(Hyperspace *hs, Point *p)
 {
-	Chunk *chunk;
+	ChunkStub *stub;
+	Chunk *chunk = NULL;
 	ChunkScanCtx ctx;
 
 	/* The scan context will keep the state accumulated during the scan */
@@ -1042,15 +1067,15 @@ ts_chunk_find(Hyperspace *hs, Point *p)
 	/* Scan for the chunk matching the point */
 	chunk_point_scan(&ctx, p);
 
-	/* Find the chunk that has N matching dimension constraints */
-	chunk = chunk_scan_ctx_get_chunk(&ctx);
+	/* Find the stub that has N matching dimension constraints */
+	stub = chunk_scan_ctx_get_chunk(&ctx);
 
 	chunk_scan_ctx_destroy(&ctx);
 
-	if (NULL != chunk)
+	if (NULL != stub)
 	{
 		/* Fill in the rest of the chunk's data from the chunk table */
-		chunk_fill_stub(chunk, false);
+		chunk = make_chunk_from_stub(stub, false);
 
 		/*
 		 * When searching for the chunk that matches the point, we only
@@ -1193,13 +1218,14 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 }
 
 static ChunkResult
-append_chunk_oid(ChunkScanCtx *scanctx, Chunk *chunk)
+append_chunk_oid(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
-	if (!chunk_is_complete(chunk, scanctx->space))
+	Chunk *chunk;
+	if (!chunk_stub_is_complete(stub, scanctx->space))
 		return CHUNK_IGNORED;
 
 	/* Fill in the rest of the chunk's data from the chunk table */
-	chunk_fill_stub(chunk, false);
+	chunk = make_chunk_from_stub(stub, false);
 
 	if (scanctx->lockmode != NoLock)
 		LockRelationOid(chunk->table_id, scanctx->lockmode);
@@ -1210,15 +1236,16 @@ append_chunk_oid(ChunkScanCtx *scanctx, Chunk *chunk)
 }
 
 static ChunkResult
-append_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
+append_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	Chunk **chunks = scanctx->data;
+	Chunk *chunk;
 
-	if (!chunk_is_complete(chunk, scanctx->space))
+	if (!chunk_stub_is_complete(stub, scanctx->space))
 		return CHUNK_IGNORED;
 
 	/* Fill in the rest of the chunk's data from the chunk table */
-	chunk_fill_stub(chunk, false);
+	chunk = make_chunk_from_stub(stub, false);
 
 	if (scanctx->lockmode != NoLock)
 		LockRelationOid(chunk->table_id, scanctx->lockmode);
@@ -1233,7 +1260,7 @@ append_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
 }
 
 static void *
-chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_func on_chunk, LOCKMODE lockmode,
+chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_stub_func on_chunk, LOCKMODE lockmode,
 			   unsigned int *num_chunks)
 {
 	ChunkScanCtx ctx;
@@ -1258,7 +1285,7 @@ chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_func on_chunk, LOC
 		*num_chunks = ctx.num_complete_chunks;
 
 	ctx.data = NULL;
-	chunk_scan_ctx_foreach_chunk(&ctx, on_chunk, 0);
+	chunk_scan_ctx_foreach_chunk_stub(&ctx, on_chunk, 0);
 
 	chunk_scan_ctx_destroy(&ctx);
 
@@ -1315,7 +1342,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 	return chunks_return_srf(fcinfo);
 }
 
-static Chunk **
+static Chunk *
 chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 							   Oid older_than_type, Oid newer_than_type, char *caller_name,
 							   MemoryContext mctx, uint64 *num_chunks_returned)
@@ -1323,8 +1350,8 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	ListCell *lc;
 	MemoryContext oldcontext;
 	ChunkScanCtx **chunk_scan_ctxs;
-	Chunk **chunks;
-	Chunk **current;
+	Chunk *chunks;
+	Chunk *current;
 	Cache *hypertable_cache;
 	Hypertable *ht;
 	Dimension *time_dim;
@@ -1417,15 +1444,16 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	 * num_chunks can safely be 0 as palloc protects against unportable
 	 * behavior.
 	 */
-	chunks = palloc(sizeof(Chunk *) * num_chunks);
+	chunks = palloc(sizeof(Chunk) * num_chunks);
 	current = chunks;
 
 	MemoryContextSwitchTo(oldcontext);
+
 	for (i = 0; i < list_length(hypertables); i++)
 	{
 		/* Get all the chunks from the context */
 		chunk_scan_ctxs[i]->data = current;
-		chunk_scan_ctx_foreach_chunk(chunk_scan_ctxs[i], chunk_scan_context_add_chunk, -1);
+		chunk_scan_ctx_foreach_chunk_stub(chunk_scan_ctxs[i], chunk_scan_context_add_chunk, -1);
 
 		current = chunk_scan_ctxs[i]->data;
 
@@ -1436,7 +1464,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 		chunk_scan_ctx_destroy(chunk_scan_ctxs[i]);
 	}
 
-	qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp);
+	qsort(chunks, num_chunks, sizeof(Chunk), chunk_cmp);
 
 	*num_chunks_returned = num_chunks;
 	ts_cache_release(hypertable_cache);
@@ -1864,12 +1892,13 @@ ts_chunk_contains_compressed_data(Chunk *chunk)
 }
 
 static ChunkResult
-chunk_recreate_constraint(ChunkScanCtx *ctx, Chunk *chunk)
+chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {
-	ChunkConstraints *ccs = chunk->constraints;
+	ChunkConstraints *ccs = stub->constraints;
+	Chunk *chunk;
 	int i;
 
-	chunk_fill_stub(chunk, false);
+	chunk = make_chunk_from_stub(stub, false);
 
 	for (i = 0; i < ccs->num_constraints; i++)
 		ts_chunk_constraint_recreate(&ccs->constraints[i], chunk->table_id);
@@ -1896,7 +1925,7 @@ ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_
 													&chunkctx,
 													CurrentMemoryContext);
 
-	chunk_scan_ctx_foreach_chunk(&chunkctx, chunk_recreate_constraint, 0);
+	chunk_scan_ctx_foreach_chunk_stub(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);
 }
 
@@ -2054,8 +2083,8 @@ ts_chunks_rename_schema_name(char *old_schema, char *new_schema)
 static int
 chunk_cmp(const void *ch1, const void *ch2)
 {
-	const Chunk *v1 = *((const Chunk **) ch1);
-	const Chunk *v2 = *((const Chunk **) ch2);
+	const Chunk *v1 = ((const Chunk *) ch1);
+	const Chunk *v2 = ((const Chunk *) ch2);
 
 	if (v1->fd.hypertable_id < v2->fd.hypertable_id)
 		return -1;
@@ -2080,7 +2109,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 	FuncCallContext *funcctx;
 	uint64 call_cntr;
 	TupleDesc tupdesc;
-	Chunk **result_set;
+	Chunk *result_set;
 
 	/* stuff done only on the first call of the function */
 	if (SRF_IS_FIRSTCALL())
@@ -2098,11 +2127,11 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 	funcctx = SRF_PERCALL_SETUP();
 
 	call_cntr = funcctx->call_cntr;
-	result_set = (Chunk **) funcctx->user_fctx;
+	result_set = (Chunk *) funcctx->user_fctx;
 
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)
-		SRF_RETURN_NEXT(funcctx, result_set[call_cntr]->table_id);
+		SRF_RETURN_NEXT(funcctx, result_set[call_cntr].table_id);
 	else /* do when there is no more left */
 		SRF_RETURN_DONE(funcctx);
 }
@@ -2133,9 +2162,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 						Oid older_than_type, Oid newer_than_type, bool cascade,
 						bool cascades_to_materializations, int32 log_level)
 {
-	int i = 0;
+	uint64 i = 0;
 	uint64 num_chunks = 0;
-	Chunk **chunks;
+	Chunk *chunks;
 	List *dropped_chunk_names = NIL;
 	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
@@ -2174,8 +2203,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		char *chunk_name;
 
 		/* store chunk name for output */
-		schema_name = quote_identifier(chunks[i]->fd.schema_name.data);
-		table_name = quote_identifier(chunks[i]->fd.table_name.data);
+		schema_name = quote_identifier(chunks[i].fd.schema_name.data);
+		table_name = quote_identifier(chunks[i].fd.table_name.data);
 
 		len = strlen(schema_name) + strlen(table_name) + 2;
 		chunk_name = palloc(len);
@@ -2183,11 +2212,11 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		snprintf(chunk_name, len, "%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		ts_chunk_drop(chunks[i], (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
+		ts_chunk_drop(chunks + i, (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
 	}
 
 	if (cascades_to_materializations)
-		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, chunks, num_chunks);
+		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, &chunks, num_chunks);
 
 	return dropped_chunk_names;
 }
@@ -2384,7 +2413,7 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-/* has chunk ,specifieid by chunk_id, been compressed */
+/* has chunk, specifieid by chunk_id, been compressed */
 bool
 ts_chunk_has_associated_compressed_chunk(int32 chunk_id)
 {
