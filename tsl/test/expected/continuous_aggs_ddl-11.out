@@ -22,6 +22,12 @@ select table_name from create_hypertable('conditions', 'timec');
 
 -- check that GRANTS work correctly
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
 create  view mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum( temperature ), min(location)
