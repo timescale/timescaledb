@@ -551,6 +551,27 @@ add_distributed_id_to_data_node(TSConnection *conn)
 	remote_result_close(res);
 }
 
+/*
+ * Connect to do bootstrapping.
+ *
+ * This behaves similar to connectMaintenanceDatabase and will first try to
+ * connect to "postgres" database and if that does not exists, to the
+ * "template1" database.
+ */
+static TSConnection *
+connect_for_bootstrapping(const char *node_name, const char *const host, int32 port,
+						  const char *username)
+{
+	List *node_options = create_data_node_options(host, port, "postgres", username);
+	TSConnection *conn = remote_connection_open_with_options_nothrow(node_name, node_options);
+
+	if (conn)
+		return conn;
+
+	node_options = create_data_node_options(host, port, "template1", username);
+	return remote_connection_open_with_options_nothrow(node_name, node_options);
+}
+
 /**
  * Get the configured server port for the server as an integer.
  *
@@ -586,7 +607,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	long port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	bool bootstrap = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
-	const char *bootstrap_database = PG_ARGISNULL(6) ? dbname : PG_GETARG_CSTRING(6);
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
@@ -605,11 +625,6 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
 				 (errmsg("unable to assign data nodes from an existing distributed database"))));
-
-	if (NULL == bootstrap_database)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 (errmsg("invalid bootstrap database name"))));
 
 	if (NULL == node_name)
 		ereport(ERROR,
@@ -650,11 +665,10 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 		if (bootstrap)
 		{
-			node_options = create_data_node_options(host, port, bootstrap_database, username);
-			conn = remote_connection_open_with_options(node_name, node_options, false);
-
+			conn = connect_for_bootstrapping(node_name, host, port, username);
 			database_created = data_node_bootstrap_database(conn, &database);
 			remote_connection_close(conn);
+			conn = NULL; /* A precaution */
 		}
 
 		/* Connect to the database we are bootstrapping and either install the
