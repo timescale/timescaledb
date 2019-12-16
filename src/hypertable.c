@@ -995,7 +995,7 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 	 * allocates a lot of transient data. We don't want this allocated on
 	 * the cache's memory context.
 	 */
-	chunk = ts_chunk_find(h->space, point);
+	chunk = ts_chunk_find(h->space, point, false);
 
 	if (NULL == chunk)
 	{

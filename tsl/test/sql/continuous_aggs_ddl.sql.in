@@ -429,6 +429,16 @@ SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --earliest datapoint now in table
 SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
+--we see the chunks row with the dropped flags set;
+SELECT * FROM _timescaledb_catalog.chunk where dropped;
+--still see data in the view
+SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER BY time_bucket DESC;
+--no data but covers dropped chunks
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
+--recreate the dropped chunk
+INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
+--see data from recreated region
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 --change to bucket 31 also seen

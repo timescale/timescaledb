@@ -177,8 +177,8 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *cc)
 /*
  * Insert multiple chunk constraints into the metadata catalog.
  */
-static void
-chunk_constraints_insert(ChunkConstraints *ccs)
+TSDLLEXPORT void
+ts_chunk_constraints_insert_metadata(ChunkConstraints *ccs)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -330,8 +330,6 @@ ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id
 							Oid hypertable_oid, int32 hypertable_id)
 {
 	int i;
-
-	chunk_constraints_insert(ccs);
 
 	for (i = 0; i < ccs->num_constraints; i++)
 		chunk_constraint_create(&ccs->constraints[i],

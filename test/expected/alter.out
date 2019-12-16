@@ -185,25 +185,25 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id 
-----+---------------+-----------------------+------------------+---------------------
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                    
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped 
+----+---------------+-----------------------+------------------+---------------------+---------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f
 (1 row)
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id 
-----+---------------+-----------------------+----------------+---------------------
-  2 |             2 | _timescaledb_internal | new_chunk_name |                    
+ id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id | dropped 
+----+---------------+-----------------------+----------------+---------------------+---------
+  2 |             2 | _timescaledb_internal | new_chunk_name |                     | f
 (1 row)
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id | schema_name |   table_name   | compressed_chunk_id 
-----+---------------+-------------+----------------+---------------------
-  2 |             2 | public      | new_chunk_name |                    
+ id | hypertable_id | schema_name |   table_name   | compressed_chunk_id | dropped 
+----+---------------+-------------+----------------+---------------------+---------
+  2 |             2 | public      | new_chunk_name |                     | f
 (1 row)
 
 -- Test that we cannot rename chunk columns
@@ -626,10 +626,10 @@ SELECT * from _timescaledb_catalog.hypertable;
 (1 row)
 
 SELECT * from _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id 
-----+---------------+-----------------------+--------------------+---------------------
- 22 |            11 | new_associated_schema | _hyper_11_22_chunk |                    
- 23 |            11 | new_associated_schema | _hyper_11_23_chunk |                    
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped 
+----+---------------+-----------------------+--------------------+---------------------+---------
+ 22 |            11 | new_associated_schema | _hyper_11_22_chunk |                     | f
+ 23 |            11 | new_associated_schema | _hyper_11_23_chunk |                     | f
 (2 rows)
 
 DROP TABLE my_table;

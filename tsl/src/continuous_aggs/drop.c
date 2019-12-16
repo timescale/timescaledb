@@ -16,13 +16,15 @@
 #include "create.h"
 
 void
-ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks, Size num_chunks)
+ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks_ptr,
+										  Size num_chunks)
 {
 	ListCell *lc;
 	Oid arg_type = INT4OID;
 	List *continuous_aggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
 	StringInfo command = makeStringInfo();
 	CatalogSecurityContext sec_ctx;
+	Chunk *chunks = *chunks_ptr;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
@@ -51,7 +53,7 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 
 		for (i = 0; i < num_chunks; i++)
 		{
-			Datum arg = Int32GetDatum(chunks[i]->fd.id);
+			Datum arg = Int32GetDatum(chunks[i].fd.id);
 			int res = SPI_execute_plan(delete_plan, &arg, NULL, false, 0);
 			if (res < 0)
 				elog(ERROR, "could not delete from the materialization");
