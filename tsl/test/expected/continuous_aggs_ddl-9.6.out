@@ -266,6 +266,14 @@ SELECT drop_chunks(schema_name => :'drop_chunks_mat_schema',
     newer_than => -20,
     verbose => true);
 ERROR:  cannot drop_chunks on a continuous aggregate materialization table
+SELECT drop_chunks(
+    newer_than => -20,
+    verbose => true,
+    cascade_to_materializations=>true);
+INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
+ERROR:  cannot drop_chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -290,7 +298,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 -- cannot drop from the raw table without specifying cascade_to_materializations
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 10);
-ERROR:  cannot drop_chunks on hypertable that has a continuous aggregate without cascade_to_materializations set to true
+ERROR:  cascade_to_materializations options must be set explicitly
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -314,7 +322,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(older_than => 200);
-ERROR:  cannot drop_chunks on hypertable that has a continuous aggregate without cascade_to_materializations set to true
+ERROR:  cascade_to_materializations options must be set explicitly
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
