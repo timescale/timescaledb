@@ -83,3 +83,9 @@ ALTER TABLE _timescaledb_config.bgw_policy_drop_chunks ALTER COLUMN cascade_to_m
 
 UPDATE _timescaledb_config.bgw_policy_drop_chunks SET cascade_to_materializations = NULL WHERE cascade_to_materializations = false;
 
+ALTER TABLE  _timescaledb_catalog.chunk ADD COLUMN dropped BOOLEAN DEFAULT false;
+UPDATE _timescaledb_catalog.chunk SET dropped = false;
+ALTER TABLE _timescaledb_catalog.chunk ALTER COLUMN dropped SET NOT NULL;
+
+CLUSTER  _timescaledb_catalog.chunk USING chunk_pkey;
+ALTER TABLE _timescaledb_catalog.chunk SET WITHOUT CLUSTER;

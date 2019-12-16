@@ -717,6 +717,62 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
    30 |   30
 (1 row)
 
+--we see the chunks row with the dropped flags set;
+SELECT * FROM _timescaledb_catalog.chunk where dropped;
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped 
+----+---------------+-----------------------+--------------------+---------------------+---------
+ 13 |            12 | _timescaledb_internal | _hyper_12_13_chunk |                     | t
+ 14 |            12 | _timescaledb_internal | _hyper_12_14_chunk |                     | t
+ 15 |            12 | _timescaledb_internal | _hyper_12_15_chunk |                     | t
+(3 rows)
+
+--still see data in the view
+SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER BY time_bucket DESC;
+ time_bucket | max 
+-------------+-----
+          25 | 100
+          20 |  24
+          15 |  19
+          10 |  14
+           5 |   9
+           0 |   4
+(6 rows)
+
+--no data but covers dropped chunks
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
+ time | data 
+------+------
+(0 rows)
+
+--recreate the dropped chunk
+INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
+--see data from recreated region
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
+ time | data 
+------+------
+   20 |   20
+   19 |   19
+   18 |   18
+   17 |   17
+   16 |   16
+   15 |   15
+   14 |   14
+   13 |   13
+   12 |   12
+   11 |   11
+   10 |   10
+    9 |    9
+    8 |    8
+    7 |    7
+    6 |    6
+    5 |    5
+    4 |    4
+    3 |    3
+    2 |    2
+    1 |    1
+    0 |    0
+(21 rows)
+
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
@@ -768,7 +824,10 @@ INFO:  materializing continuous aggregate public.drop_chunks_view: no new range 
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_17_chunk
-(1 row)
+ _timescaledb_internal._hyper_12_13_chunk
+ _timescaledb_internal._hyper_12_14_chunk
+ _timescaledb_internal._hyper_12_15_chunk
+(4 rows)
 
 --see both 30 and 35 updated
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;

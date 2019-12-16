@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     schema_name     NAME    NOT NULL,
     table_name      NAME    NOT NULL,
     compressed_chunk_id   INTEGER  REFERENCES _timescaledb_catalog.chunk(id),
+    dropped         BOOLEAN NOT NULL DEFAULT false,
     UNIQUE (schema_name, table_name)
 );
 CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx

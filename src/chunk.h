@@ -69,6 +69,7 @@ typedef struct ChunkScanCtx
 	Hyperspace *space;
 	Point *point;
 	unsigned int num_complete_chunks;
+	int num_processed;
 	bool early_abort;
 	LOCKMODE lockmode;
 	void *data;
@@ -100,7 +101,7 @@ typedef enum CascadeToMaterializationOption
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
-extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
+extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p, bool include_chunks_marked_as_dropped);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
@@ -124,8 +125,7 @@ extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
-extern int ts_chunk_delete_by_name(const char *schema, const char *table,
-								   DropBehavior DropBehavior);
+extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
@@ -133,6 +133,8 @@ extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
 													  bool isnull);
 extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level);
+extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBehavior behavior,
+														   int32 log_level);
 extern TSDLLEXPORT List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,

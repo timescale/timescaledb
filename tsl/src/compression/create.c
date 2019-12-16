@@ -603,6 +603,8 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 													 compress_chunk->fd.id,
 													 compress_chunk->hypertable_relid);
 
+	ts_chunk_constraints_insert_metadata(compress_chunk->constraints);
+
 	/* Create the actual table relation for the chunk
 	 * Note that we have to pick the tablespace here as the compressed ht doesn't have dimensions
 	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
