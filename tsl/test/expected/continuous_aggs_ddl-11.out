@@ -917,3 +917,38 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
            0 |   4
 (12 rows)
 
+--no data but covers dropped chunks
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
+ time | data 
+------+------
+(0 rows)
+
+SELECT set_chunk_time_interval('drop_chunks_table', 1000);
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
+(1 row)
+
+--recreate the dropped chunk
+INSERT INTO drop_chunks_table VALUES (20, 20);
+--now sees the re-entered data
+SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
+ time | data 
+------+------
+   20 |   20
+(1 row)
+
+--should show chunk with old name and old ranges
+SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_12_15_chunk | {"[20,30)"}
+ _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
+(2 rows)
+
