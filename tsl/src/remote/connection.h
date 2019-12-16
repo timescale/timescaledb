@@ -38,6 +38,8 @@ typedef enum ConnOptionType
 extern TSConnection *remote_connection_open_with_options(const char *node_name,
 														 List *connection_options,
 														 bool set_dist_id);
+extern TSConnection *remote_connection_open_with_options_nothrow(const char *node_name,
+																 List *connection_options);
 extern TSConnection *remote_connection_open_by_id(TSConnectionId id);
 extern TSConnection *remote_connection_open(Oid server_id, Oid user_id);
 extern TSConnection *remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg);

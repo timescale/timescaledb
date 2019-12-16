@@ -1009,8 +1009,15 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 	*option_start = option_pos;
 }
 
-static TSConnection *
-remote_connection_open_internal(const char *node_name, List *connection_options)
+/*
+ * This will only open a connection to a specific node, but not do anything
+ * else. In particular, it will not perform any validation nor configure the
+ * connection since it cannot know that it connects to a data node database or
+ * not. For that, please use the `remote_connection_open_with_options`
+ * function.
+ */
+TSConnection *
+remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options)
 {
 	PGconn *pg_conn = NULL;
 	const char *user_name = NULL;
@@ -1085,7 +1092,7 @@ TSConnection *
 remote_connection_open_with_options(const char *node_name, List *connection_options,
 									bool set_dist_id)
 {
-	TSConnection *conn = remote_connection_open_internal(node_name, connection_options);
+	TSConnection *conn = remote_connection_open_with_options_nothrow(node_name, connection_options);
 
 	if (NULL == conn)
 		ereport(ERROR,
@@ -1185,7 +1192,7 @@ remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
 	}
 
 	connection_options = add_username_to_server_options(server, user_id);
-	conn = remote_connection_open_internal(server->servername, connection_options);
+	conn = remote_connection_open_with_options_nothrow(server->servername, connection_options);
 
 	if (NULL == conn)
 	{
