@@ -109,6 +109,7 @@ get_relation_qualified_name(Oid relid)
 
 	return name->data;
 }
+
 static const double FILL_FACTOR_CURRENT_CHUNK = 0.5;
 static const double FILL_FACTOR_HISTORICAL_CHUNK = 1;
 
@@ -174,6 +175,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	{
 		TimestampTz now = GetSQLCurrentTimestamp(-1);
 		int64 now_internal_time;
+		double elapsed;
+		double interval;
 
 #ifdef TS_DEBUG
 		if (ts_current_timestamp_override_value >= 0)
@@ -195,8 +198,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 			return FILL_FACTOR_CURRENT_CHUNK;
 
 		/* current time falls within chunk time constraints */
-		double elapsed = (now_internal_time - time_slice->fd.range_start);
-		double interval = (time_slice->fd.range_end - time_slice->fd.range_start);
+		elapsed = (now_internal_time - time_slice->fd.range_start);
+		interval = (time_slice->fd.range_end - time_slice->fd.range_start);
 
 		Assert(interval != 0);
 
