@@ -446,8 +446,7 @@ AS SELECT time_bucket('1 hour', "Time"), SUM(i)
    FROM test1
    GROUP BY 1;
 REFRESH MATERIALIZED VIEW test1_cont_view;
-INFO:  new materialization range for public.test1 (time column Time) (1522216800000000)
-INFO:  materializing continuous aggregate public.test1_cont_view: nothing to invalidate, new range up to 1522216800000000
+INFO:  materializing continuous aggregate public.test1_cont_view: nothing to invalidate, new range up to Tue Mar 27 23:00:00 2018 PDT
 SELECT count(*) FROM test1_cont_view;
  count 
 -------

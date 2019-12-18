@@ -311,6 +311,19 @@ ts_internal_to_time_value(int64 value, Oid type)
 	}
 }
 
+TSDLLEXPORT char *
+ts_internal_to_time_string(int64 value, Oid type)
+{
+	Datum time_datum = ts_internal_to_time_value(value, type);
+	Oid typoutputfunc;
+	bool typIsVarlena;
+	FmgrInfo typoutputinfo;
+
+	getTypeOutputInfo(type, &typoutputfunc, &typIsVarlena);
+	fmgr_info(typoutputfunc, &typoutputinfo);
+	return OutputFunctionCall(&typoutputinfo, time_datum);
+}
+
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
 
 Datum

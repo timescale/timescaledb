@@ -237,7 +237,6 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range for public.drop_chunks_table (time column time) (15)
 INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -399,7 +398,6 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range for public.drop_chunks_table_u (time column time) (15)
 INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
  count 
@@ -557,8 +555,7 @@ NOTICE:  adding index _materialized_hypertable_10_case_time_idx ON _timescaledb_
 NOTICE:  adding index _materialized_hypertable_10_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(coalesce, time)
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
-INFO:  new materialization range for public.metrics (time column time) (947289600000000)
-INFO:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to 947289600000000
+INFO:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------

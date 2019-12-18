@@ -58,8 +58,7 @@ group by time_bucket('1day', timec), location;
 NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_m1;
-INFO:  new materialization range for public.conditions (time column timec) (1546041600000000)
-INFO:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to 1546041600000000
+INFO:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
 --test first/last
 create or replace view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
@@ -71,8 +70,7 @@ NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescal
 --time that refresh assumes as now() for repeatability
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_m2;
-INFO:  new materialization range for public.conditions (time column timec) (1546041600000000)
-INFO:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to 1546041600000000
+INFO:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as
