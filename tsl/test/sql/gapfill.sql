@@ -525,6 +525,14 @@ SELECT
 FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
 GROUP BY 1 ORDER BY 1;
 
+-- test locf with NULLs in first row of resultset and treat_null_as_missing with lookup query
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=false, prev := (SELECT 100)) AS v1,
+  locf(min(value),treat_null_as_missing:=true, prev := (SELECT 100)) AS v2
+FROM (values (0,NULL),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+
 -- test locf with NULLs in resultset and treat_null_as_missing with resort
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,

@@ -896,11 +896,14 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 		{
 			case LOCF_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
-				if (isnull && column.locf->treat_null_as_missing && !column.locf->isnull)
+				if (isnull && column.locf->treat_null_as_missing)
 				{
-					state->subslot->tts_isnull[i] = false;
-					state->subslot->tts_values[i] = column.locf->value;
-					modified = true;
+					gapfill_locf_calculate(column.locf,
+										   state,
+										   state->subslot_time,
+										   &state->subslot->tts_values[i],
+										   &state->subslot->tts_isnull[i]);
+					modified = !state->subslot->tts_isnull[i];
 				}
 				else
 					gapfill_locf_tuple_returned(column.locf, value, isnull);
