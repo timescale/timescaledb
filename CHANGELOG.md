@@ -4,7 +4,7 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.6
+## 1.6.0 (unreleased)
 
 The semantics of the refresh_lag parameter for continuous aggregates has 
 been changed to be relative to the current timestamp instead of the maximum
@@ -19,6 +19,12 @@ timescaledb.ignore_invalidation_older_than = '1 month', then any modifications
 for data older than 1 month from the current timestamp at modification time may 
 not cause continuous aggregate to be updated. This limits the amount of work
 that a backfill can trigger. By default, all invalidations are processed.
+
+**Bugfixes**
+* #1591 Fix locf treat_null_as_missing option
+
+**Thanks**
+* @optijon for reporting an issue with locf treat_null_as_missing option
 
 ## 1.5.1 (2019-11-12)
 

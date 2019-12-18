@@ -833,6 +833,23 @@ GROUP BY 1 ORDER BY 1;
    50 |     6
 (6 rows)
 
+-- test locf with NULLs in first row of resultset and treat_null_as_missing with lookup query
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=false, prev := (SELECT 100)) AS v1,
+  locf(min(value),treat_null_as_missing:=true, prev := (SELECT 100)) AS v2
+FROM (values (0,NULL),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+ time | v1 | v2  
+------+----+-----
+    0 |    | 100
+   10 |    | 100
+   20 |    | 100
+   30 |    | 100
+   40 |    | 100
+   50 |  6 |   6
+(6 rows)
+
 -- test locf with NULLs in resultset and treat_null_as_missing with resort
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
