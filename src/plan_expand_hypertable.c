@@ -897,6 +897,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		.join_conditions = NIL,
 		.propagate_conditions = NIL,
 	};
+	Size old_rel_array_len;
+	Index first_chunk_index = 0;
+	Index i = 0;
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -905,7 +908,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		elog(ERROR, "unexpected permissions requested");
 
 	/* mark the parent as an append relation */
+#if PG12_LT
 	rte->inh = true;
+#endif
 
 	init_chunk_exclusion_func();
 
@@ -921,11 +926,18 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	 * the simple_*_array structures have already been set, we need to add the
 	 * children to them
 	 */
+	old_rel_array_len = root->simple_rel_array_size;
 	root->simple_rel_array_size += list_length(inh_oids);
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
+	/* postgres expects these arrays to be 0'ed until intialized */
+	memset(root->simple_rel_array + old_rel_array_len, 0, list_length(inh_oids) * sizeof(*root->simple_rel_array));
+
 	root->simple_rte_array =
 		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
+	/* postgres expects these arrays to be 0'ed until intialized */
+	memset(root->simple_rte_array + old_rel_array_len, 0, list_length(inh_oids) * sizeof(*root->simple_rte_array));
+	//TODO use expand_planner_arrays
 
 #if PG11_GE
 	/* Adding partition info will make PostgreSQL consider the inheritance
@@ -974,8 +986,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		childrte->securityQuals = NIL;
 		parse->rtable = lappend(parse->rtable, childrte);
 		child_rtindex = list_length(parse->rtable);
+		if (first_chunk_index == 0)
+			first_chunk_index = child_rtindex;
 		root->simple_rte_array[child_rtindex] = childrte;
+#if PG12_LT
 		root->simple_rel_array[child_rtindex] = NULL;
+#endif
 
 #if PG10_GE
 		Assert(childrte->relkind != RELKIND_PARTITIONED_TABLE);
@@ -1001,12 +1017,28 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	heap_close(oldrelation, NoLock);
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
+	// root->append_rel_array = palloc0(sizeof(*root->append_rel_array));
+
 #if PG11_GE
 	/*
 	 * PG11 introduces a separate array to make looking up children faster, see:
 	 * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.
 	 */
 	setup_append_rel_array(root);
+#endif
+
+#if PG12
+	/* In pg12 postgres will not set up the child rels for use, due to the games
+	 * we're playing with inheritance, so we must do it ourselves.
+	 * build_simple_rel will look things up in the append_rel_array, so we can
+	 * only use it after that array has been set up.
+	 */
+	foreach (l, inh_oids)
+	{
+		Index child_rtindex = first_chunk_index + i;
+		root->simple_rel_array[child_rtindex] = build_simple_rel(root, child_rtindex, rel);
+		i += 1;
+	}
 #endif
 }
 
