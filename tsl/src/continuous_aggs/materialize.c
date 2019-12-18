@@ -257,8 +257,9 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 
 		if (materializing_new_range)
 			appendStringInfo(msg,
-							 "new range up to " INT64_FORMAT,
-							 materialization_invalidation_threshold);
+							 "new range up to %s",
+							 ts_internal_to_time_string(materialization_invalidation_threshold,
+														time_column_type));
 		else
 			appendStringInfo(msg, "no new range");
 		elog(INFO, "%s", msg->data);
@@ -424,11 +425,11 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (verbose)
 			elog(INFO,
 				 "new materialization range not found for %s.%s (time column %s): not enough data "
-				 "in table (" INT64_FORMAT ")",
+				 "that satisfies the refresh lag criterion as of %s",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
-				 now_time);
+				 ts_internal_to_time_string(now_time, time_column_type));
 		*materializing_new_range = false;
 		return old_completed_threshold;
 	}
@@ -449,11 +450,12 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (verbose)
 			elog(INFO,
 				 "new materialization range not found for %s.%s (time column %s): "
-				 "not enough new data past completion threshold (" INT64_FORMAT ")",
+				 "not enough new data past completion threshold of %s as of %s",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
-				 end_time);
+				 ts_internal_to_time_string(start_time, time_column_type),
+				 ts_internal_to_time_string(now_time, time_column_type));
 		*materializing_new_range = false;
 		return old_completed_threshold;
 	}
@@ -463,30 +465,26 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	 */
 	if (end_time - start_time > max_interval_per_job)
 	{
+		int64 new_end_time;
+		new_end_time = ts_time_bucket_by_type(bucket_width,
+											  start_time + max_interval_per_job,
+											  time_column_type);
 		if (verbose)
 			elog(INFO,
-				 "new materialization range for %s.%s larger than allowed in one run, truncating "
-				 "(time column %s) (" INT64_FORMAT ")",
+				 "new materialization range for %s.%s (time column %s) larger than allowed in one "
+				 "run, truncating %s "
+				 "to %s",
 				 NameStr(*hypertable.schema),
 				 NameStr(*hypertable.name),
 				 NameStr(time_column_name),
-				 end_time);
-		end_time = ts_time_bucket_by_type(bucket_width,
-										  start_time + max_interval_per_job,
-										  time_column_type);
+				 ts_internal_to_time_string(end_time, time_column_type),
+				 ts_internal_to_time_string(new_end_time, time_column_type));
+		end_time = new_end_time;
 		Assert(end_time > old_completed_threshold);
 		*truncated_materialization = true;
 	}
 	else
 		*truncated_materialization = false;
-
-	if (verbose)
-		elog(INFO,
-			 "new materialization range for %s.%s (time column %s) (" INT64_FORMAT ")",
-			 NameStr(*hypertable.schema),
-			 NameStr(*hypertable.name),
-			 NameStr(time_column_name),
-			 end_time);
 
 	Assert(end_time > old_completed_threshold);
 

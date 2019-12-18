@@ -109,8 +109,7 @@ NOTICE:  adding index _materialized_hypertable_4_location_bucket_idx ON _timesca
 --materialize mat_before
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_before;
-INFO:  new materialization range for public.conditions_before (time column timec) (1551052800000000)
-INFO:  materializing continuous aggregate public.mat_before: nothing to invalidate, new range up to 1551052800000000
+INFO:  materializing continuous aggregate public.mat_before: nothing to invalidate, new range up to Sun Feb 24 16:00:00 2019 PST
 SELECT count(*) FROM conditions_before;
  count 
 -------
@@ -193,8 +192,7 @@ ERROR:  dropping a continous aggregate requires using CASCADE
 --materialize mat_after
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_after;
-INFO:  new materialization range for public.conditions_after (time column timec) (1551052800000000)
-INFO:  materializing continuous aggregate public.mat_after: nothing to invalidate, new range up to 1551052800000000
+INFO:  materializing continuous aggregate public.mat_after: nothing to invalidate, new range up to Sun Feb 24 16:00:00 2019 PST
 SELECT count(*) FROM mat_after;
  count 
 -------
