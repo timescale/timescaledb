@@ -3302,3 +3302,80 @@ FROM hyper_estimate;
    ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..100.05 rows=2 width=20)
 (8 rows)
 
+CREATE TABLE devices (
+       device_id INTEGER PRIMARY KEY,
+       device_name VARCHAR(10)
+);
+SELECT * FROM distributed_exec($$
+  CREATE TABLE devices(device_id INTEGER PRIMARY KEY, device_name VARCHAR(10))
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+INSERT INTO devices VALUES
+  (1, 'A001'), (2, 'B015'), (3, 'D821'), (4, 'C561'), (5, 'D765');
+SELECT * FROM distributed_exec($$
+  INSERT INTO devices VALUES
+    (1, 'A001'), (2, 'B015'), (3, 'D821'), (4, 'C561'), (5, 'D765')
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+CREATE TABLE hyper (
+  time TIMESTAMPTZ NOT NULL,
+  device INTEGER REFERENCES devices(device_id),
+  temp FLOAT
+);
+SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 3,
+       chunk_time_interval => interval '18 hours'
+);
+WARNING:  FOREIGN KEY from distributed hypertable "hyper" requires referenced table to be consistent across all data nodes.
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            17 | public      | hyper      | t
+(1 row)
+
+-- Inserting some values should succeed.
+INSERT INTO hyper VALUES
+       ('2017-01-01 06:01', 1, 1.1),
+       ('2017-01-01 09:11', 1, 2.1),
+       ('2017-01-01 08:01', 1, 1.2),
+       ('2017-01-02 08:01', 1, 1.3),
+       ('2017-01-02 08:01', 2, 1.6),
+       ('2017-01-02 06:01', 2, 1.4),
+       ('2017-01-03 01:01', 3, 2),
+       ('2017-01-03 01:16', 3, 3),
+       ('2017-01-03 01:17', 3, 4),
+       ('2018-01-13 01:01', 1, 2),
+       ('2018-01-13 01:10', 1, 0.4),
+       ('2018-01-13 02:10', 2, 1.4),
+       ('2018-01-13 05:01', 2, 2),
+       ('2018-01-13 05:50', 2, 4),
+       ('2018-01-13 16:01', 3, 2);
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM hyper
+GROUP BY 1, 2
+HAVING avg(temp) > 1.2
+ORDER BY 1;
+             time             | device | avg_temp 
+------------------------------+--------+----------
+ Sun Jan 01 07:00:00 2017 PST |      1 |     1.65
+ Mon Jan 02 04:00:00 2017 PST |      2 |      1.4
+ Mon Jan 02 07:00:00 2017 PST |      1 |      1.3
+ Mon Jan 02 07:00:00 2017 PST |      2 |      1.6
+ Tue Jan 03 01:00:00 2017 PST |      3 |        3
+ Sat Jan 13 01:00:00 2018 PST |      2 |      1.4
+ Sat Jan 13 04:00:00 2018 PST |      2 |        3
+ Sat Jan 13 16:00:00 2018 PST |      3 |        2
+(8 rows)
+
+-- Add some devices on the access node only. Inserts should then fail.
+INSERT INTO devices VALUES (6, 'E999');
+\set ON_ERROR_STOP 0
+INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
+ERROR:  [data_node_1]: insert or update on table "_hyper_17_44_dist_chunk" violates foreign key constraint "27_17_hyper_device_fkey"
+\set ON_ERROR_STOP 1
