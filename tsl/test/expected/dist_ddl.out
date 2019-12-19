@@ -755,6 +755,7 @@ CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
 $$);
+WARNING:  FOREIGN KEY from distributed hypertable "some_dist_table" requires referenced table to be consistent across all data nodes.
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  [data_node_x]: relation "non_htable" does not exist
 \set ON_ERROR_STOP 1

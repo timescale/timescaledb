@@ -1422,7 +1422,7 @@ hypertable_create_schema(const char *schema_name)
  * parent table, which will have no tuples.
  */
 static void
-hypertable_validate_constraints(Oid relid)
+hypertable_validate_constraints(Oid relid, int replication_factor)
 {
 	Relation catalog;
 	SysScanDesc scan;
@@ -1448,9 +1448,19 @@ hypertable_validate_constraints(Oid relid)
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
 							get_rel_name(relid)),
-					 errhint("Remove all NO INHERIT constraints from table \"%s\" before making it "
-							 "a hypertable.",
+					 errhint("Remove all NO INHERIT constraints from table \"%s\" before "
+							 "making it a hypertable.",
 							 get_rel_name(relid))));
+
+		if (form->contype == CONSTRAINT_FOREIGN && replication_factor > 0)
+			ereport(WARNING,
+					(errmsg("FOREIGN KEY from distributed hypertable \"%s\" requires referenced "
+							"table to be consistent across all data nodes.",
+							get_rel_name(relid)),
+					 errdetail(
+						 "Foreign key constraints on distributed hypertables require referenced "
+						 "tables to be present on all data nodes and consistent. Updates to the "
+						 "referenced table is not automatically propagated to data nodes.")));
 	}
 
 	systable_endscan(scan);
@@ -1846,7 +1856,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 													 is_dist_call);
 
 	/* Validate data nodes and check permissions on them if this is a
-	 * distributed hypertable */
+	 * distributed hypertable. */
 	if (replication_factor > 0)
 		data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
 
@@ -2008,7 +2018,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
-	hypertable_validate_constraints(table_relid);
+	hypertable_validate_constraints(table_relid, replication_factor);
 
 	table_has_data = relation_has_tuples(rel);
 
