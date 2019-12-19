@@ -931,30 +931,30 @@ GROUP BY 1,2
 HAVING device > 4
 ORDER BY 1,2
 
-                                                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (AsyncAppend)
-   Output: (time_bucket('@ 2 days'::interval, "time")), device, (avg(temp))
-   ->  Merge Append
-         Sort Key: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device
-         ->  Custom Scan (DataNodeScan)
-               Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
-               Relations: Aggregate on (public.hyper)
-               Data node: data_node_1
-               Chunks: _hyper_1_1_dist_chunk
-               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-         ->  Custom Scan (DataNodeScan)
-               Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device, (avg(hyper_1.temp))
-               Relations: Aggregate on (public.hyper)
-               Data node: data_node_2
-               Chunks: _hyper_1_2_dist_chunk
-               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
-         ->  Custom Scan (DataNodeScan)
-               Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), hyper_2.device, (avg(hyper_2.temp))
-               Relations: Aggregate on (public.hyper)
-               Data node: data_node_3
-               Chunks: _hyper_1_3_dist_chunk
-               Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, avg(hyper.temp)
+   Group Key: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device
+   ->  Custom Scan (AsyncAppend)
+         Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, hyper.temp
+         ->  Merge Append
+               Sort Key: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device
+               ->  Custom Scan (DataNodeScan) on public.hyper hyper_1
+                     Output: time_bucket('@ 2 days'::interval, hyper_1."time"), hyper_1.device, hyper_1.temp
+                     Data node: data_node_1
+                     Chunks: _hyper_1_1_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
+                     Output: time_bucket('@ 2 days'::interval, hyper_2."time"), hyper_2.device, hyper_2.temp
+                     Data node: data_node_2
+                     Chunks: _hyper_1_2_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
+                     Output: time_bucket('@ 2 days'::interval, hyper_3."time"), hyper_3.device, hyper_3.temp
+                     Data node: data_node_3
+                     Chunks: _hyper_1_3_dist_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (22 rows)
 
 EXPLAIN (verbose, costs off)
@@ -1435,17 +1435,20 @@ GROUP BY 1,2
 HAVING avg(temp) > 40 AND max(temp) < 70
 ORDER BY 1,2
 
-                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                        
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: (time_bucket('@ 2 days'::interval, hyper."time"))
-   ->  Custom Scan (DataNodeScan)
-         Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
-         Relations: Aggregate on (public.hyper)
-         Data node: data_node_1
-         Chunks: _hyper_1_1_dist_chunk
-         Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device = 1)) GROUP BY 1, 2 HAVING ((avg(temp) > 40::double precision)) AND ((max(temp) < 70::double precision)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST
-(8 rows)
+   ->  GroupAggregate
+         Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, avg(hyper.temp)
+         Group Key: time_bucket('@ 2 days'::interval, hyper."time"), hyper.device
+         Filter: ((avg(hyper.temp) > '40'::double precision) AND (max(hyper.temp) < '70'::double precision))
+         ->  Custom Scan (DataNodeScan) on public.hyper
+               Output: time_bucket('@ 2 days'::interval, hyper."time"), hyper.device, hyper.temp
+               Data node: data_node_1
+               Chunks: _hyper_1_1_dist_chunk
+               Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device = 1)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST
+(11 rows)
 
 
 ######### Grouping on device only (full aggregation)
