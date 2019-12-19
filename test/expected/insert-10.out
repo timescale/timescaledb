@@ -636,3 +636,26 @@ WHERE NOT EXISTS (
 		AND toe = '2020-05-09 10:34:35.296288+00'
 );
 DROP TABLE readings;
+CREATE TABLE sample_table (
+       sequence INTEGER NOT NULL,
+       time TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+       value NUMERIC NOT NULL,
+       UNIQUE (sequence, time)
+);
+SELECT * FROM create_hypertable('sample_table', 'time',
+       chunk_time_interval => INTERVAL '1 day');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+            12 | public      | sample_table | t
+(1 row)
+
+INSERT INTO sample_table (sequence,time,value) VALUES
+       (7, generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'), ROUND(RANDOM()*10)::int);
+\set ON_ERROR_STOP 0
+INSERT INTO sample_table (sequence,time,value) VALUES
+       (7, generate_series(TIMESTAMP '2019-07-21', TIMESTAMP '2019-08-01', INTERVAL '10 minutes'), ROUND(RANDOM()*10)::int);
+ERROR:  duplicate key value violates unique constraint "27_1_sample_table_sequence_time_key"
+\set ON_ERROR_STOP 1
+INSERT INTO sample_table (sequence,time,value) VALUES
+       (7,generate_series(TIMESTAMP '2019-01-01', TIMESTAMP '2019-07-01', '10 minutes'), ROUND(RANDOM()*10)::int);
+DROP TABLE sample_table;
