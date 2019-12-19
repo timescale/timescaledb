@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/remote_exec.sql
 GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -55,6 +56,9 @@ FROM show_chunks('chunkapi');
 -- Show the new chunks
 \dt public.*
 \dt "ChunkSchema".*
+
+-- Make ANALYZE deterministic
+SELECT setseed(1);
 
 
 -- Test getting relation stats for chunk.  First get stats
@@ -110,6 +114,9 @@ INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4, 'green'),
                              ('2018-01-01 06:00:00-8', 4, 22.3, NULL),
                              ('2018-01-01 06:00:00-8', 1, 21.1, 'green');
 
+-- Make sure we get deterministic behavior across all nodes
+SELECT distributed_exec($$ SELECT setseed(1); $$);
+
 -- No stats on the local table
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
@@ -161,48 +168,20 @@ ORDER BY 1,2,3;
 -- starelid, which changes depending on how many tests are run before
 -- this)
 RESET ROLE;
-SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
-FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
-ORDER BY 1, 11;
-\c data_node_1
-SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
+FROM pg_statistic st, show_chunks('disttable') ch
+WHERE st.starelid = ch
+ORDER BY ch, staattnum;
+
+SELECT test.remote_exec(NULL, $$
+SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
-FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
-ORDER BY 1, 11;
-\c data_node_2
-SELECT staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
-stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
-FROM pg_statistic WHERE starelid IN (SELECT oid FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable')))
-ORDER BY 1, 11;
-\c :TEST_DBNAME :ROLE_SUPERUSER
+FROM pg_statistic st, show_chunks('disttable') ch
+WHERE st.starelid = ch
+ORDER BY ch, staattnum;
+$$);
 SET ROLE :ROLE_1;
-
--- Verify plan cost changes as a table is analyzed
-SELECT setseed(1);
-CREATE TABLE costtable(time timestamptz, device int, temp float);
-SELECT * FROM create_distributed_hypertable('costtable', 'time', 'device');
-INSERT INTO costtable
-SELECT t, (abs(timestamp_hash(t::timestamp)) % 40) + 1, random() * 100
-FROM generate_series('2019-01-01'::timestamptz, '2019-01-29'::timestamptz, '1 minute') as t;
-SELECT * FROM distributed_exec('ANALYZE costtable');
-
--- Cost with stats not yet collected from data nodes
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
-
--- Cost with relstats collected
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('costtable');
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
-
--- Cost with colstats collected
-SELECT chunk_id, hypertable_id, att_num FROM _timescaledb_internal.get_chunk_colstats('costtable');
-EXPLAIN (VERBOSE, COSTS OFF)
-SELECT device, AVG(temp) FROM costtable WHERE temp > 90 AND device < 10 GROUP BY device;
 
 -- Clean up
 RESET ROLE;

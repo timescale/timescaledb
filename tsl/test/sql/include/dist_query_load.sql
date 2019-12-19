@@ -80,6 +80,8 @@ CREATE AGGREGATE custom_sum(int4) (
     STYPE = int8
 );
 
+-- Set seed on all data nodes for ANALYZE to sample consistently
+SELECT distributed_exec($$ SELECT setseed(1); $$);
 ANALYZE reference;
 ANALYZE hyper;
 ANALYZE hyper1d;
