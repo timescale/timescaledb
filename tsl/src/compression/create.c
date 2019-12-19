@@ -676,6 +676,20 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 	return orderby_cols;
 }
 
+static FormData_hypertable_compression *
+get_col_info_for_attnum(Hypertable *ht, CompressColInfo *colinfo, AttrNumber attno)
+{
+	char *attr_name = get_attname_compat(ht->main_table_relid, attno, false);
+	int colno;
+
+	for (colno = 0; colno < colinfo->numcols; colno++)
+	{
+		if (namestrcmp(&colinfo->col_meta[colno].attname, attr_name) == 0)
+			return &colinfo->col_meta[colno];
+	}
+	return NULL;
+}
+
 /* returns list of constraints that need to be cloned on the compressed hypertable
  * This is limited to foreign key constraints now
  */
@@ -738,18 +752,23 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 			attnums = (int16 *) ARR_DATA_PTR(arr);
 			for (j = 0; j < numkeys; j++)
 			{
-				int16 colno = attnums[j] - 1;
+				FormData_hypertable_compression *col_def =
+					get_col_info_for_attnum(ht, colinfo, attnums[j]);
+
+				if (col_def == NULL)
+					elog(ERROR, "missing column definition for constraint");
+
 				if (form->contype == CONSTRAINT_FOREIGN)
 				{
 					/* is this a segment-by column */
-					if (colinfo->col_meta[colno].segmentby_column_index < 1)
+					if (col_def->segmentby_column_index < 1)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("constraint %s requires column %s to be a segment_by "
 										"column for compression",
 										NameStr(form->conname),
-										NameStr(colinfo->col_meta[colno].attname)),
+										NameStr(col_def->attname)),
 								 errhint("Only segment by columns can be used in foreign key"
 										 "constraints on hypertables that are compressed.")));
 					}
@@ -763,14 +782,13 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 				else
 				{
 					/* is colno  a segment-by or order_by column */
-					if (colinfo->col_meta[colno].segmentby_column_index < 1 &&
-						colinfo->col_meta[colno].orderby_column_index < 1)
+					if (col_def->segmentby_column_index < 1 && col_def->orderby_column_index < 1)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("constraint %s requires column %s to be a segment_by or "
 										"order_by column for compression",
 										NameStr(form->conname),
-										NameStr(colinfo->col_meta[colno].attname)),
+										NameStr(col_def->attname)),
 								 errhint("Only segment by and order by columns can be used in "
 										 "constraints on hypertables that are compressed.")));
 				}

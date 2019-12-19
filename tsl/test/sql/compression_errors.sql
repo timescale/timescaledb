@@ -173,6 +173,20 @@ ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby
 --can't add fks after compression enabled
 alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 
+--FK check should not error even with dropped columns (previously had a bug related to this)
+CREATE TABLE table_fk (
+	time timestamptz NOT NULL,
+	id1 int8 NOT NULL,
+	id2 int8 NOT NULL,
+	value float8 NULL,
+	CONSTRAINT fk1 FOREIGN KEY (id1) REFERENCES fortable(col),
+	CONSTRAINT fk2 FOREIGN KEY (id2) REFERENCES fortable(col)
+);
+
+SELECT create_hypertable('table_fk', 'time');
+ALTER TABLE table_fk DROP COLUMN id1;
+ALTER TABLE table_fk SET (timescaledb.compress,timescaledb.compress_segmentby = 'id2');
+
 -- TEST fk cascade delete behavior on compressed chunk --
 insert into fortable values(1);
 insert into fortable values(10);

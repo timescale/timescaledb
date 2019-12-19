@@ -22,9 +22,11 @@ that a backfill can trigger. By default, all invalidations are processed.
 
 **Bugfixes**
 * #1591 Fix locf treat_null_as_missing option
+* #1594 Fix error in compression constraint check
 
 **Thanks**
 * @optijon for reporting an issue with locf treat_null_as_missing option
+* @ChristopherZellermann for reporting an issue with the compression constraint check
 
 ## 1.5.1 (2019-11-12)
 
