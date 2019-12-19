@@ -9,6 +9,7 @@
 #include <nodes/execnodes.h>
 #include <nodes/nodes.h>
 
+#include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
 #include <utils/lsyscache.h>
@@ -614,20 +615,9 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	return state;
 }
 
-static void
-chunk_insert_state_free(void *arg)
-{
-	ChunkInsertState *state = arg;
-
-	MemoryContextDelete(state->mctx);
-}
-
 extern void
 ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
-	MemoryContext deletion_context;
-	MemoryContextCallback *free_callback;
-
 	if (state == NULL)
 		return;
 
@@ -635,39 +625,64 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	ExecCloseIndices(state->result_relation_info);
 	table_close(state->rel, NoLock);
 
+	if (NULL != state->slot)
+		ExecDropSingleTupleTableSlot(state->slot);
+
 	/*
 	 * Postgres stores cached row types from `get_cached_rowtype` in the
-	 * constraint expression and tries to free this type via a callback from
-	 * the `per_tuple_exprcontext`. Since we create constraint expressions
-	 * within the chunk insert state memory context, this leads to a series of
-	 * pointers structured like: `per_tuple_exprcontext -> constraint expr (in
-	 * chunk insert state) -> cached row type` if we try to free the the chunk
-	 * insert state MemoryContext while the `es_per_tuple_exprcontext` is
-	 * live, postgres tries to dereference a dangling pointer in one of
+	 * constraint expression and tries to free this type via a callback from the
+	 * `per_tuple_exprcontext`. Since we create constraint expressions within
+	 * the chunk insert state memory context, this leads to a series of pointers
+	 * structured like: `per_tuple_exprcontext -> constraint expr (in chunk
+	 * insert state) -> cached row type` if we try to free the the chunk insert
+	 * state MemoryContext while the `es_per_tuple_exprcontext` is live,
+	 * postgres tries to dereference a dangling pointer in one of
 	 * `es_per_tuple_exprcontext`'s callbacks. Normally postgres allocates the
 	 * constraint expressions in a parent context of per_tuple_exprcontext so
 	 * there is no issue, however we've run into excessive memory usage due to
-	 * too many constraints, and want to allocate them for a shorter lifetime
-	 * so we free them when SubspaceStore gets to full.
+	 * too many constraints, and want to allocate them for a shorter lifetime so
+	 * we free them when SubspaceStore gets to full. This leaves us with a
+	 * memory context relationship like the following:
 	 *
-	 * To ensure this doesn't create dangling pointers, we don't free the
-	 * ChunkInsertState immediately, but rather register it to be freed when
-	 * the current `es_per_tuple_exprcontext` or `es_query_cxt` is cleaned up.
-	 * deletion of the ChunkInsertState until the current context if freed.
+	 *     query_ctx
+	 *       / \
+	 *      /   \
+	 *   CIS    per_tuple
+	 *
+	 *
+	 * To ensure this doesn't create dangling pointers from the per-tuple
+	 * context to the chunk insert state (CIS) when we destroy the CIS, we avoid
+	 * freeing the CIS memory context immediately. Instead we change its parent
+	 * to be the per-tuple context (if it is still alive) so that it is only
+	 * freed once that context is freed:
+	 *
+	 *     query_ctx
+	 *        \
+	 *         \
+	 *         per_tuple
+	 *           \
+	 *            \
+	 *            CIS
+	 *
+	 * Note that a previous approach registered the chunk insert state (CIS) to
+	 * be freed by a reset callback on the per-tuple context. That caused a
+	 * subtle bug because both the per-tuple context and the CIS share the same
+	 * parent. Thus, the callback on a child would trigger the deletion of a
+	 * sibling, leading to a cyclic relationship:
+	 *
+	 *     query_ctx
+	 *       / \
+	 *      /   \
+	 *   CIS <-- per_tuple
+	 *
+	 *
+	 * With this cycle, a delete of the query_ctx could first trigger a delete
+	 * of the CIS (if not already deleted), then the per_tuple context, followed
+	 * by the CIS again (via the callback), and thus a crash.
 	 */
 	if (state->estate->es_per_tuple_exprcontext != NULL)
-		deletion_context = state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory;
+		MemoryContextSetParent(state->mctx,
+							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	else
-		deletion_context = state->estate->es_query_cxt;
-
-	free_callback = MemoryContextAlloc(deletion_context, sizeof(*free_callback));
-	*free_callback = (MemoryContextCallback){
-		.func = chunk_insert_state_free,
-		.arg = state,
-	};
-
-	MemoryContextRegisterResetCallback(deletion_context, free_callback);
-
-	if (NULL != state->slot)
-		ExecDropSingleTupleTableSlot(state->slot);
+		MemoryContextDelete(state->mctx);
 }
