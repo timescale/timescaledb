@@ -698,7 +698,19 @@ chunk_insert_state_free(void *arg)
 {
 	ChunkInsertState *state = arg;
 
-	MemoryContextDelete(state->mctx);
+	/*
+	 * Do not delete ChunkInsertState memory context if we are in the
+	 * transaction abort state.
+	 *
+	 * Because reset callbacks are executed only after all child memory context
+	 * got deleted, it is possible to end up in the situation when the context
+	 * is already deleted before this callback function being called.
+	 *
+	 * Since there is no way to unregister a reset callback, rely on the current
+	 * transaction state.
+	 */
+	if (IsTransactionState())
+		MemoryContextDelete(state->mctx);
 }
 
 extern void

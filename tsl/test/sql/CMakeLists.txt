@@ -92,6 +92,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_grant.sql
     dist_partial_agg.sql
     dist_util.sql
+    issues.sql
     remote_connection.sql
     remote_connection_cache.sql
     remote_copy.sql
