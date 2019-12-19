@@ -80,10 +80,8 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 endif()
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
-  list(APPEND TEST_FILES
-    chunk_api.sql
-  )
   list(APPEND TEST_FILES_DEBUG
+    chunk_api.sql
     data_node.sql
     data_node_bootstrap.sql
     debug_notice.sql

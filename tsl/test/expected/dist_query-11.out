@@ -142,6 +142,13 @@ CREATE AGGREGATE custom_sum(int4) (
     SFUNC = int4_sum,
     STYPE = int8
 );
+-- Set seed on all data nodes for ANALYZE to sample consistently
+SELECT distributed_exec($$ SELECT setseed(1); $$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
 ANALYZE reference;
 ANALYZE hyper;
 ANALYZE hyper1d;
