@@ -197,6 +197,15 @@ that a backfill can trigger. By default, all invalidations are processed.
 * @ChristopherZellermann for reporting an issue with the compression constraint check
 * @SimonDelamare for reporting an issue with joining hypertables with compression
 
+## 2.0.0-beta4 (2019-12-19)
+
+**For beta releases**, upgrading from an earlier version of the
+extension (including previous beta releases) is not supported.
+
+This release includes user experience improvements for managing data
+nodes, more efficient statistics collection for distributed
+hypertables, and miscellaneous fixes and improvements.
+
 ## 1.5.1 (2019-11-12)
 
 This maintenance release contains bugfixes since the 1.5.0 release. We deem it low
