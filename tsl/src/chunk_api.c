@@ -43,13 +43,13 @@
 /*
  * These values come from the pg_type table.
  */
-#define FLOAT4_TYPELEN 4
+#define FLOAT4_TYPELEN sizeof(float4)
 #define FLOAT4_TYPEBYVAL true
 #define FLOAT4_TYPEALIGN 'i'
 #define CSTRING_TYPELEN -2
 #define CSTRING_TYPEBYVAL false
 #define CSTRING_TYPEALIGN 'c'
-#define INT4_TYPELEN 4
+#define INT4_TYPELEN sizeof(int32)
 #define INT4_TYPEBYVAL true
 #define INT4_TYPEALIGN 'i'
 #define CSTRING_ARY_TYPELEN -1
@@ -715,7 +715,13 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 
 		if (slot_fields & ATTSTATSSLOT_NUMBERS)
 		{
-			array = construct_array((Datum *) stat_slot.numbers,
+			Datum *stanumbers = palloc(sizeof(Datum) * stat_slot.nnumbers);
+			int j;
+
+			for (j = 0; j < stat_slot.nnumbers; j++)
+				stanumbers[j] = Float4GetDatum(stat_slot.numbers[j]);
+
+			array = construct_array(stanumbers,
 									stat_slot.nnumbers,
 									FLOAT4OID,
 									FLOAT4_TYPELEN,
@@ -884,6 +890,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 		values[i++] = ObjectIdGetDatum(slot_ops[k]); /* staopN */
 
 	i = AttrNumberGetAttrOffset(Anum_pg_statistic_stanumbers1);
+
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
 		if (slot_numbers[k] == NULL)
 			nulls[i++] = true;
@@ -891,6 +898,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 			values[i++] = PointerGetDatum(slot_numbers[k]); /* stanumbersN */
 
 	i = AttrNumberGetAttrOffset(Anum_pg_statistic_stavalues1);
+
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
 	{
 		Oid value_oid = value_kinds[k];
@@ -1012,6 +1020,7 @@ chunk_process_remote_colstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult 
 	for (i = 0; i < STATISTIC_NUM_SLOTS; ++i)
 	{
 		Datum strings[STRINGS_PER_OP_OID];
+		Datum d;
 		int k;
 
 		op_oids[i] = InvalidOid;
@@ -1036,13 +1045,15 @@ chunk_process_remote_colstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult 
 			Assert(!isnull);
 			++os_idx;
 		}
-		op_oids[i] = convert_strings_to_op_id(strings);
 
-		Datum d = values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_numbers) + i];
+		op_oids[i] = convert_strings_to_op_id(strings);
+		d = values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_numbers) + i];
+
 		if (DatumGetPointer(d) != NULL)
 			number_arrays[i] = DatumGetArrayTypeP(d);
 
 		d = values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_values) + i];
+
 		if (DatumGetPointer(d) != NULL)
 		{
 			value_arrays[i] = DatumGetArrayTypeP(d);
