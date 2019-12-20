@@ -155,7 +155,7 @@ ForeignServer *
 data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
 {
 	ForeignServer *server = GetForeignServer(server_oid);
-	bool valid = validate_foreign_server(server, mode, true);
+	bool PG_USED_FOR_ASSERTS_ONLY valid = validate_foreign_server(server, mode, true);
 	Assert(valid); /* Sould always be valid since we should see error otherwise */
 	return server;
 }
@@ -610,7 +610,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
-	bool result;
+	bool PG_USED_FOR_ASSERTS_ONLY result;
 	DbInfo database;
 
 	namestrcpy(&database.name, dbname);
