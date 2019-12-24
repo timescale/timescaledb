@@ -286,6 +286,33 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
 
+typedef struct CompressedAttnoContext
+{
+	Bitmapset *compressed_attnos;
+	Index compress_relid;
+} CompressedAttnoContext;
+
+/* check if the clause refers to any attributes that are in compressed
+ * form.
+ */
+static bool
+clause_has_compressed_attrs(Node *node, void *context)
+{
+	if (node == NULL)
+		return true;
+	if (IsA(node, Var))
+	{
+		CompressedAttnoContext *cxt = (CompressedAttnoContext *) context;
+		Var *var = (Var *) node;
+		if (var->varno == cxt->compress_relid)
+		{
+			if (bms_is_member(var->varattno, cxt->compressed_attnos))
+				return true;
+		}
+	}
+	return expression_tree_walker(node, clause_has_compressed_attrs, context);
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 							 List *clauses, List *custom_plans)
@@ -313,6 +340,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		/* from create_indexscan_plan() */
 		IndexPath *ipath = castNode(IndexPath, compressed_path);
 		ListCell *lc;
+		List *indexqual = NIL;
+		Plan *indexplan;
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
@@ -320,6 +349,29 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				continue; /* dup or derived from same EquivalenceClass */
 			cscan->scan.plan.qual = lappend(cscan->scan.plan.qual, rinfo->clause);
 		}
+		/* joininfo clauses on the compressed chunk rel have to
+		 * contain clauses on both compressed and
+		 * decompressed attnos. joininfo clauses get translated into
+		 * ParamPathInfo for the indexpath. But the index scans can't
+		 * handle compressed attributes, so remove them from the
+		 * indexscans here. (these are included in the `clauses` passed in
+		 * to the function and so were added as filters
+		 * for cscan->scan.plan.qual in the loop above. )
+		 */
+		indexplan = linitial(custom_plans);
+		Assert(IsA(indexplan, IndexScan) || IsA(indexplan, IndexOnlyScan));
+		foreach (lc, indexplan->qual)
+		{
+			Node *expr = (Node *) lfirst(lc);
+			CompressedAttnoContext cxt;
+			Index compress_relid = dcpath->info->compressed_rel->relid;
+			cxt.compress_relid = compress_relid;
+			cxt.compressed_attnos = dcpath->info->compressed_chunk_compressed_attnos;
+			if (!clause_has_compressed_attrs((Node *) expr, &cxt))
+
+				indexqual = lappend(indexqual, expr);
+		}
+		indexplan->qual = indexqual;
 	}
 	else if (IsA(compressed_path, BitmapHeapPath))
 	{

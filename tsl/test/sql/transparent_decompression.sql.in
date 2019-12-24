@@ -155,6 +155,12 @@ INSERT into device_tbl select generate_series(1, 6,1), 'devicex';
 INSERT into device_tbl select  8, 'device8';
 analyze device_tbl;
 
+-- table for joins ---
+create table nodetime( node int,
+     start_time timestamp ,
+     stop_time timestamp  );
+insert into nodetime values( 4, '2018-01-06 00:00'::timestamp, '2018-12-02 12:00'::timestamp);
+
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
@@ -178,7 +184,7 @@ ORDER BY c.id;
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
-\set ECHO none
+\set ECHO none 
 SET client_min_messages TO error;
 set enable_seqscan = false;
 \o :TEST_RESULTS_COMPRESSED_IDX
