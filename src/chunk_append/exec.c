@@ -252,6 +252,17 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 			ExecSetTupleBound(state->limit, state->subplanstates[i]);
 
 		i++;
+
+#if PG12
+	ExecInitResultTupleSlotTL(&node->ss.ps, TTSOpsVirtualP);
+
+	/* node returns slots from each of its subnodes, therefore not fixed */
+	node->ss.ps.resultopsset = true;
+	node->ss.ps.resultopsfixed = false;
+
+	if (node->ss.ps.ps_ExprContext->ecxt_scantuple == NULL)
+		node->ss.ps.ps_ExprContext->ecxt_scantuple = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+#endif
 	}
 
 	if (state->runtime_exclusion)
@@ -398,7 +409,14 @@ chunk_append_exec(CustomScanState *node)
 				return subslot;
 
 			ResetExprContext(econtext);
+#if PG12
+			/* convert to Virtual tuple, so the tts_ops don't conflict */
+			if (econtext->ecxt_scantuple->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
+				ExecSetSlotDescriptor(econtext->ecxt_scantuple, subslot->tts_tupleDescriptor);
+			ExecCopySlot(econtext->ecxt_scantuple, subslot);
+#else
 			econtext->ecxt_scantuple = subslot;
+#endif
 
 #if PG96
 			resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
@@ -555,6 +573,7 @@ chunk_append_end(CustomScanState *node)
 	{
 		ExecEndNode(state->subplanstates[i]);
 	}
+	ExecDropSingleTupleTableSlot(node->ss.ps.ps_ExprContext->ecxt_scantuple);
 }
 
 /*

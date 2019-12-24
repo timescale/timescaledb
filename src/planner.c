@@ -72,6 +72,7 @@ static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
 static bool contain_param(Node *node);
+static void expand_hypertable_inheritance(PlannerInfo *root, Oid relation_objectid, bool inhparent, RelOptInfo *rel);
 
 #define CTE_NAME_HYPERTABLES "hypertable_parent"
 
@@ -97,7 +98,7 @@ is_rte_hypertable(RangeTblEntry *rte)
 
 /* This turns off inheritance on hypertables where we will do chunk
  * expansion ourselves. This prevents postgres from expanding the inheritance
- * tree itself. We will expand the chunks in timescaledb_get_relation_info_hook. */
+ * tree itself. We will expand the chunks in expand_hypertable_inheritance. */
 static bool
 turn_off_inheritance_walker(Node *node, Cache *hc)
 {
@@ -149,7 +150,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 		/*
 		 * turn of inheritance on hypertables we will expand ourselves in
-		 * timescaledb_get_relation_info_hook
+		 * expand_hypertable_inheritance
 		 */
 		turn_off_inheritance_walker((Node *) parse, hc);
 
@@ -1248,7 +1249,6 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 		 */
 		set_dummy_rel_pathlist(rel);
 	}
-
 	else if (rte->inh)
 	{
 		/* It's an "append relation", process accordingly */
@@ -1308,8 +1308,10 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 {
 	Index i;
 	bool set_pathlist_for_current_rel = false;
+	double total_pages;
+	bool reenabled_inheritance = false;
 
-	Assert(inheritance_disabled_counter > inheritance_reenabled_counter);
+	// Assert(inheritance_disabled_counter > inheritance_reenabled_counter);
 	inheritance_reenabled_counter = inheritance_disabled_counter;
 
 	for(i = 1; i < root->simple_rel_array_size; i++)
@@ -1317,8 +1319,14 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 		if(is_rte_hypertable(in_rte) && !in_rte->inh)
 		{
+			RelOptInfo *in_rel = root->simple_rel_array[i];
+			expand_hypertable_inheritance(root, in_rte->relid, in_rte->inh, in_rel);
+			//TODO move this back into ts_plan_expand_hypertable_chunks
 			in_rte->inh = true;
-			set_rel_size(root, root->simple_rel_array[i], i, in_rte);
+			reenabled_inheritance = true;
+			//FIXME redo set_rel_consider_parallel
+			if (in_rel != NULL && in_rel->reloptkind == RELOPT_BASEREL)
+				set_rel_size(root, in_rel, i, in_rte);
 			/* if we're activating inheritance during a hypertable's pathlist
 			 * creation then we're past the point at which postgres will add
 			 * paths for the children, and we have to do it ourselves. We delay
@@ -1330,8 +1338,30 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 				Assert(rti == i);
 				set_pathlist_for_current_rel = true;
 			}
+
 		}
 	}
+
+	if(!reenabled_inheritance)
+		return;
+
+	total_pages = 0;
+	for (i = 1; i < root->simple_rel_array_size; i++)
+	{
+		RelOptInfo *brel = root->simple_rel_array[i];
+
+		if (brel == NULL)
+			continue;
+
+		Assert(brel->relid == i); /* sanity check on array */
+
+		if (IS_DUMMY_REL(brel))
+			continue;
+
+		if (IS_SIMPLE_REL(brel))
+			total_pages += (double) brel->pages;
+	}
+	root->total_table_pages = total_pages;
 
 	if(set_pathlist_for_current_rel)
 	{
@@ -1357,7 +1387,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	bool is_htdml;
 
 #if PG12
-	if(inheritance_disabled_counter > inheritance_reenabled_counter)
+	// if(inheritance_disabled_counter > inheritance_reenabled_counter)
 		reenable_inheritance(root, rel, rti, rte);
 #endif
 
@@ -1406,15 +1436,21 @@ static void
 timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
 								   RelOptInfo *rel)
 {
-	RangeTblEntry *rte;
-
 	if (prev_get_relation_info_hook != NULL)
 		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
 
 	if (!ts_extension_is_loaded() || !ts_guc_enable_constraint_exclusion)
 		return;
 
-	rte = rt_fetch(rel->relid, root->parse->rtable);
+	expand_hypertable_inheritance(root, relation_objectid, inhparent, rel);
+}
+
+static void
+expand_hypertable_inheritance(PlannerInfo *root, Oid relation_objectid, bool inhparent,
+								   RelOptInfo *rel)
+{
+
+	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 
 	/*
 	 * We expand the hypertable chunks into an append relation. Previously, in
@@ -1680,7 +1716,9 @@ _planner_init(void)
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
 
 	prev_get_relation_info_hook = get_relation_info_hook;
+#if PG12_LT
 	get_relation_info_hook = timescaledb_get_relation_info_hook;
+#endif
 	prev_create_upper_paths_hook = create_upper_paths_hook;
 	create_upper_paths_hook = timescale_create_upper_paths_hook;
 }

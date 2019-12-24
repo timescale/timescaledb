@@ -899,7 +899,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	};
 	Size old_rel_array_len;
 	Index first_chunk_index = 0;
-	Index i = 0;
+	Index i;
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -1033,11 +1033,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	foreach (l, inh_oids)
+	i = 0;
+	for (i = 0; i < list_length(inh_oids); i++)
 	{
 		Index child_rtindex = first_chunk_index + i;
-		root->simple_rel_array[child_rtindex] = build_simple_rel(root, child_rtindex, rel);
-		i += 1;
+		/* build_simple_rel will add the child to the relarray */
+		(void) build_simple_rel(root, child_rtindex, rel);
 	}
 #endif
 }

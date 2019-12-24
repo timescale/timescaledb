@@ -197,6 +197,7 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 	tuple = index_getnext(scan, BackwardScanDirection);
 	found_tuple = HeapTupleIsValid(tuple);
 #else /* TODO we should not materialize a HeapTuple unless needed */
+	index_rescan(scan, NULL, 0, NULL, 0);
 	found_tuple = index_getnext_slot(scan, BackwardScanDirection, slot);
 	if (found_tuple)
 		tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
