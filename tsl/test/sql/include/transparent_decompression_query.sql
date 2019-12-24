@@ -221,7 +221,9 @@ SET enable_hashjoin TO false;
 
 --with multiple values can get a nested loop.
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id_peer IN (VALUES (1), (2));
+
 RESET enable_hashjoin;
+
 
 :PREFIX_VERBOSE SELECT device_id_peer FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
 
@@ -286,3 +288,19 @@ SELECT time FROM cagg_test ORDER BY time LIMIT 1;
 DROP VIEW cagg_test CASCADE;
 RESET client_min_messages;
 
+--github issue 1558. nested loop with index scan needed
+--disables parallel scan
+set enable_seqscan = false;
+set enable_bitmapscan = false;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = false;
+set enable_mergejoin = false;
+
+:PREFIX select * from metrics, metrics_space where metrics.time > metrics_space.time and metrics.device_id = metrics_space.device_id and metrics.time < metrics_space.time;
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = true;
+set enable_mergejoin = true;
+
+---end github issue 1558

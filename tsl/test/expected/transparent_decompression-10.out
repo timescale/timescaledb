@@ -47,10 +47,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
 -- compress first and last chunk on the hypertable
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby='v0, v1 desc, time', timescaledb.compress_segmentby='device_id,device_id_peer');
 NOTICE:  adding index _compressed_hypertable_5_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_5 USING BTREE(device_id, _ts_meta_sequence_num)
@@ -129,10 +129,10 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
 -- look at postgres version to decide whether we run with analyze or without
 SELECT
   CASE WHEN current_setting('server_version_num')::int >= 100000
@@ -2318,8 +2318,8 @@ SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
@@ -2328,6 +2328,54 @@ SELECT time FROM cagg_test ORDER BY time LIMIT 1;
 
 DROP VIEW cagg_test CASCADE;
 RESET client_min_messages;
+--github issue 1558. nested loop with index scan needed
+--disables parallel scan
+set enable_seqscan = false;
+set enable_bitmapscan = false;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = false;
+set enable_mergejoin = false;
+:PREFIX select * from metrics, metrics_space where metrics.time > metrics_space.time and metrics.device_id = metrics_space.device_id and metrics.time < metrics_space.time;
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=0 loops=1)
+   ->  Append (actual rows=27360 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1440 loops=1)
+               ->  Index Scan using compress_hyper_6_17_chunk_c_space_index_2 on compress_hyper_6_17_chunk (actual rows=2 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4320 loops=1)
+               ->  Index Scan using compress_hyper_6_18_chunk_c_space_index_2 on compress_hyper_6_18_chunk (actual rows=6 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1440 loops=1)
+               ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on compress_hyper_6_19_chunk (actual rows=2 loops=1)
+         ->  Index Scan Backward using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_7_chunk (actual rows=2016 loops=1)
+         ->  Index Scan Backward using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk (actual rows=6048 loops=1)
+         ->  Index Scan Backward using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_9_chunk (actual rows=2016 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
+               ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on compress_hyper_6_20_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
+               ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on compress_hyper_6_21_chunk (actual rows=9 loops=1)
+         ->  Index Scan Backward using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_12_chunk (actual rows=2016 loops=1)
+   ->  Append (actual rows=0 loops=27360)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=27360)
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Rows Removed by Filter: 1440
+               ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on compress_hyper_5_15_chunk (actual rows=2 loops=27360)
+                     Index Cond: (device_id = _hyper_2_4_chunk.device_id)
+         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0 loops=27360)
+               Index Cond: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Filter: (_hyper_2_4_chunk.device_id = device_id)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=27360)
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Rows Removed by Filter: 2016
+               ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on compress_hyper_5_16_chunk (actual rows=3 loops=27360)
+                     Index Cond: (device_id = _hyper_2_4_chunk.device_id)
+(30 rows)
+
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = true;
+set enable_mergejoin = true;
+---end github issue 1558
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -5618,8 +5666,8 @@ SET client_min_messages TO error;
 CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
 REFRESH MATERIALIZED VIEW cagg_test;
-psql:include/transparent_decompression_query.sql:284: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
-psql:include/transparent_decompression_query.sql:284: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
+psql:include/transparent_decompression_query.sql:286: INFO:  new materialization range for public.metrics_space (time column time) (948067200000000)
+psql:include/transparent_decompression_query.sql:286: INFO:  materializing continuous aggregate public.cagg_test: nothing to invalidate, new range up to 948067200000000
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;
              time             
 ------------------------------
@@ -5628,6 +5676,54 @@ SELECT time FROM cagg_test ORDER BY time LIMIT 1;
 
 DROP VIEW cagg_test CASCADE;
 RESET client_min_messages;
+--github issue 1558. nested loop with index scan needed
+--disables parallel scan
+set enable_seqscan = false;
+set enable_bitmapscan = false;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = false;
+set enable_mergejoin = false;
+:PREFIX select * from metrics, metrics_space where metrics.time > metrics_space.time and metrics.device_id = metrics_space.device_id and metrics.time < metrics_space.time;
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=0 loops=1)
+   ->  Append (actual rows=27360 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1440 loops=1)
+               ->  Index Scan using compress_hyper_6_17_chunk_c_space_index_2 on compress_hyper_6_17_chunk (actual rows=2 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=4320 loops=1)
+               ->  Index Scan using compress_hyper_6_18_chunk_c_space_index_2 on compress_hyper_6_18_chunk (actual rows=6 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1440 loops=1)
+               ->  Index Scan using compress_hyper_6_19_chunk_c_space_index_2 on compress_hyper_6_19_chunk (actual rows=2 loops=1)
+         ->  Index Scan Backward using _hyper_2_7_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_7_chunk (actual rows=2016 loops=1)
+         ->  Index Scan Backward using _hyper_2_8_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_8_chunk (actual rows=6048 loops=1)
+         ->  Index Scan Backward using _hyper_2_9_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_9_chunk (actual rows=2016 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=2016 loops=1)
+               ->  Index Scan using compress_hyper_6_20_chunk_c_space_index_2 on compress_hyper_6_20_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=6048 loops=1)
+               ->  Index Scan using compress_hyper_6_21_chunk_c_space_index_2 on compress_hyper_6_21_chunk (actual rows=9 loops=1)
+         ->  Index Scan Backward using _hyper_2_12_chunk_device_id_device_id_peer_v0_v1_time_idx2 on _hyper_2_12_chunk (actual rows=2016 loops=1)
+   ->  Append (actual rows=0 loops=27360)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=27360)
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Rows Removed by Filter: 1440
+               ->  Index Scan using compress_hyper_5_15_chunk_c_index_2 on compress_hyper_5_15_chunk (actual rows=2 loops=27360)
+                     Index Cond: (device_id = _hyper_2_4_chunk.device_id)
+         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0 loops=27360)
+               Index Cond: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Filter: (_hyper_2_4_chunk.device_id = device_id)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=0 loops=27360)
+               Filter: (("time" > _hyper_2_4_chunk."time") AND ("time" < _hyper_2_4_chunk."time"))
+               Rows Removed by Filter: 2016
+               ->  Index Scan using compress_hyper_5_16_chunk_c_index_2 on compress_hyper_5_16_chunk (actual rows=3 loops=27360)
+                     Index Cond: (device_id = _hyper_2_4_chunk.device_id)
+(30 rows)
+
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = true;
+set enable_mergejoin = true;
+---end github issue 1558
 \ir include/transparent_decompression_ordered.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -7435,6 +7531,11 @@ CREATE TABLE device_tbl(device_id int, descr text);
 INSERT into device_tbl select generate_series(1, 6,1), 'devicex';
 INSERT into device_tbl select  8, 'device8';
 analyze device_tbl;
+-- table for joins ---
+create table nodetime( node int,
+     start_time timestamp ,
+     stop_time timestamp  );
+insert into nodetime values( 4, '2018-01-06 00:00'::timestamp, '2018-12-02 12:00'::timestamp);
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
@@ -7458,7 +7559,7 @@ ORDER BY c.id;
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
-\set ECHO none
+\set ECHO none 
 -- diff compressed and uncompressed results
 :DIFF_CMD_IDX
 -- look at postgres version to decide whether we run with analyze or without
@@ -7719,6 +7820,144 @@ FROM metrics_ordered_idx d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx
                                  Filter: (device_id = d.device_id)
 (39 rows)
 
+--github issue 1558
+set enable_seqscan = false;
+set enable_bitmapscan = false;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = false;
+set enable_mergejoin = false;
+:PREFIX select device_id, count(*) from
+(select * from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time) as subq group by device_id;
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   Group Key: mt.device_id
+   ->  Nested Loop (actual rows=4291 loops=1)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+         Rows Removed by Join Filter: 8616
+         ->  Merge Append (actual rows=12907 loops=1)
+               Sort Key: mt.device_id
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk mt (actual rows=1440 loops=1)
+                     ->  Index Scan using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk mt_1 (actual rows=2880 loops=1)
+                     ->  Index Scan using compress_hyper_16_1444_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1444_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk mt_2 (actual rows=4291 loops=1)
+                     ->  Index Scan using compress_hyper_16_1445_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1445_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1441_chunk mt_3 (actual rows=4291 loops=1)
+                     ->  Index Scan using compress_hyper_16_1446_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1446_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk mt_4 (actual rows=5 loops=1)
+                     ->  Index Scan using compress_hyper_16_1447_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1447_chunk (actual rows=5 loops=1)
+         ->  Materialize (actual rows=1 loops=12907)
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+(19 rows)
+
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=4291 loops=1)
+   Sort Key: mt."time"
+   Sort Method: quicksort 
+   ->  Nested Loop (actual rows=4291 loops=1)
+         ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+         ->  Append (actual rows=4291 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk mt (actual rows=0 loops=1)
+                     Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
+                     Rows Removed by Filter: 288
+                     ->  Index Scan using compress_hyper_16_1443_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1443_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = nd.node)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk mt_1 (actual rows=0 loops=1)
+                     Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
+                     Rows Removed by Filter: 576
+                     ->  Index Scan using compress_hyper_16_1444_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1444_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = nd.node)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk mt_2 (actual rows=0 loops=1)
+                     Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
+                     ->  Index Scan using compress_hyper_16_1445_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1445_chunk (actual rows=0 loops=1)
+                           Index Cond: (device_id = nd.node)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1441_chunk mt_3 (actual rows=4291 loops=1)
+                     Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
+                     ->  Index Scan using compress_hyper_16_1446_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1446_chunk (actual rows=5 loops=1)
+                           Index Cond: (device_id = nd.node)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk mt_4 (actual rows=0 loops=1)
+                     Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
+                     Rows Removed by Filter: 1
+                     ->  Index Scan using compress_hyper_16_1447_chunk__compressed_hypertable_16_device_i on compress_hyper_16_1447_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = nd.node)
+(29 rows)
+
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set max_parallel_workers_per_gather = 0;
+set enable_mergejoin = true;
+set enable_hashjoin = false;
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=4291 loops=1)
+   Sort Key: mt."time"
+   Sort Method: quicksort 
+   ->  Merge Join (actual rows=4291 loops=1)
+         Merge Cond: (nd.node = mt.device_id)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
+         Rows Removed by Join Filter: 865
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: nd.node
+               Sort Method: quicksort 
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+         ->  Sort (actual rows=12040 loops=1)
+               Sort Key: mt.device_id
+               Sort Method: quicksort 
+               ->  Append (actual rows=12907 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk mt (actual rows=1440 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk mt_1 (actual rows=2880 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1444_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk mt_2 (actual rows=4291 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1445_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1441_chunk mt_3 (actual rows=4291 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1446_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk mt_4 (actual rows=5 loops=1)
+                           ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=5 loops=1)
+(25 rows)
+
+set enable_mergejoin = false;
+set enable_hashjoin = true;
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Sort (actual rows=4291 loops=1)
+   Sort Key: mt."time"
+   Sort Method: quicksort 
+   ->  Hash Join (actual rows=4291 loops=1)
+         Hash Cond: (mt.device_id = nd.node)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
+         Rows Removed by Join Filter: 865
+         ->  Append (actual rows=12907 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1438_chunk mt (actual rows=1440 loops=1)
+                     ->  Seq Scan on compress_hyper_16_1443_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1439_chunk mt_1 (actual rows=2880 loops=1)
+                     ->  Seq Scan on compress_hyper_16_1444_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1440_chunk mt_2 (actual rows=4291 loops=1)
+                     ->  Seq Scan on compress_hyper_16_1445_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1441_chunk mt_3 (actual rows=4291 loops=1)
+                     ->  Seq Scan on compress_hyper_16_1446_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk mt_4 (actual rows=5 loops=1)
+                     ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=5 loops=1)
+         ->  Hash (actual rows=1 loops=1)
+               Buckets: 2048  Batches: 1 
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
+(21 rows)
+
+--enable all joins after the tests
+set enable_mergejoin = true;
+set enable_hashjoin = true;
+ --end github issue 1558
 set enable_seqscan = true;
 \ir include/transparent_decompression_constraintaware.sql
 -- This file and its contents are licensed under the Timescale License.

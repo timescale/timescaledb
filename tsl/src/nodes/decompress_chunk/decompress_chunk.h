@@ -32,6 +32,8 @@ typedef struct CompressionInfo
 	Bitmapset *chunk_segmentby_attnos;
 	/* chunk attribute numbers that have equality constraint in baserestrictinfo */
 	Bitmapset *chunk_segmentby_ri;
+	/* compressed chunk attribute numbers for columns that are compressed */
+	Bitmapset *compressed_chunk_compressed_attnos;
 
 } CompressionInfo;
 

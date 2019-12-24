@@ -357,7 +357,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	compressed_rel = info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
-
+	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root, chunk_rel, compressed_rel, info->hypertable_compression_info);
 	set_baserel_size_estimates(root, compressed_rel);
 	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
@@ -544,6 +544,129 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 	}
 }
 
+static Bitmapset *
+decompress_chunk_adjust_child_relids(Bitmapset *src, int chunk_relid, int compressed_chunk_relid)
+{
+	Bitmapset *result = NULL;
+	if (src != NULL)
+	{
+		result = bms_copy(src);
+		result = bms_del_member(result, chunk_relid);
+		result = bms_add_member(result, compressed_chunk_relid);
+	}
+	return result;
+}
+
+/* based on adjust_appendrel_attrs_mutator handling of RestrictInfo */
+static Node *
+chunk_joininfo_mutator(Node *node, CompressionInfo *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Var))
+	{
+		Var *var = castNode(Var, node);
+		Var *compress_var = copyObject(var);
+		char *column_name;
+		AttrNumber compressed_attno;
+		FormData_hypertable_compression *compressioninfo;
+		if (var->varno != context->chunk_rel->relid)
+			return (Node *) var;
+
+		column_name = get_attname_compat(context->chunk_rte->relid, var->varattno, false);
+		compressioninfo =
+			get_column_compressioninfo(context->hypertable_compression_info, column_name);
+
+		compressed_attno =
+			get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
+		compress_var->varno = context->compressed_rel->relid;
+		compress_var->varattno = compressed_attno;
+
+		return (Node *) compress_var;
+	}
+	else if (IsA(node, RestrictInfo))
+	{
+		RestrictInfo *oldinfo = (RestrictInfo *) node;
+		RestrictInfo *newinfo = makeNode(RestrictInfo);
+
+		/* Copy all flat-copiable fields */
+		memcpy(newinfo, oldinfo, sizeof(RestrictInfo));
+
+		/* Recursively fix the clause itself */
+		newinfo->clause = (Expr *) chunk_joininfo_mutator((Node *) oldinfo->clause, context);
+
+		/* and the modified version, if an OR clause */
+		newinfo->orclause = (Expr *) chunk_joininfo_mutator((Node *) oldinfo->orclause, context);
+
+		/* adjust relid sets too */
+		newinfo->clause_relids =
+			decompress_chunk_adjust_child_relids(oldinfo->clause_relids,
+												 context->chunk_rel->relid,
+												 context->compressed_rel->relid);
+		newinfo->required_relids =
+			decompress_chunk_adjust_child_relids(oldinfo->required_relids,
+												 context->chunk_rel->relid,
+												 context->compressed_rel->relid);
+		newinfo->outer_relids =
+			decompress_chunk_adjust_child_relids(oldinfo->outer_relids,
+												 context->chunk_rel->relid,
+												 context->compressed_rel->relid);
+		newinfo->nullable_relids =
+			decompress_chunk_adjust_child_relids(oldinfo->nullable_relids,
+												 context->chunk_rel->relid,
+												 context->compressed_rel->relid);
+		newinfo->left_relids = decompress_chunk_adjust_child_relids(oldinfo->left_relids,
+																	context->chunk_rel->relid,
+																	context->compressed_rel->relid);
+		newinfo->right_relids =
+			decompress_chunk_adjust_child_relids(oldinfo->right_relids,
+												 context->chunk_rel->relid,
+												 context->compressed_rel->relid);
+
+		newinfo->eval_cost.startup = -1;
+		newinfo->norm_selec = -1;
+		newinfo->outer_selec = -1;
+		newinfo->left_em = NULL;
+		newinfo->right_em = NULL;
+		newinfo->scansel_cache = NIL;
+		newinfo->left_bucketsize = -1;
+		newinfo->right_bucketsize = -1;
+#if PG11_GE
+		newinfo->left_mcvfreq = -1;
+		newinfo->right_mcvfreq = -1;
+#endif
+		return (Node *) newinfo;
+	}
+	return expression_tree_mutator(node, chunk_joininfo_mutator, context);
+}
+
+/* translate chunk_rel->joininfo for compressed_rel
+ * this is necessary for create_index_path which gets join clauses from
+ * rel->joininfo and sets up paramaterized paths (in rel->ppilist).
+ * ppi_clauses is finally used to add any additional filters on the
+ * indexpath when creating a plan in create_indexscan_plan.
+ * Otherwise we miss additional filters that need to be applied after
+ * the index plan is executed (github issue 1558)
+ */
+static void
+compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
+{
+	RelOptInfo *chunk_rel = info->chunk_rel;
+	ListCell *lc;
+	List *compress_joininfo = NIL;
+	foreach (lc, chunk_rel->joininfo)
+	{
+		RestrictInfo *compress_ri;
+		RestrictInfo *ri = (RestrictInfo *) lfirst(lc);
+		Node *result = chunk_joininfo_mutator((Node *) ri, info);
+		Assert(IsA(result, RestrictInfo));
+		compress_ri = (RestrictInfo *) result;
+		compress_joininfo = lappend(compress_joininfo, compress_ri);
+	}
+	compressed_rel->joininfo = compress_joininfo;
+}
+
 typedef struct EMCreationContext
 {
 	List *compression_info;
@@ -652,8 +775,8 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		if (var->varno != info->chunk_rel->relid)
 			continue;
 
-		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should be
-		 * set on the em */
+		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
+		 * be set on the em */
 		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
 		context->current_col_info =
@@ -752,6 +875,7 @@ static void
 decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
+	ListCell *lc;
 	Index compressed_index = root->simple_rel_array_size;
 	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, true);
 	Oid compressed_relid = compressed_chunk->table_id;
@@ -780,12 +904,34 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 #else
 	compressed_rel = build_simple_rel(root, compressed_index, NULL);
 #endif
-
+	/* github issue :1558
+	 * set up top_parent_relids for this rel as the same as the
+	 * original hypertable, otherwise eq classes are not computed correctly
+	 * in generate_join_implied_equalities (called by
+	 * get_baserel_parampathinfo <- create_index_paths)
+	 */
+#if !PG96
+	Assert(chunk_rel->top_parent_relids != NULL);
+	compressed_rel->top_parent_relids = bms_copy(chunk_rel->top_parent_relids);
+#endif
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
-
+	foreach (lc, info->hypertable_compression_info)
+	{
+		FormData_hypertable_compression *fd = lfirst(lc);
+		if (fd->segmentby_column_index <= 0)
+		{
+			/* store attnos for the compressed chunk here */
+			AttrNumber compressed_chunk_attno =
+				get_attnum(info->compressed_rte->relid, NameStr(fd->attname));
+			info->compressed_chunk_compressed_attnos =
+				bms_add_member(info->compressed_chunk_compressed_attnos, compressed_chunk_attno);
+		}
+	}
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
 	compressed_rel_setup_equivalence_classes(root, info);
+	/* translate chunk_rel->joininfo for compressed_rel */
+	compressed_rel_setup_joininfo(compressed_rel, info);
 }
 
 static DecompressChunkPath *

@@ -17,3 +17,37 @@ SET work_mem TO '50MB';
 :PREFIX SELECT d.device_id, m.time,  m.time
 FROM metrics_ordered_idx d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
 
+--github issue 1558
+set enable_seqscan = false;
+set enable_bitmapscan = false;
+set max_parallel_workers_per_gather = 0;
+set enable_hashjoin = false;
+set enable_mergejoin = false;
+
+:PREFIX select device_id, count(*) from
+(select * from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time) as subq group by device_id;
+
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set enable_seqscan = true;
+set enable_bitmapscan = true;
+set max_parallel_workers_per_gather = 0;
+
+set enable_mergejoin = true;
+set enable_hashjoin = false;
+
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+
+set enable_mergejoin = false;
+set enable_hashjoin = true;
+:PREFIX select nd.node, mt.* from metrics_ordered_idx mt, nodetime nd 
+where mt.time > nd.start_time and mt.device_id = nd.node and mt.time < nd.stop_time order by time;
+
+--enable all joins after the tests
+set enable_mergejoin = true;
+set enable_hashjoin = true;
+ --end github issue 1558
