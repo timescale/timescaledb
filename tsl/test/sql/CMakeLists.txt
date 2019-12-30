@@ -24,13 +24,14 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   continuous_aggs_permissions.sql.in
   plan_gapfill.sql.in
-  continuous_aggs_query.sql.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
     # parallel plans are different between postgres versions
     continuous_aggs_ddl.sql.in
+    #current_timestamp_mock available only in debug mode
+    continuous_aggs_query.sql.in
     )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
