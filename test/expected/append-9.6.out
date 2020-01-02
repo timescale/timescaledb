@@ -106,14 +106,14 @@ INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 3;
 ANALYZE metrics_timestamptz;
 -- create space partitioned hypertable
-CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float, v3 text);
 SELECT create_hypertable('metrics_space','time','device_id',3);
      create_hypertable      
 ----------------------------
  (6,public,metrics_space,t)
 (1 row)
 
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
 ANALYZE metrics_space;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -1101,6 +1101,94 @@ reset enable_material;
                Index Cond: ((device_id = ANY ('{1,2}'::integer[])) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (11 rows)
 
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (VALUES(1)) ORDER BY time;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_6_25_chunk."time"
+   ->  Nested Loop
+         ->  HashAggregate
+               Group Key: 1
+               ->  Result
+         ->  Append
+               ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan using _hyper_6_27_chunk_metrics_space_device_id_time_idx on _hyper_6_27_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Index Only Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(19 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND v3 IN (VALUES('1')) ORDER BY time;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_6_25_chunk."time"
+   ->  Hash Semi Join
+         Hash Cond: (_hyper_6_25_chunk.v3 = ('1'::text))
+         ->  Append
+               ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_28_chunk
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_29_chunk
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_30_chunk
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Hash
+               ->  Result
+(19 rows)
+
+:PREFIX SELECT * FROM metrics_space
+WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
+  AND v3 NOT IN (VALUES ('1'));
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space
+   Chunks excluded during startup: 0
+   InitPlan 1 (returns $0)
+     ->  Result
+   ->  Index Scan using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+         SubPlan 2
+           ->  Result
+   ->  Index Scan using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+(33 rows)
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
@@ -1725,7 +1813,7 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:309: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit

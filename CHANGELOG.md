@@ -23,11 +23,13 @@ that a backfill can trigger. By default, all invalidations are processed.
 **Bugfixes**
 * #1591 Fix locf treat_null_as_missing option
 * #1594 Fix error in compression constraint check
+* #1606 Fix constify params during runtime exclusion
 * #1607 Delete compression policy when drop hypertable
 * #1608 Add jobs to timescaledb_information.policy_stats
 
 **Thanks**
 * @optijon for reporting an issue with locf treat_null_as_missing option
+* @acarrera42 for reporting an issue with constify params during runtime exclusion
 * @ChristopherZellermann for reporting an issue with the compression constraint check
 
 ## 1.5.1 (2019-11-12)
