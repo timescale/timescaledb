@@ -106,14 +106,14 @@ INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 3;
 ANALYZE metrics_timestamptz;
 -- create space partitioned hypertable
-CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float, v3 text);
 SELECT create_hypertable('metrics_space','time','device_id',3);
      create_hypertable      
 ----------------------------
  (6,public,metrics_space,t)
 (1 row)
 
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
 ANALYZE metrics_space;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -1278,6 +1278,104 @@ reset enable_material;
                Rows Removed by Filter: 1155
 (22 rows)
 
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (VALUES(1)) ORDER BY time;
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=1152 loops=1)
+   Sort Key: _hyper_6_25_chunk."time"
+   Sort Method: quicksort 
+   ->  Nested Loop (actual rows=1152 loops=1)
+         ->  HashAggregate (actual rows=1 loops=1)
+               Group Key: 1
+               ->  Result (actual rows=1 loops=1)
+         ->  Append (actual rows=1152 loops=1)
+               ->  Index Only Scan using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=767 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 767
+               ->  Index Only Scan using _hyper_6_26_chunk_metrics_space_device_id_time_idx on _hyper_6_26_chunk (actual rows=0 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_6_27_chunk_metrics_space_device_id_time_idx on _hyper_6_27_chunk (actual rows=0 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=385 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 385
+               ->  Index Only Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk (actual rows=0 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk (actual rows=0 loops=1)
+                     Index Cond: ((device_id = (1)) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 0
+(26 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND v3 IN (VALUES('1')) ORDER BY time;
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=1152 loops=1)
+   Sort Key: _hyper_6_25_chunk."time"
+   Sort Method: quicksort 
+   ->  Hash Semi Join (actual rows=1152 loops=1)
+         Hash Cond: (_hyper_6_25_chunk.v3 = ('1'::text))
+         ->  Append (actual rows=11520 loops=1)
+               ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068 loops=1)
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=3068 loops=1)
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=1534 loops=1)
+                     Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540 loops=1)
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540 loops=1)
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_6_30_chunk (actual rows=770 loops=1)
+                     Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Hash (actual rows=1 loops=1)
+               Buckets: 1024  Batches: 1 
+               ->  Result (actual rows=1 loops=1)
+(21 rows)
+
+:PREFIX SELECT * FROM metrics_space
+WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
+  AND v3 NOT IN (VALUES ('1'));
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Chunks excluded during startup: 0
+   Chunks excluded during runtime: 9
+   InitPlan 1 (returns $0)
+     ->  Result (actual rows=1 loops=1)
+   ->  Index Scan using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+         SubPlan 2
+           ->  Result (never executed)
+   ->  Index Scan using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+(34 rows)
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
@@ -1530,31 +1628,31 @@ WHERE time > '2000-01-10'::timestamptz
 ORDER BY time DESC, device_id;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Sort (actual rows=557 loops=1)
+ Sort (actual rows=522 loops=1)
    Sort Key: _hyper_6_30_chunk."time" DESC, _hyper_6_30_chunk.device_id
    Sort Method: quicksort 
-   ->  Append (actual rows=557 loops=1)
-         ->  Sample Scan on _hyper_6_30_chunk (actual rows=40 loops=1)
+   ->  Append (actual rows=522 loops=1)
+         ->  Sample Scan on _hyper_6_30_chunk (actual rows=35 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sample Scan on _hyper_6_29_chunk (actual rows=68 loops=1)
+         ->  Sample Scan on _hyper_6_29_chunk (actual rows=61 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sample Scan on _hyper_6_28_chunk (actual rows=68 loops=1)
+         ->  Sample Scan on _hyper_6_28_chunk (actual rows=61 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Sample Scan on _hyper_6_27_chunk (actual rows=65 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Rows Removed by Filter: 113
-         ->  Sample Scan on _hyper_6_26_chunk (actual rows=158 loops=1)
+         ->  Sample Scan on _hyper_6_26_chunk (actual rows=150 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Rows Removed by Filter: 220
-         ->  Sample Scan on _hyper_6_25_chunk (actual rows=158 loops=1)
+               Rows Removed by Filter: 218
+         ->  Sample Scan on _hyper_6_25_chunk (actual rows=150 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Rows Removed by Filter: 220
+               Rows Removed by Filter: 218
 (25 rows)
 
 -- test runtime exclusion
@@ -2029,7 +2127,7 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:309: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit

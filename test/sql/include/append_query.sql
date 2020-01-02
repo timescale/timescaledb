@@ -208,6 +208,12 @@ reset enable_material;
 -- test filtering on space partition
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id = 1 ORDER BY time;
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (1,2) ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (VALUES(1)) ORDER BY time;
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND v3 IN (VALUES('1')) ORDER BY time;
+
+:PREFIX SELECT * FROM metrics_space
+WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
+  AND v3 NOT IN (VALUES ('1'));
 
 -- test CURRENT_DATE
 -- should be 0 chunks

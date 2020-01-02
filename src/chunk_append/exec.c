@@ -723,6 +723,11 @@ constify_param_mutator(Node *node, void *context)
 	if (node == NULL)
 		return NULL;
 
+	/* Don't descend into subplans to constify their parameters, because they may not be valid yet
+	 */
+	if (IsA(node, SubPlan))
+		return node;
+
 	if (IsA(node, Param))
 	{
 		Param *param = castNode(Param, node);
