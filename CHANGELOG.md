@@ -24,6 +24,7 @@ that a backfill can trigger. By default, all invalidations are processed.
 * #1591 Fix locf treat_null_as_missing option
 * #1594 Fix error in compression constraint check
 * #1607 Delete compression policy when drop hypertable
+* #1608 Add jobs to timescaledb_information.policy_stats
 
 **Thanks**
 * @optijon for reporting an issue with locf treat_null_as_missing option
