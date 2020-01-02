@@ -382,6 +382,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	/* Delete any policy args associated with this job */
 	ts_bgw_policy_reorder_delete_row_only_by_job_id(job_id);
 	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
+	ts_bgw_policy_compress_chunks_delete_row_only_by_job_id(job_id);
 
 	/* Delete any stats in bgw_policy_chunk_stats related to this job */
 	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);
