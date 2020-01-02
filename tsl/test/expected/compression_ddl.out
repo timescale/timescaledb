@@ -407,6 +407,19 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
      2
 (1 row)
 
+--add policy to make sure it's dropped later
+select add_compress_chunks_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
+ add_compress_chunks_policy 
+----------------------------
+                       1000
+(1 row)
+
+SELECT count(*) FROM _timescaledb_config.bgw_policy_compress_chunks;
+ count 
+-------
+     1
+(1 row)
+
 DROP TABLE :UNCOMPRESSED_HYPER_NAME;
 --verify that there are no more hypertable remaining
 SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
@@ -416,6 +429,13 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 (1 row)
 
 SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
+ count 
+-------
+     0
+(1 row)
+
+--verify that the policy is gone
+SELECT count(*) FROM _timescaledb_config.bgw_policy_compress_chunks;
  count 
 -------
      0
@@ -495,6 +515,22 @@ AS sub;
  count_compressed 
 ------------------
                 1
+(1 row)
+
+select add_compress_chunks_policy('test1', interval '1 day');
+ add_compress_chunks_policy 
+----------------------------
+                       1002
+(1 row)
+
+\set ON_ERROR_STOP 0
+ALTER table test1 set (timescaledb.compress='f');
+ERROR:  cannot change compression options as a compression policy exists on the table
+\set ON_ERROR_STOP 1
+select remove_compress_chunks_policy('test1');
+ remove_compress_chunks_policy 
+-------------------------------
+ t
 (1 row)
 
 ALTER table test1 set (timescaledb.compress='f');

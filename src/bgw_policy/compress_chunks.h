@@ -19,5 +19,5 @@ extern TSDLLEXPORT BgwPolicyCompressChunks *ts_bgw_policy_compress_chunks_find_b
 extern TSDLLEXPORT BgwPolicyCompressChunks *
 ts_bgw_policy_compress_chunks_find_by_hypertable(int32 hypertable_id);
 extern TSDLLEXPORT void ts_bgw_policy_compress_chunks_insert(BgwPolicyCompressChunks *policy);
-extern TSDLLEXPORT bool ts_bgw_policy_compress_chunks_delete(int32 job_id);
+extern TSDLLEXPORT bool ts_bgw_policy_compress_chunks_delete_row_only_by_job_id(int32 job_id);
 #endif /* TIMESCALEDB_BGW_POLICY_COMPRESS_CHUNKS_H */

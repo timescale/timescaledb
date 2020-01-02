@@ -182,8 +182,6 @@ compress_chunks_remove_policy(PG_FUNCTION_ARGS)
 	}
 
 	ts_bgw_job_delete_by_id(policy->fd.job_id);
-	/* Now, delete from policy table */
-	ts_bgw_policy_compress_chunks_delete(policy->fd.job_id);
 
 	PG_RETURN_BOOL(true);
 }

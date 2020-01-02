@@ -55,9 +55,9 @@ compress_policy_delete_row_tuple_found(TupleInfo *ti, void *const data)
 	return SCAN_CONTINUE;
 }
 
-/*deletes only from the compress_chunks policy table. need to remove the job separately */
+/* deletes only from the compress_chunks policy table. need to remove the job separately */
 bool
-ts_bgw_policy_compress_chunks_delete(int32 job_id)
+ts_bgw_policy_compress_chunks_delete_row_only_by_job_id(int32 job_id)
 {
 	ScanKeyData scankey[1];
 
