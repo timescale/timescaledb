@@ -41,6 +41,11 @@ insert into foo values( 30 , 12 , 20, NULL);
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 NOTICE:  adding index _compressed_hypertable_2_a__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(a, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_2_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(b, _ts_meta_sequence_num)
+--test self-refencing updates
+SET timescaledb.enable_transparent_decompression to ON;
+update foo set c = 40
+where  a = (SELECT max(a) FROM foo);
+SET timescaledb.enable_transparent_decompression to OFF;
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 

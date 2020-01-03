@@ -19,6 +19,13 @@ insert into foo values( 20 , 11 , 20, NULL);
 insert into foo values( 30 , 12 , 20, NULL);
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
+
+--test self-refencing updates
+SET timescaledb.enable_transparent_decompression to ON;
+update foo set c = 40
+where  a = (SELECT max(a) FROM foo);
+SET timescaledb.enable_transparent_decompression to OFF;
+
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
 select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;

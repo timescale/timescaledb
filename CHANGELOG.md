@@ -26,6 +26,7 @@ that a backfill can trigger. By default, all invalidations are processed.
 * #1606 Fix constify params during runtime exclusion
 * #1607 Delete compression policy when drop hypertable
 * #1608 Add jobs to timescaledb_information.policy_stats
+* #1609 Fix bug with parent table in decompression 
 
 **Thanks**
 * @optijon for reporting an issue with locf treat_null_as_missing option

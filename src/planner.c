@@ -563,7 +563,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
 
-		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
+		if (ht != NULL && ht_oid != rte->relid && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{
 			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
 
