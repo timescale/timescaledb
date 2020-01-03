@@ -575,6 +575,16 @@ $$);
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
 SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
+-- Create one chunk to block add_dimension
+INSERT INTO dimented_table VALUES('2017-01-01 06:01', 1, '2017-01-01 08:01', 1);
+
+\set ON_ERROR_STOP 0
+-- add_dimension should fail when table has data and a chunk
+SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
+\set ON_ERROR_STOP 1
+-- Clear table
+TRUNCATE dimented_table;
+-- Now add_dimension should work
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
@@ -951,7 +961,7 @@ SELECT * FROM create_distributed_hypertable('hyper_estimate', 'time', 'device', 
 -- This will enable us to more easily see estimates per chunk
 SET timescaledb.enable_per_data_node_queries = false;
 
--- Estimating chunk progress uses current timestamp so we override it for test purposes 
+-- Estimating chunk progress uses current timestamp so we override it for test purposes
 SELECT ts_test_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
 
 -- Test estimates when backfilling. 3 chunks should be historical and 3 should be considered current when estimating.

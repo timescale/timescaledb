@@ -154,7 +154,7 @@ DROP DATABASE data_node_3;
 
 -- Test TS execution on non-TSDB server
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER myserver FOREIGN DATA WRAPPER postgres_fdw 
+CREATE SERVER myserver FOREIGN DATA WRAPPER postgres_fdw
     OPTIONS (host 'foo', dbname 'foodb', port '5432');
 \set ON_ERROR_STOP 0
 SELECT * FROM test.remote_exec('{myserver}', $$ SELECT 1; $$);

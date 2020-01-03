@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 #include <fmgr.h>
+#include "hypertable.h"
 
 typedef enum DistUtilMembershipStatus
 {
@@ -35,4 +36,4 @@ void validate_data_node_settings(void);
 bool dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,
 									 bool *is_old_version);
 
-#endif /* TIMESCALEDB_TSL_CHUNK_API_H */
+#endif /* TIMESCALEDB_TSL_DIST_UTIL_H */

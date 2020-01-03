@@ -1920,6 +1920,16 @@ NOTICE:  adding not-null constraint to column "time"
              5 | public      | dimented_table | t
 (1 row)
 
+-- Create one chunk to block add_dimension
+INSERT INTO dimented_table VALUES('2017-01-01 06:01', 1, '2017-01-01 08:01', 1);
+\set ON_ERROR_STOP 0
+-- add_dimension should fail when table has data and a chunk
+SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
+ERROR:  hypertable "dimented_table" has data or empty chunks
+\set ON_ERROR_STOP 1
+-- Clear table
+TRUNCATE dimented_table;
+-- Now add_dimension should work
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 NOTICE:  adding not-null constraint to column "column2"
  dimension_id | schema_name |   table_name   | column_name | created 
@@ -2064,17 +2074,17 @@ SELECT * FROM disttable_replicated;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=4 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: data_node_1
-               Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
-               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[5, 7])
+               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: data_node_2
-               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: data_node_3
-               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
+               Chunks: _hyper_6_14_dist_chunk, _hyper_6_17_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
 (18 rows)
 
@@ -2085,30 +2095,30 @@ SELECT * FROM disttable_replicated;
                                                                 QUERY PLAN                                                                 
 -------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=8 loops=1)
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=2 loops=1)
-         Output: _hyper_6_11_dist_chunk."time", _hyper_6_11_dist_chunk.device, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color"
-         Data node: data_node_1
-         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_11_dist_chunk
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=1 loops=1)
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=2 loops=1)
          Output: _hyper_6_12_dist_chunk."time", _hyper_6_12_dist_chunk.device, _hyper_6_12_dist_chunk.temp, _hyper_6_12_dist_chunk."Color"
-         Data node: data_node_2
+         Data node: data_node_1
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_12_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_13_dist_chunk."time", _hyper_6_13_dist_chunk.device, _hyper_6_13_dist_chunk.temp, _hyper_6_13_dist_chunk."Color"
-         Data node: data_node_3
-         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_13_dist_chunk
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk (actual rows=2 loops=1)
-         Output: _hyper_6_14_dist_chunk."time", _hyper_6_14_dist_chunk.device, _hyper_6_14_dist_chunk.temp, _hyper_6_14_dist_chunk."Color"
-         Data node: data_node_1
-         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_14_dist_chunk
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk (actual rows=1 loops=1)
-         Output: _hyper_6_15_dist_chunk."time", _hyper_6_15_dist_chunk.device, _hyper_6_15_dist_chunk.temp, _hyper_6_15_dist_chunk."Color"
          Data node: data_node_2
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_13_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_14_dist_chunk."time", _hyper_6_14_dist_chunk.device, _hyper_6_14_dist_chunk.temp, _hyper_6_14_dist_chunk."Color"
+         Data node: data_node_3
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_14_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk (actual rows=2 loops=1)
+         Output: _hyper_6_15_dist_chunk."time", _hyper_6_15_dist_chunk.device, _hyper_6_15_dist_chunk.temp, _hyper_6_15_dist_chunk."Color"
+         Data node: data_node_1
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_15_dist_chunk
    ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk (actual rows=1 loops=1)
          Output: _hyper_6_16_dist_chunk."time", _hyper_6_16_dist_chunk.device, _hyper_6_16_dist_chunk.temp, _hyper_6_16_dist_chunk."Color"
-         Data node: data_node_3
+         Data node: data_node_2
          Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_16_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_17_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_17_dist_chunk."time", _hyper_6_17_dist_chunk.device, _hyper_6_17_dist_chunk.temp, _hyper_6_17_dist_chunk."Color"
+         Data node: data_node_3
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_17_dist_chunk
 (25 rows)
 
 SET timescaledb.enable_per_data_node_queries = TRUE;
@@ -2123,17 +2133,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: data_node_1
-               Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
-               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[5, 7]) AND ((temp > 2::double precision))
+               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: data_node_2
-               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: data_node_3
-               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
+               Chunks: _hyper_6_14_dist_chunk, _hyper_6_17_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND ((temp > 2::double precision))
 (18 rows)
 
@@ -2148,17 +2158,17 @@ SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=1 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: data_node_1
-               Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
-               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[5, 7]) AND (((temp > 2::double precision) OR ("Color" = 11)))
+               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: data_node_2
-               Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                Data node: data_node_3
-               Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
+               Chunks: _hyper_6_14_dist_chunk, _hyper_6_17_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) AND (((temp > 2::double precision) OR ("Color" = 11)))
 (18 rows)
 
@@ -2173,12 +2183,12 @@ SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=2 loops=1)
                Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                Data node: data_node_1
-               Chunks: _hyper_6_11_dist_chunk
-               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[5]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
+               Chunks: _hyper_6_12_dist_chunk
+               Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
          ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=0 loops=1)
                Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                Data node: data_node_2
-               Chunks: _hyper_6_12_dist_chunk
+               Chunks: _hyper_6_13_dist_chunk
                Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
 (13 rows)
 
@@ -2209,17 +2219,17 @@ SELECT * FROM cte;
                  ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_1 (actual rows=4 loops=1)
                        Output: disttable_replicated_1."time", disttable_replicated_1.device, disttable_replicated_1.temp, disttable_replicated_1."Color"
                        Data node: data_node_1
-                       Chunks: _hyper_6_11_dist_chunk, _hyper_6_14_dist_chunk
-                       Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[5, 7])
+                       Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+                       Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
                  ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_2 (actual rows=2 loops=1)
                        Output: disttable_replicated_2."time", disttable_replicated_2.device, disttable_replicated_2.temp, disttable_replicated_2."Color"
                        Data node: data_node_2
-                       Chunks: _hyper_6_12_dist_chunk, _hyper_6_15_dist_chunk
+                       Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
                        Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
                  ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=2 loops=1)
                        Output: disttable_replicated_3."time", disttable_replicated_3.device, disttable_replicated_3.temp, disttable_replicated_3."Color"
                        Data node: data_node_3
-                       Chunks: _hyper_6_13_dist_chunk, _hyper_6_16_dist_chunk
+                       Chunks: _hyper_6_14_dist_chunk, _hyper_6_17_dist_chunk
                        Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8])
 (21 rows)
 
@@ -2233,8 +2243,6 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
 ----------------------------------------------------------------------------------------------------------------------------------------------------
  Update on public.disttable_replicated (actual rows=0 loops=1)
    Update on public.disttable_replicated
-   Foreign Update on _timescaledb_internal._hyper_6_11_dist_chunk
-     Remote SQL: UPDATE _timescaledb_internal._hyper_6_11_dist_chunk SET device = $2 WHERE ctid = $1
    Foreign Update on _timescaledb_internal._hyper_6_12_dist_chunk
      Remote SQL: UPDATE _timescaledb_internal._hyper_6_12_dist_chunk SET device = $2 WHERE ctid = $1
    Foreign Update on _timescaledb_internal._hyper_6_13_dist_chunk
@@ -2245,6 +2253,8 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
      Remote SQL: UPDATE _timescaledb_internal._hyper_6_15_dist_chunk SET device = $2 WHERE ctid = $1
    Foreign Update on _timescaledb_internal._hyper_6_16_dist_chunk
      Remote SQL: UPDATE _timescaledb_internal._hyper_6_16_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_17_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_17_dist_chunk SET device = $2 WHERE ctid = $1
    CTE devices
      ->  Sort (actual rows=1 loops=1)
            Output: disttable_replicated_1.device
@@ -2256,30 +2266,30 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
                  ->  Append (actual rows=8 loops=1)
                        ->  Seq Scan on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
                              Output: disttable_replicated_1.device
-                       ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk _hyper_6_11_dist_chunk_1 (actual rows=2 loops=1)
-                             Output: _hyper_6_11_dist_chunk_1.device
-                             Data node: data_node_1
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_11_dist_chunk
-                       ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk _hyper_6_12_dist_chunk_1 (actual rows=1 loops=1)
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk _hyper_6_12_dist_chunk_1 (actual rows=2 loops=1)
                              Output: _hyper_6_12_dist_chunk_1.device
-                             Data node: data_node_2
+                             Data node: data_node_1
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_12_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk _hyper_6_13_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_13_dist_chunk_1.device
-                             Data node: data_node_3
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_13_dist_chunk
-                       ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk _hyper_6_14_dist_chunk_1 (actual rows=2 loops=1)
-                             Output: _hyper_6_14_dist_chunk_1.device
-                             Data node: data_node_1
-                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_14_dist_chunk
-                       ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk _hyper_6_15_dist_chunk_1 (actual rows=1 loops=1)
-                             Output: _hyper_6_15_dist_chunk_1.device
                              Data node: data_node_2
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_13_dist_chunk
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk _hyper_6_14_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_14_dist_chunk_1.device
+                             Data node: data_node_3
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_14_dist_chunk
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk _hyper_6_15_dist_chunk_1 (actual rows=2 loops=1)
+                             Output: _hyper_6_15_dist_chunk_1.device
+                             Data node: data_node_1
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_15_dist_chunk
                        ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk _hyper_6_16_dist_chunk_1 (actual rows=1 loops=1)
                              Output: _hyper_6_16_dist_chunk_1.device
-                             Data node: data_node_3
+                             Data node: data_node_2
                              Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_16_dist_chunk
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_17_dist_chunk _hyper_6_17_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_17_dist_chunk_1.device
+                             Data node: data_node_3
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_17_dist_chunk
    InitPlan 2 (returns $1)
      ->  Limit (actual rows=1 loops=1)
            Output: devices.device
@@ -2288,30 +2298,30 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
    ->  Seq Scan on public.disttable_replicated (actual rows=0 loops=1)
          Output: disttable_replicated."time", 2, disttable_replicated.temp, disttable_replicated."Color", disttable_replicated.ctid
          Filter: (disttable_replicated.device = $1)
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=2 loops=1)
-         Output: _hyper_6_11_dist_chunk."time", 2, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color", _hyper_6_11_dist_chunk.ctid
-         Data node: data_node_1
-         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_11_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=0 loops=1)
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_12_dist_chunk (actual rows=2 loops=1)
          Output: _hyper_6_12_dist_chunk."time", 2, _hyper_6_12_dist_chunk.temp, _hyper_6_12_dist_chunk."Color", _hyper_6_12_dist_chunk.ctid
-         Data node: data_node_2
+         Data node: data_node_1
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_12_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_13_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_13_dist_chunk."time", 2, _hyper_6_13_dist_chunk.temp, _hyper_6_13_dist_chunk."Color", _hyper_6_13_dist_chunk.ctid
-         Data node: data_node_3
+         Data node: data_node_2
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_13_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_14_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_14_dist_chunk."time", 2, _hyper_6_14_dist_chunk.temp, _hyper_6_14_dist_chunk."Color", _hyper_6_14_dist_chunk.ctid
-         Data node: data_node_1
+         Data node: data_node_3
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_14_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_15_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_15_dist_chunk."time", 2, _hyper_6_15_dist_chunk.temp, _hyper_6_15_dist_chunk."Color", _hyper_6_15_dist_chunk.ctid
-         Data node: data_node_2
+         Data node: data_node_1
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_15_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
    ->  Foreign Scan on _timescaledb_internal._hyper_6_16_dist_chunk (actual rows=0 loops=1)
          Output: _hyper_6_16_dist_chunk."time", 2, _hyper_6_16_dist_chunk.temp, _hyper_6_16_dist_chunk."Color", _hyper_6_16_dist_chunk.ctid
-         Data node: data_node_3
+         Data node: data_node_2
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_16_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_17_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_17_dist_chunk."time", 2, _hyper_6_17_dist_chunk.temp, _hyper_6_17_dist_chunk."Color", _hyper_6_17_dist_chunk.ctid
+         Data node: data_node_3
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_17_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
 (81 rows)
 
 -- Test inserts with smaller batch size and more tuples to reach full
@@ -2413,7 +2423,7 @@ SET timescaledb.max_insert_batch_size=4;
 -- Execute and filter mentioned data node name in the error message.
 \set ON_ERROR_STOP 0
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
-ERROR:  [data_node_x]: new row for relation "_hyper_7_22_dist_chunk" violates check constraint "twodim_Color_check"
+ERROR:  [data_node_x]: new row for relation "_hyper_7_23_dist_chunk" violates check constraint "twodim_Color_check"
 \set ON_ERROR_STOP 1
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
 -- First EXPLAIN with batching turned on.
@@ -2715,12 +2725,12 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
  chunk_id | hypertable_id |      schema_name      |       table_name        | relkind |                                           slices                                            
 ----------+---------------+-----------------------+-------------------------+---------+---------------------------------------------------------------------------------------------
-       26 |            10 | _timescaledb_internal | _hyper_10_26_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
-       27 |            10 | _timescaledb_internal | _hyper_10_27_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
-       28 |            10 | _timescaledb_internal | _hyper_10_28_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}
-       29 |            10 | _timescaledb_internal | _hyper_10_29_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-       30 |            10 | _timescaledb_internal | _hyper_10_30_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}
-       31 |            10 | _timescaledb_internal | _hyper_10_31_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+       27 |            10 | _timescaledb_internal | _hyper_10_27_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
+       28 |            10 | _timescaledb_internal | _hyper_10_28_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
+       29 |            10 | _timescaledb_internal | _hyper_10_29_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}
+       30 |            10 | _timescaledb_internal | _hyper_10_30_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+       31 |            10 | _timescaledb_internal | _hyper_10_31_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}
+       32 |            10 | _timescaledb_internal | _hyper_10_32_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (6 rows)
 
 -- Show chunks on data nodes
@@ -2734,10 +2744,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      15|            9|_timescaledb_internal|_hyper_10_26_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
-      16|            9|_timescaledb_internal|_hyper_10_27_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
-      17|            9|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      18|            9|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      16|            9|_timescaledb_internal|_hyper_10_27_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
+      17|            9|_timescaledb_internal|_hyper_10_28_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
+      18|            9|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      19|            9|_timescaledb_internal|_hyper_10_32_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (4 rows)
 
 
@@ -2747,10 +2757,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      16|            8|_timescaledb_internal|_hyper_10_26_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
-      17|            8|_timescaledb_internal|_hyper_10_28_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
-      18|            8|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      19|            8|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      16|            8|_timescaledb_internal|_hyper_10_27_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
+      17|            8|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
+      18|            8|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      19|            8|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (4 rows)
 
 
@@ -2760,10 +2770,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      14|            7|_timescaledb_internal|_hyper_10_27_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
-      15|            7|_timescaledb_internal|_hyper_10_28_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
-      16|            7|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
-      17|            7|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      14|            7|_timescaledb_internal|_hyper_10_28_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
+      15|            7|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
+      16|            7|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      17|            7|_timescaledb_internal|_hyper_10_32_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (4 rows)
 
 
@@ -2776,9 +2786,9 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
 SELECT * FROM drop_chunks(older_than => '2018-01-01'::timestamptz, table_name => 'disttable_drop_chunks', schema_name => 'public');
                   drop_chunks                  
 -----------------------------------------------
- _timescaledb_internal._hyper_10_26_dist_chunk
  _timescaledb_internal._hyper_10_27_dist_chunk
  _timescaledb_internal._hyper_10_28_dist_chunk
+ _timescaledb_internal._hyper_10_29_dist_chunk
 (3 rows)
 
 SELECT * FROM disttable_drop_chunks;
@@ -2794,9 +2804,9 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
  chunk_id | hypertable_id |      schema_name      |       table_name        | relkind |                                           slices                                            
 ----------+---------------+-----------------------+-------------------------+---------+---------------------------------------------------------------------------------------------
-       29 |            10 | _timescaledb_internal | _hyper_10_29_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-       30 |            10 | _timescaledb_internal | _hyper_10_30_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}
-       31 |            10 | _timescaledb_internal | _hyper_10_31_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+       30 |            10 | _timescaledb_internal | _hyper_10_30_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+       31 |            10 | _timescaledb_internal | _hyper_10_31_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}
+       32 |            10 | _timescaledb_internal | _hyper_10_32_dist_chunk | f       | {"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (3 rows)
 
 SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
@@ -2809,8 +2819,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      17|            9|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      18|            9|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      18|            9|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      19|            9|_timescaledb_internal|_hyper_10_32_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (2 rows)
 
 
@@ -2820,8 +2830,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      18|            8|_timescaledb_internal|_hyper_10_29_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      19|            8|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      18|            8|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      19|            8|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (2 rows)
 
 
@@ -2831,8 +2841,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [data_node_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      16|            7|_timescaledb_internal|_hyper_10_30_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
-      17|            7|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      16|            7|_timescaledb_internal|_hyper_10_31_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      17|            7|_timescaledb_internal|_hyper_10_32_dist_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (2 rows)
 
 
@@ -2845,9 +2855,9 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
 SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks', cascade => true);
                   drop_chunks                  
 -----------------------------------------------
- _timescaledb_internal._hyper_10_29_dist_chunk
  _timescaledb_internal._hyper_10_30_dist_chunk
  _timescaledb_internal._hyper_10_31_dist_chunk
+ _timescaledb_internal._hyper_10_32_dist_chunk
 (3 rows)
 
 SELECT * FROM disttable_drop_chunks;
@@ -2878,8 +2888,8 @@ SELECT * FROM "weird nAme\\#^.";
 SELECT * FROM drop_chunks(older_than => 1000, table_name => 'weird nAme\\#^.');
                   drop_chunks                  
 -----------------------------------------------
- _timescaledb_internal._hyper_11_32_dist_chunk
  _timescaledb_internal._hyper_11_33_dist_chunk
+ _timescaledb_internal._hyper_11_34_dist_chunk
 (2 rows)
 
 SELECT * FROM "weird nAme\\#^.";
@@ -3095,7 +3105,7 @@ INSERT INTO disttable2 VALUES ('2017-01-01 06:01', 1, 1.1);
 SELECT * FROM show_chunks('disttable2');
                   show_chunks                  
 -----------------------------------------------
- _timescaledb_internal._hyper_13_34_dist_chunk
+ _timescaledb_internal._hyper_13_35_dist_chunk
 (1 row)
 
 -- Ensure tablespace oid is set to 0 for a foreign table
@@ -3157,7 +3167,7 @@ INSERT INTO disttable2 VALUES ('2017-01-01 06:01', 1, 1.1);
 SELECT * FROM show_chunks('disttable2');
                   show_chunks                  
 -----------------------------------------------
- _timescaledb_internal._hyper_14_35_dist_chunk
+ _timescaledb_internal._hyper_14_36_dist_chunk
 (1 row)
 
 -- Ensure tablespace oid is set to 0 for a foreign table
@@ -3204,8 +3214,8 @@ SELECT * FROM dist_device;
    ->  Custom Scan (DataNodeScan) on public.dist_device
          Output: dist_device."time", dist_device.dist_device, dist_device.temp
          Data node: data_node_1
-         Chunks: _hyper_15_36_dist_chunk
-         Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[23])
+         Chunks: _hyper_15_37_dist_chunk
+         Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[24])
 (6 rows)
 
 SELECT * FROM dist_device;
@@ -3227,7 +3237,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- This will enable us to more easily see estimates per chunk
 SET timescaledb.enable_per_data_node_queries = false;
--- Estimating chunk progress uses current timestamp so we override it for test purposes 
+-- Estimating chunk progress uses current timestamp so we override it for test purposes
 SELECT ts_test_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
  ts_test_override_current_timestamptz 
 --------------------------------------
@@ -3260,12 +3270,12 @@ FROM hyper_estimate;
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
  Append  (cost=100.00..166847.40 rows=4118040 width=20)
-   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
    ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
    ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
-   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..32468.60 rows=915120 width=20)
    ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
    ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
+   ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..16283.80 rows=457560 width=20)
 (7 rows)
 
 -- This will calculate the stats
@@ -3276,12 +3286,12 @@ FROM hyper_estimate;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
  Append  (cost=100.00..606.52 rows=15 width=20)
-   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
-   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
-   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
-   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
-   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
-   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
+   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
+   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
 (7 rows)
 
 -- Let's insert data into a new chunk. This will result in chunk creation.
@@ -3293,13 +3303,13 @@ FROM hyper_estimate;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
  Append  (cost=100.00..706.58 rows=17 width=20)
-   ->  Foreign Scan on _hyper_16_37_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
-   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
-   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
-   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
-   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
-   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
-   ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..100.05 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_38_dist_chunk  (cost=100.00..101.12 rows=4 width=20)
+   ->  Foreign Scan on _hyper_16_39_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_40_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_41_dist_chunk  (cost=100.00..101.06 rows=2 width=20)
+   ->  Foreign Scan on _hyper_16_42_dist_chunk  (cost=100.00..101.09 rows=3 width=20)
+   ->  Foreign Scan on _hyper_16_43_dist_chunk  (cost=100.00..101.03 rows=1 width=20)
+   ->  Foreign Scan on _hyper_16_44_dist_chunk  (cost=100.00..100.05 rows=2 width=20)
 (8 rows)
 
 CREATE TABLE devices (
@@ -3377,5 +3387,5 @@ ORDER BY 1;
 INSERT INTO devices VALUES (6, 'E999');
 \set ON_ERROR_STOP 0
 INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
-ERROR:  [data_node_1]: insert or update on table "_hyper_17_44_dist_chunk" violates foreign key constraint "27_17_hyper_device_fkey"
+ERROR:  [data_node_1]: insert or update on table "_hyper_17_45_dist_chunk" violates foreign key constraint "28_17_hyper_device_fkey"
 \set ON_ERROR_STOP 1
