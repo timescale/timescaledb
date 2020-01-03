@@ -1387,11 +1387,7 @@ ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 bool
 ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
 {
-	List *chunks = find_inheritance_children(table_relid, lockmode);
-	if (chunks != NIL)
-		return true;
-	else
-		return false;
+	return find_inheritance_children(table_relid, lockmode) != NIL;
 }
 
 static void

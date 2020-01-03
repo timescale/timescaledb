@@ -1536,7 +1536,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		if (ts_hypertable_has_chunks(info.table_relid, AccessShareLock))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertable \"%s\" has tuples or empty chunks",
+					 errmsg("hypertable \"%s\" has data or empty chunks",
 							get_rel_name(info.table_relid)),
 					 errdetail("It is not possible to add dimensions to a hypertable that has "
 							   "chunks. Please truncate the table.")));
