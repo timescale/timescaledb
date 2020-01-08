@@ -220,8 +220,8 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 	{
 		case DIMENSION_TYPE_OPEN:
 			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-												    collation,
 													strategy,
+												    collation,
 													values);
 		case DIMENSION_TYPE_CLOSED:
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,

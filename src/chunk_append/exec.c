@@ -227,6 +227,16 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->num_subplans = list_length(state->filtered_subplans);
 
+#if PG12
+	ExecInitResultTupleSlotTL(&node->ss.ps, TTSOpsVirtualP);
+
+	/* node returns slots from each of its subnodes, therefore not fixed */
+	node->ss.ps.resultopsset = true;
+	node->ss.ps.resultopsfixed = false;
+
+	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+#endif
+
 	if (state->num_subplans == 0)
 	{
 		state->current = NO_MATCHING_SUBPLANS;
@@ -252,17 +262,6 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 			ExecSetTupleBound(state->limit, state->subplanstates[i]);
 
 		i++;
-
-#if PG12
-	ExecInitResultTupleSlotTL(&node->ss.ps, TTSOpsVirtualP);
-
-	/* node returns slots from each of its subnodes, therefore not fixed */
-	node->ss.ps.resultopsset = true;
-	node->ss.ps.resultopsfixed = false;
-
-	if (node->ss.ps.ps_ExprContext->ecxt_scantuple == NULL)
-		node->ss.ps.ps_ExprContext->ecxt_scantuple = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
-#endif
 	}
 
 	if (state->runtime_exclusion)
@@ -401,6 +400,16 @@ chunk_append_exec(CustomScanState *node)
 
 		if (!TupIsNull(subslot))
 		{
+
+#if PG12
+			/* convert to Virtual tuple, so the tts_ops don't conflict */
+			if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
+				ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
+
+			ExecCopySlot(state->slot, subslot);
+			subslot = state->slot;
+#endif
+
 			/*
 			 * If the subplan gave us something check if we need
 			 * to do projection otherwise return as is.
@@ -408,15 +417,10 @@ chunk_append_exec(CustomScanState *node)
 			if (node->ss.ps.ps_ProjInfo == NULL)
 				return subslot;
 
+
 			ResetExprContext(econtext);
-#if PG12
-			/* convert to Virtual tuple, so the tts_ops don't conflict */
-			if (econtext->ecxt_scantuple->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
-				ExecSetSlotDescriptor(econtext->ecxt_scantuple, subslot->tts_tupleDescriptor);
-			ExecCopySlot(econtext->ecxt_scantuple, subslot);
-#else
+
 			econtext->ecxt_scantuple = subslot;
-#endif
 
 #if PG96
 			resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
@@ -432,7 +436,7 @@ chunk_append_exec(CustomScanState *node)
 		}
 
 #if PG12
-		ExecClearTuple(econtext->ecxt_scantuple);
+		ExecClearTuple(state->slot);
 #endif
 
 		state->choose_next_subplan(state);
@@ -577,8 +581,8 @@ chunk_append_end(CustomScanState *node)
 	{
 		ExecEndNode(state->subplanstates[i]);
 	}
-	if (node->ss.ps.ps_ExprContext->ecxt_scantuple != NULL)
-		ExecDropSingleTupleTableSlot(node->ss.ps.ps_ExprContext->ecxt_scantuple);
+
+	ExecDropSingleTupleTableSlot(state->slot);
 }
 
 /*

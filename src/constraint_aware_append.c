@@ -141,6 +141,10 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 		.parse = &parse,
 	};
 
+#if PG12
+	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+#endif
+
 	switch (nodeTag(subplan))
 	{
 		case T_Append:
@@ -287,6 +291,14 @@ ca_append_exec(CustomScanState *node)
 		if (TupIsNull(subslot))
 			return NULL;
 
+		if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
+			ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
+
+#if PG12
+		ExecCopySlot(state->slot, subslot);
+		subslot = state->slot;
+#endif
+
 		if (!node->ss.ps.ps_ProjInfo)
 			return subslot;
 
@@ -313,6 +325,9 @@ ca_append_end(CustomScanState *node)
 	{
 		ExecEndNode(linitial(node->custom_ps));
 	}
+#if PG12
+	ExecDropSingleTupleTableSlot(((ConstraintAwareAppendState *) node)->slot);
+#endif
 }
 
 static void

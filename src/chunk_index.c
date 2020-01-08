@@ -1046,7 +1046,7 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 	Chunk *chunk;
 	ChunkIndexMapping cim;
 
-	chunk_index_rel = table_open(chunk_index_oid, AccessShareLock);
+	chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
 
 	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
 	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
@@ -1089,7 +1089,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	Oid constraint_oid;
 	char *name;
 
-	index_rel = table_open(chunk_index_oid_old, ShareLock);
+	index_rel = relation_open(chunk_index_oid_old, ShareLock);
 
 	/* check permissions */
 	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, 0, true);

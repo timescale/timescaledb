@@ -203,13 +203,20 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			foreach (lc_oid, current_oids)
 			{
-				Assert(lfirst_oid(lc_oid) ==
-					   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
-				merge_childs = lappend(merge_childs, lfirst(flat));
-				flat = lnext(flat);
+				/* postgres may have pruned away some children already */
+				if (lfirst_oid(lc_oid) ==
+					   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid)
+				{
+					Assert(lfirst_oid(lc_oid) ==
+						root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
+					merge_childs = lappend(merge_childs, lfirst(flat));
+					flat = lnext(flat);
+				}
 			}
 
-			if (list_length(merge_childs) > 1)
+			if (merge_childs == NIL)
+			{}
+			else if (list_length(merge_childs) > 1)
 			{
 #if PG96
 				append = create_merge_append_path(root,
@@ -233,6 +240,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
 		}
+
+		Assert(flat == NULL);
 
 		/*
 		 * if we do not have scans as direct childs of this

@@ -955,9 +955,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
 
-		/* Open rel if needed; we already have required locks */
+		/* Open rel if needed */
 		if (child_oid != parent_oid)
-			newrelation = table_open(child_oid, NoLock);
+			newrelation = table_open(child_oid, AccessShareLock);
 		else
 			newrelation = oldrelation;
 
