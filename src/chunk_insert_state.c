@@ -134,7 +134,7 @@ ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple,
 #if PG12_LT
 	ExecStoreTuple(tuple, state->slot, InvalidBuffer, true);
 #else
-	ExecStoreHeapTuple(tuple, state->slot, true);
+	ExecForceStoreHeapTuple(tuple, state->slot, true);
 #endif
 
 	if (NULL != existing_slot)
@@ -232,6 +232,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 #if PG12
 		rri->ri_onConflict->oc_Existing = rri_orig->ri_onConflict->oc_Existing;
 		rri->ri_onConflict->oc_ProjSlot = rri_orig->ri_onConflict->oc_ProjSlot;
+		Assert(!TTS_FIXED(rri->ri_onConflict->oc_ProjSlot));
 #else
 		rri->ri_onConflict->oc_ProjTupdesc = rri_orig->ri_onConflict->oc_ProjTupdesc;
 #endif
@@ -525,7 +526,11 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch
+#if PG12
+	, const TupleTableSlotOps *const ops
+#endif
+)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
@@ -594,7 +599,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)
-		state->slot = MakeTupleTableSlotCompat(NULL, TTSOpsHeapTupleP);
+		state->slot = MakeTupleTableSlotCompat(NULL, ops);
 
 	heap_close(parent_rel, AccessShareLock);
 

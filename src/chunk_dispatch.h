@@ -48,6 +48,10 @@ typedef struct Point Point;
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
 void ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
 extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
-																  bool *cis_changed_out);
+																  bool *cis_changed_out
+#if PG12
+																  , const TupleTableSlotOps *const ops
+#endif
+																  );
 
 #endif /* TIMESCALEDB_CHUNK_DISPATCH_H */

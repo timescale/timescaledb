@@ -431,6 +431,10 @@ chunk_append_exec(CustomScanState *node)
 #endif
 		}
 
+#if PG12
+		ExecClearTuple(econtext->ecxt_scantuple);
+#endif
+
 		state->choose_next_subplan(state);
 
 		/* loop back and try to get a tuple from the new subplan */
@@ -573,7 +577,8 @@ chunk_append_end(CustomScanState *node)
 	{
 		ExecEndNode(state->subplanstates[i]);
 	}
-	ExecDropSingleTupleTableSlot(node->ss.ps.ps_ExprContext->ecxt_scantuple);
+	if (node->ss.ps.ps_ExprContext->ecxt_scantuple != NULL)
+		ExecDropSingleTupleTableSlot(node->ss.ps.ps_ExprContext->ecxt_scantuple);
 }
 
 /*

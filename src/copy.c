@@ -289,7 +289,11 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed);
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed
+#if PG12
+				, TTSOpsHeapTupleP
+#endif
+		);
 
 		Assert(cis != NULL);
 

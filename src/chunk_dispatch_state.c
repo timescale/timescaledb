@@ -83,7 +83,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		 * we check that we have the correct tts_ops, and update our slot if
 		 * it's wrong.
 		 */
-		if (state->slot->tts_ops  != state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops)
+		if (state->slot->tts_ops != state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops)
 		{
 			ExecDropSingleTupleTableSlot(state->slot);
 			state->slot = MakeSingleTupleTableSlot(NULL, state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops);
@@ -111,8 +111,13 @@ chunk_dispatch_exec(CustomScanState *node)
 		dispatch->returning_index = state->parent->mt_whichplan;
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed);
-		if (cis_changed)
+
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed
+#if PG12
+				, state->slot->tts_ops
+#endif
+			);
+	if (cis_changed)
 		{
 			TupleDesc chunk_desc;
 
@@ -149,10 +154,19 @@ chunk_dispatch_exec(CustomScanState *node)
 				ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
 			}
 #else
-			if (cis->result_relation_info->ri_onConflict != NULL && cis->result_relation_info->ri_onConflict->oc_ProjSlot != NULL)
+			if (cis->result_relation_info->ri_onConflict != NULL)
 			{
-				Assert(chunk_desc != NULL);
-				ExecSetSlotDescriptor(cis->result_relation_info->ri_onConflict->oc_ProjSlot, chunk_desc);
+				if (cis->result_relation_info->ri_onConflict->oc_ProjSlot != NULL)
+				{
+					Assert(chunk_desc != NULL);
+					ExecSetSlotDescriptor(cis->result_relation_info->ri_onConflict->oc_ProjSlot, chunk_desc);
+				}
+
+				if (cis->result_relation_info->ri_onConflict->oc_Existing != NULL)
+				{
+					Assert(chunk_desc != NULL);
+					ExecSetSlotDescriptor(cis->result_relation_info->ri_onConflict->oc_Existing, chunk_desc);
+				}
 			}
 
 			ExecSetSlotDescriptor(state->slot, chunk_desc);
@@ -338,15 +352,18 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 			TupleDesc existing;
 
 			existing = parent->resultRelInfo->ri_onConflict->oc_Existing->tts_tupleDescriptor;
-			parent->resultRelInfo->ri_onConflict->oc_Existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL, TTSOpsHeapTupleP);
+			parent->resultRelInfo->ri_onConflict->oc_Existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL, table_slot_callbacks(parent->resultRelInfo->ri_RelationDesc));
 			ExecSetSlotDescriptor(parent->resultRelInfo->ri_onConflict->oc_Existing, existing);
 		}
 
-		if (parent->resultRelInfo->ri_onConflict->oc_ProjSlot)
+		if (parent->resultRelInfo->ri_onConflict->oc_ProjSlot && TTS_FIXED(parent->resultRelInfo->ri_onConflict->oc_ProjSlot))
 		{
 			TupleDesc existing;
-
-			existing = parent->resultRelInfo->ri_onConflict->oc_ProjSlot->tts_tupleDescriptor;
+			TupleTableSlot *new_slot;
+			TupleTableSlot *old_slot = parent->resultRelInfo->ri_onConflict->oc_ProjSlot;
+			MemoryContext old_context = old_slot->tts_mcxt;
+			existing = old_slot->tts_tupleDescriptor;
+			Assert(TTS_EMPTY(old_slot));
 
 			/*
 			* in this case we must overwrite mt_conflproj because there are
@@ -354,9 +371,21 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 			* evaluations, and the original tuple will otherwise be stored to the
 			* old slot, whose pointer is saved there.
 			*/
-			/*FIXME that can't work, the slot is variably-sized*/
-			parent->resultRelInfo->ri_onConflict->oc_ProjSlot = MakeTupleTableSlot(NULL, TTSOpsHeapTupleP);
-			ExecSetSlotDescriptor(parent->resultRelInfo->ri_onConflict->oc_ProjSlot, existing);
+			new_slot = MakeTupleTableSlot(NULL, old_slot->tts_ops);
+
+			/* a TupleTableSlot without a TupleDesc is smaller that one with */
+			memcpy(old_slot, new_slot, old_slot->tts_ops->base_slot_size);
+			old_slot->tts_mcxt = old_context;
+			old_slot->tts_ops->init(old_slot);
+			Assert(!TTS_FIXED(old_slot));
+			pfree(new_slot);
+
+			Assert(old_slot->tts_values == NULL);
+			Assert(old_slot->tts_isnull == NULL);
+			Assert(old_slot->tts_tupleDescriptor == NULL);
+			ExecSetSlotDescriptor(old_slot, existing);
+			Assert(TTS_EMPTY(old_slot));
+			Assert(!TTS_FIXED(old_slot));
 		}
 	}
 #endif
