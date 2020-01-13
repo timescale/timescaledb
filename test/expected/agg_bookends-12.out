@@ -67,8 +67,8 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.dis
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
 (7 rows)
@@ -79,89 +79,82 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.dis
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time"
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time"
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
 (7 rows)
 
 :PREFIX SELECT last(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                         QUERY PLAN                         
+------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(3 rows)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(2 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                         QUERY PLAN                         
+------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(3 rows)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(2 rows)
 
 :PREFIX SELECT gp, last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         ->  Append (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
 
 :PREFIX SELECT gp, first(temp, time) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         ->  Append (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
 
 --check whole row
 :PREFIX SELECT gp, first(btest, time) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         ->  Append (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
 
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         ->  Append (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
 
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         ->  Append (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-(7 rows)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
 
 BEGIN;
 --check null value as last element
@@ -172,11 +165,11 @@ INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (9 rows)
 
@@ -188,13 +181,13 @@ INSERT INTO btest VALUES('2019-01-20T09:00:43', '2018-01-20T09:00:55', 2, 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (11 rows)
 
@@ -285,8 +278,8 @@ INSERT INTO btest_numeric VALUES ('2019-01-20T09:00:43', NULL);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_2_6_chunk."time" DESC
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+                 Order: btest_numeric."time" DESC
                  ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
 (7 rows)
@@ -299,11 +292,11 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_2_6_chunk."time" DESC
-                 ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+                 Order: btest_numeric."time" DESC
                  ->  Index Scan using _hyper_2_7_chunk_btest_numeric_time_idx on _hyper_2_7_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (9 rows)
 
@@ -314,17 +307,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (15 rows)
 
@@ -335,17 +328,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time"
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time"
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (15 rows)
 
@@ -369,17 +362,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (15 rows)
 
@@ -402,26 +395,24 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 
 -- do index scan when agg function is used in CTE subquery
 :PREFIX WITH last_temp AS (SELECT last(temp, time) FROM btest) SELECT * from last_temp;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
- CTE Scan on last_temp (actual rows=1 loops=1)
-   CTE last_temp
-     ->  Result (actual rows=1 loops=1)
-           InitPlan 1 (returns $0)
-             ->  Limit (actual rows=1 loops=1)
-                   ->  Merge Append (actual rows=1 loops=1)
-                         Sort Key: _hyper_1_1_chunk."time" DESC
-                         ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                               Index Cond: ("time" IS NOT NULL)
-                         ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                               Index Cond: ("time" IS NOT NULL)
-                         ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                               Index Cond: ("time" IS NOT NULL)
-                         ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                               Index Cond: ("time" IS NOT NULL)
-                         ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
-                               Index Cond: ("time" IS NOT NULL)
-(17 rows)
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+(15 rows)
 
 -- do index scan when using both FIRST and LAST aggregate functions
 :PREFIX SELECT first(temp, time), last(temp, time) FROM btest;
@@ -430,31 +421,31 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $1)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
    InitPlan 2 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk_1."time"
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1 loops=1)
+                 Order: btest_1."time"
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (29 rows)
 
@@ -465,31 +456,31 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $1)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
    InitPlan 2 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk_1."time"
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1 loops=1)
+                 Order: btest_1."time"
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1 loops=1)
                        Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (29 rows)
 
@@ -500,11 +491,11 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                        Index Cond: (("time" IS NOT NULL) AND ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone))
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: (("time" IS NOT NULL) AND ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone))
 (9 rows)
 
@@ -544,28 +535,27 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                       Filter: (temp < '30'::double precision)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                       Filter: (temp < '30'::double precision)
-                       Rows Removed by Filter: 2
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                       Filter: (temp < '30'::double precision)
-                       Rows Removed by Filter: 1
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=0 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                       Filter: (temp < '30'::double precision)
-                       Rows Removed by Filter: 1
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=0 loops=1)
                        Index Cond: ("time" IS NOT NULL)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 1
-(24 rows)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                       Filter: (temp < '30'::double precision)
+                       Rows Removed by Filter: 1
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                       Filter: (temp < '30'::double precision)
+                       Rows Removed by Filter: 2
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                       Filter: (temp < '30'::double precision)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                       Filter: (temp < '30'::double precision)
+(23 rows)
 
 -- SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
 -- do index scan
@@ -575,15 +565,15 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time"
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time"
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                        Index Cond: (("time" IS NOT NULL) AND ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone))
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Cond: (("time" IS NOT NULL) AND ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone))
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Cond: (("time" IS NOT NULL) AND ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone))
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
                        Index Cond: (("time" IS NOT NULL) AND ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone))
 (13 rows)
 
@@ -648,17 +638,17 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
-                       Index Cond: ("time" IS NOT NULL)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+                 Order: btest."time" DESC
                  ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
 (15 rows)
 

@@ -586,9 +586,8 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->parse = parse = copyObject(root->parse);
 	IncrementVarSublevelsUp((Node *) parse, 1, 1);
 
-	/* append_rel_list might contain outer Vars? */
-	subroot->append_rel_list = copyObject(root->append_rel_list);
-	IncrementVarSublevelsUp((Node *) subroot->append_rel_list, 1, 1);
+	/* NULL the append_rel_list, we'll recreate it when we re-expand */
+	subroot->append_rel_list = NULL;
 	/* There shouldn't be any OJ info to translate, as yet */
 	Assert(subroot->join_info_list == NIL);
 	/* and we haven't made equivalence classes, either */
@@ -657,6 +656,22 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->tuple_fraction = 1.0;
 	subroot->limit_tuples = 1.0;
 
+#if PG12
+		{
+			ListCell *lc;
+			/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
+			foreach(lc, subroot->parse->rtable)
+			{
+				RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+				if(is_rte_hypertable(rte))
+				{
+					Assert(rte->inh);
+					rte->inh = false;
+				}
+			}
+		}
+#endif
+
 	final_rel = query_planner(subroot,
 #if PG12_LT
 		/* as of 333ed24 uses subroot->processed_tlist instead  */
@@ -665,6 +680,20 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		first_last_qp_callback,
 		NULL);
 
+#if PG12
+		{
+			ListCell *lc;
+			/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
+			foreach(lc, root->parse->rtable)
+			{
+				RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+				if(is_rte_hypertable(rte))
+				{
+					rte->inh = true;
+				}
+			}
+		}
+#endif
 	/*
 	 * Since we didn't go through subquery_planner() to handle the subquery,
 	 * we have to do some of the same cleanup it would do, in particular cope

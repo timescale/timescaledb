@@ -90,7 +90,7 @@ mark_rte_hypertable_parent(RangeTblEntry *rte)
 	rte->ctename = CTE_NAME_HYPERTABLES;
 }
 
-static bool
+bool
 is_rte_hypertable(RangeTblEntry *rte)
 {
 	return rte->ctename != NULL && strcmp(rte->ctename, CTE_NAME_HYPERTABLES) == 0;
