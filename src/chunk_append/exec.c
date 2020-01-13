@@ -802,7 +802,8 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 	/*
 	 * We assume the relation has already been safely locked.
 	 */
-	relation = table_open(relationObjectId, NoLock);
+	//FIXME this lock should not be needed...
+	relation = table_open(relationObjectId, AccessShareLock);
 
 	constr = relation->rd_att->constr;
 	if (constr != NULL)

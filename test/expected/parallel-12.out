@@ -203,7 +203,7 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
  {1,2000,2000,2000,2000,1999,90000}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
+EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Finalize Aggregate
@@ -217,7 +217,7 @@ EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = c
                            Filter: ((i)::double precision = '-1'::double precision)
 (9 rows)
 
-SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j); 
+SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
  histogram 
 -----------
  
@@ -450,13 +450,17 @@ ALTER TABLE :CHUNK2 RESET (parallel_workers);
 
 -- this won't be parallel query because now() is parallel restricted in PG < 12
 :PREFIX SELECT i FROM "test" WHERE ts < now();
-                           QUERY PLAN                           
-----------------------------------------------------------------
- Custom Scan (ChunkAppend) on test (actual rows=100000 loops=1)
-   Chunks excluded during startup: 0
-   ->  Seq Scan on _hyper_1_1_chunk (actual rows=50000 loops=1)
-         Filter: (ts < now())
-   ->  Seq Scan on _hyper_1_2_chunk (actual rows=50000 loops=1)
-         Filter: (ts < now())
-(6 rows)
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Gather (actual rows=100000 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Custom Scan (ChunkAppend) on test (actual rows=100000 loops=1)
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=50000 loops=1)
+               Filter: (ts < now())
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=50000 loops=1)
+               Filter: (ts < now())
+(10 rows)
 
