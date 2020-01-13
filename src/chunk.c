@@ -2488,7 +2488,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			ts_chunk_drop(chunks + i, (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
 	}
 
-	if (cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
+	if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
 		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, &chunks, num_chunks);
 
 	return dropped_chunk_names;
