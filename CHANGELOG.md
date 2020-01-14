@@ -4,7 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.6.0 (unreleased)
+## 1.6.0 (2020-01-14)
+
+This release adds major new features and bugfixes since the 1.5.1 release.
+We deem it moderate priority for upgrading.
+
+The major new feature in this release allows users to keep the aggregated
+data in a continuous aggregate while dropping the raw data with drop_chunks.
+This allows users to save storage by keeping only the aggregates.
 
 The semantics of the refresh_lag parameter for continuous aggregates has 
 been changed to be relative to the current timestamp instead of the maximum
@@ -20,18 +27,31 @@ for data older than 1 month from the current timestamp at modification time may
 not cause continuous aggregate to be updated. This limits the amount of work
 that a backfill can trigger. By default, all invalidations are processed.
 
+**Major Features**
+* #1589 Allow drop_chunks while keeping continuous aggregates
+
+**Minor Features**
+* #1568 Add ignore_invalidation_older_than option to continuous aggs
+* #1575 Reorder group-by clause for continuous aggregates
+* #1592 Improve continuous agg user messages
+
 **Bugfixes**
+* #1565 Fix partial select query for continuous aggregate
 * #1591 Fix locf treat_null_as_missing option
 * #1594 Fix error in compression constraint check
+* #1603 Add join info to compressed chunk
 * #1606 Fix constify params during runtime exclusion
 * #1607 Delete compression policy when drop hypertable
 * #1608 Add jobs to timescaledb_information.policy_stats
-* #1609 Fix bug with parent table in decompression 
+* #1609 Fix bug with parent table in decompression
+* #1624 Fix drop_chunks for ApacheOnly
+* #1632 Check for NULL before dereferencing variable
 
 **Thanks**
 * @optijon for reporting an issue with locf treat_null_as_missing option
 * @acarrera42 for reporting an issue with constify params during runtime exclusion
 * @ChristopherZellermann for reporting an issue with the compression constraint check
+* @SimonDelamare for reporting an issue with joining hypertables with compression
 
 ## 1.5.1 (2019-11-12)
 
