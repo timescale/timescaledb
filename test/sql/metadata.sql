@@ -36,6 +36,7 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 -- Now make sure that only the exported_uuid is exported on pg_dump
 \c postgres :ROLE_SUPERUSER
 
+\setenv PGOPTIONS '--client-min-messages=warning'
 \! ${PG_BINDIR}/pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
 \! ${PG_BINDIR}/dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
 \! ${PG_BINDIR}/createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"

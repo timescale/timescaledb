@@ -63,3 +63,17 @@ CREATE TABLE "hyper2" (
 SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10); 
 \copy hyper2 from data/copy_data.csv with csv header ;
 
+----------------------------------------------------------------
+-- Testing COPY TO.
+----------------------------------------------------------------
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages TO NOTICE;
+
+-- COPY TO using a hypertable will not copy any tuples, but should
+-- show a notice.
+COPY hyper TO STDOUT DELIMITER ',';
+
+-- COPY TO using a query should display all the tuples and not show a
+-- notice.
+COPY (SELECT * FROM hyper) TO STDOUT DELIMITER ',';
