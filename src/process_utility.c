@@ -53,6 +53,7 @@
 #include "event_trigger.h"
 #include "extension.h"
 #include "hypercube.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "dimension_vector.h"
 #include "indexing.h"
@@ -361,24 +362,42 @@ process_copy(ProcessUtilityArgs *args)
 	 * Needed to add the appropriate number of tuples to the completion tag
 	 */
 	uint64 processed;
-	Hypertable *ht;
-	Cache *hcache;
+	Hypertable *ht = NULL;
+	Cache *hcache = NULL;
 	Oid relid;
 
-	if (!stmt->is_from || NULL == stmt->relation)
-		return false;
-
-	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-
-	if (!OidIsValid(relid))
-		return false;
-
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
-
-	if (ht == NULL)
+	if (stmt->relation)
 	{
-		ts_cache_release(hcache);
+		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+		if (!OidIsValid(relid))
+			return false;
+
+		hcache = ts_hypertable_cache_pin();
+		ht = ts_hypertable_cache_get_entry(hcache, relid);
+
+		if (ht == NULL)
+		{
+			ts_cache_release(hcache);
+			return false;
+		}
+	}
+
+	/* We only copy for COPY FROM (which copies into a hypertable). Since
+	 * hypertable data are in the hypertable chunks and no data would be
+	 * copied, we skip the copy for COPY TO, but print an informative
+	 * message. */
+	if (!stmt->is_from || NULL == stmt->relation)
+	{
+		if (ht && stmt->relation)
+			ereport(NOTICE,
+					(errmsg("hypertable data are in the chunks, no data will be copied"),
+					 errdetail("Data for hypertables are stored in the chunks of a hypertable so "
+							   "COPY TO of a hypertable will not copy any data."),
+					 errhint("Use \"COPY (SELECT * FROM <hypertable>) TO ...\" to copy all data in "
+							 "hypertable, or copy each chunk individually.")));
+		if (hcache)
+			ts_cache_release(hcache);
 		return false;
 	}
 
