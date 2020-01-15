@@ -123,7 +123,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive ordered_append-10 transparent_decompression-10' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive ordered_append-10 parallel-10 transparent_decompression-10' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -141,7 +141,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive ordered_append-11 transparent_decompression-11' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive ordered_append-11 parallel-11 transparent_decompression-11' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     # This runs tests on ARM32 emulation
     - if: branch = arm_test
