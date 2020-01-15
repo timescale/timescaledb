@@ -886,6 +886,10 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 	SchemaAndName materialization_table_name;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *raw_table = ts_hypertable_cache_get_entry_by_id(hcache, hypertable_id);
+
+	if (raw_table == NULL)
+		elog(ERROR, "can only materialize continuous aggregates on a hypertable");
+
 	Oid time_col_type =
 		ts_dimension_get_partition_type(hyperspace_get_open_dimension(raw_table->space, 0));
 	InternalTimeRange new_materialization_range = {
@@ -904,9 +908,6 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 
 	range_check(new_invalidation_range, bucket_width);
 	range_check(new_materialization_range, bucket_width);
-
-	if (raw_table == NULL)
-		elog(ERROR, "can only materialize continuous aggregates on a hypertable");
 
 	if (materialization_table == NULL)
 		elog(ERROR, "can only materialize continuous aggregates to a hypertable");
