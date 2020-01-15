@@ -106,7 +106,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
   if (CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_TEMPLATES
       dist_query.sql.in
-      hypertable_distributed.sql.in
+      dist_hypertable.sql.in
     )
   endif ()
 endif ()
