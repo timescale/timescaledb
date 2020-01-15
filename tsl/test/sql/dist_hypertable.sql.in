@@ -1073,3 +1073,49 @@ INSERT INTO devices VALUES (6, 'E999');
 \set ON_ERROR_STOP 0
 INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
 \set ON_ERROR_STOP 1
+
+-- Test alter replication factor with data
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+
+SELECT * FROM set_replication_factor('hyper', 3);
+INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+
+INSERT INTO hyper VALUES ('2017-02-01 06:01', 1, 5.1);
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+
+SELECT * FROM set_replication_factor('hyper', 2);
+
+INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+
+SELECT * FROM set_replication_factor('hyper', replication_factor => 2);
+
+INSERT INTO hyper VALUES ('2017-04-01 06:01', 2, 45.1);
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+
+DROP TABLE hyper;
+SELECT * FROM distributed_exec($$
+    DROP TABLE devices;
+$$);
+DROP TABLE devices;

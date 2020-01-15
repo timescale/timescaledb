@@ -209,3 +209,10 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
 -- to execute the query on every data node
 CREATE OR REPLACE FUNCTION distributed_exec(query TEXT, node_list name[] = NULL) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C VOLATILE;
+
+-- Sets new replication factor for distributed hypertable
+CREATE OR REPLACE FUNCTION  set_replication_factor(
+    main_table              REGCLASS,
+    replication_factor      INTEGER
+) RETURNS VOID 
+AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGUAGE C VOLATILE;

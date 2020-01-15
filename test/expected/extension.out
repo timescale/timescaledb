@@ -58,6 +58,7 @@ ORDER BY proname;
  set_chunk_time_interval
  set_integer_now_func
  set_number_partitions
+ set_replication_factor
  show_chunks
  show_tablespaces
  time_bucket
@@ -66,5 +67,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(52 rows)
+(53 rows)
 
