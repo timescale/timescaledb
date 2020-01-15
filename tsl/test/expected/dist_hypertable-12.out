@@ -1639,7 +1639,7 @@ ERROR:  [data_node_3]: relation "remotetable" already exists
 -- Test distributed_hypertable creation fails with replication factor 0
 CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
-ERROR:  invalid replication_factor
+ERROR:  invalid replication factor
 \set ON_ERROR_STOP 1
 SELECT * FROM timescaledb_information.hypertable
 ORDER BY table_schema, table_name;
@@ -3417,3 +3417,269 @@ INSERT INTO devices VALUES (6, 'E999');
 INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
 ERROR:  [data_node_1]: insert or update on table "_hyper_17_45_dist_chunk" violates foreign key constraint "28_17_hyper_device_fkey"
 \set ON_ERROR_STOP 1
+-- Test alter replication factor with data
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+NOTICE:  [data_node_1]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_1]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      28|           16|_timescaledb_internal|_hyper_17_45_dist_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_hyper_17_46_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_hyper_17_49_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+(3 rows)
+
+
+NOTICE:  [data_node_2]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_2]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                           
+--------+-------------+---------------------+-----------------------+-------+---------------------------------------------------------------------------------
+      23|           15|_timescaledb_internal|_hyper_17_47_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
+      24|           15|_timescaledb_internal|_hyper_17_50_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
+(2 rows)
+
+
+NOTICE:  [data_node_3]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_3]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      21|           14|_timescaledb_internal|_hyper_17_48_dist_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      22|           14|_timescaledb_internal|_hyper_17_51_dist_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM set_replication_factor('hyper', 3);
+WARNING:  hypertable "hyper" is under-replicated
+ set_replication_factor 
+------------------------
+ 
+(1 row)
+
+INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+NOTICE:  [data_node_1]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_1]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      28|           16|_timescaledb_internal|_hyper_17_45_dist_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_hyper_17_46_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_hyper_17_49_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+(3 rows)
+
+
+NOTICE:  [data_node_2]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_2]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                           
+--------+-------------+---------------------+-----------------------+-------+---------------------------------------------------------------------------------
+      23|           15|_timescaledb_internal|_hyper_17_47_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
+      24|           15|_timescaledb_internal|_hyper_17_50_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
+(2 rows)
+
+
+NOTICE:  [data_node_3]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_3]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      21|           14|_timescaledb_internal|_hyper_17_48_dist_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      22|           14|_timescaledb_internal|_hyper_17_51_dist_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+INSERT INTO hyper VALUES ('2017-02-01 06:01', 1, 5.1);
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+NOTICE:  [data_node_1]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_1]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      28|           16|_timescaledb_internal|_hyper_17_45_dist_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_hyper_17_46_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_hyper_17_49_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      31|           16|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+(4 rows)
+
+
+NOTICE:  [data_node_2]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_2]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      23|           15|_timescaledb_internal|_hyper_17_47_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           15|_timescaledb_internal|_hyper_17_50_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           15|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+(3 rows)
+
+
+NOTICE:  [data_node_3]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_3]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      21|           14|_timescaledb_internal|_hyper_17_48_dist_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      22|           14|_timescaledb_internal|_hyper_17_51_dist_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      23|           14|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+(3 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM set_replication_factor('hyper', 2);
+WARNING:  hypertable "hyper" is under-replicated
+ set_replication_factor 
+------------------------
+ 
+(1 row)
+
+INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+NOTICE:  [data_node_1]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_1]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      28|           16|_timescaledb_internal|_hyper_17_45_dist_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_hyper_17_46_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_hyper_17_49_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      31|           16|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      32|           16|_timescaledb_internal|_hyper_17_53_dist_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+(5 rows)
+
+
+NOTICE:  [data_node_2]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_2]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      23|           15|_timescaledb_internal|_hyper_17_47_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           15|_timescaledb_internal|_hyper_17_50_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           15|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           15|_timescaledb_internal|_hyper_17_53_dist_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+(4 rows)
+
+
+NOTICE:  [data_node_3]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_3]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      21|           14|_timescaledb_internal|_hyper_17_48_dist_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      22|           14|_timescaledb_internal|_hyper_17_51_dist_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      23|           14|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+(3 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM set_replication_factor('hyper', replication_factor => 2);
+WARNING:  hypertable "hyper" is under-replicated
+ set_replication_factor 
+------------------------
+ 
+(1 row)
+
+INSERT INTO hyper VALUES ('2017-04-01 06:01', 2, 45.1);
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper');
+$$);
+NOTICE:  [data_node_1]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_1]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      28|           16|_timescaledb_internal|_hyper_17_45_dist_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_hyper_17_46_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_hyper_17_49_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      31|           16|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      32|           16|_timescaledb_internal|_hyper_17_53_dist_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+(5 rows)
+
+
+NOTICE:  [data_node_2]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_2]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      23|           15|_timescaledb_internal|_hyper_17_47_dist_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           15|_timescaledb_internal|_hyper_17_50_dist_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           15|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           15|_timescaledb_internal|_hyper_17_53_dist_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+      27|           15|_timescaledb_internal|_hyper_17_54_dist_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
+(5 rows)
+
+
+NOTICE:  [data_node_3]: 
+    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    FROM show_chunks('hyper')
+NOTICE:  [data_node_3]:
+chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
+--------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
+      21|           14|_timescaledb_internal|_hyper_17_48_dist_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      22|           14|_timescaledb_internal|_hyper_17_51_dist_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      23|           14|_timescaledb_internal|_hyper_17_52_dist_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      24|           14|_timescaledb_internal|_hyper_17_54_dist_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
+(4 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP TABLE hyper;
+SELECT * FROM distributed_exec($$
+    DROP TABLE devices;
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+DROP TABLE devices;

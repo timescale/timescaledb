@@ -106,6 +106,13 @@ TRUNCATE disttable;
 -- Test unsupported operations on distributed hypertable
 \set ON_ERROR_STOP 0
 
+-- test set_replication_factor on non-hypertable
+SELECT * FROM set_replication_factor('non_disttable1', 1);
+-- test set_replication_factor on non-distributed
+SELECT * FROM set_replication_factor('non_disttable2', 1);
+-- test set_replication_factor on NULL hypertable
+SELECT * FROM set_replication_factor(NULL, 1);
+
 -- Combining one distributed hypertable with any other tables should
 -- be blocked since not all nodes might have all tables and we
 -- currently don't rewrite the command.
@@ -412,11 +419,28 @@ CREATE TABLE disttable(time timestamptz, device int);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 CREATE INDEX disttable_device_idx ON disttable (device);
 
+-- Test alter replication factor on empty table
+SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT * FROM set_replication_factor('disttable',  1);
+SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT * FROM set_replication_factor('disttable',  1);
+SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT * FROM set_replication_factor('disttable',  2);
+SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
+\set ON_ERROR_STOP 0
+SELECT * FROM set_replication_factor('disttable',  0);
+SELECT * FROM set_replication_factor('disttable',  NULL);
+\set ON_ERROR_STOP 1
+SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
+
 \c data_node_1
 SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable';
 SELECT * FROM test.show_indexes('disttable');
 
 \set ON_ERROR_STOP 0
+
+-- fail to alter replication factor for the table on data node
+SELECT * FROM set_replication_factor('disttable',  1);
 
 -- Test TRUNCATE blocked on data node
 TRUNCATE disttable;

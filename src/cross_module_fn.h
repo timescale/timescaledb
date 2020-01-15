@@ -145,6 +145,7 @@ typedef struct CrossModuleFunctions
 	PGFunction distributed_exec;
 	PGFunction get_chunk_relstats;
 	PGFunction get_chunk_colstats;
+	PGFunction set_replication_factor;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

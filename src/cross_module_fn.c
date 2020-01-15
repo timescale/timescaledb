@@ -65,6 +65,7 @@ TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
 TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
 TS_FUNCTION_INFO_V1(ts_distributed_exec);
+TS_FUNCTION_INFO_V1(ts_hypertable_distributed_set_replication_factor);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -247,6 +248,12 @@ ts_distributed_exec(PG_FUNCTION_ARGS)
 {
 	ts_cm_functions->distributed_exec(fcinfo);
 	PG_RETURN_VOID();
+}
+
+Datum
+ts_hypertable_distributed_set_replication_factor(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->set_replication_factor(fcinfo));
 }
 
 /*
@@ -660,6 +667,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
 	.get_chunk_relstats = error_no_default_fn_pg_community,
 	.get_chunk_colstats = error_no_default_fn_pg_community,
+	.set_replication_factor = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

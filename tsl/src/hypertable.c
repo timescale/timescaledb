@@ -7,6 +7,8 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_proc.h>
+#include <catalog/pg_inherits.h>
+#include <funcapi.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -22,6 +24,8 @@
 #include "license.h"
 #include "utils.h"
 #include "hypertable_cache.h"
+#include "chunk.h"
+#include "chunk_data_node.h"
 
 #if PG_VERSION_SUPPORTS_MULTINODE
 #include <foreign/foreign.h>
@@ -198,6 +202,71 @@ void
 hypertable_make_distributed(Hypertable *ht, List *data_node_names)
 {
 	hypertable_assign_data_nodes(ht->fd.id, data_node_names);
+}
+
+static bool
+hypertable_is_underreplicated(Hypertable *const ht, const int16 replication_factor)
+{
+	ListCell *lc;
+	List *chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+
+	Assert(hypertable_is_distributed(ht));
+
+	foreach (lc, chunks)
+	{
+		Oid chunk_oid = lfirst_oid(lc);
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_oid, true);
+		List *replicas = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, CurrentMemoryContext);
+
+		Assert(get_rel_relkind(chunk_oid) == RELKIND_FOREIGN_TABLE);
+
+		if (list_length(replicas) < replication_factor)
+			return true;
+	}
+	return false;
+}
+
+static void
+update_replication_factor(Hypertable *const ht, const int32 replication_factor_in)
+{
+	const int16 replication_factor =
+		ts_validate_replication_factor(replication_factor_in, false, true);
+
+	ht->fd.replication_factor = replication_factor;
+	ts_hypertable_update(ht);
+	if (hypertable_is_underreplicated(ht, replication_factor))
+		ereport(WARNING,
+				(errcode(ERRCODE_WARNING),
+				 errmsg("hypertable \"%s\" is under-replicated", NameStr(ht->fd.table_name)),
+				 errdetail("Some chunks have less than %d replicas.", replication_factor)));
+}
+
+Datum
+hypertable_set_replication_factor(PG_FUNCTION_ARGS)
+{
+	const Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const int32 replication_factor_in = PG_ARGISNULL(1) ? 0 : PG_GETARG_INT32(1);
+	Cache *hcache;
+	Hypertable *ht;
+
+	if (!OidIsValid(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable: cannot be NULL")));
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_NONE);
+
+	if (!hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_DISTRIBUTED),
+				 errmsg("hypertable \"%s\" is not distributed", get_rel_name(table_relid))));
+
+	update_replication_factor(ht, replication_factor_in);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_VOID();
 }
 
 #endif /* PG_VERSION_SUPPORTS_MULTINODE */

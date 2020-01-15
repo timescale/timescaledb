@@ -337,13 +337,13 @@ ERROR:  table "disttable" is not a hypertable
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
-ERROR:  invalid replication_factor
+ERROR:  invalid replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 32768);
-ERROR:  invalid replication_factor
+ERROR:  invalid replication factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
-ERROR:  invalid replication_factor
+ERROR:  invalid replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => -1);
-ERROR:  invalid replication_factor
+ERROR:  invalid replication factor
 -- Non-existing data node
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_4" }');
 ERROR:  server "data_node_4" does not exist

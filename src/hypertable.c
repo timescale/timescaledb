@@ -1714,8 +1714,8 @@ ts_hypertable_check_partitioning(Hypertable *ht, int32 id_of_updated_dimension)
 	}
 }
 
-static int16
-validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call)
+extern int16
+ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call)
 {
 	bool valid = replication_factor >= 1 && replication_factor <= PG_INT16_MAX;
 
@@ -1750,7 +1750,7 @@ validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist
 	if (!valid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication_factor"),
+				 errmsg("invalid replication factor"),
 				 errhint("A hypertable's replication factor must be between 1 and %d.",
 						 PG_INT16_MAX)));
 
@@ -1847,9 +1847,9 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	 * Ensure replication factor is a valid value and convert it to
 	 * catalog table format
 	 */
-	replication_factor = validate_replication_factor(replication_factor_in,
-													 replication_factor_is_null,
-													 is_dist_call);
+	replication_factor = ts_validate_replication_factor(replication_factor_in,
+														replication_factor_is_null,
+														is_dist_call);
 
 	/* Validate data nodes and check permissions on them if this is a
 	 * distributed hypertable. */
@@ -2183,7 +2183,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	else if (list_length(data_node_names) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication_factor for non-empty data node list"),
+				 errmsg("invalid replication factor for non-empty data node list"),
 				 errhint("The replication_factor should be 1 or greater with a non-empty data node "
 						 "list")));
 

@@ -118,7 +118,7 @@ extern int ts_hypertable_scan_with_memory_context(const char *schema, const char
 												  MemoryContext mctx);
 extern TM_Result ts_hypertable_lock_tuple(Oid table_relid);
 extern bool ts_hypertable_lock_tuple_simple(Oid table_relid);
-extern int ts_hypertable_update(Hypertable *ht);
+extern TSDLLEXPORT int ts_hypertable_update(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
@@ -162,6 +162,8 @@ extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(Hyper
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(Hypertable *ht,
 															  FunctionCallInfo fcinfo);
+extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor, bool is_null,
+														bool is_dist_call);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

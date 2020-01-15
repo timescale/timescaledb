@@ -22,6 +22,7 @@ extern Datum hypertable_valid_ts_interval(PG_FUNCTION_ARGS);
 extern void hypertable_make_distributed(Hypertable *ht, List *data_node_names);
 extern List *hypertable_assign_data_nodes(int32 hypertable_id, List *nodes);
 extern List *hypertable_get_and_validate_data_nodes(ArrayType *nodearr);
+extern Datum hypertable_set_replication_factor(PG_FUNCTION_ARGS);
 #endif /*  PG_VERSION_SUPPORTS_MULTINODE */
 
 #endif /* TIMESCALEDB_TSL_HYPERTABLE_H */
