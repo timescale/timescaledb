@@ -91,11 +91,14 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 			 "invalid type for dictionary compression, type must have both a hash function and "
 			 "equality function");
 
+	/* TODO get collation from table? we need to think about backcompat,
+	 * and different collations should only affect compression ratios anyaway
+	 */
 	meta->eq_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, 0, NULL, NULL);
+	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, tentry->typcollation, NULL, NULL);
 
 	meta->hash_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, 0, NULL, NULL);
+	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, tentry->typcollation, NULL, NULL);
 
 	return dictionary_create(CurrentMemoryContext, 10, meta);
 }

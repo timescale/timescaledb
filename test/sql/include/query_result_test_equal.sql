@@ -9,6 +9,6 @@ with query1 AS (
 query2 AS (
   SELECT row_number() OVER (ORDER BY v.*) row_number, * FROM (:QUERY2) as v
 )
-SELECT count(*) FILTER (WHERE query1.* IS DISTINCT FROM (query2.*)) AS "Different Rows",
+SELECT count(*) FILTER (WHERE query1.row_number IS DISTINCT FROM query2.row_number OR query1.show_chunks IS DISTINCT FROM query2.drop_chunks) AS "Different Rows",
 coalesce(max(query1.row_number), 0) AS "Total Rows from Query 1", coalesce(max(query2.row_number), 0) AS "Total Rows from Query 2"
 FROM query1 FULL OUTER JOIN query2 ON (query1.row_number = query2.row_number);

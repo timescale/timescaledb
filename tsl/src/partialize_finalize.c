@@ -406,7 +406,7 @@ group_state_advance(FAPerGroupState *per_group_state, FACombineFnMeta *combine_m
 {
 	FC_ARG(combine_meta->combfn_fcinfo, 0) = per_group_state->trans_value;
 	FC_NULL(combine_meta->combfn_fcinfo, 0) = per_group_state->trans_value_isnull;
-	FC_ARG(combine_meta->combfn_fcinfo, 0) = newval;
+	FC_ARG(combine_meta->combfn_fcinfo, 1) = newval;
 	FC_NULL(combine_meta->combfn_fcinfo, 1) = newval_isnull;
 	combine_meta->combfn_fcinfo->isnull = false;
 	per_group_state->trans_value = FunctionCallInvoke(combine_meta->combfn_fcinfo);

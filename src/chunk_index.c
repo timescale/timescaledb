@@ -965,7 +965,7 @@ static Oid
 chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk_index_oid,
 							Relation dest_chunk_rel, Oid index_tablespace)
 {
-	Relation chunk_index_rel = table_open(chunk_index_oid, AccessShareLock);
+	Relation chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
 	ChunkIndexMapping cim;
 	Oid constraint_oid;
 	Oid new_chunk_indexrelid;
