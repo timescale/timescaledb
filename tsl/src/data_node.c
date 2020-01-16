@@ -809,18 +809,18 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	num_nodes = list_length(ht->data_nodes) + 1;
 
+	if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("max number of data nodes already attached"),
+				 errdetail("The number of data nodes in a hypertable cannot exceed %d",
+						   MAX_NUM_HYPERTABLE_DATA_NODES)));
+
 	/* If there are less slices (partitions) in the space dimension than there
-	 * are data nodesx, we'd like to expand the number of slices to be able to
+	 * are data nodes, we'd like to expand the number of slices to be able to
 	 * make use of the new data node. */
 	if (NULL != dim && num_nodes > dim->fd.num_slices)
 	{
-		if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("max number of data nodes already attached"),
-					 errdetail("The number of data nodes in a hypertable cannot exceed %d",
-							   MAX_NUM_HYPERTABLE_DATA_NODES)));
-
 		if (repartition)
 		{
 			ts_dimension_set_number_of_slices(dim, num_nodes & 0xFFFF);
@@ -975,7 +975,7 @@ data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, Ope
 static int
 data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
 									   bool all_hypertables, OperationType op_type,
-									   bool block_chunks, bool force)
+									   bool block_chunks, bool force, bool repartition)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -1028,6 +1028,26 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			/* delete hypertable mapping */
 			removed +=
 				ts_hypertable_data_node_delete_by_node_name_and_hypertable_id(node_name, ht->fd.id);
+
+			if (repartition)
+			{
+				Dimension *dim = hyperspace_get_closed_dimension(ht->space, 0);
+				int num_nodes = list_length(ht->data_nodes) - 1;
+
+				if (dim != NULL && num_nodes < dim->fd.num_slices && num_nodes > 0)
+				{
+					ts_dimension_set_number_of_slices(dim, num_nodes & 0xFFFF);
+
+					ereport(NOTICE,
+							(errmsg("the number of partitions in dimension \"%s\" was decreased to "
+									"%u",
+									NameStr(dim->fd.column_name),
+									num_nodes),
+							 errdetail(
+								 "To make efficient use of all attached data nodes, the number of "
+								 "space partitions was set to match the number of data nodes.")));
+				}
+			}
 		}
 		else
 		{
@@ -1065,19 +1085,22 @@ data_node_block_hypertable_data_nodes(const char *node_name, List *hypertable_da
 												  all_hypertables,
 												  OP_BLOCK,
 												  block_chunks,
-												  force);
+												  force,
+												  false);
 }
 
 static int
 data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
-									   bool all_hypertables, bool force, OperationType op_type)
+									   bool all_hypertables, bool force, bool repartition,
+									   OperationType op_type)
 {
 	return data_node_modify_hypertable_data_nodes(node_name,
 												  hypertable_data_nodes,
 												  all_hypertables,
 												  op_type,
 												  false,
-												  force);
+												  force,
+												  repartition);
 }
 
 static HypertableDataNode *
@@ -1171,6 +1194,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool all_hypertables = PG_ARGISNULL(1);
 	bool force = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
+	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
@@ -1197,6 +1221,7 @@ data_node_detach(PG_FUNCTION_ARGS)
 													 hypertable_data_nodes,
 													 all_hypertables,
 													 force,
+													 repartition,
 													 OP_DETACH);
 
 	PG_RETURN_INT32(removed);
@@ -1208,6 +1233,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	List *hypertable_data_nodes = NIL;
 	DropStmt stmt;
 	ObjectAddress address;
@@ -1247,6 +1273,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 										   hypertable_data_nodes,
 										   true,
 										   force,
+										   repartition,
 										   OP_DELETE);
 
 	stmt = (DropStmt){

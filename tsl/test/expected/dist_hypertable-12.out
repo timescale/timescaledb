@@ -1909,6 +1909,41 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
  
 (1 row)
 
+-- Verify that repartitioning works as expected on detach_data_node
+SELECT * FROM detach_data_node('data_node_1', '"Table\\Schema"."Param_Table"', repartition => true);
+NOTICE:  the number of partitions in dimension "__region" was decreased to 2
+ detach_data_node 
+------------------
+                1
+(1 row)
+
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+ table_name  |   column_name    | num_slices 
+-------------+------------------+------------
+ Param_Table | __region         |          2
+ Param_Table | time Col %#^#@$# |           
+(2 rows)
+
+SELECT * FROM detach_data_node('data_node_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
+WARNING:  new data for hypertable "Param_Table" will be under-replicated due to detaching data node "data_node_2"
+ detach_data_node 
+------------------
+                1
+(1 row)
+
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+ table_name  |   column_name    | num_slices 
+-------------+------------------+------------
+ Param_Table | __region         |          2
+ Param_Table | time Col %#^#@$# |           
+(2 rows)
+
 -- Test multi-dimensional hypertable. The add_dimension() command
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
@@ -1950,7 +1985,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
   2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
   5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  6 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
+  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
   8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
@@ -1970,7 +2005,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
   2 |             1 | device           | integer                  | f       |          3 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   3 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
   5 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
-  6 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
+  6 |             4 | __region         | text                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   7 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
   8 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                 |                         | 
   9 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 

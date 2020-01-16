@@ -571,6 +571,18 @@ SELECT t.tgname, t.tgtype, t.tgfoid::regproc
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
 $$);
 
+-- Verify that repartitioning works as expected on detach_data_node
+SELECT * FROM detach_data_node('data_node_1', '"Table\\Schema"."Param_Table"', repartition => true);
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+SELECT * FROM detach_data_node('data_node_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
+SELECT h.table_name, d.column_name, d.num_slices
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
+WHERE h.id = d.hypertable_id
+AND h.table_name = 'Param_Table';
+
 -- Test multi-dimensional hypertable. The add_dimension() command
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);

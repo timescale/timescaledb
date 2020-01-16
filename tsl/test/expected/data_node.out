@@ -1016,6 +1016,7 @@ ERROR:  table "devices" is not a hypertable
 -- force detach data node to become under-replicated for new data
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to detaching data node "data_node_3"
+NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
 ------------------
                 1
@@ -1108,6 +1109,7 @@ ORDER BY foreign_table_name;
 
 SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to detaching data node "data_node_2"
+NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
 ------------------
                 1

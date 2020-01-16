@@ -173,7 +173,8 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION delete_data_node(
     node_name              NAME,
     if_exists              BOOLEAN = FALSE,
-    force                  BOOLEAN = FALSE
+    force                  BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
 
 -- Attach a data node to a distributed hypertable
@@ -186,7 +187,12 @@ CREATE OR REPLACE FUNCTION attach_data_node(
 AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
 
 -- Detach a data node from a distributed hypertable. NULL hypertable means it will detach from all distributed hypertables
-CREATE OR REPLACE FUNCTION detach_data_node(node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+CREATE OR REPLACE FUNCTION detach_data_node(
+    node_name              NAME,
+    hypertable             REGCLASS = NULL,
+    force                  BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE
+) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
 -- Block new chunk creation on a data node for a distributed hypertable. NULL hypertable means it will block

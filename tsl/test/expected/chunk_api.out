@@ -458,6 +458,7 @@ RESET ROLE;
 TRUNCATE disttable;
 TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
+NOTICE:  the number of partitions in dimension "device" was decreased to 1
  delete_data_node 
 ------------------
  t
