@@ -220,3 +220,279 @@ f     |t     |t     |t     |f
  
 (1 row)
 
+-- Add another data node and check that grants are propagated when the
+-- data node is attached to an existing table.
+SELECT * FROM add_data_node('data4', host => 'localhost', database => 'data4');
+ node_name |   host    | port  | database | node_created | database_created | extension_created 
+-----------+-----------+-------+----------+--------------+------------------+-------------------
+ data4     | localhost | 55432 | data4    | t            | t                | t
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data4]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+ERROR:  [data4]: relation "conditions" does not exist
+\set ON_ERROR_STOP 1
+SELECT * FROM attach_data_node('data4', 'conditions');
+NOTICE:  the number of partitions in dimension "device" was increased to 4
+ hypertable_id | node_hypertable_id | node_name 
+---------------+--------------------+-----------
+             1 |                  1 | data4
+(1 row)
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80
+FROM generate_series('2019-02-01 00:00:00'::timestamptz, '2019-03-01 00:00:00', '1 min') AS time;
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+NOTICE:  [data4]: 
+  SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_2', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('test_role_2', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('test_role_2', 'conditions', 'TRUNCATE') AS "TRUNCATE"
+NOTICE:  [data4]:
+SELECT|DELETE|INSERT|UPDATE|TRUNCATE
+------+------+------+------+--------
+f     |t     |t     |t     |f       
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Check that grants are not propagated when enable_grant_propagation
+-- is false.
+SET timescaledb.enable_grant_propagation = false;
+CREATE TABLE no_grants(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT);
+GRANT SELECT ON no_grants TO :ROLE_1;
+-- First case is when table is created. Grants should not be propagated.
+SELECT * FROM create_distributed_hypertable('no_grants', 'time', 'device');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | no_grants  | t
+(1 row)
+
+SELECT has_table_privilege(:'ROLE_1', 'no_grants', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'INSERT') AS "INSERT";
+ SELECT | DELETE | INSERT 
+--------+--------+--------
+ t      | f      | f
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
+$$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+NOTICE:  [data4]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data4]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |f     
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Second case is when grants is done on an existing table. The grant
+-- should not be propagated.
+GRANT INSERT ON no_grants TO :ROLE_1;
+SELECT has_table_privilege(:'ROLE_1', 'no_grants', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'INSERT') AS "INSERT";
+ SELECT | DELETE | INSERT 
+--------+--------+--------
+ t      | f      | t
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
+$$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+NOTICE:  [data1]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data1]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |t     
+(1 row)
+
+
+NOTICE:  [data2]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data2]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |t     
+(1 row)
+
+
+NOTICE:  [data3]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data3]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |t     
+(1 row)
+
+
+NOTICE:  [data4]: 
+  SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('test_role_1', 'no_grants', 'INSERT') AS "INSERT"
+NOTICE:  [data4]:
+SELECT|DELETE|INSERT
+------+------+------
+t     |f     |t     
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
