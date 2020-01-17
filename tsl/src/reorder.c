@@ -1012,6 +1012,8 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 	}
 	heap_close(oldHeapRel, NoLock);
 
+	CommandCounterIncrement();
+
 	/* Destroy new heap with old filenode */
 	object.classId = RelationRelationId;
 	object.objectId = OIDNewHeap;
@@ -1059,6 +1061,16 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 		}
 		relation_close(newrel, NoLock);
 	}
+#if PG12
+		/* it's not a catalog table, clear any missing attribute settings */
+	{
+		Relation	newrel;
+
+		newrel = table_open(OIDOldHeap, NoLock);
+		RelationClearMissing(newrel);
+		relation_close(newrel, NoLock);
+	}
+#endif
 }
 
 /*
