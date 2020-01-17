@@ -70,3 +70,63 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+
+-- Add another data node and check that grants are propagated when the
+-- data node is attached to an existing table.
+SELECT * FROM add_data_node('data4', host => 'localhost', database => 'data4');
+
+\set ON_ERROR_STOP 0
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+\set ON_ERROR_STOP 1
+
+SELECT * FROM attach_data_node('data4', 'conditions');
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80
+FROM generate_series('2019-02-01 00:00:00'::timestamptz, '2019-03-01 00:00:00', '1 min') AS time;
+
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'conditions', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT"
+       , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
+       , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
+$$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+
+-- Check that grants are not propagated when enable_grant_propagation
+-- is false.
+SET timescaledb.enable_grant_propagation = false;
+
+CREATE TABLE no_grants(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT);
+GRANT SELECT ON no_grants TO :ROLE_1;
+
+-- First case is when table is created. Grants should not be propagated.
+SELECT * FROM create_distributed_hypertable('no_grants', 'time', 'device');
+
+SELECT has_table_privilege(:'ROLE_1', 'no_grants', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'INSERT') AS "INSERT";
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
+$$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+
+-- Second case is when grants is done on an existing table. The grant
+-- should not be propagated.
+GRANT INSERT ON no_grants TO :ROLE_1;
+
+SELECT has_table_privilege(:'ROLE_1', 'no_grants', 'SELECT') AS "SELECT"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'DELETE') AS "DELETE"
+     , has_table_privilege(:'ROLE_1', 'no_grants', 'INSERT') AS "INSERT";
+SELECT * FROM test.remote_exec(NULL, format($$
+  SELECT has_table_privilege('%s', 'no_grants', 'SELECT') AS "SELECT"
+       , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
+       , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
+$$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
