@@ -17,8 +17,8 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "
       format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
 \gset
 
-\set ON_ERROR_STOP 0
 
+\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
 
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -81,36 +81,36 @@ set enable_hashagg = false;
 -- NO pushdown cases ---
 --when we have addl. attrs in order by that are not in the
 -- group by, we will still need a sort
-explain verbose 
+:EXPLAIN
 select * from mat_m1 order by sumh, sumt, minl, timec ;
-explain verbose 
+:EXPLAIN
 select * from regview order by timec desc;
 
 -- PUSHDOWN cases --
 -- all group by elts in order by , reorder group by elts to match
 -- group by order
 -- This should prevent an additional sort after GroupAggregate
-explain verbose 
+:EXPLAIN
 select * from mat_m1 order by timec desc, location;
 
-explain verbose 
+:EXPLAIN
 select * from mat_m1 order by location, timec desc;
 
-explain verbose 
+:EXPLAIN
 select * from mat_m1 order by location, timec asc;
-explain verbose 
+:EXPLAIN
 select * from mat_m1 where timec > '2018-10-01' order by timec desc;
 -- outer sort is used by mat_m1 for grouping. But doesn't avoid a sort after the join ---
-explain verbose 
+:EXPLAIN
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
 
-explain verbose 
+:EXPLAIN
 select * from mat_m2 where timec > '2018-10-01' order by timec desc;
 
-explain verbose 
+:EXPLAIN
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc ) as q limit 1;
 
-explain verbose 
+:EXPLAIN
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
 
 --plans with CTE
@@ -185,5 +185,5 @@ RESET client_min_messages;
 --check if the guc works , reordering will not work
 set timescaledb.enable_cagg_reorder_groupby = false;
 set enable_hashagg = false;
-explain verbose 
+:EXPLAIN
 select * from mat_m1 order by timec desc, location;
