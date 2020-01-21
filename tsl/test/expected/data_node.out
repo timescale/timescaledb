@@ -632,6 +632,12 @@ ERROR:  server "data_node_2" does not exist
 -- Attaching to an already attached data node without 'if_not_exists'
 SELECT * FROM attach_data_node('data_node_1', 'disttable', false);
 ERROR:  data node "data_node_1" is already attached to hypertable "disttable"
+-- Attaching a data node to another data node
+\c data_node_1
+SELECT * FROM attach_data_node('data_node_4', 'disttable');
+ERROR:  hypertable "disttable" is not distributed
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
 \set ON_ERROR_STOP 1
 -- Attach if not exists
 SELECT * FROM attach_data_node('data_node_1', 'disttable', true);
