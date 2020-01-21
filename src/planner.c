@@ -1436,13 +1436,48 @@ static void
 timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
 								   RelOptInfo *rel)
 {
+	RangeTblEntry *rte;
 	if (prev_get_relation_info_hook != NULL)
 		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
 
-	if (!ts_extension_is_loaded() || !ts_guc_enable_constraint_exclusion)
+	if (!ts_extension_is_loaded())
 		return;
 
-	expand_hypertable_inheritance(root, relation_objectid, inhparent, rel);
+#if PG12_LT
+	if (ts_guc_enable_constraint_exclusion)
+		expand_hypertable_inheritance(root, relation_objectid, inhparent, rel);
+#endif
+
+	rte = rt_fetch(rel->relid, root->parse->rtable);
+
+		if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
+	{
+		Oid ht_oid = get_parentoid(root, rel->relid);
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
+
+		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
+		{
+			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
+
+			if (chunk->fd.compressed_chunk_id > 0)
+			{
+				LockRelationOid(chunk->table_id, AccessShareLock);
+				Assert(rel->fdw_private == NULL);
+				rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
+				((TimescaleDBPrivate *) rel->fdw_private)->compressed = true;
+
+				/* Planning indexes are expensive, and if this is a compressed chunk, we
+				 * know we'll never need to us indexes on the uncompressed version, since all
+				 * the data is in the compressed chunk anyway. Therefore, it is much faster if
+				 * we simply trash the indexlist here and never plan any useless IndexPaths
+				 *  at all
+				 */
+				rel->indexlist = NIL;
+			}
+		}
+		ts_cache_release(hcache);
+	}
 }
 
 static void
@@ -1478,34 +1513,6 @@ expand_hypertable_inheritance(PlannerInfo *root, Oid relation_objectid, bool inh
 		setup_append_rel_array(root);
 #endif
 
-		ts_cache_release(hcache);
-	}
-
-	if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
-	{
-		Oid ht_oid = get_parentoid(root, rel->relid);
-		Cache *hcache = ts_hypertable_cache_pin();
-		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
-
-		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
-		{
-			Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
-
-			if (chunk->fd.compressed_chunk_id > 0)
-			{
-				Assert(rel->fdw_private == NULL);
-				rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
-				((TimescaleDBPrivate *) rel->fdw_private)->compressed = true;
-
-				/* Planning indexes are expensive, and if this is a compressed chunk, we
-				 * know we'll never need to us indexes on the uncompressed version, since all
-				 * the data is in the compressed chunk anyway. Therefore, it is much faster if
-				 * we simply trash the indexlist here and never plan any useless IndexPaths
-				 *  at all
-				 */
-				rel->indexlist = NIL;
-			}
-		}
 		ts_cache_release(hcache);
 	}
 }
@@ -1716,9 +1723,8 @@ _planner_init(void)
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
 
 	prev_get_relation_info_hook = get_relation_info_hook;
-#if PG12_LT
 	get_relation_info_hook = timescaledb_get_relation_info_hook;
-#endif
+
 	prev_create_upper_paths_hook = create_upper_paths_hook;
 	create_upper_paths_hook = timescale_create_upper_paths_hook;
 }

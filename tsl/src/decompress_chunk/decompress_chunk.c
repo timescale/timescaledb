@@ -873,6 +873,9 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->rtekind = RTE_RELATION;
 	rte->relid = compressed_relid;
 	rte->relkind = r->rd_rel->relkind;
+#if PG12
+	rte->rellockmode = lockmode;
+#endif
 	rte->eref = makeAlias(RelationGetRelationName(r), NULL);
 
 	/*
