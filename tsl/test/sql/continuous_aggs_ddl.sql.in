@@ -364,8 +364,8 @@ ALTER TABLE metrics set(timescaledb.compress);
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
-SELECT hypertable_id AS drop_chunks_table_u_id
-    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10);
+SELECT hypertable_id AS drop_chunks_table_nid
+    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
 
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
@@ -480,3 +480,37 @@ INSERT INTO drop_chunks_table VALUES (20, 20);
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 --should show chunk with old name and old ranges
 SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
+
+--test drop_chunks with cascade_to_materialization set to true (github 1644)
+-- This checks if chunks from mat. hypertable are actually dropped 
+-- and deletes data from chunks that cannot be dropped from that mat. hypertable.
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen
+    FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
+    WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
+        AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
+
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
+
+SELECT set_chunk_time_interval('drop_chunks_table', 10);
+SELECT set_chunk_time_interval(:'drop_chunks_mat_tablen', 20);
+INSERT INTO drop_chunks_table SELECT generate_series(1,35), 100;
+update drop_chunks_table set data = 250 where time = 25;
+update drop_chunks_table set data = 290 where time = 29;
+REFRESH materialized view drop_chunks_view;
+REFRESH materialized view drop_chunks_view;
+--now we have chunks in both mat and raw hypertables
+select * from drop_chunks_view order by 1;
+SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table')
+ORDER BY ranges;
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
+ORDER BY ranges;
+--1 chunk from the mat. hypertable will be dropped and the other will
+--need deletes when the chunks from the raw hypertable are dropped.
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
+SELECT * from drop_chunks_view ORDER BY 1;
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
+ORDER BY ranges;
+

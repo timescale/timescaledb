@@ -272,6 +272,7 @@ SELECT drop_chunks(
 INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_6_4_chunk
 ERROR:  cannot drop_chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -576,14 +577,9 @@ DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
-SELECT hypertable_id AS drop_chunks_table_u_id
-    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10);
+SELECT hypertable_id AS drop_chunks_table_nid
+    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
 NOTICE:  adding not-null constraint to column "time"
- drop_chunks_table_u_id 
-------------------------
-                     12
-(1 row)
-
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
  set_integer_now_func 
@@ -598,11 +594,11 @@ AS SELECT time_bucket('5', time), max(data)
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 13, cascade_to_materializations => false);
-ERROR:  older_than must be greater than the ignore_invalidation_older_than parameter of public.drop_chunks_view
+ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 ALTER VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
 -- 9 is too small (less than timescaledb.ignore_invalidation_older_than)
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-8), cascade_to_materializations => false);
-ERROR:  older_than must be greater than the ignore_invalidation_older_than parameter of public.drop_chunks_view
+ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 -- 10 works but we don't have the completion threshold far enough along
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
@@ -942,4 +938,113 @@ SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
  _timescaledb_internal._hyper_12_15_chunk | {"[20,30)"}
  _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
 (2 rows)
+
+--test drop_chunks with cascade_to_materialization set to true (github 1644)
+-- This checks if chunks from mat. hypertable are actually dropped 
+-- and deletes data from chunks that cannot be dropped from that mat. hypertable.
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen
+    FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
+    WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
+        AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_12_19_chunk
+ _timescaledb_internal._hyper_12_15_chunk
+(2 rows)
+
+SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
+ count 
+-------
+     0
+(1 row)
+
+SELECT set_chunk_time_interval('drop_chunks_table', 10);
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+SELECT set_chunk_time_interval(:'drop_chunks_mat_tablen', 20);
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+INSERT INTO drop_chunks_table SELECT generate_series(1,35), 100;
+update drop_chunks_table set data = 250 where time = 25;
+update drop_chunks_table set data = 290 where time = 29;
+REFRESH materialized view drop_chunks_view;
+INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
+INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+REFRESH materialized view drop_chunks_view;
+INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
+INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+--now we have chunks in both mat and raw hypertables
+select * from drop_chunks_view order by 1;
+ time_bucket | max 
+-------------+-----
+           0 | 100
+           5 | 100
+          10 | 100
+          15 | 100
+          20 | 100
+          25 | 290
+          30 | 100
+          35 | 100
+(8 rows)
+
+SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table')
+ORDER BY ranges;
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_12_13_chunk | {"[0,10)"}
+ _timescaledb_internal._hyper_12_14_chunk | {"[10,20)"}
+ _timescaledb_internal._hyper_12_20_chunk | {"[20,30)"}
+ _timescaledb_internal._hyper_12_17_chunk | {"[30,40)"}
+(4 rows)
+
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
+ORDER BY ranges;
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_13_21_chunk | {"[0,20)"}
+ _timescaledb_internal._hyper_13_22_chunk | {"[20,40)"}
+(2 rows)
+
+--1 chunk from the mat. hypertable will be dropped and the other will
+--need deletes when the chunks from the raw hypertable are dropped.
+SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_12_13_chunk
+ _timescaledb_internal._hyper_12_14_chunk
+ _timescaledb_internal._hyper_12_20_chunk
+(3 rows)
+
+SELECT * from drop_chunks_view ORDER BY 1;
+ time_bucket | max 
+-------------+-----
+          30 | 100
+          35 | 100
+(2 rows)
+
+SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
+ORDER BY ranges;
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_13_22_chunk | {"[20,40)"}
+(1 row)
 

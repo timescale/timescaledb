@@ -140,6 +140,11 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 						Oid older_than_type, Oid newer_than_type, bool cascade,
 						CascadeToMaterializationOption cascades_to_materializations,
 						int32 log_level);
+extern TSDLLEXPORT Chunk *
+ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
+								  Oid older_than_type, Oid newer_than_type, char *caller_name,
+								  MemoryContext mctx, uint64 *num_chunks_returned,
+								  bool include_chunks_marked_as_dropped);
 
 extern bool TSDLLEXPORT ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_has_associated_compressed_chunk(int32 chunk_id);
