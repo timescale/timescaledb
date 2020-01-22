@@ -272,6 +272,7 @@ SELECT drop_chunks(
 INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_6_4_chunk
 ERROR:  cannot drop_chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
