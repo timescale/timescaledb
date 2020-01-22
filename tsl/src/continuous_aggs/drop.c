@@ -15,9 +15,38 @@
 
 #include "create.h"
 
+/* drop chunks from the materialization hypertable that fall within the time
+ * range.
+ */
+static void
+cagg_drop_mat_chunks(Oid mattable_relid, Datum older_than_datum, Datum newer_than_datum,
+					 Oid older_than_type, Oid newer_than_type, bool cascade, int32 log_level)
+{
+	uint64 i = 0, num_chunks = 0;
+	Chunk *matchunks;
+
+	matchunks = ts_chunk_get_chunks_in_time_range(mattable_relid,
+												  older_than_datum,
+												  newer_than_datum,
+												  older_than_type,
+												  newer_than_type,
+												  "drop chunks for materialized hypertable",
+												  CurrentMemoryContext,
+												  &num_chunks,
+												  false);
+	for (; i < num_chunks; i++)
+	{
+		ts_chunk_drop(&matchunks[i], cascade, log_level);
+	}
+}
+
 void
 ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks_ptr,
-										  Size num_chunks)
+										  Size num_chunks,
+
+										  Datum older_than_datum, Datum newer_than_datum,
+										  Oid older_than_type, Oid newer_than_type, bool cascade,
+										  int32 log_level)
 {
 	ListCell *lc;
 	Oid arg_type = INT4OID;
@@ -37,7 +66,18 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 		SPIPlanPtr delete_plan;
 		ContinuousAgg *agg = lfirst(lc);
 		Hypertable *mat_table = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
-
+		cagg_drop_mat_chunks(mat_table->main_table_relid,
+							 older_than_datum,
+							 newer_than_datum,
+							 older_than_type,
+							 newer_than_type,
+							 cascade,
+							 log_level);
+		/* we might still have materialization chunks that have data that refer
+		 * to the dropped chunks from the hypertable. This is because the
+		 * chunk interval on the mat. hypertable is NOT the same as the
+		 * chunk interval on the raw hypertable.
+		 */
 		resetStringInfo(command);
 
 		appendStringInfo(command,

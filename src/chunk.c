@@ -77,11 +77,6 @@ static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
 											 uint16 limit);
-static Chunk *chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum,
-											 Datum newer_than_datum, Oid older_than_type,
-											 Oid newer_than_type, char *caller_name,
-											 MemoryContext mctx, uint64 *num_chunks_returned,
-											 bool include_chunks_marked_as_dropped);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 
@@ -1410,25 +1405,25 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 
 		funcctx = SRF_FIRSTCALL_INIT();
 
-		funcctx->user_fctx = chunk_get_chunks_in_time_range(table_relid,
-															older_than_datum,
-															newer_than_datum,
-															older_than_type,
-															newer_than_type,
-															"show_chunks",
-															funcctx->multi_call_memory_ctx,
-															&funcctx->max_calls,
-															false);
+		funcctx->user_fctx = ts_chunk_get_chunks_in_time_range(table_relid,
+															   older_than_datum,
+															   newer_than_datum,
+															   older_than_type,
+															   newer_than_type,
+															   "show_chunks",
+															   funcctx->multi_call_memory_ctx,
+															   &funcctx->max_calls,
+															   false);
 	}
 
 	return chunks_return_srf(fcinfo);
 }
 
-static Chunk *
-chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-							   Oid older_than_type, Oid newer_than_type, char *caller_name,
-							   MemoryContext mctx, uint64 *num_chunks_returned,
-							   bool include_chunks_marked_as_dropped)
+TSDLLEXPORT Chunk *
+ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
+								  Oid older_than_type, Oid newer_than_type, char *caller_name,
+								  MemoryContext mctx, uint64 *num_chunks_returned,
+								  bool include_chunks_marked_as_dropped)
 {
 	ListCell *lc;
 	MemoryContext oldcontext;
@@ -1484,7 +1479,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 		ht = lfirst(lc);
 
 		if (ht->fd.compressed)
-			elog(ERROR, "cannot call chunk_get_chunks_in_time_range on a compressed hypertable");
+			elog(ERROR, "cannot call ts_chunk_get_chunks_in_time_range on a compressed hypertable");
 
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
@@ -2348,7 +2343,8 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 	if (minimum_invalidation_time < older_than_time)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("older_than must be greater than the ignore_invalidation_older_than "
+				 errmsg("older_than must be greater than the "
+						"timescaledb.ignore_invalidation_older_than "
 						"parameter of %s.%s",
 						cagg.user_view_schema.data,
 						cagg.user_view_name.data)));
@@ -2446,15 +2442,15 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			break;
 	}
 
-	chunks = chunk_get_chunks_in_time_range(table_relid,
-											older_than_datum,
-											newer_than_datum,
-											older_than_type,
-											newer_than_type,
-											"drop_chunks",
-											CurrentMemoryContext,
-											&num_chunks,
-											false);
+	chunks = ts_chunk_get_chunks_in_time_range(table_relid,
+											   older_than_datum,
+											   newer_than_datum,
+											   older_than_type,
+											   newer_than_type,
+											   "drop_chunks",
+											   CurrentMemoryContext,
+											   &num_chunks,
+											   false);
 
 	if (has_continuous_aggs)
 		ts_chunk_drop_process_materialization(table_relid,
@@ -2489,8 +2485,17 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	}
 
 	if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
-		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id, &chunks, num_chunks);
-
+	{
+		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id,
+																&chunks,
+																num_chunks,
+																older_than_datum,
+																newer_than_datum,
+																older_than_type,
+																newer_than_type,
+																cascade,
+																log_level);
+	}
 	return dropped_chunk_names;
 }
 
