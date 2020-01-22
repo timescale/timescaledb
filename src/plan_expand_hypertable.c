@@ -983,6 +983,7 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
 	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
 	hyper_rel->boundinfo = palloc(sizeof(PartitionBoundInfoData));
+	hyper_rel->part_rels = palloc0(sizeof(*hyper_rel->part_rels) * nparts);
 }
 
 #endif /* PG11_GE */
@@ -1203,7 +1204,11 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	{
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */
-		(void) build_simple_rel(root, child_rtindex, rel);
+		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
+
+		/* if we're performing partitionwise aggregation, we must populate part_rels */
+		if (rel->part_rels != NULL)
+			rel->part_rels[i] = child_rel;
 	}
 #endif
 }
