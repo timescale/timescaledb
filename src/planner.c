@@ -1443,16 +1443,17 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	if (!ts_extension_is_loaded())
 		return;
 
+	ts_plan_expand_timebucket_annotate(root, rel);
+
 #if PG12_LT
 	if (ts_guc_enable_constraint_exclusion)
 		expand_hypertable_inheritance(root, relation_objectid, inhparent, rel);
 #endif
 
-	ts_plan_expand_timebucket_annotate(root, rel);
 
 	rte = rt_fetch(rel->relid, root->parse->rtable);
 
-		if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
+	if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
 	{
 		Oid ht_oid = get_parentoid(root, rel->relid);
 		Cache *hcache = ts_hypertable_cache_pin();

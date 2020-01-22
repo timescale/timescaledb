@@ -1124,7 +1124,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		/* Open rel if needed */
 		//FIXME this lock should not be needed...
 		if (child_oid != parent_oid)
-			newrelation = table_open(child_oid, AccessShareLock);
+			newrelation = table_open(child_oid, rte->rellockmode);
 		else
 			newrelation = oldrelation;
 
@@ -1144,6 +1144,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		 * other base restriction clauses, so we don't need to do it here.
 		 */
 		childrte = copyObject(rte);
+		childrte->rellockmode = rte->rellockmode;
 		childrte->relid = child_oid;
 		childrte->relkind = newrelation->rd_rel->relkind;
 		childrte->inh = false;
