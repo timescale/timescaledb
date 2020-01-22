@@ -139,14 +139,13 @@ SET constraint_exclusion = 'off';
 \qecho test upper bounds
 test upper bounds
 :PREFIX SELECT * FROM hyper WHERE time < 10 ORDER BY value;
-                QUERY PLAN                
-------------------------------------------
+             QUERY PLAN             
+------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_1_chunk
-               Filter: ("time" < 10)
-(5 rows)
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: ("time" < 10)
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time < 11 ORDER BY value;
                 QUERY PLAN                
@@ -161,14 +160,13 @@ test upper bounds
 (7 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time = 10 ORDER BY value;
-                QUERY PLAN                
-------------------------------------------
+             QUERY PLAN             
+------------------------------------
  Sort
    Sort Key: _hyper_1_2_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: ("time" = 10)
-(5 rows)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ("time" = 10)
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE 10 >= time ORDER BY value;
                 QUERY PLAN                
@@ -185,14 +183,13 @@ test upper bounds
 \qecho test lower bounds
 test lower bounds
 :PREFIX SELECT * FROM hyper WHERE time >= 10 and time < 20 ORDER BY value;
-                        QUERY PLAN                        
-----------------------------------------------------------
+                     QUERY PLAN                     
+----------------------------------------------------
  Sort
    Sort Key: _hyper_1_2_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" >= 10) AND ("time" < 20))
-(5 rows)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (("time" >= 10) AND ("time" < 20))
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE 10 < time and 20 >= time ORDER BY value;
                         QUERY PLAN                        
@@ -219,14 +216,13 @@ test lower bounds
 (7 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time > 9 and time < 20 ORDER BY value;
-                       QUERY PLAN                       
---------------------------------------------------------
+                    QUERY PLAN                    
+--------------------------------------------------
  Sort
    Sort Key: _hyper_1_2_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" > 9) AND ("time" < 20))
-(5 rows)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (("time" > 9) AND ("time" < 20))
+(4 rows)
 
 \qecho test empty result
 test empty result
@@ -240,44 +236,40 @@ test empty result
 \qecho test expression evaluation
 test expression evaluation
 :PREFIX SELECT * FROM hyper WHERE time < (5*2)::smallint;
-                QUERY PLAN                 
--------------------------------------------
- Append
-   ->  Seq Scan on _hyper_1_1_chunk
-         Filter: ("time" < '10'::smallint)
-(3 rows)
+             QUERY PLAN              
+-------------------------------------
+ Seq Scan on _hyper_1_1_chunk
+   Filter: ("time" < '10'::smallint)
+(2 rows)
 
 \qecho test logic at INT64_MAX
 test logic at INT64_MAX
 :PREFIX SELECT * FROM hyper WHERE time = 9223372036854775807::bigint ORDER BY value;
-                           QUERY PLAN                           
-----------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Sort
    Sort Key: _hyper_1_102_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_102_chunk
-               Filter: ("time" = '9223372036854775807'::bigint)
-(5 rows)
+   ->  Seq Scan on _hyper_1_102_chunk
+         Filter: ("time" = '9223372036854775807'::bigint)
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time = 9223372036854775806::bigint ORDER BY value;
-                           QUERY PLAN                           
-----------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Sort
    Sort Key: _hyper_1_102_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_102_chunk
-               Filter: ("time" = '9223372036854775806'::bigint)
-(5 rows)
+   ->  Seq Scan on _hyper_1_102_chunk
+         Filter: ("time" = '9223372036854775806'::bigint)
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time >= 9223372036854775807::bigint ORDER BY value;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Sort
    Sort Key: _hyper_1_102_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_102_chunk
-               Filter: ("time" >= '9223372036854775807'::bigint)
-(5 rows)
+   ->  Seq Scan on _hyper_1_102_chunk
+         Filter: ("time" >= '9223372036854775807'::bigint)
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time > 9223372036854775807::bigint ORDER BY value;
            QUERY PLAN           
@@ -289,14 +281,13 @@ test logic at INT64_MAX
 (4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time > 9223372036854775806::bigint ORDER BY value;
-                           QUERY PLAN                           
-----------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Sort
    Sort Key: _hyper_1_102_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_1_102_chunk
-               Filter: ("time" > '9223372036854775806'::bigint)
-(5 rows)
+   ->  Seq Scan on _hyper_1_102_chunk
+         Filter: ("time" > '9223372036854775806'::bigint)
+(4 rows)
 
 \qecho cte
 cte
@@ -304,28 +295,24 @@ cte
   SELECT * FROM hyper WHERE time < 10
 )
 SELECT * FROM cte ORDER BY value;
-                 QUERY PLAN                 
---------------------------------------------
+             QUERY PLAN             
+------------------------------------
  Sort
-   Sort Key: cte.value
-   CTE cte
-     ->  Append
-           ->  Seq Scan on _hyper_1_1_chunk
-                 Filter: ("time" < 10)
-   ->  CTE Scan on cte
-(7 rows)
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: ("time" < 10)
+(4 rows)
 
 \qecho subquery
 subquery
 :PREFIX SELECT 0 = ANY (SELECT value FROM hyper WHERE time < 10);
-                 QUERY PLAN                 
---------------------------------------------
+              QUERY PLAN              
+--------------------------------------
  Result
    SubPlan 1
-     ->  Append
-           ->  Seq Scan on _hyper_1_1_chunk
-                 Filter: ("time" < 10)
-(5 rows)
+     ->  Seq Scan on _hyper_1_1_chunk
+           Filter: ("time" < 10)
+(4 rows)
 
 \qecho no space constraint
 no space constraint
@@ -348,34 +335,31 @@ no space constraint
 \qecho valid space constraint
 valid space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and device_id = 'dev5' ORDER BY value;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = 'dev5'::text))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and 'dev5' = device_id ORDER BY value;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND ('dev5'::text = device_id))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND ('dev5'::text = device_id))
+(4 rows)
 
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and 'dev'||(2+3) = device_id ORDER BY value;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND ('dev5'::text = device_id))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND ('dev5'::text = device_id))
+(4 rows)
 
 \qecho only space constraint
 only space constraint
@@ -435,52 +419,46 @@ cte
    SELECT * FROM hyper_w_space WHERE time < 10 and device_id = 'dev5'
 )
 SELECT * FROM cte ORDER BY value;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
-   Sort Key: cte.value
-   CTE cte
-     ->  Append
-           ->  Seq Scan on _hyper_2_106_chunk
-                 Filter: (("time" < 10) AND (device_id = 'dev5'::text))
-   ->  CTE Scan on cte
-(7 rows)
+   Sort Key: _hyper_2_106_chunk.value
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 \qecho subquery
 subquery
 :PREFIX SELECT 0 = ANY (SELECT value FROM hyper_w_space WHERE time < 10 and device_id = 'dev5');
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Result
    SubPlan 1
-     ->  Append
-           ->  Seq Scan on _hyper_2_106_chunk
-                 Filter: (("time" < 10) AND (device_id = 'dev5'::text))
-(5 rows)
+     ->  Seq Scan on _hyper_2_106_chunk
+           Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 \qecho view
 view
 :PREFIX SELECT * FROM hyper_w_space_view WHERE time < 10 and device_id = 'dev5' ORDER BY value;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = 'dev5'::text))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 \qecho IN statement - simple
 IN statement - simple
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev5') ORDER BY value;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = 'dev5'::text))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 \qecho IN statement - two chunks
 IN statement - two chunks
@@ -499,14 +477,13 @@ IN statement - two chunks
 \qecho IN statement - one chunk
 IN statement - one chunk
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev4','dev5') ORDER BY value;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = ANY ('{dev4,dev5}'::text[])))
-(5 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = ANY ('{dev4,dev5}'::text[])))
+(4 rows)
 
 \qecho NOT IN - does not filter chunks
 NOT IN - does not filter chunks
@@ -529,24 +506,13 @@ NOT IN - does not filter chunks
 \qecho IN statement with subquery - does not filter chunks
 IN statement with subquery - does not filter chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN (SELECT 'dev5'::text) ORDER BY value;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_106_chunk.value
-   ->  Nested Loop
-         ->  HashAggregate
-               Group Key: 'dev5'::text
-               ->  Result
-         ->  Append
-               ->  Seq Scan on _hyper_2_106_chunk
-                     Filter: (("time" < 10) AND (('dev5'::text) = device_id))
-               ->  Seq Scan on _hyper_2_104_chunk
-                     Filter: (("time" < 10) AND (('dev5'::text) = device_id))
-               ->  Seq Scan on _hyper_2_105_chunk
-                     Filter: (("time" < 10) AND (('dev5'::text) = device_id))
-               ->  Seq Scan on _hyper_2_103_chunk
-                     Filter: (("time" < 10) AND (('dev5'::text) = device_id))
-(15 rows)
+   ->  Seq Scan on _hyper_2_106_chunk
+         Filter: (("time" < 10) AND (device_id = 'dev5'::text))
+(4 rows)
 
 \qecho ANY
 ANY
@@ -565,14 +531,13 @@ ANY
 \qecho ANY with intersection
 ANY with intersection
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) AND device_id = ANY(ARRAY['dev6','dev7']) ORDER BY value;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_2_105_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_2_105_chunk
-               Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])) AND (device_id = ANY ('{dev6,dev7}'::text[])))
-(5 rows)
+   ->  Seq Scan on _hyper_2_105_chunk
+         Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])) AND (device_id = ANY ('{dev6,dev7}'::text[])))
+(4 rows)
 
 \qecho ANY without intersection shouldnt scan any chunks
 ANY without intersection shouldnt scan any chunks
@@ -808,14 +773,13 @@ these should work since they are immutable functions
 (7 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_3_116_chunk
-               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(5 rows)
+   ->  Seq Scan on _hyper_3_116_chunk
+         Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+(4 rows)
 
 \qecho these should not work since uses stable functions;
 these should not work since uses stable functions;
@@ -859,17 +823,16 @@ these should not work since uses stable functions;
 \qecho joins
 joins
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
    ->  Nested Loop Semi Join
-         ->  Append
-               ->  Seq Scan on _hyper_3_116_chunk
-                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text) AND (tag_id = 1))
+         ->  Seq Scan on _hyper_3_116_chunk
+               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text) AND (tag_id = 1))
          ->  Seq Scan on tag
                Filter: (id = 1)
-(8 rows)
+(7 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) or (time < to_timestamp(10) and device_id = 'dev1') ORDER BY value;
                                                                      QUERY PLAN                                                                     
@@ -899,22 +862,21 @@ joins
 (22 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.name='tag1') and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
    ->  Nested Loop
          Join Filter: (_hyper_3_116_chunk.tag_id = tag.id)
-         ->  Append
-               ->  Seq Scan on _hyper_3_116_chunk
-                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+         ->  Seq Scan on _hyper_3_116_chunk
+               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
          ->  Seq Scan on tag
                Filter: (name = 'tag1'::text)
-(9 rows)
+(8 rows)
 
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
    ->  Merge Join
@@ -922,24 +884,22 @@ joins
          ->  Index Scan using tag_pkey on tag
          ->  Sort
                Sort Key: _hyper_3_116_chunk.tag_id
-               ->  Append
-                     ->  Seq Scan on _hyper_3_116_chunk
-                           Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(10 rows)
+               ->  Seq Scan on _hyper_3_116_chunk
+                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+(9 rows)
 
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
    ->  Nested Loop
          Join Filter: (_hyper_3_116_chunk.tag_id = tag.id)
-         ->  Append
-               ->  Seq Scan on _hyper_3_116_chunk
-                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+         ->  Seq Scan on _hyper_3_116_chunk
+               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
          ->  Seq Scan on tag
                Filter: (name = 'tag1'::text)
-(9 rows)
+(8 rows)
 
 \qecho test constraint exclusion for constraints in ON clause of JOINs
 test constraint exclusion for constraints in ON clause of JOINs
@@ -1256,14 +1216,13 @@ transformation would be out of range
 (7 rows)
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(1, time) > 11 AND time_bucket(1, time) < 19 ORDER BY time;
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_2_chunk."time"
-   ->  Append
-         ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" > 11) AND ("time" < '20'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
-(5 rows)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (("time" > 11) AND ("time" < '20'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
+(4 rows)
 
 :PREFIX SELECT * FROM hyper WHERE 10 < time_bucket(10, time) AND 20 > time_bucket(10,time) ORDER BY time;
                                                                          QUERY PLAN                                                                          
@@ -1280,14 +1239,12 @@ transformation would be out of range
 \qecho time_bucket exclusion with date
 time_bucket exclusion with date
 :PREFIX SELECT * FROM metrics_date WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_date
-   Order: metrics_date."time"
-   ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_date_time_idx on _hyper_7_165_chunk
-         Index Cond: ("time" < '01-04-2000'::date)
-         Filter: (time_bucket('@ 1 day'::interval, "time") < '01-03-2000'::date)
-(5 rows)
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_7_165_chunk_metrics_date_time_idx on _hyper_7_165_chunk
+   Index Cond: ("time" < '01-04-2000'::date)
+   Filter: (time_bucket('@ 1 day'::interval, "time") < '01-03-2000'::date)
+(3 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                        QUERY PLAN                                                                        
@@ -1305,14 +1262,12 @@ time_bucket exclusion with date
 \qecho time_bucket exclusion with timestamp
 time_bucket exclusion with timestamp
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamp
-   Order: metrics_timestamp."time"
-   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000'::timestamp without time zone)
-         Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000'::timestamp without time zone)
-(5 rows)
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+   Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000'::timestamp without time zone)
+   Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000'::timestamp without time zone)
+(3 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                                                             QUERY PLAN                                                                                                             
@@ -1330,14 +1285,12 @@ time_bucket exclusion with timestamp
 \qecho time_bucket exclusion with timestamptz
 time_bucket exclusion with timestamptz
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) < '2000-01-03' ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz
-   Order: metrics_timestamptz."time"
-   ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Mon Jan 03 06:00:00 2000 PST'::timestamp with time zone)
-         Filter: (time_bucket('@ 6 hours'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
-(5 rows)
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+   Index Cond: ("time" < 'Mon Jan 03 06:00:00 2000 PST'::timestamp with time zone)
+   Filter: (time_bucket('@ 6 hours'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
+(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('6h',time) >= '2000-01-03' AND time_bucket('6h',time) <= '2000-01-10' ORDER BY time;
                                                                                                                QUERY PLAN                                                                                                                
@@ -1355,14 +1308,12 @@ time_bucket exclusion with timestamptz
 \qecho time_bucket exclusion with timestamptz and day interval
 time_bucket exclusion with timestamptz and day interval
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '2000-01-03' ORDER BY time;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz
-   Order: metrics_timestamptz."time"
-   ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000 PST'::timestamp with time zone)
-         Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
-(5 rows)
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+   Index Cond: ("time" < 'Tue Jan 04 00:00:00 2000 PST'::timestamp with time zone)
+   Filter: (time_bucket('@ 1 day'::interval, "time") < 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone)
+(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
                                                                                                              QUERY PLAN                                                                                                              
@@ -2175,7 +2126,8 @@ will not propagate because constraints are only added to hypertables
    ->  Sort
          Sort Key: m2."time"
          ->  Seq Scan on regular_timestamptz m2
-(11 rows)
+               Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(12 rows)
 
 \qecho test JOINs with normal table
 test JOINs with normal table
@@ -2210,32 +2162,28 @@ SELECT (SELECT table_name FROM create_hypertable(tbl, 'time')) FROM (VALUES ('ou
 INSERT INTO outer_join_1 VALUES(1,'a'), (2,'b');
 INSERT INTO outer_join_2 VALUES(1,'a');
 :PREFIX SELECT one.id, two.name FROM outer_join_1 one LEFT OUTER JOIN outer_join_2 two ON one.id=two.id WHERE one.id=2;
-                      QUERY PLAN                      
-------------------------------------------------------
+                   QUERY PLAN                   
+------------------------------------------------
  Nested Loop Left Join
    Join Filter: (one.id = two.id)
-   ->  Append
-         ->  Seq Scan on _hyper_8_170_chunk one
-               Filter: (id = 2)
+   ->  Seq Scan on _hyper_8_170_chunk one
+         Filter: (id = 2)
    ->  Materialize
-         ->  Append
-               ->  Seq Scan on _hyper_9_171_chunk two
-                     Filter: (id = 2)
-(9 rows)
+         ->  Seq Scan on _hyper_9_171_chunk two
+               Filter: (id = 2)
+(7 rows)
 
 :PREFIX SELECT one.id, two.name FROM outer_join_2 two RIGHT OUTER JOIN outer_join_1 one ON one.id=two.id WHERE one.id=2;
-                      QUERY PLAN                      
-------------------------------------------------------
+                   QUERY PLAN                   
+------------------------------------------------
  Nested Loop Left Join
    Join Filter: (one.id = two.id)
-   ->  Append
-         ->  Seq Scan on _hyper_8_170_chunk one
-               Filter: (id = 2)
+   ->  Seq Scan on _hyper_8_170_chunk one
+         Filter: (id = 2)
    ->  Materialize
-         ->  Append
-               ->  Seq Scan on _hyper_9_171_chunk two
-                     Filter: (id = 2)
-(9 rows)
+         ->  Seq Scan on _hyper_9_171_chunk two
+               Filter: (id = 2)
+(7 rows)
 
 DROP TABLE outer_join_1;
 DROP TABLE outer_join_2;
@@ -2393,18 +2341,17 @@ SET constraint_exclusion = 'off';
 (9 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE device_id = 'dev1' AND time < to_timestamp(10) AND _timescaledb_internal.chunks_in(hyper_ts, ARRAY[116]) ORDER BY value;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
-   ->  Append
-         ->  Seq Scan on _hyper_3_116_chunk
-               Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(5 rows)
+   ->  Seq Scan on _hyper_3_116_chunk
+         Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+(4 rows)
 
 :PREFIX SELECT * FROM hyper_ts h JOIN tag on (h.tag_id = tag.id ) WHERE _timescaledb_internal.chunks_in(h, ARRAY[116]) AND time < to_timestamp(10) AND device_id = 'dev1' ORDER BY value;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: h.value
    ->  Merge Join
@@ -2412,10 +2359,9 @@ SET constraint_exclusion = 'off';
          ->  Index Scan using tag_pkey on tag
          ->  Sort
                Sort Key: h.tag_id
-               ->  Append
-                     ->  Seq Scan on _hyper_3_116_chunk h
-                           Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(10 rows)
+               ->  Seq Scan on _hyper_3_116_chunk h
+                     Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
+(9 rows)
 
 :PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id WHERE _timescaledb_internal.chunks_in(h1, ARRAY[104,105]) AND _timescaledb_internal.chunks_in(h2, ARRAY[116,117]) ORDER BY h1.value;
                          QUERY PLAN                          
@@ -2466,24 +2412,21 @@ SET enable_seqscan=false;
 -- Should perform index-only scan. Since we pass whole row into the function it might block planner from using index-only scan.
 -- But since we'll remove the function from the query tree before planner decision it shouldn't affect index-only decision.
 :PREFIX SELECT time FROM hyper WHERE time=0 AND _timescaledb_internal.chunks_in(hyper, ARRAY[1]);
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Append
-   ->  Index Only Scan using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk
-         Index Cond: ("time" = 0)
-(3 rows)
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Index Only Scan using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk
+   Index Cond: ("time" = 0)
+(2 rows)
 
 :PREFIX SELECT first(value, time) FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[1]);
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Result
    InitPlan 1 (returns $0)
      ->  Limit
-           ->  Merge Append
-                 Sort Key: h."time"
-                 ->  Index Scan Backward using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk h
-                       Index Cond: ("time" IS NOT NULL)
-(7 rows)
+           ->  Index Scan Backward using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk h
+                 Index Cond: ("time" IS NOT NULL)
+(5 rows)
 
 \set ON_ERROR_STOP 0
 SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1,2]) AND _timescaledb_internal.chunks_in(hyper, ARRAY[2,3]);
@@ -2502,7 +2445,7 @@ SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[104]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:33: ERROR:  chunk id 104 does not belong to hypertable "hyper"
 -- passing wrong row ref
 SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(ROW(1,2), ARRAY[104]);
-psql:include/plan_expand_hypertable_chunks_in_query.sql:35: ERROR:  illegal invocation of chunks_in function
+psql:include/plan_expand_hypertable_chunks_in_query.sql:35: ERROR:  first parameter for chunks_in function needs to be record
 -- passing func as chunk id
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, array_append(ARRAY[1],current_setting('server_version_num')::int));
 psql:include/plan_expand_hypertable_chunks_in_query.sql:37: ERROR:  second argument to chunk_in should contain only integer consts

@@ -470,7 +470,15 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 
 			ctx->chunk_exclusion_func = func_expr;
 			ctx->restrictions = NIL;
+			/* In PG12 removing the chunk_exclusion function here causes issues
+			 * when the first/last optimization fires, as those subqueries
+			 * will not see the function. Fortunately, in pg12 we do not the
+			 * baserestrictinfo is already populated by the time this function
+			 * is called, so we can remove the functions from that directly
+			 */
+#if PG12_LT
 			quals = (Node *) list_delete_cell((List *) quals, lc, prev);
+#endif
 			return quals;
 		}
 
