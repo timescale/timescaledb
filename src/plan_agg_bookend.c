@@ -586,8 +586,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->parse = parse = copyObject(root->parse);
 	IncrementVarSublevelsUp((Node *) parse, 1, 1);
 
-	/* NULL the append_rel_list, we'll recreate it when we re-expand */
-	subroot->append_rel_list = NULL;
+	/* append_rel_list might contain outer Vars? */
+	subroot->append_rel_list = copyObject(root->append_rel_list);
+	IncrementVarSublevelsUp((Node *) subroot->append_rel_list, 1, 1);
 	/* There shouldn't be any OJ info to translate, as yet */
 	Assert(subroot->join_info_list == NIL);
 	/* and we haven't made equivalence classes, either */
@@ -659,14 +660,47 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 #if PG12
 		{
 			ListCell *lc;
-			/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
+			/* min/max optimizations ususally happen before
+			 * inheritance-relations are expanded, and thus query_planner will
+			 * try to expand our hypertables if they are marked as
+			 * inheritance-relations. Since we do not want this, we must mark
+			 * hypertabls as non-inheritance now.
+			 */
 			foreach(lc, subroot->parse->rtable)
 			{
 				RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 				if(is_rte_hypertable(rte))
 				{
+					ListCell *prev = NULL;
+					ListCell *next = list_head(subroot->append_rel_list);
 					Assert(rte->inh);
 					rte->inh = false;
+					/* query planner gets confused when entries in the
+					 * append_rel_list refer to entreis in the relarray that
+					 * don't exist. Since we need to rexpand hypertables in the
+					 * subquery, all of the chunk entries will be invalid in
+					 * this manner, so we remove them from the list
+					 */
+					/* TODO this can be made non-quadratic by storing all the
+					 *      relids in a bitset, then iterating over the
+					 *      append_rel_list once
+					 */
+					while (next != NULL)
+					{
+						AppendRelInfo *app = lfirst(next);
+						if (app->parent_reloid == rte->relid)
+						{
+							subroot->append_rel_list = list_delete_cell(
+								subroot->append_rel_list,
+								next,
+								prev);
+							next = prev != NULL? prev->next: list_head(subroot->append_rel_list);
+						}
+						else {
+							prev = next;
+							next = next->next;
+						}
+					}
 				}
 			}
 		}
