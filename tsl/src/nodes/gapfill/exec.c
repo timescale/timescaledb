@@ -522,7 +522,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
-	state->subslot = NULL;
+	state->subslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
 	state->scanslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
 
 	/* bucket_width */
@@ -942,8 +942,6 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			state->subslot->tts_shouldFreeMin = false;
 		}
 		state->subslot->tts_mintuple = NULL;
-#else
-		state->subslot->tts_ops->clear(state->subslot);
 #endif
 	}
 
@@ -989,7 +987,7 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	if (!subslot)
 		return NULL;
 
-	state->subslot = subslot;
+	ExecCopySlot(state->subslot, subslot);
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
 	if (isnull)
 		ereport(ERROR,
@@ -998,7 +996,7 @@ gapfill_fetch_next_tuple(GapFillState *state)
 
 	state->subslot_time = gapfill_datum_get_internal(time_value, state->gapfill_typid);
 
-	return subslot;
+	return state->subslot;
 }
 
 /*
