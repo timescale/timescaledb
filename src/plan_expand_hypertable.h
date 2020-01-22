@@ -28,6 +28,8 @@
 extern bool ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
 													   RangeTblEntry *rte);
 
+void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
+
 /* Do the expansion */
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root,
 											 Oid relation_objectid, bool inhparent,

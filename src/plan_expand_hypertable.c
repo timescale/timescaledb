@@ -506,6 +506,111 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
 
+static List *
+remove_exclusion_fns(List *restrictinfo)
+{
+	ListCell *prev = NULL;
+	ListCell *lc = list_head(restrictinfo);
+	while(lc != NULL)
+	{
+		RestrictInfo *rinfo = lfirst(lc);
+		Expr *qual = rinfo->clause;
+
+		if (is_chunk_exclusion_func(qual))
+		{
+			FuncExpr *func_expr = (FuncExpr *) qual;
+
+			/* validation */
+			Assert(func_expr->args->length == 2);
+			if (!IsA(linitial(func_expr->args), Var))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("first parameter for chunks_in function needs to be record")));
+
+			restrictinfo = list_delete_cell((List *) restrictinfo, lc, prev);
+			return restrictinfo;
+		}
+		prev = lc;
+		lc = lnext(lc);
+	}
+	return restrictinfo;
+}
+
+static bool
+remove_exclusion_fns_walker(Node *node, void *ctx)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FromExpr))
+	{
+		FromExpr *f = castNode(FromExpr, node);
+		f->quals = (Node *) remove_exclusion_fns((List *)f->quals);
+	}
+	else if (IsA(node, JoinExpr))
+	{
+		JoinExpr *j = castNode(JoinExpr, node);
+		j->quals = (Node *) remove_exclusion_fns((List *)j->quals);
+	}
+
+	/* skip processing if we found a chunks_in call for current relation */
+	// if (ctx->chunk_exclusion_func != NULL)
+	// 	return true;
+
+	// return expression_tree_walker(node, remove_exclusion_fns_walker, ctx);
+	return false;
+}
+
+
+static Node *
+timebucket_annotate(Node *quals, CollectQualCtx *ctx)
+{
+	ListCell *lc;
+	ListCell *prev = NULL;
+	List *additional_quals = NIL;
+
+	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
+	{
+		Expr *qual = lfirst(lc);
+		Relids relids = pull_varnos((Node *) qual);
+		int num_rels = bms_num_members(relids);
+
+		/* stop processing if not for current rel */
+		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+			continue;
+
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			/*
+			 * check for time_bucket comparisons
+			 * time_bucket(Const, time_colum) > Const
+			 */
+			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
+				 list_length(castNode(FuncExpr, left)->args) == 2 &&
+				 is_time_bucket_function(left)) ||
+				(IsA(left, Const) && IsA(right, FuncExpr) &&
+				 list_length(castNode(FuncExpr, right)->args) == 2 &&
+				 is_time_bucket_function(right)))
+			{
+				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
+				/*
+				 * if we could transform the expression we add it to the list of
+				 * quals so it can be used as an index condition
+				 */
+				if (qual != (Expr *) op)
+					additional_quals = lappend(additional_quals, qual);
+			}
+		}
+
+		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
+	}
+	return (Node *) list_concat((List *) quals, additional_quals);
+}
+
 /*
  * collect JOIN information
  *
@@ -874,6 +979,54 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 
 #endif /* PG11_GE */
 
+static bool
+timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FromExpr))
+	{
+		FromExpr *f = castNode(FromExpr, node);
+		f->quals = timebucket_annotate(f->quals, ctx);
+		collect_join_quals(f->quals, ctx, true);
+	}
+	else if (IsA(node, JoinExpr))
+	{
+		JoinExpr *j = castNode(JoinExpr, node);
+		j->quals = timebucket_annotate(j->quals, ctx);
+		collect_join_quals(j->quals, ctx, !IS_OUTER_JOIN(j->jointype));
+	}
+
+	/* skip processing if we found a chunks_in call for current relation */
+	if (ctx->chunk_exclusion_func != NULL)
+		return true;
+
+	return expression_tree_walker(node, timebucket_annotate_walker, ctx);
+}
+
+void
+ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
+{
+	CollectQualCtx ctx = {
+		.root = root,
+		.rel = rel,
+		.restrictions = NIL,
+		.chunk_exclusion_func = NULL,
+		.all_quals = NIL,
+		.join_conditions = NIL,
+		.propagate_conditions = NIL,
+	};
+
+	init_chunk_exclusion_func();
+
+	/* Walk the tree and find restrictions or chunk exclusion functions */
+	timebucket_annotate_walker((Node *) root->parse->jointree, &ctx);
+
+	if (ctx.propagate_conditions != NIL)
+		propagate_join_quals(root, rel, &ctx);
+}
+
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
@@ -916,6 +1069,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
+
+#if PG12
+	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);
+#endif
 
 	if (ctx.propagate_conditions != NIL)
 		propagate_join_quals(root, rel, &ctx);
@@ -1018,7 +1175,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	heap_close(oldrelation, NoLock);
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-	// root->append_rel_array = palloc0(sizeof(*root->append_rel_array));
 
 #if PG11_GE
 	/*

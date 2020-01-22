@@ -1448,6 +1448,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		expand_hypertable_inheritance(root, relation_objectid, inhparent, rel);
 #endif
 
+	ts_plan_expand_timebucket_annotate(root, rel);
+
 	rte = rt_fetch(rel->relid, root->parse->rtable);
 
 		if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
@@ -1462,7 +1464,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 			if (chunk->fd.compressed_chunk_id > 0)
 			{
-				LockRelationOid(chunk->table_id, AccessShareLock);
 				Assert(rel->fdw_private == NULL);
 				rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 				((TimescaleDBPrivate *) rel->fdw_private)->compressed = true;
