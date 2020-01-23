@@ -29,9 +29,9 @@ NOTICE:  adding not-null constraint to column "a"
 
 insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
-ERROR:  must set the 'compress' boolean option when setting compression options
+ERROR:  the option timescaledb.compress must be set to true to enable compression
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
-ERROR:  cannot use the same column c in compress_orderby and compress_segmentby
+ERROR:  cannot use column "c" in both timescaledb.compress_orderby and timescaledb.compress_segmentby
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 NOTICE:  adding index _compressed_hypertable_4_bacB toD__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(bacB toD, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_4_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(c, _ts_meta_sequence_num)
@@ -78,7 +78,7 @@ NOTICE:  adding index _compressed_hypertable_10_bacB toD__ts_meta_sequence_num_i
 NOTICE:  adding index _compressed_hypertable_10_c__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(c, _ts_meta_sequence_num)
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
-ERROR:  need to specify compress_orderby if it was previously set
+ERROR:  need to specify timescaledb.compress_orderby if it was previously set
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -114,49 +114,49 @@ select attname, attnotnull from pg_attribute where attrelid = (select oid from p
 (1 row)
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-ERROR:  column d in compress_segmentby list does not exist
+ERROR:  column "d" specified in option timescaledb.compress_segmentby does not exist
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'd');
-ERROR:  column d in compress_orderby list does not exist
+ERROR:  column "d" in option timescaledb.compress_orderby does not exist
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls');
-ERROR:  unable to parse the compress_orderby option 'c desc nulls'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c desc nulls'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls thirsty');
-ERROR:  unable to parse the compress_orderby option 'c desc nulls thirsty'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c desc nulls thirsty'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c climb nulls first');
-ERROR:  unable to parse the compress_orderby option 'c climb nulls first'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c climb nulls first'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c nulls first asC');
-ERROR:  unable to parse the compress_orderby option 'c nulls first asC'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c nulls first asC'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls first asc');
-ERROR:  unable to parse the compress_orderby option 'c desc nulls first asc'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c desc nulls first asc'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc hurry');
-ERROR:  unable to parse the compress_orderby option 'c desc hurry'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c desc hurry'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
-ERROR:  unable to parse the compress_orderby option 'c descend'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c descend'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c; SELECT 1');
-ERROR:  unable to parse the compress_orderby option 'c; SELECT 1'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c; SELECT 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = '1,2');
-ERROR:  unable to parse the compress_orderby option '1,2'
+ERROR:  unable to parse timescaledb.compress_orderby option '1,2'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c + 1');
-ERROR:  unable to parse the compress_orderby option 'c + 1'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c + 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'random()');
-ERROR:  unable to parse the compress_orderby option 'random()'
+ERROR:  unable to parse timescaledb.compress_orderby option 'random()'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c LIMIT 1');
-ERROR:  unable to parse the compress_orderby option 'c LIMIT 1'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c LIMIT 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c USING <');
-ERROR:  unable to parse the compress_orderby option 'c USING <'
+ERROR:  unable to parse timescaledb.compress_orderby option 'c USING <'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 't COLLATE "en_US"');
-ERROR:  unable to parse the compress_orderby option 't COLLATE "en_US"'
+ERROR:  unable to parse timescaledb.compress_orderby option 't COLLATE "en_US"'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
-ERROR:  unable to parse the compress_segmentby option 'c asc'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'c asc'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c nulls last');
-ERROR:  unable to parse the compress_segmentby option 'c nulls last'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'c nulls last'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + 1');
-ERROR:  unable to parse the compress_segmentby option 'c + 1'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'c + 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'random()');
-ERROR:  unable to parse the compress_segmentby option 'random()'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'random()'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c LIMIT 1');
-ERROR:  unable to parse the compress_segmentby option 'c LIMIT 1'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'c LIMIT 1'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
-ERROR:  unable to parse the compress_segmentby option 'c + b'
+ERROR:  unable to parse timescaledb.compress_segmentby option 'c + b'
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
 ERROR:  invalid order by column type: could not identify an less-than operator for type point
 --should succeed
@@ -278,13 +278,13 @@ select table_name from create_hypertable('table_constr', 'timec', chunk_time_int
 (1 row)
 
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-ERROR:  constraint table_constr_pkey requires column device_id to be a segment_by or order_by column for compression
+ERROR:  constraint "table_constr_pkey" requires column "device_id" to be a timescaledb.compress_segmentby or timescaledb.compress_orderby column for compression
 alter table table_constr add constraint table_constr_uk unique (location, timec, device_id);
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id');
-ERROR:  constraint table_constr_uk requires column location to be a segment_by or order_by column for compression
+ERROR:  constraint "table_constr_uk" requires column "location" to be a timescaledb.compress_segmentby or timescaledb.compress_orderby column for compression
 alter table table_constr add constraint table_constr_fk FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location');
-ERROR:  constraint table_constr_fk requires column d to be a segment_by column for compression
+ERROR:  constraint "table_constr_fk" requires column "d" to be a timescaledb.compress_segmentby column for compression
 --exclusion constraints not allowed
 alter table table_constr add constraint table_constr_exclu exclude using btree (timec with = );
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
