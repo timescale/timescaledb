@@ -1744,6 +1744,8 @@ SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
 (1 row)
 
 \set ON_ERROR_STOP 0
+SELECT * FROM set_replication_factor('disttable',  4);
+ERROR:  too big replication factor for hypertable "disttable"
 SELECT * FROM set_replication_factor('disttable',  0);
 ERROR:  invalid replication factor
 SELECT * FROM set_replication_factor('disttable',  NULL);

@@ -234,6 +234,17 @@ update_replication_factor(Hypertable *const ht, const int32 replication_factor_i
 
 	ht->fd.replication_factor = replication_factor;
 	ts_hypertable_update(ht);
+	if (list_length(ht->data_nodes) < replication_factor)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("too big replication factor for hypertable \"%s\"",
+						NameStr(ht->fd.table_name)),
+				 errdetail("The hypertable has %d data nodes attached, while "
+						   "the replication factor is %d.",
+						   list_length(ht->data_nodes),
+						   replication_factor),
+				 errhint("Decrease the replication factor or attach more data "
+						 "nodes to the hypertable.")));
 	if (hypertable_is_underreplicated(ht, replication_factor))
 		ereport(WARNING,
 				(errcode(ERRCODE_WARNING),
