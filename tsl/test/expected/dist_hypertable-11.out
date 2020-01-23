@@ -3680,6 +3680,10 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
  
 (1 row)
 
+\set ON_ERROR_STOP 0
+SELECT * FROM set_replication_factor('hyper', replication_factor => 4);
+ERROR:  too big replication factor for hypertable "hyper"
+\set ON_ERROR_STOP 1
 DROP TABLE hyper;
 SELECT * FROM distributed_exec($$
     DROP TABLE devices;

@@ -212,7 +212,7 @@ AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C VOLATILE;
 
 -- Sets new replication factor for distributed hypertable
 CREATE OR REPLACE FUNCTION  set_replication_factor(
-    main_table              REGCLASS,
+    hypertable              REGCLASS,
     replication_factor      INTEGER
 ) RETURNS VOID 
 AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGUAGE C VOLATILE;

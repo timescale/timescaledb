@@ -445,6 +445,7 @@ SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
 SELECT * FROM set_replication_factor('disttable',  2);
 SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
 \set ON_ERROR_STOP 0
+SELECT * FROM set_replication_factor('disttable',  4);
 SELECT * FROM set_replication_factor('disttable',  0);
 SELECT * FROM set_replication_factor('disttable',  NULL);
 \set ON_ERROR_STOP 1
