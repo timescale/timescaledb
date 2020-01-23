@@ -542,7 +542,7 @@ select create_hypertable( 'test_collation', 'time', chunk_time_interval=> '1 day
 \set ON_ERROR_STOP 0
 --forbid setting collation in compression ORDER BY clause. (parse error is fine)
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1 COLLATE "POSIX", val2, time');
-ERROR:  unable to parse the compress_orderby option 'val_1 COLLATE "POSIX", val2, time'
+ERROR:  unable to parse timescaledb.compress_orderby option 'val_1 COLLATE "POSIX", val2, time'
 \set ON_ERROR_STOP 1
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1, val_2, time');
 NOTICE:  adding index _compressed_hypertable_10_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id, _ts_meta_sequence_num)

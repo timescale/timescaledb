@@ -2896,8 +2896,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		if (parse_results[CompressEnabled].is_default)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("must set the 'compress' boolean option when setting compression "
-							"options")));
+					 errmsg("the option timescaledb.compress must be set to true to enable "
+							"compression")));
 	}
 	else
 		return false;

@@ -245,7 +245,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("column %s in compress_segmentby list does not exist",
+					 errmsg("column \"%s\" specified in option timescaledb.compress_segmentby does "
+							"not exist",
 							NameStr(col->colname))));
 		}
 		segorder_colindex[col_attno - 1] = i++;
@@ -261,7 +262,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("column %s in compress_orderby list does not exist",
+					 errmsg("column \"%s\" in option timescaledb.compress_orderby does not exist",
 							NameStr(col->colname))));
 		}
 		/* check if orderby_cols and segmentby_cols are distinct */
@@ -269,8 +270,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("cannot use the same column %s in compress_orderby and "
-							"compress_segmentby",
+					 errmsg("cannot use column \"%s\" in both timescaledb.compress_orderby and "
+							"timescaledb.compress_segmentby",
 							NameStr(col->colname))));
 		}
 		segorder_colindex[col_attno - 1] = i++;
@@ -766,7 +767,8 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("constraint %s requires column %s to be a segment_by "
+								 errmsg("constraint \"%s\" requires column \"%s\" to be a "
+										"timescaledb.compress_segmentby "
 										"column for compression",
 										NameStr(form->conname),
 										NameStr(col_def->attname)),
@@ -786,11 +788,13 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 					if (col_def->segmentby_column_index < 1 && col_def->orderby_column_index < 1)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("constraint %s requires column %s to be a segment_by or "
-										"order_by column for compression",
+								 errmsg("constraint \"%s\" requires column \"%s\" to be a "
+										"timescaledb.compress_segmentby or "
+										"timescaledb.compress_orderby column for compression",
 										NameStr(form->conname),
 										NameStr(col_def->attname)),
-								 errhint("Only segment by and order by columns can be used in "
+								 errhint("Only columns specified in timescaledb.compress_segmentby "
+										 "and timescaledb.compress_orderby can be used in "
 										 "constraints on hypertables that are compressed.")));
 				}
 			}
@@ -904,12 +908,14 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		if (with_clause_options[CompressOrderBy].is_default && order_by_set)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("need to specify compress_orderby if it was previously set")));
+					 errmsg(
+						 "need to specify timescaledb.compress_orderby if it was previously set")));
 
 		if (with_clause_options[CompressSegmentBy].is_default && segment_by_set)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("need to specify compress_segmentby if it was previously set")));
+					 errmsg("need to specify timescaledb.compress_segmentby if it was previously "
+							"set")));
 	}
 
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
