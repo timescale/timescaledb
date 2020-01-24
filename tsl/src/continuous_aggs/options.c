@@ -4,11 +4,17 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
+#include <catalog/namespace.h>
+#include <commands/view.h>
+#include <miscadmin.h>
+#include <rewrite/rewriteManip.h>
 #include <utils/int8.h>
 #include <utils/builtins.h>
 
 #include "options.h"
 #include "continuous_agg.h"
+#include "continuous_aggs/create.h"
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "scan_iterator.h"
@@ -223,6 +229,17 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 {
 	if (!with_clause_options[ContinuousEnabled].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
+
+	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		Assert(mat_ht != NULL);
+
+		cagg_update_view_definition(agg, mat_ht, with_clause_options);
+		ts_cache_release(hcache);
+	}
 
 	if (!with_clause_options[ContinuousViewOptionRefreshLag].is_default)
 	{

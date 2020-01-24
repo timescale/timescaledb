@@ -33,7 +33,8 @@ GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
 SELECT create_hypertable('foo', 'time');
 
-CREATE VIEW rename_test WITH ( timescaledb.continuous)
+CREATE VIEW rename_test
+  WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1;
@@ -144,7 +145,12 @@ SELECT hypertable_id AS drop_chunks_table_id
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
 
-CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+CREATE VIEW drop_chunks_view
+  WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only=true,
+    timescaledb.refresh_interval='72 hours'
+  )
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
     GROUP BY 1;
@@ -222,7 +228,12 @@ SELECT hypertable_id AS drop_chunks_table_u_id
 CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
 SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
 
-CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+CREATE VIEW drop_chunks_view
+  WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only=true,
+    timescaledb.refresh_interval='72 hours'
+  )
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
     GROUP BY 1;
@@ -297,13 +308,23 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 \set ON_ERROR_STOP 0
 
 -- no continuous aggregates on a continuous aggregate materialization table
-CREATE VIEW new_name_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+CREATE VIEW new_name_view
+  WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only=true,
+    timescaledb.refresh_interval='72 hours'
+  )
 AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
     FROM new_name
     GROUP BY 1;
 
 -- cannot create a continuous aggregate on a continuous aggregate view
-CREATE VIEW drop_chunks_view_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+CREATE VIEW drop_chunks_view_view
+  WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only=true,
+    timescaledb.refresh_interval='72 hours'
+  )
 AS SELECT time_bucket('6', time_bucket), SUM(count)
     FROM drop_chunks_view
     GROUP BY 1;
@@ -317,7 +338,8 @@ SELECT create_hypertable('metrics','time');
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 
 -- check expressions in view definition
-CREATE VIEW cagg_expr WITH (timescaledb.continuous)
+CREATE VIEW cagg_expr
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1d', time) AS time,
@@ -347,7 +369,14 @@ SELECT hypertable_id AS drop_chunks_table_nid
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 
-CREATE VIEW drop_chunks_view WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours', timescaledb.refresh_lag = '-5', timescaledb.max_interval_per_job=10)
+CREATE VIEW drop_chunks_view
+  WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only=true,
+    timescaledb.refresh_interval='72 hours',
+    timescaledb.refresh_lag = '-5',
+    timescaledb.max_interval_per_job=10
+  )
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1;

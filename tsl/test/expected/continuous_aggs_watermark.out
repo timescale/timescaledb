@@ -299,7 +299,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 (4 rows)
 
 DROP TABLE ca_inval_test CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
@@ -371,7 +371,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 (1 row)
 
 DROP TABLE ts_continuous_test CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;

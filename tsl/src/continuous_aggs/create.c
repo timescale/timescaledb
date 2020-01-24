@@ -15,38 +15,42 @@
  *
  */
 #include <postgres.h>
-#include <nodes/nodes.h>
-#include <nodes/parsenodes.h>
-#include <nodes/makefuncs.h>
-#include <nodes/nodeFuncs.h>
+#include <access/reloptions.h>
+#include <access/sysattr.h>
+#include <access/xact.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
-#include <catalog/pg_type.h>
 #include <catalog/pg_aggregate.h>
-#include <catalog/toasting.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_type.h>
+#include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
 #include <commands/view.h>
-#include <access/xact.h>
-#include <access/reloptions.h>
-#include <access/sysattr.h>
 #include <miscadmin.h>
-#include <parser/parse_func.h>
-#include <parser/parse_type.h>
-#include <parser/parse_relation.h>
-#include <parser/parse_oper.h>
-#include <parser/analyze.h>
-#include <optimizer/tlist.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
+#include <nodes/pg_list.h>
 #include <optimizer/clauses.h>
+#include <optimizer/tlist.h>
+#include <parser/analyze.h>
+#include <parser/parse_func.h>
+#include <parser/parse_oper.h>
+#include <parser/parse_relation.h>
+#include <parser/parse_type.h>
+#include <rewrite/rewriteHandler.h>
+#include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/int8.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
-#include <utils/int8.h>
+#include <utils/typcache.h>
 
 #include "create.h"
 
@@ -63,15 +67,19 @@
 #include "continuous_agg.h"
 #include "options.h"
 #include "utils.h"
+#include "errors.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
-#define TIMEBUCKETFN "time_bucket"
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
+#define BOUNDARY_FUNCTION "cagg_watermark"
+#define INTERNAL_TO_DATE_FUNCTION "to_date"
+#define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
+#define INTERNAL_TO_TS_FUNCTION "to_timestamp_without_timezone"
 
 #define DEFAULT_MAX_INTERVAL_MULTIPLIER 20
 #define DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH (PG_INT64_MAX / DEFAULT_MAX_INTERVAL_MULTIPLIER)
@@ -200,8 +208,13 @@ static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 							   MatTableColumnInfo *mattblinfo);
 static Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											 ObjectAddress *mattbladdress);
-
 static bool is_valid_bucketing_function(Oid funcid);
+
+static Const *cagg_boundary_make_lower_bound(Oid type);
+static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
+static Oid relation_oid(NameData schema, NameData name);
+static Query *build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo,
+								Query *q1, Query *q2);
 
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
@@ -1358,7 +1371,7 @@ replace_targetentry_in_havingqual(Query *origquery, List *newtlist)
 /*
 Init the finalize query data structure.
 Parameters:
-orig_query - the original query from user view that is ebing used as template for the finalize query
+orig_query - the original query from user view that is being used as template for the finalize query
 tlist_aliases - aliases for the view select list
 materialization table columns are created . This will be returned in  the mattblinfo
 
@@ -1456,11 +1469,12 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 {
 	Query *final_selquery = NULL;
 	ListCell *lc;
-	/* we have only 1 entry in rtable -checked during query validation
-	 * modify this to reflect the materialization table we just
-	 * created.
+	/*
+	 * for initial cagg creation rtable will have only 1 entry,
+	 * for alter table rtable will have multiple entries with our
+	 * RangeTblEntry as last member.
 	 */
-	RangeTblEntry *rte = list_nth(inp->final_userquery->rtable, 0);
+	RangeTblEntry *rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
 	FromExpr *fromexpr;
 	Var *result;
 	rte->relid = mattbladdress->objectId;
@@ -1477,7 +1491,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
-	result = makeWholeRowVar(rte, 1, 0, true);
+	result = makeWholeRowVar(rte, list_length(inp->final_userquery->rtable), 0, true);
 	result->location = 0;
 	markVarForSelectPriv(NULL, result, rte);
 	/* 2. Fixup targetlist with the correct rel information */
@@ -1505,6 +1519,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	final_selquery->sortClause = inp->final_userquery->sortClause;
 	/* copy the having clause too */
 	final_selquery->havingQual = inp->final_havingqual;
+
 	return final_selquery;
 }
 
@@ -1640,6 +1655,10 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	 */
 	final_selquery =
 		finalizequery_get_select_query(&finalqinfo, mattblinfo.matcollist, &mataddress);
+
+	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
+		final_selquery = build_union_query(origquery_ht, &mattblinfo, final_selquery, panquery);
+
 	create_view_for_query(final_selquery, stmt->view);
 
 	/* Step 3: create the internal view with select partialize(..)
@@ -1730,4 +1749,364 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 
 	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
 	return true;
+}
+
+/*
+ * update the view definition of an existing continuous aggregate
+ */
+void
+cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
+							WithClauseResult *with_clause_options)
+{
+	ListCell *lc1, *lc2;
+	int sec_ctx;
+	Oid uid, saved_uid;
+	/* cagg view created by the user */
+	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
+	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
+	Query *user_query = get_view_query(user_view_rel);
+	relation_close(user_view_rel, AccessShareLock);
+
+	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
+
+	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
+	Query *direct_query = get_view_query(direct_view_rel);
+
+	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
+
+	relation_close(direct_view_rel, AccessShareLock);
+	FinalizeQueryInfo fqi;
+	MatTableColumnInfo mattblinfo;
+	ObjectAddress mataddress = {
+		.classId = RelationRelationId,
+		.objectId = mat_ht->main_table_relid,
+	};
+
+	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(direct_query->groupClause));
+	finalizequery_init(&fqi, direct_query, &mattblinfo);
+
+	Query *view_query = finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress);
+
+	/* adjust varnos in targetlist */
+	Assert(list_length(view_query->rtable) > 1);
+	foreach (lc1, view_query->targetList)
+	{
+		ChangeVarNodes((Node *) lfirst_node(TargetEntry, lc1),
+					   1,
+					   list_length(view_query->rtable),
+					   0);
+	}
+
+	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
+		view_query = build_union_query(&timebucket_exprinfo, &mattblinfo, view_query, direct_query);
+
+	/*
+	 * adjust names in the targetlist of the updated view to match the view definition
+	 */
+	Assert(list_length(view_query->targetList) == list_length(user_query->targetList));
+
+	forboth (lc1, view_query->targetList, lc2, user_query->targetList)
+	{
+		TargetEntry *view_tle, *user_tle;
+		view_tle = lfirst_node(TargetEntry, lc1);
+		user_tle = lfirst_node(TargetEntry, lc2);
+		view_tle->resname = user_tle->resname;
+	}
+
+	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
+	StoreViewQuery(user_view_oid, view_query, true);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+}
+
+/*
+ * create Const of proper type for lower bound of watermark when
+ * watermark has not been set yet
+ */
+static Const *
+cagg_boundary_make_lower_bound(Oid type)
+{
+	Datum value;
+	int16 typlen;
+	bool typbyval;
+
+	get_typlenbyval(type, &typlen, &typbyval);
+
+	switch (type)
+	{
+		case INT2OID:
+			value = Int16GetDatum(PG_INT16_MIN);
+			break;
+		case DATEOID:
+		case INT4OID:
+			value = Int32GetDatum(PG_INT32_MIN);
+			break;
+		case INT8OID:
+		case TIMESTAMPTZOID:
+		case TIMESTAMPOID:
+			value = Int64GetDatum(PG_INT64_MIN);
+			break;
+		default:
+			/* validation at earlier stages should prevent ever reaching this */
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("unsupported datatype \"%s\" for continuous aggregate",
+							format_type_be(type))));
+			pg_unreachable();
+	}
+	return makeConst(type, -1, InvalidOid, typlen, value, false, typbyval);
+}
+
+/*
+ * get oid of function to convert from our internal representation to postgres representation
+ */
+static Oid
+cagg_get_boundary_converter_funcoid(Oid typoid)
+{
+	char *function_name;
+	Oid argtyp[] = { INT8OID };
+
+	switch (typoid)
+	{
+		case DATEOID:
+			function_name = INTERNAL_TO_DATE_FUNCTION;
+			break;
+		case TIMESTAMPOID:
+			function_name = INTERNAL_TO_TS_FUNCTION;
+			break;
+		case TIMESTAMPTZOID:
+			function_name = INTERNAL_TO_TSTZ_FUNCTION;
+			break;
+		default:
+			/*
+			 * this should never be reached and unsupported datatypes
+			 * should be caught at much earlier stages
+			 */
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("no converter function defined for datatype: %s",
+							format_type_be(typoid))));
+			pg_unreachable();
+	}
+
+	List *func_name = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(function_name));
+	Oid converter_oid = LookupFuncName(func_name, lengthof(argtyp), argtyp, false);
+
+	Assert(OidIsValid(converter_oid));
+
+	return converter_oid;
+}
+
+static FuncExpr *
+build_conversion_call(Oid type, FuncExpr *boundary)
+{
+	/*
+	 * if the partitioning column type is not integer we need to convert to proper representation
+	 */
+	switch (type)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+			/* nothing to do for int types */
+			return boundary;
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		{
+			/* date/timestamp/timestamptz need to be converted since we store them differently from
+			 * postgres format */
+			Oid converter_oid = cagg_get_boundary_converter_funcoid(type);
+			return makeFuncExpr(converter_oid,
+								type,
+								list_make1(boundary),
+								InvalidOid,
+								InvalidOid,
+								COERCE_EXPLICIT_CALL);
+		}
+
+		default:
+			/* all valid types should be handled above, this should never be reached and error
+			 * handling at earlier stages should catch this */
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("unsupported datatype for continuous aggregates: %s",
+							format_type_be(type))));
+			pg_unreachable();
+	}
+}
+
+/*
+ * build function call that returns boundary for a hypertable
+ * wrapped in type conversion calls when required
+ */
+static FuncExpr *
+build_boundary_call(int32 ht_id, Oid type)
+{
+	Oid argtyp[] = { OIDOID };
+	FuncExpr *boundary;
+
+	Oid boundary_func_oid =
+		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(BOUNDARY_FUNCTION)),
+					   lengthof(argtyp),
+					   argtyp,
+					   false);
+	List *func_args =
+		list_make1(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(ht_id), false, true));
+
+	boundary = makeFuncExpr(boundary_func_oid,
+							INT8OID,
+							func_args,
+							InvalidOid,
+							InvalidOid,
+							COERCE_EXPLICIT_CALL);
+
+	return build_conversion_call(type, boundary);
+}
+
+static Node *
+build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno, AttrNumber attno)
+{
+	Var *var = makeVar(varno, attno, partcoltype, -1, InvalidOid, InvalidOid);
+	FuncExpr *boundary = build_boundary_call(ht_id, partcoltype);
+
+	CoalesceExpr *coalesce = makeNode(CoalesceExpr);
+	coalesce->coalescetype = partcoltype;
+	coalesce->coalescecollid = InvalidOid;
+	coalesce->args = list_make2(boundary, cagg_boundary_make_lower_bound(partcoltype));
+
+	return (Node *) make_opclause(opno,
+								  BOOLOID,
+								  false,
+								  (Expr *) var,
+								  (Expr *) coalesce,
+								  InvalidOid,
+								  InvalidOid);
+}
+
+static RangeTblEntry *
+make_subquery_rte(Query *subquery, const char *aliasname)
+{
+	RangeTblEntry *rte = makeNode(RangeTblEntry);
+	ListCell *lc;
+
+	rte->rtekind = RTE_SUBQUERY;
+	rte->relid = InvalidOid;
+	rte->subquery = subquery;
+	rte->alias = makeAlias(aliasname, NIL);
+	rte->eref = copyObject(rte->alias);
+
+	foreach (lc, subquery->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (!tle->resjunk)
+			rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(tle->resname)));
+	}
+
+	rte->lateral = false;
+	rte->inh = false; /* never true for subqueries */
+	rte->inFromCl = true;
+
+	return rte;
+}
+
+/*
+ * build union query combining the materialized data with data from the raw data hypertable
+ *
+ * q1 is the query on the materialization hypertable with the finalize call
+ * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ */
+static Query *
+build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Query *q1, Query *q2)
+{
+	ListCell *lc1, *lc2;
+	List *col_types = NIL;
+	List *col_typmods = NIL;
+	List *col_collations = NIL;
+	List *tlist = NIL;
+	int varno;
+	AttrNumber attno;
+
+	Assert(list_length(q1->targetList) == list_length(q2->targetList));
+
+	q1 = copyObject(q1);
+	q2 = copyObject(q2);
+
+	TypeCacheEntry *tce = lookup_type_cache(tbinfo->htpartcoltype, TYPECACHE_LT_OPR);
+
+	varno = list_length(q1->rtable);
+	attno = mattblinfo->matpartcolno + 1;
+	q1->jointree->quals =
+		build_union_query_quals(tbinfo->htid, tbinfo->htpartcoltype, tce->lt_opr, varno, attno);
+	attno =
+		get_attnum(tbinfo->htoid, get_attname_compat(tbinfo->htoid, tbinfo->htpartcolno, false));
+	varno = list_length(q2->rtable);
+	q2->jointree->quals = build_union_query_quals(tbinfo->htid,
+												  tbinfo->htpartcoltype,
+												  get_negator(tce->lt_opr),
+												  varno,
+												  attno);
+
+	Query *query = makeNode(Query);
+	SetOperationStmt *setop = makeNode(SetOperationStmt);
+	RangeTblEntry *rte_q1 = make_subquery_rte(q1, "*SELECT* 1");
+	RangeTblEntry *rte_q2 = make_subquery_rte(q2, "*SELECT* 2");
+	RangeTblRef *ref_q1 = makeNode(RangeTblRef);
+	RangeTblRef *ref_q2 = makeNode(RangeTblRef);
+
+	query->commandType = CMD_SELECT;
+	query->rtable = list_make2(rte_q1, rte_q2);
+	query->setOperations = (Node *) setop;
+
+	setop->op = SETOP_UNION;
+	setop->all = true;
+	ref_q1->rtindex = 1;
+	ref_q2->rtindex = 2;
+	setop->larg = (Node *) ref_q1;
+	setop->rarg = (Node *) ref_q2;
+
+	forboth (lc1, q1->targetList, lc2, q2->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc1);
+		TargetEntry *tle2 = lfirst_node(TargetEntry, lc2);
+		TargetEntry *tle_union;
+		Var *expr;
+
+		if (!tle->resjunk)
+		{
+			col_types = lappend_int(col_types, exprType((Node *) tle->expr));
+			col_typmods = lappend_int(col_typmods, exprTypmod((Node *) tle->expr));
+			col_collations = lappend_int(col_collations, exprCollation((Node *) tle->expr));
+
+			expr = makeVarFromTargetEntry(1, tle);
+			/*
+			 * we need to use resname from q2 because that is the query from the
+			 * initial CREATE VIEW statement so the VIEW can be updated in place
+			 */
+			tle_union = makeTargetEntry((Expr *) copyObject(expr),
+										list_length(tlist) + 1,
+										tle2->resname,
+										false);
+			tle_union->resorigtbl = expr->varno;
+			tle_union->resorigcol = expr->varattno;
+			tlist = lappend(tlist, tle_union);
+		}
+	}
+
+	query->targetList = tlist;
+
+	setop->colTypes = col_types;
+	setop->colTypmods = col_typmods;
+	setop->colCollations = col_collations;
+
+	return query;
+}
+
+/*
+ * return Oid for a schema-qualified relation
+ */
+static Oid
+relation_oid(NameData schema, NameData name)
+{
+	return get_relname_relid(NameStr(name), get_namespace_oid(NameStr(schema), false));
 }

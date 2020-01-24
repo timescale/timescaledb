@@ -25,6 +25,7 @@ set(TEST_FILES_DEBUG
 
 set(TEST_TEMPLATES
   continuous_aggs_permissions.sql.in
+  continuous_aggs_union_view.sql.in
   plan_gapfill.sql.in
 )
 

@@ -60,6 +60,11 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.arg_name = "ignore_invalidation_older_than",
 			.type_id = TEXTOID,
 		},
+		[ContinuousViewOptionMaterializedOnly] = {
+			.arg_name = "materialized_only",
+			.type_id = BOOLOID,
+			.default_val = BoolGetDatum(false),
+		},
 };
 
 WithClauseResult *
@@ -492,14 +497,16 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	 * wait on */
 	ts_bgw_job_delete_by_id(agg->data.job_id);
 
-	if (drop_user_view)
-	{
-		user_view = (ObjectAddress){
-			.classId = RelationRelationId,
-			.objectId = ts_continuous_agg_get_user_view_oid(agg),
-		};
+	user_view = (ObjectAddress){
+		.classId = RelationRelationId,
+		.objectId =
+			get_relname_relid(NameStr(agg->data.user_view_name),
+							  get_namespace_oid(NameStr(agg->data.user_view_schema), false)),
+	};
+	/* The partial view may already be dropped by PG's dependency system (e.g. the raw table was
+	 * dropped) */
+	if (OidIsValid(user_view.objectId))
 		LockRelationOid(user_view.objectId, AccessExclusiveLock);
-	}
 
 	raw_hypertable = ts_hypertable_get_by_id(agg->data.raw_hypertable_id);
 	/* The raw hypertable might be already dropped if this is a cascade from that drop */

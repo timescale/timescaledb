@@ -84,7 +84,7 @@ SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
 (1 row)
 
 CREATE VIEW test_continuous_agg_view
-    WITH ( timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
@@ -346,6 +346,7 @@ DROP VIEW test_continuous_agg_view CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
+        timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value
@@ -490,6 +491,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute
 CREATE VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
+        timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
@@ -538,7 +540,8 @@ INSERT INTO test_continuous_agg_table_w_grant
 -- make sure view can be created
 CREATE VIEW test_continuous_agg_view_user_2
     WITH ( timescaledb.continuous,
-         timescaledb.max_interval_per_job='2',
+        timescaledb.materialized_only=true,
+        timescaledb.max_interval_per_job='2',
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
