@@ -20,7 +20,7 @@ SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 
 --Next, create your continuous aggregate view
 CREATE VIEW device_summary
-WITH (timescaledb.continuous) --This flag is what makes the view continuous
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) --This flag is what makes the view continuous
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket, --time_bucket is required
@@ -205,7 +205,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 DROP VIEW device_summary CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -223,7 +223,7 @@ ERROR:  only immutable functions are supported for continuous aggregate query
 DROP VIEW device_summary CASCADE;
 ERROR:  view "device_summary" does not exist
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -241,7 +241,7 @@ DROP VIEW device_summary CASCADE;
 DROP VIEW device_summary CASCADE;
 ERROR:  view "device_summary" does not exist
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -262,4 +262,131 @@ SELECT min(min_time)::timestamp FROM device_summary;
 --------------------------
  Sat Dec 01 00:00:00 2018
 (1 row)
+
+--
+-- test just in time aggregate / materialization only view
+--
+-- hardcoding now to 50 will lead to 30 watermark
+CREATE OR REPLACE FUNCTION device_readings_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 50;
+$BODY$;
+CREATE TABLE device_readings_int(time int, value float);
+SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable         
+----------------------------------
+ (5,public,device_readings_int,t)
+(1 row)
+
+SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE VIEW device_readings_mat_only
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+CREATE VIEW device_readings_jit
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
+-- materialization only should have 0 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+(0 rows)
+
+-- jit aggregate should have 4 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+(4 rows)
+
+REFRESH MATERIALIZED VIEW device_readings_mat_only;
+LOG:  materializing continuous aggregate public.device_readings_mat_only: nothing to invalidate, new range up to 30
+REFRESH MATERIALIZED VIEW device_readings_jit;
+LOG:  materializing continuous aggregate public.device_readings_jit: nothing to invalidate, new range up to 30
+-- materialization only should have 2 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+(2 rows)
+
+-- jit aggregate should have 4 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+(4 rows)
+
+-- add 2 more rows
+INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(50,60,10) AS g(i);
+-- materialization only should have 2 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+(2 rows)
+
+-- jit aggregate should have 6 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+          50 | 500
+          60 | 600
+(6 rows)
+
+-- hardcoding now to 100 will lead to 80 watermark
+CREATE OR REPLACE FUNCTION device_readings_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 100;
+$BODY$;
+-- refresh should materialize all now
+REFRESH MATERIALIZED VIEW device_readings_mat_only;
+LOG:  materializing continuous aggregate public.device_readings_mat_only: nothing to invalidate, new range up to 70
+REFRESH MATERIALIZED VIEW device_readings_jit;
+LOG:  materializing continuous aggregate public.device_readings_jit: nothing to invalidate, new range up to 70
+-- materialization only should have 6 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+          50 | 500
+          60 | 600
+(6 rows)
+
+-- jit aggregate should have 6 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+ time_bucket | avg 
+-------------+-----
+          10 | 100
+          20 | 200
+          30 | 300
+          40 | 400
+          50 | 500
+          60 | 600
+(6 rows)
 

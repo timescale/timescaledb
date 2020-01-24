@@ -25,6 +25,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionMaxIntervalPerRun,
 	ContinuousViewOptionCreateGroupIndex,
 	ContinuousViewOptionIgnoreInvalidationOlderThan,
+	ContinuousViewOptionMaterializedOnly,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType

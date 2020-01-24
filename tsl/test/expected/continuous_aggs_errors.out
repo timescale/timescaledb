@@ -404,7 +404,7 @@ ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET(timescaledb.refresh_lag = '
 ERROR:  cannot alter the internal view of a continuous aggregate
 \set ON_ERROR_STOP 1
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 6 other objects
 --test WITH using a hypertable with an integer time dimension
 CREATE TABLE conditions (
       timec       SMALLINT       NOT NULL,

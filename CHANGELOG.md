@@ -4,9 +4,10 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## latest
+## 1.7.0 (unreleased)
 
 **Major Features**
+* #1685 Add real-time support to continuous aggregates
 
 **Minor Features**
 

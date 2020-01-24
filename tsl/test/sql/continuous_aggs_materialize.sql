@@ -271,7 +271,7 @@ SET client_min_messages TO LOG;
 SELECT * FROM continuous_agg_test_t;
 
 CREATE VIEW test_t_mat_view
-    WITH ( timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
         GROUP BY 1;
@@ -370,7 +370,7 @@ SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_ag
 -- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
 CREATE VIEW extreme_view
-    WITH ( timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
         GROUP BY 1;
@@ -449,7 +449,7 @@ CREATE OR REPLACE FUNCTION integer_now_continuous_agg_negative() returns BIGINT 
 SELECT set_integer_now_func('continuous_agg_negative', 'integer_now_continuous_agg_negative');
 
 CREATE VIEW negative_view_5
-    WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
         FROM continuous_agg_negative
         GROUP BY 1;
@@ -480,7 +480,7 @@ DROP VIEW negative_view_5 CASCADE;
 TRUNCATE continuous_agg_negative;
 
 CREATE VIEW negative_view_5
-            WITH (timescaledb.continuous, timescaledb.refresh_lag='-2')
+            WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
 AS SELECT time_bucket('5', time), COUNT(data) as value
    FROM continuous_agg_negative
    GROUP BY 1;
@@ -511,7 +511,7 @@ SELECT set_integer_now_func('continuous_agg_max_mat', 'integer_now_continuous_ag
 
 -- only allow two time_buckets per run
 CREATE VIEW max_mat_view
-    WITH (timescaledb.continuous, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), COUNT(data) as value
         FROM continuous_agg_max_mat
         GROUP BY 1;
@@ -582,7 +582,7 @@ SELECT create_hypertable('continuous_agg_max_mat_t', 'time');
 
 -- only allow two time_buckets per run
 CREATE VIEW max_mat_view_t
-    WITH (timescaledb.continuous, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_max_mat_t
         GROUP BY 1;
@@ -611,7 +611,7 @@ CREATE TABLE continuous_agg_max_mat_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_max_mat_timestamp', 'time');
 
 CREATE VIEW max_mat_view_timestamp
-    WITH (timescaledb.continuous, timescaledb.refresh_lag='-2 hours')
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time)
         FROM continuous_agg_max_mat_timestamp
         GROUP BY 1;
@@ -628,7 +628,7 @@ CREATE TABLE continuous_agg_max_mat_date(time DATE);
 SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
 
 CREATE VIEW max_mat_view_date
-    WITH (timescaledb.continuous, timescaledb.refresh_lag='-7 days')
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-7 days')
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_max_mat_date
         GROUP BY 1;
@@ -666,7 +666,7 @@ SELECT table_name FROM create_hypertable('timezone_test','time');
 INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
 
 CREATE VIEW timezone_test_summary
-    WITH (timescaledb.continuous)
+    WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
         GROUP BY 1;
@@ -685,7 +685,7 @@ SELECT table_name FROM create_hypertable('timezone_test','time');
 INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
 
 CREATE VIEW timezone_test_summary
-    WITH (timescaledb.continuous)
+    WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
         GROUP BY 1;

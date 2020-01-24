@@ -281,7 +281,7 @@ DEALLOCATE param_prep;
 
 -- test continuous aggs
 SET client_min_messages TO error;
-CREATE VIEW cagg_test WITH (timescaledb.continuous) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
+CREATE VIEW cagg_test WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS SELECT time_bucket('1d',time) AS time, device_id, avg(v1) FROM :TEST_TABLE WHERE device_id=1 GROUP BY 1,2;
 SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
 REFRESH MATERIALIZED VIEW cagg_test;
 SELECT time FROM cagg_test ORDER BY time LIMIT 1;

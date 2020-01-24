@@ -19,7 +19,7 @@ SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 
 --Next, create your continuous aggregate view
 CREATE VIEW device_summary
-WITH (timescaledb.continuous) --This flag is what makes the view continuous
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) --This flag is what makes the view continuous
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket, --time_bucket is required
@@ -120,7 +120,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 
 DROP VIEW device_summary CASCADE;
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -138,7 +138,7 @@ GROUP BY bucket, device_id;
 
 DROP VIEW device_summary CASCADE;
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -156,7 +156,7 @@ DROP VIEW device_summary CASCADE;
 
 DROP VIEW device_summary CASCADE;
 CREATE VIEW device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,
@@ -169,3 +169,72 @@ FROM
 GROUP BY bucket, device_id;
 REFRESH MATERIALIZED VIEW device_summary;
 SELECT min(min_time)::timestamp FROM device_summary;
+
+--
+-- test just in time aggregate / materialization only view
+--
+
+-- hardcoding now to 50 will lead to 30 watermark
+CREATE OR REPLACE FUNCTION device_readings_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 50;
+$BODY$;
+
+CREATE TABLE device_readings_int(time int, value float);
+SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
+
+SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
+
+CREATE VIEW device_readings_mat_only
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+
+CREATE VIEW device_readings_jit
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+
+INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
+
+-- materialization only should have 0 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+
+-- jit aggregate should have 4 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+
+REFRESH MATERIALIZED VIEW device_readings_mat_only;
+REFRESH MATERIALIZED VIEW device_readings_jit;
+
+-- materialization only should have 2 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+-- jit aggregate should have 4 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+
+-- add 2 more rows
+INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(50,60,10) AS g(i);
+
+-- materialization only should have 2 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+-- jit aggregate should have 6 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+
+-- hardcoding now to 100 will lead to 80 watermark
+CREATE OR REPLACE FUNCTION device_readings_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 100;
+$BODY$;
+
+-- refresh should materialize all now
+REFRESH MATERIALIZED VIEW device_readings_mat_only;
+REFRESH MATERIALIZED VIEW device_readings_jit;
+
+-- materialization only should have 6 rows
+SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
+-- jit aggregate should have 6 rows
+SELECT * FROM device_readings_jit ORDER BY time_bucket;
+
+
+

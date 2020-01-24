@@ -224,7 +224,7 @@ select view_name from timescaledb_information.continuous_aggregates;
 (1 row)
 
 drop table continuous_agg_test cascade;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_6_chunk
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
  count 

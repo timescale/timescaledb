@@ -109,6 +109,8 @@ ERROR:  insufficient permissions to alter job 1000
 --make sure that commands fail
 ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ERROR:  must be owner of relation mat_refresh_test
+ALTER VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
+ERROR:  must be owner of relation mat_refresh_test
 DROP VIEW mat_refresh_test CASCADE; 
 ERROR:  must be owner of relation mat_refresh_test
 REFRESH MATERIALIZED VIEW mat_refresh_test;
@@ -121,7 +123,7 @@ SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
 ERROR:  permission denied for relation _hyper_2_2_chunk
 --cannot create a mat view without select and trigger grants
 create or replace view mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
 from conditions_for_perm_check
@@ -130,7 +132,7 @@ NOTICE:  adding index _materialized_hypertable_5_location_time_partition_col_idx
 ERROR:  permission denied for relation conditions_for_perm_check
 --cannot create mat view in a schema without create privileges
 create or replace view custom_schema.mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
@@ -140,7 +142,7 @@ ERROR:  permission denied for schema custom_schema
 --cannot use a function without EXECUTE privileges
 --you can create a VIEW but cannot refresh it
 create or replace view mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity), get_constant()
 from conditions_for_perm_check_w_grant
@@ -153,7 +155,7 @@ ERROR:  permission denied for function get_constant
 DROP VIEW mat_perm_view_test CASCADE;
 --can create a mat view on something with select and trigger grants
 create or replace view mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
