@@ -294,8 +294,8 @@ ts_hypertable_id_to_relid(int32 hypertable_id)
 int32
 ts_hypertable_relid_to_id(Oid relid)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Cache *hcache;
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 	int result = (ht == NULL) ? -1 : ht->fd.id;
 
 	ts_cache_release(hcache);
@@ -1121,8 +1121,8 @@ ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id, Oid tablespace_
 static inline Oid
 hypertable_relid_lookup(Oid relid)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Cache *hcache;
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 	Oid result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
 
 	ts_cache_release(hcache);
@@ -1627,8 +1627,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 											 associated_table_prefix,
 											 &chunk_sizing_info);
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 	retval = create_hypertable_datum(fcinfo, ht, created);
 	ts_cache_release(hcache);
 
@@ -1839,10 +1838,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  false);
 
 	/* Get the a Hypertable object via the cache */
-	hcache = ts_hypertable_cache_pin();
-	time_dim_info->ht = ts_hypertable_cache_get_entry(hcache, table_relid);
-
-	Assert(time_dim_info->ht != NULL);
+	time_dim_info->ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	/* Add validated dimensions */
 	ts_dimension_add_from_info(time_dim_info);
@@ -1855,10 +1851,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	ts_cache_release(hcache);
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
 
-	Assert(ht != NULL);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	/* Verify that existing indexes are compatible with a hypertable */
 	ts_indexing_verify_indexes(ht);
@@ -2056,14 +2050,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, table_relid);
-	/* First verify that the hypertable corresponds to a valid table */
-	if (hypertable == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not set integer_now function because \"%s\" is not a hypertable",
-						get_rel_name(table_relid))));
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);

@@ -1462,12 +1462,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 	}
 	else
 	{
-		ht = ts_hypertable_cache_get_entry(hypertable_cache, table_relid);
-		if (!ht)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("table \"%s\" does not exist or is not a hypertable",
-							get_rel_name(table_relid))));
+		ht = ts_hypertable_cache_get_entry(hypertable_cache, table_relid, false);
 		hypertables = list_make1(ht);
 	}
 
@@ -2321,11 +2316,7 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 				 errmsg("must use older_than parameter to drop_chunks with "
 						"cascade_to_materializations")));
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid);
-	if (!ht)
-		elog(ERROR, "can only call drop_chunks on hypertables");
-
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, false, &hcache);
 	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
 	older_than_time = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
 																 time_dimension,

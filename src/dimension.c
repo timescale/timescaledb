@@ -930,7 +930,7 @@ void
 ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum *interval,
 					Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
+	Cache *hcache;
 	Hypertable *ht;
 	Dimension *dim;
 
@@ -938,12 +938,7 @@ ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum 
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid dimension type")));
 
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_relid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	if (NULL == dimname)
 	{
@@ -1305,7 +1300,7 @@ TS_FUNCTION_INFO_V1(ts_dimension_add);
 Datum
 ts_dimension_add(PG_FUNCTION_ARGS)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
+	Cache *hcache;
 	DimensionInfo info = {
 		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
@@ -1344,12 +1339,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 				 errmsg("could not lock hypertable \"%s\" for update",
 						get_rel_name(info.table_relid))));
 
-	info.ht = ts_hypertable_cache_get_entry(hcache, info.table_relid);
-
-	if (NULL == info.ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(info.table_relid))));
+	info.ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, false, &hcache);
 
 	if (info.num_slices_is_set && OidIsValid(info.interval_type))
 		ereport(ERROR,

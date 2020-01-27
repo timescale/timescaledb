@@ -45,9 +45,11 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 	};
 	int64 invalidation_threshold;
 	int64 completed_threshold;
-	Cache *hcache = ts_hypertable_cache_pin();
-	int32 hypertable_id = ts_hypertable_cache_get_entry(hcache, hypertable)->fd.id;
-	int32 materialization_id = ts_hypertable_cache_get_entry(hcache, materialization_table)->fd.id;
+	Cache *hcache;
+	int32 hypertable_id =
+		ts_hypertable_cache_get_cache_and_entry(hypertable, false, &hcache)->fd.id;
+	int32 materialization_id =
+		ts_hypertable_cache_get_entry(hcache, materialization_table, false)->fd.id;
 	ts_cache_release(hcache);
 
 	if (partial_view.name == NULL)

@@ -9,6 +9,7 @@
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
 
+#include "errors.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "catalog.h"
@@ -129,24 +130,57 @@ ts_hypertable_cache_invalidate_callback(void)
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 TSDLLEXPORT Hypertable *
-ts_hypertable_cache_get_entry(Cache *cache, Oid relid)
+ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool missing_ok)
 {
-	if (!OidIsValid(relid))
-		return NULL;
+	Hypertable *ht;
 
-	return ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
+	if (!OidIsValid(relid))
+	{
+		if (missing_ok)
+			return NULL;
+		else
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+	}
+	else
+		ht = ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
+
+	if (!missing_ok && ht == NULL)
+	{
+		const char *const rel_name = get_rel_name(relid);
+		if (rel_name == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_TABLE),
+					 errmsg("OID %u does not refer to a table", relid)));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("table \"%s\" is not a hypertable", rel_name)));
+	}
+
+	return ht;
+}
+
+/*
+ * Returns cache into the argument and hypertable as the function result.
+ * If hypertable is not found, fails with an error.
+ */
+Hypertable *
+ts_hypertable_cache_get_cache_and_entry(const Oid relid, const bool missing_ok, Cache **const cache)
+{
+	*cache = ts_hypertable_cache_pin();
+	return ts_hypertable_cache_get_entry(*cache, relid, missing_ok);
 }
 
 Hypertable *
 ts_hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv)
 {
-	return ts_hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true));
+	return ts_hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true), true);
 }
 
 TSDLLEXPORT Hypertable *
 ts_hypertable_cache_get_entry_by_id(Cache *cache, int32 hypertable_id)
 {
-	return ts_hypertable_cache_get_entry(cache, ts_hypertable_id_to_relid(hypertable_id));
+	return ts_hypertable_cache_get_entry(cache, ts_hypertable_id_to_relid(hypertable_id), true);
 }
 
 Hypertable *

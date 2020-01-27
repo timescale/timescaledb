@@ -498,13 +498,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 							NameStr(*tspcname),
 							GetUserNameFromId(ownerid, true))));
 	}
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_oid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
 
 	if (ts_hypertable_has_tablespace(ht, tspc_oid))
 	{
@@ -540,13 +534,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_oid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
 
 	if (ts_hypertable_has_tablespace(ht, tspcoid))
 		ret = ts_tablespace_delete(ht->fd.id, tspcname);
@@ -577,13 +565,7 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_oid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
 
 	ret = ts_tablespace_delete(ht->fd.id, NULL);
 
@@ -668,12 +650,7 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 
 	funcctx = SRF_PERCALL_SETUP();
 	hcache = funcctx->user_fctx;
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_oid))));
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid, false);
 
 	tspcs = ts_tablespace_scan(ht->fd.id);
 

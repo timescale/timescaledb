@@ -196,15 +196,7 @@ execute_drop_chunks_policy(int32 job_id)
 						job_id)));
 
 	table_relid = ts_hypertable_id_to_relid(args->hypertable_id);
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, table_relid);
-	/* First verify that the hypertable corresponds to a valid table */
-	if (hypertable == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not run drop_chunks policy #%d because \"%s\" is not a hypertable",
-						job_id,
-						get_rel_name(table_relid))));
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
 	ts_chunk_do_drop_chunks(table_relid,
@@ -296,16 +288,7 @@ execute_compress_chunks_policy(BgwJob *job)
 						job_id)));
 
 	table_relid = ts_hypertable_id_to_relid(args->fd.hypertable_id);
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, table_relid);
-	/* First verify that the hypertable corresponds to a valid table */
-	if (ht == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not run compress_chunks policy #%d because \"%s\" is not a "
-						"hypertable",
-						job_id,
-						get_rel_name(table_relid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
 
 	chunkid = get_chunk_to_compress(ht, &args->fd.older_than);
 	if (chunkid == INVALID_CHUNK_ID)

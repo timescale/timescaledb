@@ -398,8 +398,8 @@ compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
 static void
 create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compress_cols)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, compresstable_relid);
+	Cache *hcache;
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(compresstable_relid, false, &hcache);
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
