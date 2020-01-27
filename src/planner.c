@@ -126,7 +126,7 @@ timescaledb_query_walker(Node *node, TimescaledbWalkerState *cxt)
 			{
 				/* turn off inheritance on hypertables for inserts and selects*/
 				Cache *hc = cxt->hc;
-				Hypertable *ht = ts_hypertable_cache_get_entry(hc, rte->relid);
+				Hypertable *ht = ts_hypertable_cache_get_entry(hc, rte->relid, true);
 
 				if (NULL != ht && ts_plan_expand_hypertable_valid_hypertable(ht, query, rti, rte))
 				{
@@ -372,10 +372,7 @@ is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblE
 		parent_oid = appinfo->parent_reloid;
 		if (parent_oid != InvalidOid && rte->relid != parent_oid)
 		{
-			Cache *hcache = ts_hypertable_cache_pin();
-			Hypertable *parent_ht = ts_hypertable_cache_get_entry(hcache, parent_oid);
-			ts_cache_release(hcache);
-			if (parent_ht)
+			if (ts_is_hypertable(parent_oid))
 				return true;
 		}
 	}
@@ -490,8 +487,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		!(is_append_parent(rel, rte) || is_append_child(rel, rte) || is_htdml))
 		return;
 
-	hcache = ts_hypertable_cache_pin();
-
 	/*
 	 * if this is an append child or DML we use the parent relid to
 	 * check if its a hypertable
@@ -499,7 +494,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (is_append_child(rel, rte) || is_htdml)
 		ht_reloid = get_parentoid(root, rti);
 
-	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
+	ht = ts_hypertable_cache_get_cache_and_entry(ht_reloid, true, &hcache);
 
 	if (!is_htdml)
 	{
@@ -544,10 +539,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	 */
 	if (!rte->inh && is_rte_hypertable(rte))
 	{
-		Cache *hcache = ts_hypertable_cache_pin();
-		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
-
-		Assert(ht != NULL);
+		Cache *hcache;
+		Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, false, &hcache);
 
 		Assert(rel->fdw_private == NULL);
 		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
@@ -560,8 +553,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
 	{
 		Oid ht_oid = get_parentoid(root, rel->relid);
-		Cache *hcache = ts_hypertable_cache_pin();
-		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
+		Cache *hcache;
+		Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, true, &hcache);
 
 		if (ht != NULL && ht_oid != rte->relid && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{
@@ -702,7 +695,7 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 		{
 			ModifyTablePath *mt = (ModifyTablePath *) path;
 			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
-			Hypertable *ht = ts_hypertable_cache_get_entry(htcache, rte->relid);
+			Hypertable *ht = ts_hypertable_cache_get_entry(htcache, rte->relid, true);
 
 			if (NULL != ht)
 				path = ts_hypertable_insert_path_create(root, mt);

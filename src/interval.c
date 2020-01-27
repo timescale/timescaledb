@@ -101,17 +101,10 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
 
 	ts_hypertable_permissions_check(relid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, relid);
-	/* First verify that the hypertable corresponds to a valid table */
-	if (hypertable == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not add drop_chunks policy because \"%s\" is not a hypertable",
-						get_rel_name(relid))));
+	hypertable = ts_hypertable_cache_get_cache_and_entry(relid, false, &hcache);
+
 	/* validate that the open dimension uses a time type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
-
 	if (NULL == open_dim)
 		elog(ERROR, "internal error: no open dimension found while parsing interval");
 

@@ -758,13 +758,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(info.table_relid, GetUserId());
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, info.table_relid);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(info.table_relid))));
+	ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, false, &hcache);
 
 	/* Get the first open dimension that we will adapt on */
 	dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);

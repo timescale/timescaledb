@@ -161,13 +161,10 @@ chunk_dml_trigger_drop(Oid relid)
 static void
 compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
 {
-	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid);
+	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, false);
 	Hypertable *compress_ht;
 	Chunk *srcchunk;
-	if (srcht == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(hypertable_relid))));
+
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 	if (!TS_HYPERTABLE_HAS_COMPRESSION(srcht))
 	{
@@ -250,18 +247,12 @@ static bool
 decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid,
 					  bool if_compressed)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
+	Cache *hcache;
 	Hypertable *uncompressed_hypertable =
-		ts_hypertable_cache_get_entry(hcache, uncompressed_hypertable_relid);
+		ts_hypertable_cache_get_cache_and_entry(uncompressed_hypertable_relid, false, &hcache);
 	Hypertable *compressed_hypertable;
 	Chunk *uncompressed_chunk;
 	Chunk *compressed_chunk;
-
-	if (uncompressed_hypertable == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable",
-						get_rel_name(uncompressed_hypertable_relid))));
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
 

@@ -28,15 +28,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Cache *hypertable_cache;
 	PlanState *ps;
 
-	hypertable_cache = ts_hypertable_cache_pin();
-
-	ht = ts_hypertable_cache_get_entry(hypertable_cache, state->hypertable_relid);
-
-	if (NULL == ht)
-	{
-		ts_cache_release(hypertable_cache);
-		elog(ERROR, "no hypertable for relid %d", state->hypertable_relid);
-	}
+	ht = ts_hypertable_cache_get_cache_and_entry(state->hypertable_relid, false, &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
 	state->dispatch = ts_chunk_dispatch_create(ht, estate);

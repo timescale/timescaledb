@@ -291,8 +291,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 	if (!OidIsValid(relid))
 		return;
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 
 	if (ht == NULL)
 	{
@@ -373,8 +372,7 @@ process_copy(ProcessUtilityArgs *args)
 		if (!OidIsValid(relid))
 			return false;
 
-		hcache = ts_hypertable_cache_pin();
-		ht = ts_hypertable_cache_get_entry(hcache, relid);
+		ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 
 		if (ht == NULL)
 		{
@@ -459,8 +457,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	MemoryContextSwitchTo(mctx);
 	LockRelationOid(relid, AccessShareLock);
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 	if (NULL == ht)
 	{
 		ts_cache_release(hcache);
@@ -537,8 +534,7 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, true, &hcache);
 
 	if (ht)
 		process_add_hypertable(args, ht);
@@ -622,7 +618,7 @@ process_vacuum(ProcessUtilityArgs *args)
 		if (!OidIsValid(table_relid))
 			continue;
 
-		ht = ts_hypertable_cache_get_entry(hcache, table_relid);
+		ht = ts_hypertable_cache_get_entry(hcache, table_relid, true);
 
 		if (!ht)
 			continue;
@@ -713,7 +709,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 		if (OidIsValid(relid))
 		{
-			Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+			Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 
 			if (ht != NULL)
 			{
@@ -862,7 +858,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 		{
 			Hypertable *ht;
 
-			ht = ts_hypertable_cache_get_entry(hcache, relid);
+			ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 
 			if (NULL != ht)
 			{
@@ -931,7 +927,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		if (!OidIsValid(relid))
 			continue;
 
-		ht = ts_hypertable_cache_get_entry(hcache, relid);
+		ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 		if (NULL != ht)
 		{
 			if (list_length(stmt->objects) != 1)
@@ -1131,7 +1127,7 @@ process_reindex(ProcessUtilityArgs *args)
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			ht = ts_hypertable_cache_get_entry(hcache, relid);
+			ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 
 			if (NULL != ht)
 			{
@@ -1145,7 +1141,7 @@ process_reindex(ProcessUtilityArgs *args)
 			}
 			break;
 		case REINDEX_OBJECT_INDEX:
-			ht = ts_hypertable_cache_get_entry(hcache, IndexGetRelation(relid, true));
+			ht = ts_hypertable_cache_get_entry(hcache, IndexGetRelation(relid, true), true);
 
 			if (NULL != ht)
 			{
@@ -1180,7 +1176,7 @@ process_reindex(ProcessUtilityArgs *args)
 static void
 process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 
 	if (NULL == ht)
 	{
@@ -1200,7 +1196,7 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 static void
 process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 	Dimension *dim;
 
 	if (NULL == ht)
@@ -1244,7 +1240,7 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	if (!OidIsValid(tablerelid))
 		return;
 
-	ht = ts_hypertable_cache_get_entry(hcache, tablerelid);
+	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, true);
 
 	if (NULL != ht)
 	{
@@ -1345,7 +1341,7 @@ process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Re
 {
 	Hypertable *ht;
 
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_entry(hcache, relid, true);
 
 	if (NULL != ht)
 	{
@@ -2310,9 +2306,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	if (!OidIsValid(tablerelid))
 		return;
 
-	hcache = ts_hypertable_cache_pin();
-
-	ht = ts_hypertable_cache_get_entry(hcache, tablerelid);
+	ht = ts_hypertable_cache_get_cache_and_entry(tablerelid, true, &hcache);
 
 	if (NULL != ht)
 	{
@@ -2352,8 +2346,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 
 	check_chunk_alter_table_operation_allowed(relid, stmt);
 
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 	if (ht != NULL)
 	{
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -2790,9 +2783,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 	if (!OidIsValid(relid))
 		return;
 
-	hcache = ts_hypertable_cache_pin();
-
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
 
 	if (NULL != ht)
 	{
