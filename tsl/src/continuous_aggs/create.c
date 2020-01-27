@@ -354,8 +354,7 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	};
 	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
 		return;
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, false, &hcache);
 	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
@@ -474,9 +473,9 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	/*convert the mat. table to a hypertable */
 	matpartcol_interval = MATPARTCOL_INTERVAL_FACTOR * (origquery_tblinfo->htpartcol_interval_len);
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
+
 	/* retrieve the hypertable id from the cache */
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, mat_relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(mat_relid, false, &hcache);
 	mat_htid = ht->fd.id;
 
 	/* create additional index on the group-by columns for the materialization table */
@@ -757,15 +756,7 @@ cagg_validate_query(Query *query)
 	if (rte->relkind == RELKIND_RELATION)
 	{
 		Dimension *part_dimension = NULL;
-		hcache = ts_hypertable_cache_pin();
-		ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
-
-		if (ht == NULL)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("can create continuous aggregate only on hypertables")));
-		}
+		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, false, &hcache);
 
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))

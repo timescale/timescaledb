@@ -55,7 +55,7 @@ create  view mat_m1 WITH ( timescaledb.continuous)
 as
 select a, count(*) from mat_t1
 group by a;
-ERROR:  can create continuous aggregate only on hypertables
+ERROR:  table "mat_t1" is not a hypertable
 -- no group by
 create  view mat_m1 WITH ( timescaledb.continuous)
 as

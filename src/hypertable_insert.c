@@ -212,7 +212,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 		Index rti = lfirst_int(lc_rel);
 		RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
-		ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
+		ht = ts_hypertable_cache_get_entry(hcache, rte->relid, true);
 
 		if (ht != NULL)
 		{

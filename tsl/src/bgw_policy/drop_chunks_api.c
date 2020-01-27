@@ -62,14 +62,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
-	hcache = ts_hypertable_cache_pin();
-	hypertable = ts_hypertable_cache_get_entry(hcache, ht_oid);
-
-	if (NULL == hypertable)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("\"%s\" is not a hypertable", get_rel_name(ht_oid)),
-				 errhint("add_drop_chunk_policy can only be used with hypertables.")));
+	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, false, &hcache);
 
 	if (hypertable->fd.compressed)
 		ereport(ERROR,

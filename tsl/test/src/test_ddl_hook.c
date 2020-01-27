@@ -57,8 +57,7 @@ test_ddl_command_start(ProcessUtilityArgs *args)
 	{
 		Oid relid = lfirst_oid(cell);
 
-		ht = ts_hypertable_cache_get_entry(hcache, relid);
-		Assert(ht != NULL);
+		ht = ts_hypertable_cache_get_entry(hcache, relid, false);
 
 		elog(NOTICE,
 			 "test_ddl_command_start: %s.%s",
@@ -91,8 +90,7 @@ test_ddl_command_end(EventTriggerData *command)
 	{
 		Oid relid = lfirst_oid(cell);
 
-		ht = ts_hypertable_cache_get_entry(hcache, relid);
-		Assert(ht != NULL);
+		ht = ts_hypertable_cache_get_entry(hcache, relid, false);
 
 		elog(NOTICE,
 			 "test_ddl_command_end: %s.%s",
