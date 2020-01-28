@@ -258,13 +258,9 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           10 |     5
 (3 rows)
 
--- cannot drop directly from the materialization table
+-- cannot drop directly from the materialization table without specifying
+-- cont. aggregate view name explicitly
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(schema_name => :'drop_chunks_mat_schema',
-    table_name => :'drop_chunks_mat_table_name',
-    newer_than => -20,
-    verbose => true);
-ERROR:  cannot drop_chunks on a continuous aggregate materialization table
 SELECT drop_chunks(
     newer_than => -20,
     verbose => true,
@@ -272,8 +268,7 @@ SELECT drop_chunks(
 INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
-INFO:  dropping chunk _timescaledb_internal._hyper_6_4_chunk
-ERROR:  cannot drop_chunks on a continuous aggregate materialization table
+ERROR:  cannot drop chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -939,10 +934,12 @@ SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
  _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
 (2 rows)
 
---test drop_chunks with cascade_to_materialization set to true (github 1644)
+-- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
 -- This checks if chunks from mat. hypertable are actually dropped 
 -- and deletes data from chunks that cannot be dropped from that mat. hypertable.
-SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
+        schema_name AS drop_chunks_mat_schema,
+        table_name AS drop_chunks_mat_table_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
     WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
         AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
@@ -1046,5 +1043,45 @@ ORDER BY ranges;
                chunk_table                |   ranges    
 ------------------------------------------+-------------
  _timescaledb_internal._hyper_13_22_chunk | {"[20,40)"}
+(1 row)
+
+-- TEST drop chunks from continuous aggregates by specifying view name
+SELECT drop_chunks(
+    table_name => 'drop_chunks_view',
+    newer_than => -20,
+    verbose => true);
+INFO:  dropping chunk _timescaledb_internal._hyper_13_22_chunk
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_13_22_chunk
+(1 row)
+
+--can also drop chunks by specifying materialized hypertable name
+INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
+REFRESH MATERIALIZED VIEW drop_chunks_view;
+INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 55
+INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen');
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_13_24_chunk | {"[40,60)"}
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(
+    table_name => :'drop_chunks_mat_table_name',
+    older_than => 60,
+    verbose => true);
+ERROR:  "_materialized_hypertable_13" is not a hypertable or a continuous aggregate view
+\set ON_ERROR_STOP 1
+SELECT drop_chunks(
+    schema_name => :'drop_chunks_mat_schema',
+    table_name => :'drop_chunks_mat_table_name',
+    older_than => 60,
+    verbose => true);
+INFO:  dropping chunk _timescaledb_internal._hyper_13_24_chunk
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_13_24_chunk
 (1 row)
 

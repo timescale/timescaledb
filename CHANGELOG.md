@@ -9,9 +9,10 @@ accidentally triggering the load of a previous DB version.**
 **Major Features**
 
 **Minor Features**
+* #1666 Support drop_chunks API for continuous aggregates
 
 **Bugfixes**
-* #1648 Drop chunks for materialized hypertable
+* #1648 Drop chunks from materialized hypertable
 * #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
 * #1668 Cannot add dimension if hypertable has empty chunks
 * #1674 Fix time_bucket_gapfill's interaction with GROUP BY

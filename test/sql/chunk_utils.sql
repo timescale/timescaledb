@@ -24,7 +24,6 @@ $BODY$;
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
-
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test3(time bigint, temp float8, device_id text);
@@ -574,3 +573,31 @@ SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100);
 \set ECHO all
 
 \set ON_ERROR_STOP 1
+
+--drop chunks from hypertable with same name in different schema
+-- order of schema in search_path matters --
+\c :TEST_DBNAME :ROLE_SUPERUSER
+drop table chunk_id_from_relid_test;
+drop table drop_chunk_test1;
+drop table drop_chunk_test2;
+drop table drop_chunk_test3;
+CREATE SCHEMA try_schema;
+GRANT CREATE ON SCHEMA try_schema TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA try_schema TO :ROLE_DEFAULT_PERM_USER;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE try_schema.drop_chunk_test_date(time date, temp float8, device_id text);
+SELECT create_hypertable('try_schema.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
+INSERT INTO public.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
+INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
+set search_path to try_schema, public;
+SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
+SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
+SELECT drop_chunks(table_name=>'drop_chunk_test_date', older_than=> '1 day'::interval);
+
+--drop_chunks without schema_name and table_name
+INSERT INTO public.drop_chunk_test_date VALUES( '2020-02-11', 100, 'hello');
+INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-02-10', 100, 'hello');
+SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
+SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
+SELECT drop_chunks( older_than=> '1 day'::interval);

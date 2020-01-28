@@ -13,6 +13,7 @@ set(TEST_FILES_DEBUG
   bgw_reorder_drop_chunks.sql
   continuous_aggs.sql
   continuous_aggs_bgw.sql
+  continuous_aggs_bgw_drop_chunks.sql
   continuous_aggs_dump.sql
   continuous_aggs_materialize.sql
   continuous_aggs_multi.sql

@@ -138,9 +138,9 @@ ERROR:  relation "fake_table" does not exist at character 31
 select add_drop_chunks_policy('test_table', cascade=>true);
 ERROR:  function add_drop_chunks_policy(unknown, cascade => boolean) does not exist at character 8
 select add_drop_chunks_policy('test_table_int', INTERVAL '3 month', true);
-ERROR:  invalid parameter value for older_than
+ERROR:  integer_now_func not set on hypertable "test_table_int"
 select add_drop_chunks_policy('test_table_int', 42, true);
-ERROR:  integer_now_func not set on hypertable test_table_int
+ERROR:  integer_now_func not set on hypertable "test_table_int"
 \set ON_ERROR_STOP 1
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
  add_drop_chunks_policy 
@@ -529,7 +529,7 @@ CREATE TABLE non_hypertable(junk int, more_junk int);
 CREATE INDEX non_ht_index on non_hypertable(junk);
 \set ON_ERROR_STOP 0
 select add_drop_chunks_policy('non_hypertable', INTERVAL '2 month');
-ERROR:  table "non_hypertable" is not a hypertable
+ERROR:  "non_hypertable" is not a hypertable or a continuous aggregate view
 select add_reorder_policy('non_hypertable', 'non_ht_index');
 ERROR:  could not add reorder policy because "non_hypertable" is not a hypertable
 \set ON_ERROR_STOP 1

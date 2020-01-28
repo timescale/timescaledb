@@ -2392,11 +2392,14 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 	ts_cache_release(hcache);
 }
 
+/* Continuous agg materialization hypertables can be dropped
+ * only if a user explicitly specifies the table name
+ */
 List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type, bool cascade,
 						CascadeToMaterializationOption cascades_to_materializations,
-						int32 log_level)
+						int32 log_level, bool user_supplied_table_name)
 {
 	uint64 i = 0;
 	uint64 num_chunks = 0;
@@ -2413,9 +2416,18 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	switch (ts_continuous_agg_hypertable_status(hypertable_id))
 	{
 		case HypertableIsMaterialization:
+			if (user_supplied_table_name == false)
+			{
+				elog(ERROR, "cannot drop chunks on a continuous aggregate materialization table");
+			}
+			has_continuous_aggs = false;
+			break;
 		case HypertableIsMaterializationAndRaw:
-			elog(ERROR, "cannot drop_chunks on a continuous aggregate materialization table");
-			pg_unreachable();
+			if (user_supplied_table_name == false)
+			{
+				elog(ERROR, "cannot drop chunks on a continuous aggregate materialization table");
+			}
+			has_continuous_aggs = true;
 			break;
 		case HypertableIsRawTable:
 			if (cascades_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
@@ -2485,7 +2497,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 																older_than_type,
 																newer_than_type,
 																cascade,
-																log_level);
+																log_level,
+																user_supplied_table_name);
 	}
 	return dropped_chunk_names;
 }
@@ -2550,6 +2563,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	bool cascade, verbose;
 	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
+	bool user_supplied_table_name = true;
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
@@ -2585,10 +2599,27 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (table_name != NULL)
 	{
 		if (ht_oids == NIL)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-					 errmsg("hypertable \"%s\" does not exist", NameStr(*table_name))));
+		{
+			ContinuousAgg *ca = NULL;
+			ca = ts_continuous_agg_find_userview_name(schema_name ? NameStr(*schema_name) : NULL,
+													  NameStr(*table_name));
+			if (ca == NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+						 errmsg("\"%s\" is not a hypertable or a continuous aggregate view",
+								NameStr(*table_name)),
+						 errhint("It is only possible to drop chunks from a hypertable or "
+								 "continuous aggregate view")));
+			else
+			{
+				int32 matid = ca->data.mat_hypertable_id;
+				Hypertable *mat_ht = ts_hypertable_get_by_id(matid);
+				ht_oids = lappend_oid(ht_oids, mat_ht->main_table_relid);
+			}
+		}
 	}
+	else
+		user_supplied_table_name = false;
 
 	/* Initial multi function call setup */
 	funcctx = SRF_FIRSTCALL_INIT();
@@ -2657,7 +2688,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 										  newer_than_type,
 										  cascade,
 										  cascades_to_materializations,
-										  elevel);
+										  elevel,
+										  user_supplied_table_name);
 		dc_names = list_concat(dc_names, dc_temp);
 
 		MemoryContextSwitchTo(oldcontext);
