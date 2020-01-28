@@ -531,7 +531,8 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         refobjid = (select oid from pg_extension where extname='timescaledb') AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
-        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');
+        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
+ORDER BY objid::text DESC;
                         objid                        
 -----------------------------------------------------
  timescaledb_information.compressed_hypertable_stats

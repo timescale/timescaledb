@@ -522,8 +522,12 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
-	state->subslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
-	state->scanslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
+#if PG12_LT
+	state->subslot = NULL;
+#else
+	state->subslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
+#endif
+	state->scanslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(args)))
@@ -621,7 +625,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	state->pi = ExecBuildProjectionInfoCompat(targetlist,
 											  state->csstate.ss.ps.ps_ExprContext,
-											  MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP),
+											  MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP),
 											  &state->csstate.ss.ps,
 											  NULL);
 
@@ -987,7 +991,15 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	if (!subslot)
 		return NULL;
 
+#if PG12_LT
+	state->subslot = subslot;
+#else
+	/* in PG12 we cannot simply treat an arbitrary source slot as virtual,
+	 * instead we must copy the data into our own slot in order to be able to
+	 * modify it
+	 */
 	ExecCopySlot(state->subslot, subslot);
+#endif
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
 	if (isnull)
 		ereport(ERROR,

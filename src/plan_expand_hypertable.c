@@ -514,6 +514,7 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
 
+#if PG12
 static List *
 remove_exclusion_fns(List *restrictinfo)
 {
@@ -568,7 +569,7 @@ remove_exclusion_fns_walker(Node *node, void *ctx)
 	// return expression_tree_walker(node, remove_exclusion_fns_walker, ctx);
 	return false;
 }
-
+#endif
 
 static Node *
 timebucket_annotate(Node *quals, CollectQualCtx *ctx)
@@ -1061,7 +1062,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	};
 	Size old_rel_array_len;
 	Index first_chunk_index = 0;
+#if PG12
 	Index i;
+#endif
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -1120,11 +1123,17 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		RangeTblEntry *childrte;
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
+#if PG12
+		//FIXME this lock should not be needed...
+		LOCKMODE chunk_lock = rte->rellockmode;
+#else
+		LOCKMODE chunk_lock = NoLock;
+#endif
 
 		/* Open rel if needed */
-		//FIXME this lock should not be needed...
+
 		if (child_oid != parent_oid)
-			newrelation = table_open(child_oid, rte->rellockmode);
+			newrelation = table_open(child_oid, chunk_lock);
 		else
 			newrelation = oldrelation;
 
@@ -1144,7 +1153,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		 * other base restriction clauses, so we don't need to do it here.
 		 */
 		childrte = copyObject(rte);
+#if PG12
 		childrte->rellockmode = rte->rellockmode;
+#endif
 		childrte->relid = child_oid;
 		childrte->relkind = newrelation->rd_rel->relkind;
 		childrte->inh = false;

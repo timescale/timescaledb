@@ -88,6 +88,8 @@ create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
 		estate->es_range_table = list_copy(estate->es_range_table);
 
 	estate->es_range_table = lappend(estate->es_range_table, rte);
+
+#if PG12
 	Assert(list_length(estate->es_range_table) > estate->es_range_table_size);
 	if (estate->es_range_table_array != NULL)
 	{
@@ -106,7 +108,7 @@ create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
 		Assert(estate->es_range_table_size == 0);
 		Assert(estate->es_relations == NULL);
 	}
-
+#endif
 
 	return list_length(estate->es_range_table);
 }
@@ -127,8 +129,11 @@ ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple,
 	if (NULL == state->tup_conv_map)
 		/* No conversion needed */
 		return tuple;
-
+#if PG12_LT
+	tuple = do_convert_tuple(tuple, state->tup_conv_map);
+#else
 	tuple = execute_attr_map_tuple(tuple, state->tup_conv_map);
+#endif
 
 	ExecSetSlotDescriptor(state->slot, RelationGetDescr(chunkrel));
 #if PG12_LT

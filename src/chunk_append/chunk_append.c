@@ -214,9 +214,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				}
 			}
 
-			if (merge_childs == NIL)
-			{}
-			else if (list_length(merge_childs) > 1)
+			if (list_length(merge_childs) > 1)
 			{
 #if PG96
 				append = create_merge_append_path(root,
@@ -234,6 +232,12 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #endif
 				nested_children = lappend(nested_children, append);
 			}
+#if PG12
+			else if (list_length(merge_childs) == 0)
+			{
+				/* nop */
+			}
+#endif
 			else
 			{
 				has_scan_childs = true;

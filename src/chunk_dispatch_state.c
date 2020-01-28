@@ -72,7 +72,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		bool cis_changed;
 #if PG12
 		bool should_free_tuple = false;
-#endif
+
 
 		/*
 		 * If the tts_ops of the slot we return does not match the tts_ops that
@@ -88,6 +88,7 @@ chunk_dispatch_exec(CustomScanState *node)
 			ExecDropSingleTupleTableSlot(state->slot);
 			state->slot = MakeSingleTupleTableSlot(NULL, state->parent->mt_scans[state->parent->mt_whichplan]->tts_ops);
 		}
+#endif
 
 		/* Switch to the executor's per-tuple memory context */
 		old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
@@ -222,7 +223,7 @@ chunk_dispatch_exec(CustomScanState *node)
 
 		/* Convert the tuple to the chunk's rowtype, if necessary */
 #if PG12_LT
-		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, NULL);
+		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, &slot);
 #else
 
 		Assert(state->slot->tts_tupleDescriptor == RelationGetDescr(cis->rel));
@@ -276,7 +277,9 @@ chunk_dispatch_end(CustomScanState *node)
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
 	ts_cache_release(state->hypertable_cache);
+#if PG12
 	ExecDropSingleTupleTableSlot(state->slot);
+#endif
 }
 
 static void
@@ -326,7 +329,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 		TupleDesc existing;
 
 		existing = parent->mt_existing->tts_tupleDescriptor;
-		parent->mt_existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL);
+		parent->mt_existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL, TTSOpsVirtualP);
 		ExecSetSlotDescriptor(parent->mt_existing, existing);
 	}
 	if (parent->mt_conflproj != NULL)

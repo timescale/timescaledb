@@ -1086,9 +1086,9 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
 			ReindexTable(
 				stmt->relation,
-				stmt->options,
+				stmt->options
 #if PG12
-				stmt->concurrent /* TODO test */
+				, stmt->concurrent /* TODO test */
 #endif
 			);
 			break;
@@ -2112,6 +2112,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 */
 			cluster_rel(cim->chunkoid, cim->indexoid,
 #if PG12_LT
+				true,
 				stmt->verbose
 #else
 				stmt->options
@@ -2689,7 +2690,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_SetNotNull:
+#if PG12
 		case AT_CheckNotNull: /*TODO test*/
+#endif
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:

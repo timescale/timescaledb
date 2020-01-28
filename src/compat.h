@@ -407,33 +407,13 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void * tts_ops)
 		FC_NULL(_fcinfo, _n) = true; \
 	} while(0)
 
-
-#if PG12_LT
-typedef struct VirtualTransactionId VirtualTransactionId;
-VirtualTransactionId *
-GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
-{
-	VirtualTransactionId *ids = GetLockConflicts(locktag, lockmode);
-	if (countp != NULL)
-	{
-		VirtualTransactionId *i;
-		*countp = 0;
-		while(VirtualTransactionIdIsValid(*i))
-			*countp += 1;
-	}
-	return ids;
-}
-#else
-#define GetLockConflictsCompat(locktag, lockmode, countp) GetLockConflicts(locktag, lockmode, countp)
-#endif
-
 /*
  * In PG12 OID columns were removed changing all OID columns in the catalog to
  * be regular columns. This necessitates passing in the attnum of said column to
  * any function that wishes to access these columns. In earlier versions, this
  * parameter can be safely ignored.
  */
-#if PG96 || PG10 || P11
+#if PG12_LT
 #define GetSysCacheOid2Compat(cacheId, oidcol, key1, key2) \
 	GetSysCacheOid2(cacheId, key1, key2)
 #else
@@ -776,6 +756,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #if PG96 || PG10 || PG11
 #define TableScanDesc HeapScanDesc
 #define table_beginscan heap_beginscan
+#define table_beginscan_catalog heap_beginscan_catalog
 #endif
 
 /*

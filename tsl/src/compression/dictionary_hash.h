@@ -85,6 +85,10 @@ static dictionary_hash *
 dictionary_hash_alloc(TypeCacheEntry *tentry)
 {
 	HashMeta *meta = palloc(sizeof(*meta));
+	Oid collation = InvalidOid;
+#if PG12
+	collation = tentry->typcollation;
+#endif
 
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
 		elog(ERROR,
@@ -95,10 +99,10 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 	 * and different collations should only affect compression ratios anyaway
 	 */
 	meta->eq_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, tentry->typcollation, NULL, NULL);
+	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, collation, NULL, NULL);
 
 	meta->hash_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, tentry->typcollation, NULL, NULL);
+	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, collation, NULL, NULL);
 
 	return dictionary_create(CurrentMemoryContext, 10, meta);
 }

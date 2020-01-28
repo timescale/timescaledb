@@ -115,9 +115,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
-#if PG12
-	TupleTableSlot *chunkslot = MakeSingleTupleTableSlot(NULL, TTSOpsHeapTupleP);
-#endif
+	TupleTableSlot *chunkslot = MakeSingleTupleTableSlotCompat(NULL, TTSOpsHeapTupleP);
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	ErrorContextCallback errcallback;
@@ -260,7 +258,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
 		bool cis_changed;
+#if PG12
 		bool should_free = false;
+#endif
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -366,9 +366,10 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 				/* OK, store the tuple and create index entries for it */
 				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid, hi_options, bistate);
-
+#if PG12
 				/* re-store the tuple so the slot's ItemPointer is updated */
 				ExecStoreHeapTuple(tuple, slot, should_free);
+#endif
 
 				if (resultRelInfo->ri_NumIndices > 0)
 					recheckIndexes =

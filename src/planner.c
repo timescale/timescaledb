@@ -10,7 +10,6 @@
 #include <optimizer/clauses.h>
 #include <optimizer/planner.h>
 #include <optimizer/pathnode.h>
-#include <optimizer/appendinfo.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <catalog/namespace.h>
@@ -39,6 +38,7 @@
 #if PG12_LT
 #include <optimizer/var.h> /* f09346a */
 #elif PG12_GE
+#include <optimizer/appendinfo.h>
 #include <optimizer/optimizer.h>
 #endif
 
@@ -1463,7 +1463,10 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	if (!ts_extension_is_loaded())
 		return;
 
+#if PG12
+	/* in earlier versions this is done during expand_hypertable_inheritance() below */
 	ts_plan_expand_timebucket_annotate(root, rel);
+#endif
 
 #if PG12_LT
 	if (ts_guc_enable_constraint_exclusion)

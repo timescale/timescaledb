@@ -13,6 +13,7 @@
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/timestamp.h>
+#include <storage/lock.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
@@ -34,6 +35,27 @@
 #include <cross_module_fn.h>
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
+
+#if PG12_LT
+static VirtualTransactionId *
+GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
+{
+	VirtualTransactionId *ids = GetLockConflicts(locktag, lockmode);
+	if (countp != NULL)
+	{
+		VirtualTransactionId *i = ids;
+		*countp = 0;
+		while(VirtualTransactionIdIsValid(*i))
+		{
+			i += 1;
+			*countp += 1;
+		}
+	}
+	return ids;
+}
+#else
+#define GetLockConflictsCompat(locktag, lockmode, countp) GetLockConflicts(locktag, lockmode, countp)
+#endif
 
 static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",

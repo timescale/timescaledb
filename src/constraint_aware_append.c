@@ -291,10 +291,11 @@ ca_append_exec(CustomScanState *node)
 		if (TupIsNull(subslot))
 			return NULL;
 
+#if PG12
 		if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
 			ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
 
-#if PG12
+
 		ExecCopySlot(state->slot, subslot);
 		subslot = state->slot;
 #endif

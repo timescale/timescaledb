@@ -582,7 +582,9 @@ chunk_append_end(CustomScanState *node)
 		ExecEndNode(state->subplanstates[i]);
 	}
 
+#if PG12
 	ExecDropSingleTupleTableSlot(state->slot);
+#endif
 }
 
 /*
