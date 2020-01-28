@@ -39,6 +39,7 @@
  *-------------------------------------------------------------------------
  */
 #include <postgres.h>
+#include <math.h>
 
 #include <access/heapam.h>
 #include <access/htup_details.h>
@@ -189,6 +190,7 @@ static void deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_att
 							 deparse_expr_cxt *context);
 static void deparseLockingClause(deparse_expr_cxt *context);
 static void appendOrderByClause(List *pathkeys, deparse_expr_cxt *context);
+static void appendLimit(deparse_expr_cxt *context, List *pathkeys);
 
 static void append_chunk_exclusion_condition(deparse_expr_cxt *context, bool use_alias);
 static void appendConditions(List *exprs, deparse_expr_cxt *context, bool is_first);
@@ -844,6 +846,10 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 	/* Add ORDER BY clause if we found any useful pathkeys */
 	if (pathkeys)
 		appendOrderByClause(pathkeys, &context);
+
+	/* Add LIMIT if it is set and can be pushed */
+	if (context.root->limit_tuples > 0.0)
+		appendLimit(&context, pathkeys);
 
 	/* Add any necessary FOR UPDATE/SHARE. */
 	deparseLockingClause(&context);
@@ -2811,6 +2817,48 @@ appendOrderByClause(List *pathkeys, deparse_expr_cxt *context)
 		delim = ", ";
 	}
 	reset_transmission_modes(nestlevel);
+}
+
+static void
+appendLimit(deparse_expr_cxt *context, List *pathkeys)
+{
+	Query *query = context->root->parse;
+
+	/* Limit is always set to value greater than zero, even for
+	 * the LIMIT 0 case.
+	 *
+	 * We do not explicitly push OFFSET clause, since PostgreSQL
+	 * treats limit_tuples as a sum of original
+	 * LIMIT + OFFSET.
+	 */
+	Assert(context->root->limit_tuples >= 1.0);
+
+	/* Do LIMIT deparsing only for supported clauses.
+	 *
+	 * Current implementation does not handle aggregates with LIMIT
+	 * pushdown. It should have different deparsing logic because
+	 * at this point PostgreSQL already excluded LIMIT for the most of
+	 * the incompatible features during group planning:
+	 * distinct, aggs, window functions, group by and having.
+	 *
+	 * See: grouping_planner() backend/optimizer/plan/planner.c
+	 *
+	 * Just make sure this is true.
+	 */
+	Assert(!(query->groupClause || query->groupingSets || query->distinctClause || query->hasAggs ||
+			 query->hasWindowFuncs || query->hasTargetSRFs || context->root->hasHavingQual));
+
+	/* JOIN restrict to only one table */
+	if (!(list_length(query->jointree->fromlist) == 1 &&
+		  IsA(linitial(query->jointree->fromlist), RangeTblRef)))
+		return;
+
+	/* ORDER BY is used but not pushed down */
+	if (pathkeys == NULL && context->root->query_pathkeys)
+		return;
+
+	/* Use format to round float value */
+	appendStringInfo(context->buf, " LIMIT %d", (int) ceil(context->root->limit_tuples));
 }
 
 /*
