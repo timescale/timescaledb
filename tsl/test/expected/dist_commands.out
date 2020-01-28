@@ -219,25 +219,10 @@ t
 
 -- Test distributed_exec()
 -- Make sure dist session is properly set
-SELECT * FROM distributed_exec('DO $$ BEGIN ASSERT(SELECT is_frontend_session()) = true; END; $$;');
- distributed_exec 
-------------------
- 
-(1 row)
-
+CALL distributed_exec('DO $$ BEGIN ASSERT(SELECT is_frontend_session()) = true; END; $$;');
 -- Test creating and dropping a table
-SELECT * FROM distributed_exec('CREATE TABLE dist_test (id int)');
- distributed_exec 
-------------------
- 
-(1 row)
-
-SELECT * FROM distributed_exec('INSERT INTO dist_test values (7)');
- distributed_exec 
-------------------
- 
-(1 row)
-
+CALL distributed_exec('CREATE TABLE dist_test (id int)');
+CALL distributed_exec('INSERT INTO dist_test values (7)');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from dist_test; $$);
 NOTICE:  [data_node_1]:  SELECT * from dist_test
 NOTICE:  [data_node_1]:
@@ -268,14 +253,9 @@ id
  
 (1 row)
 
-SELECT * FROM distributed_exec('DROP TABLE dist_test');
- distributed_exec 
-------------------
- 
-(1 row)
-
+CALL distributed_exec('DROP TABLE dist_test');
 \set ON_ERROR_STOP 0
-SELECT * FROM distributed_exec('INSERT INTO dist_test VALUES (8)', '{data_node_1}');
+CALL distributed_exec('INSERT INTO dist_test VALUES (8)', '{data_node_1}');
 ERROR:  [data_node_1]: relation "dist_test" does not exist
 \set ON_ERROR_STOP 1
 -- Test creating and dropping a role
@@ -283,7 +263,7 @@ CREATE ROLE dist_test_role;
 -- Expect this to be an error, since data nodes are created on the same instance
 \set ON_ERROR_STOP 0
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
-SELECT * FROM distributed_exec('CREATE ROLE dist_test_role');
+CALL distributed_exec('CREATE ROLE dist_test_role');
 $$);
 ERROR:  [data_node_x]: role "dist_test_role" already exists
 \set ON_ERROR_STOP 1
@@ -320,17 +300,35 @@ t
 DROP ROLE DIST_TEST_ROLE;
 \set ON_ERROR_STOP 0
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
-SELECT * FROM distributed_exec('DROP ROLE dist_test_role');
+CALL distributed_exec('DROP ROLE dist_test_role');
 $$);
 ERROR:  [data_node_x]: role "dist_test_role" does not exist
 \set ON_ERROR_STOP 1
 -- Do not allow to run distributed_exec() on a data nodes
 \c data_node_1
 \set ON_ERROR_STOP 0
-SELECT * FROM distributed_exec('SELECT 1');
+CALL distributed_exec('SELECT 1');
 ERROR:  function must be run on the access node only
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT * FROM delete_data_node('data_node_1');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT * FROM delete_data_node('data_node_2');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT * FROM delete_data_node('data_node_3');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
@@ -344,3 +342,143 @@ ERROR:  data node "myserver" is not a TimescaleDB server
 \set ON_ERROR_STOP 1
 DROP SERVER myserver;
 DROP EXTENSION postgres_fdw;
+-- Test that transactional behaviour is the default and that it can be
+-- disabled.
+--
+-- In this case, we only execute it on one data node since we are
+-- creating a database and multiple creations of the database would
+-- clash when executed on the same instace.
+--
+-- We prefix the database names with the test file to be able to
+-- parallelize the test. Not possible right now because there are
+-- other databases above that prevents this.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT * FROM add_data_node('dist_commands_1', host => 'localhost',
+                            database => 'dist_commands_1');
+    node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------------+-----------+-------+-----------------+--------------+------------------+-------------------
+ dist_commands_1 | localhost | 55432 | dist_commands_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('dist_commands_2', host => 'localhost',
+                            database => 'dist_commands_2');
+    node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------------+-----------+-------+-----------------+--------------+------------------+-------------------
+ dist_commands_2 | localhost | 55432 | dist_commands_2 | t            | t                | t
+(1 row)
+
+GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
+\set ON_ERROR_STOP 0
+CALL distributed_exec('CREATE DATABASE dist_commands_magic',
+       node_list => '{dist_commands_1}');
+ERROR:  [dist_commands_1]: CREATE DATABASE cannot run inside a transaction block
+\set ON_ERROR_STOP 1
+CALL distributed_exec('CREATE DATABASE dist_commands_magic',
+       node_list => '{dist_commands_1}', transactional => FALSE);
+DROP DATABASE dist_commands_magic;
+-- Test that distributed_exec honor the 2PC behaviour when starting a
+-- transaction locally. It should also give an error if attempting to
+-- execute non-transactionally inside a local transaction.
+-- To test that distributed_exec honors transactions, we create a
+-- table on both data nodes, and then tweak one of the tables so that
+-- we get a duplicate key when updating the table on both data
+-- nodes. This should then abort the transaction on all data nodes.
+\c :TEST_DBNAME :ROLE_1
+CALL distributed_exec($$
+  CREATE TABLE my_table (key INT, value TEXT, PRIMARY KEY (key));
+$$);
+\c dist_commands_1
+INSERT INTO my_table VALUES (1, 'foo');
+\c :TEST_DBNAME :ROLE_1
+\set ON_ERROR_STOP 0
+BEGIN;
+CALL distributed_exec($$ INSERT INTO my_table VALUES (1, 'bar') $$);
+ERROR:  [dist_commands_1]: duplicate key value violates unique constraint "my_table_pkey"
+COMMIT;
+\set ON_ERROR_STOP 1
+-- No changes should be there
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
+NOTICE:  [dist_commands_1]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_1]:
+key|value
+---+-----
+  1|foo  
+(1 row)
+
+
+NOTICE:  [dist_commands_2]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_2]:
+key|value
+---+-----
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- This should work.
+BEGIN;
+CALL distributed_exec($$ INSERT INTO my_table VALUES (2, 'bar'); $$);
+COMMIT;
+-- We should see changes
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
+NOTICE:  [dist_commands_1]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_1]:
+key|value
+---+-----
+  1|foo  
+  2|bar  
+(2 rows)
+
+
+NOTICE:  [dist_commands_2]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_2]:
+key|value
+---+-----
+  2|bar  
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- This should fail since we are inside a transaction and asking for
+-- transactional execution on the remote nodes. Non-transactional
+-- execution should be outside transactions.
+\set ON_ERROR_STOP 0
+BEGIN;
+CALL distributed_exec(
+     $$ INSERT INTO my_table VALUES (3, 'baz') $$,
+     transactional => FALSE
+);
+ERROR:  distributed_exec cannot run inside a transaction block
+COMMIT;
+\set ON_ERROR_STOP 1
+-- We should see no changes
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
+NOTICE:  [dist_commands_1]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_1]:
+key|value
+---+-----
+  1|foo  
+  2|bar  
+(2 rows)
+
+
+NOTICE:  [dist_commands_2]:  SELECT * FROM my_table
+NOTICE:  [dist_commands_2]:
+key|value
+---+-----
+  2|bar  
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+

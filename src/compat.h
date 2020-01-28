@@ -194,6 +194,8 @@
 
 #endif
 
+#define FC_FN_OID(fcinfo) ((fcinfo)->flinfo->fn_oid)
+
 /* convenience setters */
 #define FC_SET_ARG(fcinfo, n, val)                                                                 \
 	do                                                                                             \

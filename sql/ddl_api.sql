@@ -187,8 +187,11 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
 -- Execute query on a specified list of data nodes. By default node_list is NULL, which means
 -- to execute the query on every data node
-CREATE OR REPLACE FUNCTION distributed_exec(query TEXT, node_list name[] = NULL) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C VOLATILE;
+CREATE PROCEDURE distributed_exec(
+       query TEXT,
+       node_list name[] = NULL,
+       transactional BOOLEAN = TRUE)
+AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C;
 
 -- Sets new replication factor for distributed hypertable
 CREATE OR REPLACE FUNCTION  set_replication_factor(
