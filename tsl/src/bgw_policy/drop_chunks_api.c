@@ -16,6 +16,8 @@
 
 #include "bgw/job.h"
 #include "bgw_policy/drop_chunks.h"
+#include "continuous_agg.h"
+#include "chunk.h"
 #include "drop_chunks_api.h"
 #include "errors.h"
 #include "hypertable.h"
@@ -23,7 +25,6 @@
 #include "license.h"
 #include "utils.h"
 #include "interval.h"
-#include "chunk.h"
 
 /* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
@@ -36,6 +37,85 @@
 /* Default retry period for drop_chunks_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
+
+typedef struct DropChunksMeta
+{
+	Hypertable *ht;
+	Oid ht_oid;
+	FormData_ts_interval *older_than;
+} DropChunksMeta;
+
+static void
+validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid, Oid older_than_type,
+								Datum older_than_datum, DropChunksMeta *meta)
+{
+	FormData_ts_interval *older_than;
+	ContinuousAggHypertableStatus status;
+
+	meta->ht = NULL;
+	meta->ht_oid = user_htoid;
+	meta->ht = ts_hypertable_cache_get_entry(hcache, meta->ht_oid, true /* missing_ok */);
+	if (meta->ht != NULL)
+	{
+		if (meta->ht->fd.compressed)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot add drop chunks policy to compresed hypertable \"%s\"",
+							get_rel_name(user_htoid)),
+					 errhint("Please add the policy to the corresponding uncompressed hypertable "
+							 "instead.")));
+		}
+		status = ts_continuous_agg_hypertable_status(meta->ht->fd.id);
+		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot add drop chunks policy to materialized hypertable \"%s\" ",
+							get_rel_name(user_htoid)),
+					 errhint("Please add the policy to the corresponding continuous aggregate "
+							 "instead.")));
+		}
+		older_than = ts_interval_from_sql_input(meta->ht_oid,
+												older_than_datum,
+												older_than_type,
+												"older_than",
+												"add_drop_chunks_policy");
+	}
+	else
+	{
+		/*check if this is a cont aggregate view */
+		int32 mat_id;
+		Dimension *open_dim;
+		Oid partitioning_type;
+		char *schema = get_namespace_name(get_rel_namespace(user_htoid));
+		char *view_name = get_rel_name(user_htoid);
+		ContinuousAgg *ca = NULL;
+		ca = ts_continuous_agg_find_by_view_name(schema, view_name);
+		if (ca == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("\"%s\" is not a hypertable or a continuous aggregate view",
+							view_name)));
+		mat_id = ca->data.mat_hypertable_id;
+		meta->ht = ts_hypertable_get_by_id(mat_id);
+		Assert(meta->ht != NULL);
+		open_dim = hyperspace_get_open_dimension(meta->ht->space, 0);
+		partitioning_type = ts_dimension_get_partition_type(open_dim);
+		if (IS_INTEGER_TYPE(partitioning_type))
+		{
+			open_dim = ts_continous_agg_find_integer_now_func_by_materialization_id(mat_id);
+		}
+		older_than = ts_interval_from_sql_input_internal(open_dim,
+														 older_than_datum,
+														 older_than_type,
+														 "older_than",
+														 "add_drop_chunks_policy");
+	}
+	Assert(meta->ht != NULL);
+	meta->older_than = older_than;
+	return;
+}
 
 Datum
 drop_chunks_add_policy(PG_FUNCTION_ARGS)
@@ -57,27 +137,19 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	Hypertable *hypertable;
 	Cache *hcache;
 	FormData_ts_interval *older_than;
+	DropChunksMeta meta;
+	Oid mapped_oid;
+
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
-	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, false, &hcache);
-
-	if (hypertable->fd.compressed)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add drop chunks policy to hypertable \"%s\" which contains "
-						"compressed data",
-						get_rel_name(ht_oid)),
-				 errhint("Please add the policy to the corresponding uncompressed hypertable "
-						 "instead.")));
-
-	older_than = ts_interval_from_sql_input(ht_oid,
-											older_than_datum,
-											older_than_type,
-											"older_than",
-											"add_drop_chunks_policy");
+	hcache = ts_hypertable_cache_pin();
+	validate_drop_chunks_hypertable(hcache, ht_oid, older_than_type, older_than_datum, &meta);
+	older_than = meta.older_than;
+	hypertable = meta.ht;
+	mapped_oid = meta.ht->main_table_relid;
 
 	existing = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable->fd.id);
 
@@ -126,7 +198,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 
 	policy = (BgwPolicyDropChunks){
 		.job_id = job_id,
-		.hypertable_id = ts_hypertable_relid_to_id(ht_oid),
+		.hypertable_id = ts_hypertable_relid_to_id(mapped_oid),
 		.older_than = *older_than,
 		.cascade = cascade,
 		.cascade_to_materializations = cascade_to_materializations,

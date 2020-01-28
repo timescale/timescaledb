@@ -402,6 +402,41 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 }
 
 ContinuousAgg *
+ts_continuous_agg_find_userview_name(const char *schema, const char *name)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ContinuousAgg *ca = NULL;
+	int count = 0;
+	const char *chkschema = schema;
+
+	ts_scanner_foreach(&iterator)
+	{
+		ContinuousAggViewType vtyp;
+		FormData_continuous_agg *data =
+			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		if (schema == NULL)
+		{
+			/* only user visible views will be returned */
+			Oid relid = RelnameGetRelid(NameStr(data->user_view_name));
+			if (relid == InvalidOid)
+				continue;
+			chkschema = NameStr(data->user_view_schema);
+		}
+
+		vtyp = ts_continuous_agg_view_type(data, chkschema, name);
+		if (vtyp == ContinuousAggUserView)
+		{
+			ca = palloc0(sizeof(*ca));
+			continuous_agg_init(ca, data);
+			count++;
+		}
+	}
+	Assert(count <= 1);
+	return ca;
+}
+
+ContinuousAgg *
 ts_continuous_agg_find_by_job_id(int32 job_id)
 {
 	ScanIterator iterator =
@@ -782,4 +817,52 @@ ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg)
 	if (!OidIsValid(view_relid))
 		elog(ERROR, "could not find user view for continuous agg");
 	return view_relid;
+}
+
+static int32
+find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
+{
+	short count = 0;
+	int32 htid = INVALID_HYPERTABLE_ID;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		HeapTuple tuple = ti->tuple;
+		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
+		htid = form->raw_hypertable_id;
+		count++;
+	}
+	Assert(count <= 1);
+	ts_scan_iterator_close(&iterator);
+	return htid;
+}
+
+/* Continuous aggregate materialization hypertables inherit integer_now func
+ * from the raw hypertable (unless it was explictly reset for cont. aggregate.
+ * Walk the materialzation hyperatable ->raw hypertable tree till
+ * we find a hypertable that has integer_now_func set.
+ */
+TSDLLEXPORT Dimension *
+ts_continous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
+{
+	int32 raw_htid = mat_htid;
+	Dimension *par_dim = NULL;
+	while (raw_htid != INVALID_HYPERTABLE_ID)
+	{
+		Hypertable *raw_ht = ts_hypertable_get_by_id(raw_htid);
+		Dimension *open_dim = hyperspace_get_open_dimension(raw_ht->space, 0);
+		if (strlen(NameStr(open_dim->fd.integer_now_func)) != 0 &&
+			strlen(NameStr(open_dim->fd.integer_now_func_schema)) != 0)
+		{
+			par_dim = open_dim;
+			break;
+		}
+		mat_htid = raw_htid;
+		raw_htid = find_raw_hypertable_for_materialization(mat_htid);
+	}
+	return par_dim;
 }

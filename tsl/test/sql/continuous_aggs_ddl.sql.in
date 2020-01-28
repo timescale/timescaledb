@@ -182,12 +182,9 @@ SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
--- cannot drop directly from the materialization table
+-- cannot drop directly from the materialization table without specifying
+-- cont. aggregate view name explicitly
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(schema_name => :'drop_chunks_mat_schema',
-    table_name => :'drop_chunks_mat_table_name',
-    newer_than => -20,
-    verbose => true);
 
 SELECT drop_chunks(
     newer_than => -20,
@@ -481,10 +478,12 @@ SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY ti
 --should show chunk with old name and old ranges
 SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
 
---test drop_chunks with cascade_to_materialization set to true (github 1644)
+-- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
 -- This checks if chunks from mat. hypertable are actually dropped 
 -- and deletes data from chunks that cannot be dropped from that mat. hypertable.
-SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen
+SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
+        schema_name AS drop_chunks_mat_schema,
+        table_name AS drop_chunks_mat_table_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
     WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
         AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
@@ -514,3 +513,24 @@ SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
 SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
 ORDER BY ranges;
 
+-- TEST drop chunks from continuous aggregates by specifying view name
+SELECT drop_chunks(
+    table_name => 'drop_chunks_view',
+    newer_than => -20,
+    verbose => true);
+
+--can also drop chunks by specifying materialized hypertable name
+INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
+REFRESH MATERIALIZED VIEW drop_chunks_view;
+SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen');
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(
+    table_name => :'drop_chunks_mat_table_name',
+    older_than => 60,
+    verbose => true);
+\set ON_ERROR_STOP 1
+SELECT drop_chunks(
+    schema_name => :'drop_chunks_mat_schema',
+    table_name => :'drop_chunks_mat_table_name',
+    older_than => 60,
+    verbose => true);

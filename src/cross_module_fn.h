@@ -71,7 +71,8 @@ typedef struct CrossModuleFunctions
 
 												   Datum older_than_datum, Datum newer_than_datum,
 												   Oid older_than_type, Oid newer_than_type,
-												   bool cascade, int32 log_level);
+												   bool cascade, int32 log_level,
+												   bool user_supplied_table_name);
 	PGFunction continuous_agg_trigfn;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);

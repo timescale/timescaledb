@@ -1987,7 +1987,14 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 	if (!OidIsValid(schema_oid))
 		return SCAN_CONTINUE;
 
-	relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
+	if (accum->schema_name == NULL)
+	{
+		/* only user visible tables will be returned */
+		relid = RelnameGetRelid(NameStr(fd.table_name));
+	}
+	else
+		relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
+
 	if (!OidIsValid(relid))
 		return SCAN_CONTINUE;
 
@@ -2000,13 +2007,12 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 										  NameGetDatum(accum->table_name),
 										  NameGetDatum(&fd.table_name)))))
 		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
-
 	return SCAN_CONTINUE;
 }
 
 /*
  * Used for drop_chunks. Either name can be NULL, which indicates matching on
- * all possible names.
+ * all possible names visible in search path.
  */
 List *
 ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx)

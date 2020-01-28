@@ -21,5 +21,7 @@ TSDLLEXPORT bool ts_interval_equal(FormData_ts_interval *invl1, FormData_ts_inte
 TSDLLEXPORT void ts_interval_now_func_validate(Oid now_func_oid, Oid open_dim_type);
 TSDLLEXPORT Datum ts_interval_subtract_from_now(FormData_ts_interval *invl, Dimension *open_dim);
 TSDLLEXPORT int64 ts_get_now_internal(Dimension *open_dim);
-
+TSDLLEXPORT FormData_ts_interval *
+ts_interval_from_sql_input_internal(Dimension *open_dim, Datum interval, Oid interval_type,
+									const char *parameter_name, const char *caller_name);
 #endif /* TIMESCALEDB_INTERVAL */

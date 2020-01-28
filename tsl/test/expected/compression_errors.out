@@ -261,7 +261,7 @@ INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = unco
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
 WARNING:  Timescale License expired
-ERROR:  cannot add drop chunks policy to hypertable "_compressed_hypertable_15" which contains compressed data
+ERROR:  cannot add drop chunks policy to compresed hypertable "_compressed_hypertable_15"
 --Constraint checking for compression
 create table fortable(col integer primary key);
 create table  table_constr( device_id integer,

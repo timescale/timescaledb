@@ -169,6 +169,30 @@ commit:
 	return true;
 }
 
+static Dimension *
+get_open_dimension_for_hypertable(Hypertable *ht)
+{
+	int32 mat_id = ht->fd.id;
+	Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+		/* if this a materialization hypertable related to cont agg
+		 * then need to get the right dimension which has
+		 * integer_now function
+		 */
+
+		open_dim = ts_continous_agg_find_integer_now_func_by_materialization_id(mat_id);
+		if (open_dim == NULL)
+		{
+			elog(ERROR,
+				 "missing integer_now function for hypertable \"%s\" ",
+				 get_rel_name(ht->main_table_relid));
+		}
+	}
+	return open_dim;
+}
+
 bool
 execute_drop_chunks_policy(int32 job_id)
 {
@@ -197,8 +221,7 @@ execute_drop_chunks_policy(int32 job_id)
 
 	table_relid = ts_hypertable_id_to_relid(args->hypertable_id);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
-
-	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
+	open_dim = get_open_dimension_for_hypertable(hypertable);
 	ts_chunk_do_drop_chunks(table_relid,
 							ts_interval_subtract_from_now(&args->older_than, open_dim),
 							(Datum) 0,
@@ -206,7 +229,9 @@ execute_drop_chunks_policy(int32 job_id)
 							InvalidOid,
 							args->cascade,
 							args->cascade_to_materializations,
-							LOG);
+							LOG,
+							true /*user_supplied_table_name */
+	);
 
 	ts_cache_release(hcache);
 	elog(LOG, "completed dropping chunks");

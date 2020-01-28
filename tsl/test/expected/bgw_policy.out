@@ -450,7 +450,7 @@ WARNING:  unexpected interval: smaller than one second
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
 select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
-ERROR:  invalid parameter value for older_than
+ERROR:  integer_now_func not set on hypertable "test_table_int"
 \set ON_ERROR_STOP 1
 INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
 \c :TEST_DBNAME :ROLE_SUPERUSER;
