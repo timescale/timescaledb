@@ -18,21 +18,21 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
@@ -41,9 +41,9 @@ SET ROLE :ROLE_1;
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
 \set ON_ERROR_STOP 0
@@ -381,9 +381,9 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
 SELECT * FROM hypertable_data_node_relation_size('disttable');

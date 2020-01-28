@@ -10,19 +10,19 @@ NOTICE:  table "conditions" does not exist, skipping
 SELECT * FROM add_data_node('data1', host => 'localhost', database => 'data1');
  node_name |   host    | port  | database | node_created | database_created | extension_created 
 -----------+-----------+-------+----------+--------------+------------------+-------------------
- data1     | localhost | 15432 | data1    | t            | t                | t
+ data1     | localhost | 55432 | data1    | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data2', host => 'localhost', database => 'data2');
  node_name |   host    | port  | database | node_created | database_created | extension_created 
 -----------+-----------+-------+----------+--------------+------------------+-------------------
- data2     | localhost | 15432 | data2    | t            | t                | t
+ data2     | localhost | 55432 | data2    | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data3', host => 'localhost', database => 'data3');
  node_name |   host    | port  | database | node_created | database_created | extension_created 
 -----------+-----------+-------+----------+--------------+------------------+-------------------
- data3     | localhost | 15432 | data3    | t            | t                | t
+ data3     | localhost | 55432 | data3    | t            | t                | t
 (1 row)
 
 CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);

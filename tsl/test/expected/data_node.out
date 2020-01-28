@@ -17,14 +17,14 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', 'localhost',
                             database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -42,10 +42,24 @@ SELECT * FROM add_data_node(NULL, host => 'localhost');
 ERROR:  invalid data node name
 SELECT * FROM add_data_node(NULL, NULL);
 ERROR:  a host needs to be specified
+-- Test invalid port numbers
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => 65536,
+                            database => 'data_node_3');
+ERROR:  invalid port number 65536
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => 0,
+                            database => 'data_node_3');
+ERROR:  invalid port number 0
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => -1,
+                            database => 'data_node_3');
+ERROR:  invalid port number -1
+SELECT inet_server_port() as PGPORT \gset
 -- Adding a data node via ADD SERVER is blocked
 CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '15432', dbname 'data_node_4');
-ERROR:  operation not supported on a TimescaleDB data node
+OPTIONS (host 'localhost', port ':PGPORT', dbname 'data_node_4');
+ERROR:  operation not supported for a TimescaleDB data node
 -- Dropping a data node via DROP SERVER is also blocked
 DROP SERVER data_node_1, data_node_2;
 ERROR:  operation not supported on a TimescaleDB data node
@@ -56,13 +70,13 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'dat
 NOTICE:  data node "data_node_2" already exists, skipping
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | f            | f                | f
+ data_node_2 | localhost | 55432 | data_node_2 | f            | f                | f
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
 (1 row)
 
 -- Test altering server command is blocked
@@ -80,9 +94,9 @@ ERROR:  alter owner not supported on a TimescaleDB data node
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
 -- Delete a data node
@@ -96,8 +110,8 @@ SELECT * FROM delete_data_node('data_node_3');
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
 (2 rows)
 
 \set ON_ERROR_STOP 0
@@ -116,8 +130,8 @@ NOTICE:  data node "data_node_3" does not exist, skipping
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
 (2 rows)
 
 SELECT * FROM delete_data_node('data_node_1');
@@ -149,21 +163,21 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
 (1 row)
 
 -- Allow ROLE_1 to create distributed tables on these data nodes.
@@ -178,9 +192,9 @@ SELECT node_name, "options"
 ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
 SELECT object_name, object_type, ARRAY_AGG(privilege_type)
@@ -311,9 +325,9 @@ INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
- data_node_1 | {host=localhost,port=15432,dbname=data_node_1}
- data_node_2 | {host=localhost,port=15432,dbname=data_node_2}
- data_node_3 | {host=localhost,port=15432,dbname=data_node_3}
+ data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
+ data_node_2 | {host=localhost,port=55432,dbname=data_node_2}
+ data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
 DROP TABLE disttable;
@@ -663,7 +677,7 @@ SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'dat
                             if_not_exists => true);
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_4 | localhost | 15432 | data_node_4 | t            | t                | t
+ data_node_4 | localhost | 55432 | data_node_4 | t            | t                | t
 (1 row)
 
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
@@ -752,21 +766,21 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
@@ -1126,13 +1140,13 @@ SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_4 | localhost | 15432 | data_node_4 | t            | t                | t
+ data_node_4 | localhost | 55432 | data_node_4 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => 'data_node_5');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_5 | localhost | 15432 | data_node_5 | t            | t                | t
+ data_node_5 | localhost | 55432 | data_node_5 | t            | t                | t
 (1 row)
 
 GRANT ALL ON FOREIGN SERVER data_node_4, data_node_5 TO PUBLIC;

@@ -136,9 +136,9 @@ INSERT INTO disttable VALUES
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
 
-SELECT * FROM timescaledb_information.data_node;
+SELECT * FROM timescaledb_information.data_node ORDER BY node_name;
 SELECT * FROM timescaledb_information.hypertable;
 SELECT * FROM hypertable_relation_size('disttable');
 SELECT * FROM hypertable_relation_size('nondisttable');
-SELECT * FROM hypertable_data_node_relation_size('disttable');
-SELECT * FROM hypertable_data_node_relation_size('nondisttable');
+SELECT * FROM hypertable_data_node_relation_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_data_node_relation_size('nondisttable') ORDER BY node_name;

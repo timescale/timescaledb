@@ -39,13 +39,13 @@ LANGUAGE C;
 SELECT * FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
  server_name |   host    | port  |   database    | server_created | database_created | extension_created 
 -------------+-----------+-------+---------------+----------------+------------------+-------------------
- loopback    | localhost | 15432 | db_remote_txn | t              | f                | f
+ loopback    | localhost | 55432 | db_remote_txn | t              | f                | f
 (1 row)
 
 SELECT * FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
  server_name |   host    | port  |   database    | server_created | database_created | extension_created 
 -------------+-----------+-------+---------------+----------------+------------------+-------------------
- loopback2   | localhost | 15432 | db_remote_txn | t              | f                | f
+ loopback2   | localhost | 55432 | db_remote_txn | t              | f                | f
 (1 row)
 
 -- ===================================================================

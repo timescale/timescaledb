@@ -34,9 +34,23 @@ SELECT * FROM add_data_node(NULL);
 -- Add NULL data_node
 SELECT * FROM add_data_node(NULL, host => 'localhost');
 SELECT * FROM add_data_node(NULL, NULL);
+
+-- Test invalid port numbers
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => 65536,
+                            database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => 0,
+                            database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_3', 'localhost',
+                            port => -1,
+                            database => 'data_node_3');
+
+SELECT inet_server_port() as PGPORT \gset
+
 -- Adding a data node via ADD SERVER is blocked
 CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '15432', dbname 'data_node_4');
+OPTIONS (host 'localhost', port ':PGPORT', dbname 'data_node_4');
 -- Dropping a data node via DROP SERVER is also blocked
 DROP SERVER data_node_1, data_node_2;
 \set ON_ERROR_STOP 1

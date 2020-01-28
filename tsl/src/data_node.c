@@ -591,7 +591,7 @@ get_server_port()
 {
 	const char *const portstr =
 		GetConfigOption("port", /* missing_ok= */ false, /* restrict_privileged= */ false);
-	return pg_atoi(portstr, 2, 0);
+	return pg_atoi(portstr, sizeof(int32), 0);
 }
 
 /* set_distid may need to be false for some otherwise invalid configurations
@@ -604,7 +604,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *dbname = PG_ARGISNULL(2) ? get_database_name(MyDatabaseId) : PG_GETARG_CSTRING(2);
-	long port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
+	int32 port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	bool bootstrap = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
 	bool server_created = false;
@@ -633,7 +633,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	if (port < 1 || port > PG_UINT16_MAX)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 (errmsg("invalid port"),
+				 (errmsg("invalid port number %d", port),
 				  errhint("The port number must be between 1 and %u", PG_UINT16_MAX))));
 
 	result = get_database_info(MyDatabaseId, &database);
