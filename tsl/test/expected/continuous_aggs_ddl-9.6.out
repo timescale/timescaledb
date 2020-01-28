@@ -258,13 +258,9 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           10 |     5
 (3 rows)
 
--- cannot drop directly from the materialization table
+-- cannot drop directly from the materialization table without specifying
+-- cont. aggregate view name explicitly
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(schema_name => :'drop_chunks_mat_schema',
-    table_name => :'drop_chunks_mat_table_name',
-    newer_than => -20,
-    verbose => true);
-ERROR:  cannot drop_chunks on a continuous aggregate materialization table
 SELECT drop_chunks(
     newer_than => -20,
     verbose => true,
@@ -272,8 +268,7 @@ SELECT drop_chunks(
 INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
 INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
-INFO:  dropping chunk _timescaledb_internal._hyper_6_4_chunk
-ERROR:  cannot drop_chunks on a continuous aggregate materialization table
+ERROR:  cannot drop chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 

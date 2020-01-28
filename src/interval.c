@@ -95,7 +95,7 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
 {
 	Hypertable *hypertable;
 	Cache *hcache;
-	FormData_ts_interval *invl = palloc0(sizeof(FormData_ts_interval));
+	FormData_ts_interval *invl;
 	Oid partitioning_type;
 	Dimension *open_dim;
 
@@ -109,8 +109,33 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
 		elog(ERROR, "internal error: no open dimension found while parsing interval");
 
 	partitioning_type = ts_dimension_get_partition_type(open_dim);
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+		if (strlen(NameStr(open_dim->fd.integer_now_func)) == 0 ||
+			strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("integer_now_func not set on hypertable \"%s\"", get_rel_name(relid))));
+	}
+	invl = ts_interval_from_sql_input_internal(open_dim,
+											   interval,
+											   interval_type,
+											   parameter_name,
+											   caller_name);
 	ts_cache_release(hcache);
+	return invl;
+}
 
+/* use this variant only if the open_dim needs to be
+ * inferred for the hypertable. This is the case for continuous aggr
+ * related materialization hypertables
+ */
+TSDLLEXPORT FormData_ts_interval *
+ts_interval_from_sql_input_internal(Dimension *open_dim, Datum interval, Oid interval_type,
+									const char *parameter_name, const char *caller_name)
+{
+	FormData_ts_interval *invl = palloc0(sizeof(FormData_ts_interval));
+	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
 	switch (interval_type)
 	{
 		case INTERVALOID:
@@ -133,12 +158,6 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
 						 errmsg("invalid parameter value for %s", parameter_name),
 						 errhint("integer-based time duration cannot be used with hypertables with "
 								 "a timestamp-based time dimensions")));
-
-			if (strlen(NameStr(open_dim->fd.integer_now_func)) == 0 ||
-				strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("integer_now_func not set on hypertable %s", get_rel_name(relid))));
 
 			invl->is_time_interval = false;
 			invl->integer_interval = ts_time_value_to_internal(interval, interval_type);
@@ -277,11 +296,15 @@ ts_interval_from_now_func_get_datum(int64 interval, Oid time_dim_type, Oid now_f
 						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
 			return Int32GetDatum(res);
 		case INT8OID:
-			res = DatumGetInt64(now) - interval;
-			if (res > DatumGetInt64(now))
+		{
+			bool overflow = pg_sub_s64_overflow(DatumGetInt64(now), interval, &res);
+			if (overflow)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+			}
 			return Int64GetDatum(res);
+		}
 		default:
 			pg_unreachable();
 	}
