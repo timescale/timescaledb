@@ -195,4 +195,95 @@ SELECT test.override_current_timestamptz('2019-10-15 00:00'::timestamptz);
 :PREFIX
 EXECUTE :prepared_stmt;
 
-DEALLOCATE :prepared_stmt
+DEALLOCATE :prepared_stmt;
+
+-----------------------------------------------------------------
+-- LIMIT push down support
+-----------------------------------------------------------------
+\set TEST_DESC '\n######### LIMIT push down cases\n'
+
+-- Basic query (should be pushed)
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 10
+:OUTPUT_CMD
+
+-- LIMIT with OFFSET
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 5
+OFFSET 5
+:OUTPUT_CMD
+
+-- LIMIT 0 corner case (will be translated to 1)
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 0
+:OUTPUT_CMD
+
+-- LIMIT expr that could be constified safely
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT extract(year from date '2000-01-01')
+:OUTPUT_CMD
+
+-- No push downs for some LIMIT corner cases
+
+-- LIMIT volatile expression
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT greatest(random(), 10.0)
+:OUTPUT_CMD
+
+-- Window function
+\qecho :TEST_DESC
+:PREFIX
+SELECT time, device, avg(temp) OVER (PARTITION BY device)
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 10
+:OUTPUT_CMD
+
+-- Ensure that using DISTINCT and DISTINCT ON prevent LIMIT push down
+\qecho :TEST_DESC
+:PREFIX
+SELECT DISTINCT device, time
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 10
+:OUTPUT_CMD
+
+\qecho :TEST_DESC
+:PREFIX
+SELECT DISTINCT ON (device) device, time
+FROM :TABLE_NAME
+:ORDER_BY_1_2
+LIMIT 10
+:OUTPUT_CMD
+
+-- JOIN with a local table
+CREATE TABLE join_test (device int);
+
+\qecho :TEST_DESC
+:PREFIX
+SELECT t.time
+FROM :TABLE_NAME t, join_test
+WHERE t.device = join_test.device
+LIMIT 10;
+
+DROP TABLE join_test;
