@@ -326,12 +326,14 @@ get_parentoid(PlannerInfo *root, Index rti)
 }
 
 /* is this a hypertable's chunk involved in DML
-: used only for updates and deletes for compression now */
-static bool
+ * returns the hypertable's Oid if so, otherwise returns 0
+ * used only for updates and deletes for compression now */
+static Oid
 is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	if (root->parse->commandType == CMD_UPDATE || root->parse->commandType == CMD_DELETE)
 	{
+#if PG12_LT
 		Oid parent_oid;
 		AppendRelInfo *appinfo = ts_get_appendrelinfo(root, rti, true);
 		if (!appinfo)
@@ -343,10 +345,26 @@ is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblE
 			Hypertable *parent_ht = ts_hypertable_cache_get_entry(hcache, parent_oid);
 			ts_cache_release(hcache);
 			if (parent_ht)
-				return true;
+				return parent_oid;
 		}
+#else
+		/* In PG12 UPDATE/DELETE on inheritance relations are planned in two
+		 * stages. In stage 1, the statement is planned as if it was a SELECT
+		 * and all leaf tables are discovered. In stage 2, the original query
+		 * is planned against each leaf table, discovered in stage 1, directly,
+		 * not part of an Append. Unfortunately, this means we cannot look in
+		 * the appendrelinfo to determine if a table is a chunk as the
+		 * appendrelinfo is not initialized.
+		 * (see https://github.com/postgres/postgres/blob/REL_12_1/src/backend/optimizer/plan/planner.c#L1281-L1291
+		 *  for more details)
+		 * instead, we'll look in the chunk catalog for now.
+		 */
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, false);
+		if (chunk != NULL)
+			return chunk->hypertable_relid;
+#endif
 	}
-	return false;
+	return 0;
 }
 
 static void
@@ -1384,7 +1402,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	Hypertable *ht;
 	Cache *hcache;
 	Oid ht_reloid = rte->relid;
-	bool is_htdml;
+	Oid is_htdml;
 
 #if PG12
 	// if(inheritance_disabled_counter > inheritance_reenabled_counter)
@@ -1411,7 +1429,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * if this is an append child or DML we use the parent relid to
 	 * check if its a hypertable
 	 */
-	if (is_append_child(rel, rte) || is_htdml)
+	if (is_htdml)
+		ht_reloid = is_htdml;
+	else if (is_append_child(rel, rte))
 		ht_reloid = get_parentoid(root, rti);
 
 	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
@@ -1455,9 +1475,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 	if (ts_guc_enable_transparent_decompression && is_append_child(rel, rte))
 	{
+		Cache *hcache;
+		Hypertable *ht;
 		Oid ht_oid = get_parentoid(root, rel->relid);
-		Cache *hcache = ts_hypertable_cache_pin();
-		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
+		/* in PG12 UPDATE/DELETE the root table gets treated as a child of itself */
+		if (rte->relid == ht_oid)
+			return;
+		hcache = ts_hypertable_cache_pin();
+		ht = ts_hypertable_cache_get_entry(hcache, ht_oid);
 
 		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{
