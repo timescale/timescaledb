@@ -9,6 +9,8 @@
 #include <catalog/namespace.h>
 #include <funcapi.h>
 #include <libpq-fe.h>
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
 #include "dist_commands.h"
 #include "dist_txn.h"
@@ -432,13 +434,16 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 {
 	const char *query = PG_ARGISNULL(0) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(0));
 	ArrayType *data_nodes = PG_ARGISNULL(1) ? NULL : PG_GETARG_ARRAYTYPE_P(1);
+	bool transactional = PG_ARGISNULL(2) ? true : PG_GETARG_BOOL(2);
 	DistCmdResult *result;
 	List *data_node_list;
 	const char *search_path;
 
+	if (!transactional)
+		PreventInTransactionBlock(true, get_func_name(FC_FN_OID(fcinfo)));
+
 	if (NULL == query)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid command string")));
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("empty command string")));
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,
@@ -454,8 +459,7 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 	result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(query,
 																search_path,
 																data_node_list,
-																true);
-
+																transactional);
 	if (result)
 		ts_dist_cmd_close_response(result);
 
