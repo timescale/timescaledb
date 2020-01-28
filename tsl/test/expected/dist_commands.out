@@ -16,21 +16,21 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost',
                             database => 'data_node_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | data_node_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
                             database => 'data_node_2');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | data_node_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 15432 | data_node_3 | t            | t                | t
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
@@ -38,11 +38,11 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
                                                                                   List of foreign servers
     Name     |       Owner        | Foreign-data wrapper |            Access privileges            | Type | Version |                      FDW options                       | Description 
 -------------+--------------------+----------------------+-----------------------------------------+------+---------+--------------------------------------------------------+-------------
- data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_1') | 
+ data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_1') | 
              |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
- data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_2') | 
+ data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_2') | 
              |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
- data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '15432', dbname 'data_node_3') | 
+ data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_3') | 
              |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
 (3 rows)
 

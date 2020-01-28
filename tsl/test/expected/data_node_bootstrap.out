@@ -21,7 +21,7 @@ SET client_min_messages TO NOTICE;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
 (1 row)
 
 -- Ensure database and extensions are installed and have the correct
@@ -79,13 +79,13 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM show_data_nodes();
  data_node_name |   host    | port  |     dbname     
 ----------------+-----------+-------+----------------
- bootstrap_test | localhost | 15432 | bootstrap_test
+ bootstrap_test | localhost | 55432 | bootstrap_test
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -112,7 +112,7 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -137,7 +137,7 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -165,7 +165,7 @@ NOTICE:  database "bootstrap_test" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | f                | f
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -271,13 +271,13 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM show_data_nodes();
  data_node_name |   host    | port  |     dbname     
 ----------------+-----------+-------+----------------
- bootstrap_test | localhost | 15432 | bootstrap_test
+ bootstrap_test | localhost | 55432 | bootstrap_test
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -302,7 +302,7 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
    node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
 ----------------+-----------+-------+----------------+--------------+------------------+-------------------
- bootstrap_test | localhost | 15432 | bootstrap_test | t            | t                | t
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
@@ -433,7 +433,7 @@ SELECT label FROM pg_shseclabel
 SELECT * FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
     node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
 -----------------+-----------+-------+-----------------+--------------+------------------+-------------------
- drop_db_test_dn | localhost | 15432 | drop_db_test_dn | t            | t                | t
+ drop_db_test_dn | localhost | 55432 | drop_db_test_dn | t            | t                | t
 (1 row)
 
 -- Make sure security label is created

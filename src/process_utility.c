@@ -301,7 +301,7 @@ process_create_foreign_server_start(ProcessUtilityArgs *args)
 	if (strcmp(EXTENSION_FDW_NAME, stmt->fdwname) == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on a TimescaleDB data node"),
+				 errmsg("operation not supported for a TimescaleDB data node"),
 				 errhint("Use add_data_node() to add data nodes to a "
 						 "TimescaleDB distributed database.")));
 }

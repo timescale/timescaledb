@@ -88,7 +88,7 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_1_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | backend_1_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | backend_1_1 | t            | t                | t
 (1 row)
 
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
@@ -113,7 +113,7 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'backend_2_1');
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 15432 | backend_2_1 | t            | t                | t
+ data_node_1 | localhost | 55432 | backend_2_1 | t            | t                | t
 (1 row)
 
 SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE '%uuid';
@@ -167,7 +167,7 @@ ERROR:  invalid_data_node is not valid as data node
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => true);
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | backend_x_2 | t            | t                | t
+ data_node_2 | localhost | 55432 | backend_x_2 | t            | t                | t
 (1 row)
 
 -- dist_uuid should be added to the metadata on the data node
@@ -202,7 +202,7 @@ DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'backend_x_2', bootstrap => false);
   node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
 -------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 15432 | backend_x_2 | t            | f                | f
+ data_node_2 | localhost | 55432 | backend_x_2 | t            | f                | f
 (1 row)
 
 -- dist_uuid should be added to the metadata on the data node
@@ -241,11 +241,11 @@ INSERT INTO disttable VALUES
        ('2018-01-02 08:01', 2, 1.3),
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
-SELECT * FROM timescaledb_information.data_node;
+SELECT * FROM timescaledb_information.data_node ORDER BY node_name;
   node_name  |       owner        |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
 -------------+--------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | cluster_super_user | {host=localhost,port=15432,dbname=backend_2_1} | t       |               1 |               2 | 48 kB
- data_node_2 | cluster_super_user | {host=localhost,port=15432,dbname=backend_x_2} | t       |               1 |               1 | 24 kB
+ data_node_1 | cluster_super_user | {host=localhost,port=55432,dbname=backend_2_1} | t       |               1 |               2 | 48 kB
+ data_node_2 | cluster_super_user | {host=localhost,port=55432,dbname=backend_x_2} | t       |               1 |               1 | 24 kB
 (2 rows)
 
 SELECT * FROM timescaledb_information.hypertable;
@@ -267,14 +267,14 @@ SELECT * FROM hypertable_relation_size('nondisttable');
        24576 |       49152 |             |       73728
 (1 row)
 
-SELECT * FROM hypertable_data_node_relation_size('disttable');
+SELECT * FROM hypertable_data_node_relation_size('disttable') ORDER BY node_name;
   node_name  | num_chunks | table_size | index_size | toast_size | total_size 
 -------------+------------+------------+------------+------------+------------
  data_node_1 |          2 | 16 kB      | 32 kB      |            | 48 kB
  data_node_2 |          1 | 8192 bytes | 16 kB      |            | 24 kB
 (2 rows)
 
-SELECT * FROM hypertable_data_node_relation_size('nondisttable');
+SELECT * FROM hypertable_data_node_relation_size('nondisttable') ORDER BY node_name;
 NOTICE:  calling hypertable_data_node_relation_size on a non-distributed hypertable
  node_name | num_chunks | table_size | index_size | toast_size | total_size 
 -----------+------------+------------+------------+------------+------------

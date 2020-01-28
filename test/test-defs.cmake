@@ -17,7 +17,7 @@ set(TEST_PGPORT_LOCAL 5432 CACHE STRING "The port of a running PostgreSQL instan
 set(TEST_PGHOST localhost CACHE STRING "The hostname of a running PostgreSQL instance")
 set(TEST_PGUSER ${TEST_ROLE_DEFAULT_PERM_USER} CACHE STRING "The PostgreSQL test user")
 set(TEST_DBNAME single CACHE STRING "The database name to use for tests")
-set(TEST_PGPORT_TEMP_INSTANCE 15432 CACHE STRING "The port to run a temporary test PostgreSQL instance on")
+set(TEST_PGPORT_TEMP_INSTANCE 55432 CACHE STRING "The port to run a temporary test PostgreSQL instance on")
 set(TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/test_schedule)
 set(TEST_SCHEDULE_SHARED ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared)
 set(ISOLATION_TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/isolation_test_schedule)
@@ -135,4 +135,3 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 else ()
     set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})
 endif ()
-
