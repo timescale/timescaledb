@@ -76,19 +76,20 @@ SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, de
 --You can view informaton about your continuous aggregates. The meaning of these fields will be explained further down.
 \x
 SELECT * FROM timescaledb_information.continuous_aggregates;
--[ RECORD 1 ]--------------+-------------------------------------------------------------------------------------------------------------
-view_name                  | device_summary
-view_owner                 | default_perm_user
-refresh_lag                | @ 2 hours
-refresh_interval           | @ 2 hours
-max_interval_per_job       | @ 60 days
-materialization_hypertable | _timescaledb_internal._materialized_hypertable_2
-view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
-                           |     device_readings.device_id,                                                                              +
-                           |     avg(device_readings.metric) AS metric_avg,                                                              +
-                           |     (max(device_readings.metric) - min(device_readings.metric)) AS metric_spread                            +
-                           |    FROM device_readings                                                                                     +
-                           |   GROUP BY (time_bucket('@ 1 hour'::interval, device_readings.observation_time)), device_readings.device_id;
+-[ RECORD 1 ]------------------+-------------------------------------------------------------------------------------------------------------
+view_name                      | device_summary
+view_owner                     | default_perm_user
+refresh_lag                    | @ 2 hours
+refresh_interval               | @ 2 hours
+max_interval_per_job           | @ 60 days
+ignore_invalidation_older_than | @ 106751991 days 4 hours 54.775807 secs
+materialization_hypertable     | _timescaledb_internal._materialized_hypertable_2
+view_definition                |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
+                               |     device_readings.device_id,                                                                              +
+                               |     avg(device_readings.metric) AS metric_avg,                                                              +
+                               |     (max(device_readings.metric) - min(device_readings.metric)) AS metric_spread                            +
+                               |    FROM device_readings                                                                                     +
+                               |   GROUP BY (time_bucket('@ 1 hour'::interval, device_readings.observation_time)), device_readings.device_id;
 
 --You can also view information about your background workers.
 --Note: (some fields are empty because there are no background workers used in tests)

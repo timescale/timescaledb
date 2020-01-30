@@ -4,6 +4,19 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## latest
+
+**Major Features**
+
+**Minor Features**
+
+**Bugfixes**
+* #1648 Drop chunks for materialized hypertable
+* #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
+
+**Thanks**
+* @RJPhillips01 for reporting an issue with drop chunks.
+
 ## 1.6.0 (2020-01-14)
 
 This release adds major new features and bugfixes since the 1.5.1 release.

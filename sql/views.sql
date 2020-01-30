@@ -100,6 +100,15 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
         THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
       ELSE cagg.max_interval_per_job::TEXT
     END AS max_interval_per_job,
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+      WHEN 'TIMESTAMP'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
+      WHEN 'TIMESTAMPTZ'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
+      WHEN 'DATE'::regtype
+        THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
+      ELSE cagg.ignore_invalidation_older_than::TEXT
+    END AS ignore_invalidation_older_than,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition
   FROM  _timescaledb_catalog.continuous_agg cagg,
