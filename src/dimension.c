@@ -1355,11 +1355,13 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	if (!info.skip)
 	{
-		if (ts_hypertable_has_tuples(info.table_relid, AccessShareLock))
+		if (ts_hypertable_has_chunks(info.table_relid, AccessShareLock))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertable \"%s\" is not empty", get_rel_name(info.table_relid)),
-					 errdetail("It is not possible to add dimensions to a non-empty hypertable")));
+					 errmsg("hypertable \"%s\" has tuples or empty chunks",
+							get_rel_name(info.table_relid)),
+					 errdetail("It is not possible to add dimensions to a hypertable that has "
+							   "chunks. Please truncate the table.")));
 
 		/*
 		 * Note that space->num_dimensions reflects the actual number of

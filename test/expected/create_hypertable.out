@@ -238,10 +238,10 @@ ERROR:  cannot specify both the number of partitions and an interval
 --adding a new dimension on a non-empty table should also fail
 insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1, 1);
 select add_dimension('test_schema.test_table', 'device_type', 2);
-ERROR:  hypertable "test_table" is not empty
+ERROR:  hypertable "test_table" has tuples or empty chunks
 -- should fail on non-empty table with 'if_not_exists' in case the dimension does not exists
 select add_dimension('test_schema.test_table', 'device_type', 2, if_not_exists => true);
-ERROR:  hypertable "test_table" is not empty
+ERROR:  hypertable "test_table" has tuples or empty chunks
 \set ON_ERROR_STOP 1
 -- should not fail on non-empty table with 'if_not_exists' in case the dimension exists
 select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => true);
@@ -251,6 +251,18 @@ NOTICE:  column "location" is already a dimension, skipping
  (5,test_schema,test_table,location,f)
 (1 row)
 
+--should fail on empty table that still has chunks --
+\set ON_ERROR_STOP 0
+delete from test_schema.test_table where time is not null;
+select count(*) from test_schema.test_table;
+ count 
+-------
+     0
+(1 row)
+
+select add_dimension('test_schema.test_table', 'device_type', 2);
+ERROR:  hypertable "test_table" has tuples or empty chunks
+\set ON_ERROR_STOP 1
 --show chunks in the associated schema
 \dt "chunk_schema".*
                       List of relations

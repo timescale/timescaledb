@@ -1250,6 +1250,16 @@ ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 	return false;
 }
 
+bool
+ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
+{
+	List *chunks = find_inheritance_children(table_relid, lockmode);
+	if (chunks != NIL)
+		return true;
+	else
+		return false;
+}
+
 static void
 hypertable_create_schema(const char *schema_name)
 {
