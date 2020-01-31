@@ -135,6 +135,13 @@ select add_dimension('test_schema.test_table', 'device_type', 2, if_not_exists =
 -- should not fail on non-empty table with 'if_not_exists' in case the dimension exists
 select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => true);
 
+--should fail on empty table that still has chunks --
+\set ON_ERROR_STOP 0
+delete from test_schema.test_table where time is not null;
+select count(*) from test_schema.test_table;
+select add_dimension('test_schema.test_table', 'device_type', 2);
+\set ON_ERROR_STOP 1
+
 --show chunks in the associated schema
 \dt "chunk_schema".*
 
