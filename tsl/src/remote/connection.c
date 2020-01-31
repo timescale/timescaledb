@@ -11,26 +11,27 @@
  * the PostgreSQL License.
  */
 #include <postgres.h>
-
 #include <access/htup_details.h>
-#include <catalog/pg_foreign_server.h>
 #include <access/xact.h>
+#include <catalog/pg_foreign_server.h>
+#include <commands/defrem.h>
+#include <common/md5.h>
+#include <libpq-events.h>
+#include <libpq/libpq.h>
 #include <mb/pg_wchar.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
 #include <pgstat.h>
+#include <port.h>
+#include <postmaster/postmaster.h>
 #include <storage/latch.h>
+#include <utils/builtins.h>
 #include <utils/hsearch.h>
 #include <utils/inval.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 #include <utils/uuid.h>
-#include <utils/builtins.h>
 #include <utils/guc.h>
-#include <postmaster/postmaster.h>
-#include <libpq/libpq.h>
-#include <libpq-events.h>
-#include <nodes/makefuncs.h>
-#include <commands/defrem.h>
 
 #include <export.h>
 #include <telemetry/telemetry_metadata.h>
@@ -963,6 +964,74 @@ set_password_options(const char **keywords, const char **values, int *option_sta
 	*option_start = option_pos;
 }
 
+typedef enum PathKind
+{
+	PATH_KIND_CRT,
+	PATH_KIND_KEY
+} PathKind;
+
+/* Path description for human consumption */
+static const char *path_kind_text[PATH_KIND_KEY + 1] = {
+	[PATH_KIND_CRT] = "certificate",
+	[PATH_KIND_KEY] = "private key",
+};
+
+/* Path extension string for file system */
+static const char *path_kind_ext[PATH_KIND_KEY + 1] = {
+	[PATH_KIND_CRT] = "crt",
+	[PATH_KIND_KEY] = "key",
+};
+
+/*
+ * Helper function to report error.
+ *
+ * This is needed to avoid code coverage reporting low coverage for error
+ * cases in `make_user_path` that cannot be reached in normal situations.
+ */
+static void
+report_path_error(PathKind path_kind, const char *user_name)
+{
+	elog(ERROR,
+		 "cannot write %s for user \"%s\": path too long",
+		 path_kind_text[path_kind],
+		 user_name);
+}
+
+/*
+ * Make a user path with the given extension and user name in a portable and
+ * safe manner.
+ *
+ * We use MD5 to compute a filename for the user name, which allows all forms
+ * of user names. It is not necessary for the function to be cryptographically
+ * secure, only to have a low risk of collisions, and MD5 is fast and with a
+ * low risk of collisions.
+ *
+ * Will return the resulting path, or abort with an error.
+ */
+static StringInfo
+make_user_path(const char *user_name, PathKind path_kind)
+{
+	const char *ssl_dir = ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir;
+	char ret_path[MAXPGPATH];
+	char hexsum[33];
+	StringInfo result;
+
+	pg_md5_hash(user_name, strlen(user_name), hexsum);
+
+	if (strlcpy(ret_path, ssl_dir, MAXPGPATH) > MAXPGPATH)
+		report_path_error(path_kind, user_name);
+
+	canonicalize_path(ret_path);
+
+	join_path_components(ret_path, ret_path, EXTENSION_NAME);
+	join_path_components(ret_path, ret_path, "certs");
+	join_path_components(ret_path, ret_path, hexsum);
+
+	result = makeStringInfo();
+	appendStringInfo(result, "%s.%s", ret_path, path_kind_ext[path_kind]);
+	return result;
+}
+
 static void
 set_ssl_options(const char *user_name, const char **keywords, const char **values,
 				int *option_start)
@@ -994,16 +1063,16 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 		option_pos++;
 	}
 
-	/* Search for the user certificate in timescaledb.ssl_dir
-	 * or use a data dir */
+	/* Search for the user certificate in the user subdirectory of either
+	 * timescaledb.ssl_dir or data directory. The user subdirectory is
+	 * currently hardcoded. */
+
 	keywords[option_pos] = "sslcert";
-	values[option_pos] =
-		psprintf("%s/%s.crt", ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, user_name);
+	values[option_pos] = make_user_path(user_name, PATH_KIND_CRT)->data;
 	option_pos++;
 
 	keywords[option_pos] = "sslkey";
-	values[option_pos] =
-		psprintf("%s/%s.key", ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, user_name);
+	values[option_pos] = make_user_path(user_name, PATH_KIND_KEY)->data;
 	option_pos++;
 
 	*option_start = option_pos;
