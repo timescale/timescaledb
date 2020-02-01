@@ -20,7 +20,7 @@ hypertables with integer-based time columns to use continuous aggregates on
 this table.
 
 We added a timescaledb.ignore_invalidation_older_than parameter for continuous 
-aggregatess. This parameter accept a time-interval (e.g. 1 month). if set, 
+aggregates. This parameter accept a time-interval (e.g. 1 month). If set, 
 it limits the amount of time for which to process invalidation. Thus, if
 timescaledb.ignore_invalidation_older_than = '1 month', then any modifications
 for data older than 1 month from the current timestamp at modification time may 
