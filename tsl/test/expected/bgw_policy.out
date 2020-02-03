@@ -62,7 +62,6 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -- Make sure reorder correctly selects chunks to reorder
 -- by starting with oldest chunks
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
-WARNING:  Timescale License expired
 select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
  job_id | hypertable_id | hypertable_index_name 
 --------+---------------+-----------------------
@@ -488,7 +487,6 @@ SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 (1 row)
 
 select add_drop_chunks_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
-WARNING:  Timescale License expired
 -- Now simulate drop_chunks running automatically by calling it explicitly
 select test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
@@ -735,7 +733,6 @@ alter schema new_public rename to public;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
-WARNING:  Timescale License expired
 ERROR:  must be owner of hypertable "test_table_perm"
 select remove_reorder_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"

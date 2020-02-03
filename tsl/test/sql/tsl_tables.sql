@@ -103,6 +103,7 @@ select remove_drop_chunks_policy('test_table');
 
 select * from _timescaledb_catalog.dimension;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
 CREATE SCHEMA IF NOT EXISTS my_new_schema;
 create or replace function my_new_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
 grant execute on ALL FUNCTIONS IN SCHEMA my_new_schema to public;
@@ -352,20 +353,15 @@ select remove_reorder_policy('test_table');
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
 
--- Now make sure everything fails in the Community (non-enterprise) edition
+-- Test for failure cases
 \set ON_ERROR_STOP 0
-select add_reorder_policy('test_table', 'test_table_time_idx');
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true);
-select remove_reorder_policy('test_table');
-select remove_drop_chunks_policy('test_table');
 select alter_job_schedule(12345);
 \set ON_ERROR_STOP 1
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 
-\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
 select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);

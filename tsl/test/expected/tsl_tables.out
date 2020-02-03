@@ -45,7 +45,6 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE INDEX second_index on test_table (time);
 CREATE INDEX third_index on test_table (time);
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
-WARNING:  Timescale License expired
 -- Noop for duplicate policy
 select add_reorder_policy('test_table', 'test_table_time_idx', true);
 NOTICE:  reorder policy already exists on hypertable "test_table", skipping
@@ -159,35 +158,35 @@ NOTICE:  drop chunks policy already exists on hypertable "test_table", skipping
 
 -- Should not add new policy with different parameters
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', false, true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', true, if_not_exists => true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
@@ -267,7 +266,6 @@ select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.
 (0 rows)
 
 select remove_reorder_policy('test_table');
-WARNING:  Timescale License expired
  remove_reorder_policy 
 -----------------------
  
@@ -320,21 +318,21 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 -- Should not add new policy with different parameters
 select add_drop_chunks_policy('test_table_int', 2, false, true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table_int', 1, false, true, true);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_drop_chunks_policy('test_table_int', 1, true, true, false);
-WARNING:  could not add drop_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
  add_drop_chunks_policy 
 ------------------------
                      -1
@@ -647,7 +645,6 @@ select c.id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertabl
 
 select c.id as chunk_id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' ORDER BY c.id LIMIT 1 \gset
 select add_reorder_policy('test_table', 'second_index') as job_id \gset
-WARNING:  Timescale License expired
 -- Simulate reorder job running and setting this stat row
 select ts_test_chunk_stats_insert(:job_id, :chunk_id, 1);
  ts_test_chunk_stats_insert 
@@ -877,7 +874,6 @@ UPDATE _timescaledb_internal.bgw_job_stat SET last_finish = '2003-01-01:01:01:01
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --not changing the interval doesn't change the next_start
 select * from alter_job_schedule(:job_id, schedule_interval=>'20 min');
-WARNING:  Timescale License expired
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
 --------+-------------------+------------------+-------------+--------------+------------------------------
    1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | Tue Jan 01 01:01:01 2002 PST
@@ -936,27 +932,16 @@ select remove_reorder_policy('test_table');
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
--- Now make sure everything fails in the Community (non-enterprise) edition
+-- Test for failure cases
 \set ON_ERROR_STOP 0
-select add_reorder_policy('test_table', 'test_table_time_idx');
-ERROR:  cannot execute an enterprise function with an invalid enterprise license
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true);
-ERROR:  cannot execute an enterprise function with an invalid enterprise license
-select remove_reorder_policy('test_table');
-ERROR:  cannot execute an enterprise function with an invalid enterprise license
-select remove_drop_chunks_policy('test_table');
-ERROR:  cannot execute an enterprise function with an invalid enterprise license
 select alter_job_schedule(12345);
 ERROR:  cannot alter policy schedule, policy #12345 not found
 \set ON_ERROR_STOP 1
-\c :TEST_DBNAME :ROLE_SUPERUSER
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
-WARNING:  Timescale License expired
 select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
-\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
-WARNING:  Timescale License expired
 ERROR:  insufficient permssions to alter job 1015
 select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
 ERROR:  insufficient permssions to alter job 1016

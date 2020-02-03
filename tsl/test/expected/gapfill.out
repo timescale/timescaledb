@@ -16,7 +16,6 @@ CREATE TABLE sensors(sensor_id INT, name TEXT);
 INSERT INTO sensors VALUES (1,'Sensor 1'),(2,'Sensor 2'),(3,'Sensor 3');
 -- test locf and interpolate call without gapfill
 SELECT locf(1);
-WARNING:  Timescale License expired
  locf 
 ------
     1

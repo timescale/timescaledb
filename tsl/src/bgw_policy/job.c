@@ -322,34 +322,37 @@ execute_compress_chunks_policy(BgwJob *job)
 }
 
 static bool
-bgw_policy_job_requires_enterprise_license(BgwJob *job)
+bgw_policy_job_check_enterprise_license(BgwJob *job)
 {
-	license_print_expiration_warning_if_needed();
+	bool required = true;
 
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_REORDER:
-			return true;
 		case JOB_TYPE_DROP_CHUNKS:
-			return true;
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-			return false;
 		case JOB_TYPE_COMPRESS_CHUNKS:
-			return false;
+			required = false;
+			break;
 		default:
 			elog(ERROR,
 				 "scheduler could not determine the license type for job type: \"%s\"",
 				 NameStr(job->fd.job_type));
 	}
-	pg_unreachable();
+
+	if (required)
+	{
+		license_enforce_enterprise_enabled();
+		license_print_expiration_warning_if_needed();
+	}
+
+	return required;
 }
 
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
-	if (bgw_policy_job_requires_enterprise_license(job))
-		license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
+	bgw_policy_job_check_enterprise_license(job);
 
 	switch (job->bgw_type)
 	{
@@ -401,10 +404,7 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
 	}
 
-	if (bgw_policy_job_requires_enterprise_license(job))
-		license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
-
+	bgw_policy_job_check_enterprise_license(job);
 	ts_bgw_job_permission_check(job);
 
 	if (!PG_ARGISNULL(1))

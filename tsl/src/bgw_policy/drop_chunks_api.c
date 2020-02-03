@@ -57,8 +57,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	Hypertable *hypertable;
 	Cache *hcache;
 	FormData_ts_interval *older_than;
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
+
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
@@ -106,7 +105,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 		{
 			ts_cache_release(hcache);
 			elog(WARNING,
-				 "could not add drop_chunks policy due to existing policy on hypertable with "
+				 "could not add drop chunks policy due to existing policy on hypertable with "
 				 "different arguments");
 			PG_RETURN_INT32(-1);
 		}
@@ -148,8 +147,6 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 	BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_hypertable(ht_id);
 
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 	if (policy == NULL)

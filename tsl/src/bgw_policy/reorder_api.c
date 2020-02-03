@@ -88,8 +88,6 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 									.hypertable_index_name = *index_name,
 								} };
 
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	/* First verify that the hypertable corresponds to a valid table */
@@ -174,9 +172,6 @@ reorder_remove_policy(PG_FUNCTION_ARGS)
 	/* Remove the job, then remove the policy */
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 	BgwPolicyReorder *policy = ts_bgw_policy_reorder_find_by_hypertable(ht_id);
-
-	license_enforce_enterprise_enabled();
-	license_print_expiration_warning_if_needed();
 
 	if (policy == NULL)
 	{
