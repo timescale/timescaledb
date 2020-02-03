@@ -96,8 +96,6 @@ tsl_reorder_chunk(PG_FUNCTION_ARGS)
 	/* used for debugging purposes only see finish_heap_swaps */
 	Oid wait_id = PG_NARGS() < 4 || PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
 
-	license_print_expiration_warning_if_needed();
-
 	/*
 	 * Allow reorder in transactions for testing purposes only
 	 */

@@ -14,7 +14,6 @@
 Datum
 gapfill_marker(PG_FUNCTION_ARGS)
 {
-	license_print_expiration_warning_if_needed();
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 	else

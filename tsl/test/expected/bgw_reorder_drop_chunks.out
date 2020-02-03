@@ -99,7 +99,6 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 select add_reorder_policy('test_reorder_table', 'test_reorder_table_time_idx') as reorder_job_id \gset
-WARNING:  Timescale License expired
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_reorder_policies');
  json_object_field 
 -------------------
@@ -426,7 +425,6 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
-WARNING:  Timescale License expired
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
  json_object_field 
 -------------------

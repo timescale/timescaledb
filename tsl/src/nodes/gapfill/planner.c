@@ -410,8 +410,6 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	if (context.count == 0)
 		return;
 
-	license_print_expiration_warning_if_needed();
-
 #ifndef HAVE_INT64_TIMESTAMP
 
 	/*

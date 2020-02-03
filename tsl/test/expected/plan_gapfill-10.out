@@ -18,7 +18,6 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1;
-WARNING:  Timescale License expired
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Custom Scan (GapFill)

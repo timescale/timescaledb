@@ -205,7 +205,6 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_2_chunk');
 \set ON_ERROR_STOP 0
 -- cannot reorder a if with no index of the first call
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_2_chunk', verbose => TRUE);
-WARNING:  Timescale License expired
 ERROR:  there is no previously clustered index for table "_hyper_1_2_chunk"
 \set ON_ERROR_STOP 1
 BEGIN;
@@ -1379,6 +1378,5 @@ WHERE indisclustered = true ORDER BY 1;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
-WARNING:  Timescale License expired
 ERROR:  must be owner of hypertable "ct2"
 \set ON_ERROR_STOP 1

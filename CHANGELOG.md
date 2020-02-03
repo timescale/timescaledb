@@ -18,6 +18,11 @@ accidentally triggering the load of a previous DB version.**
 * #1686 Fix order by queries on compressed hypertables that have char segment by column
 * #1687 Fix issue with disabling compression when foreign keys are present
 
+**Licensing changes**
+* Reorder and policies around reorder and drop chunks are now
+  accessible to community users, not just enterprise
+* Gapfill functionality no longer warns about expired license
+
 **Thanks**
 * @RJPhillips01 for reporting an issue with drop chunks.
 * @b4eEx for reporting an issue with disabling compression.
