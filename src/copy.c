@@ -57,16 +57,13 @@ typedef struct CopyChunkState
 	EState *estate;
 	ChunkDispatch *dispatch;
 	CopyFromFunc next_copy_from;
-	union
-	{
-		CopyState cstate;
-		HeapScanDesc scandesc;
-		void *data;
-	} fromctx;
+	CopyState cstate;
+	HeapScanDesc scandesc;
 } CopyChunkState;
 
 static CopyChunkState *
-copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, void *fromctx)
+copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyState cstate,
+						HeapScanDesc scandesc)
 {
 	CopyChunkState *ccstate;
 	EState *estate = CreateExecutorState();
@@ -75,7 +72,8 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, vo
 	ccstate->rel = rel;
 	ccstate->estate = estate;
 	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate);
-	ccstate->fromctx.data = fromctx;
+	ccstate->cstate = cstate;
+	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;
 
 	return ccstate;
@@ -92,7 +90,8 @@ static bool
 next_copy_from(CopyChunkState *ccstate, ExprContext *econtext, Datum *values, bool *nulls,
 			   Oid *tuple_oid)
 {
-	return NextCopyFrom(ccstate->fromctx.cstate, econtext, values, nulls, tuple_oid);
+	Assert(ccstate->cstate != NULL);
+	return NextCopyFrom(ccstate->cstate, econtext, values, nulls, tuple_oid);
 }
 
 /*
@@ -233,11 +232,18 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	bistate = GetBulkInsertState();
 	econtext = GetPerTupleExprContext(estate);
 
-	/* Set up callback to identify error line number */
-	errcallback.callback = CopyFromErrorCallback;
-	errcallback.arg = (void *) ccstate->fromctx.cstate;
-	errcallback.previous = error_context_stack;
-	error_context_stack = &errcallback;
+	/* Set up callback to identify error line number.
+	 *
+	 * It is not necessary to add an entry to the error context stack if we do
+	 * not have a CopyState. In that case, we just use the existing error
+	 * already on the context stack. */
+	if (ccstate->cstate)
+	{
+		errcallback.callback = CopyFromErrorCallback;
+		errcallback.arg = (void *) ccstate->cstate;
+		errcallback.previous = error_context_stack;
+		error_context_stack = &errcallback;
+	}
 
 	for (;;)
 	{
@@ -610,7 +616,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 		free_parsestate(pstate);
 	}
 #endif
-	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate);
+	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
 
 	*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
 	EndCopyFrom(cstate);
@@ -622,8 +628,11 @@ static bool
 next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
 							   bool *nulls, Oid *tuple_oid)
 {
-	HeapScanDesc scandesc = ccstate->fromctx.scandesc;
-	HeapTuple tuple = heap_getnext(scandesc, ForwardScanDirection);
+	HeapScanDesc scandesc = ccstate->scandesc;
+	HeapTuple tuple;
+
+	Assert(scandesc != NULL);
+	tuple = heap_getnext(scandesc, ForwardScanDirection);
 
 	if (!HeapTupleIsValid(tuple))
 		return false;
@@ -678,7 +687,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	copy_security_check(rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
 	scandesc = heap_beginscan(rel, snapshot, 0, NULL);
-	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, scandesc);
+	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
 	timescaledb_CopyFrom(ccstate, range_table, ht);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
