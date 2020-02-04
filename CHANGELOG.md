@@ -4,6 +4,20 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## latest
+
+**Major Features**
+
+**Minor Features**
+
+**Bugfixes**
+* #1648 Drop chunks for materialized hypertable
+* #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
+* #1674 Fix time_bucket_gapfill's interaction with GROUP BY
+
+**Thanks**
+* @RJPhillips01 for reporting an issue with drop chunks.
+
 ## 1.6.0 (2020-01-14)
 
 This release adds major new features and bugfixes since the 1.5.1 release.
@@ -13,17 +27,17 @@ The major new feature in this release allows users to keep the aggregated
 data in a continuous aggregate while dropping the raw data with drop_chunks.
 This allows users to save storage by keeping only the aggregates.
 
-The semantics of the refresh_lag parameter for continuous aggregates has 
+The semantics of the refresh_lag parameter for continuous aggregates has
 been changed to be relative to the current timestamp instead of the maximum
 value in the table. This change requires that an integer_now func be set on
 hypertables with integer-based time columns to use continuous aggregates on
 this table.
 
-We added a timescaledb.ignore_invalidation_older_than parameter for continuous 
-aggregates. This parameter accept a time-interval (e.g. 1 month). If set, 
+We added a timescaledb.ignore_invalidation_older_than parameter for continuous
+aggregates. This parameter accept a time-interval (e.g. 1 month). If set,
 it limits the amount of time for which to process invalidation. Thus, if
 timescaledb.ignore_invalidation_older_than = '1 month', then any modifications
-for data older than 1 month from the current timestamp at modification time may 
+for data older than 1 month from the current timestamp at modification time may
 not cause continuous aggregate to be updated. This limits the amount of work
 that a backfill can trigger. By default, all invalidations are processed.
 

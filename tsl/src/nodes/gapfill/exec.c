@@ -728,6 +728,7 @@ gapfill_rescan(CustomScanState *node)
 	{
 		ExecReScan(linitial(node->custom_ps));
 	}
+	((GapFillState *) node)->state = FETCHED_NONE;
 }
 
 static void

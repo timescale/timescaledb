@@ -1323,6 +1323,16 @@ SELECT
 FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
 GROUP BY 3,4;
 
+-- test with Nested Loop
+SELECT l.id, bucket, data_value FROM
+    (VALUES (1), (2), (3), (4)) a(id)
+    INNER JOIN LATERAL (
+        SELECT b.id id, time_bucket_gapfill('1'::int, time, start=>'1'::int, finish=> '5'::int) bucket, locf(last(data, time)) data_value
+        FROM (VALUES (1, 1, 1), (1, 4, 4), (2, 1, -1), (2, 4, -4)) b(id, time, data)
+        WHERE a.id = b.id
+        GROUP BY b.id, bucket
+    ) as l on (true);
+
 -- test prepared statement
 PREPARE prep_gapfill AS
 SELECT
