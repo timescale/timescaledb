@@ -3709,3 +3709,279 @@ $$);
 (1 row)
 
 DROP TABLE devices;
+-- Test storage options are distributed to data nodes
+--
+-- Make sure that options used during CREATE TABLE WITH and CREATE INDEX WITH
+-- are properly distributed.
+--
+CREATE TABLE disttable_with_relopts_1(time timestamptz NOT NULL, device int) WITH (fillfactor=10);
+CREATE TABLE disttable_with_relopts_2(time timestamptz NOT NULL, device int) WITH (fillfactor=10, parallel_workers=1);
+CREATE TABLE disttable_with_relopts_3(time timestamptz NOT NULL, device int);
+CREATE INDEX disttable_with_relopts_3_idx ON disttable_with_relopts_3(device) WITH (fillfactor=20);
+SELECT * FROM create_distributed_hypertable('disttable_with_relopts_1', 'time');
+ hypertable_id | schema_name |        table_name        | created 
+---------------+-------------+--------------------------+---------
+            18 | public      | disttable_with_relopts_1 | t
+(1 row)
+
+SELECT * FROM create_distributed_hypertable('disttable_with_relopts_2', 'time');
+ hypertable_id | schema_name |        table_name        | created 
+---------------+-------------+--------------------------+---------
+            19 | public      | disttable_with_relopts_2 | t
+(1 row)
+
+SELECT * FROM create_distributed_hypertable('disttable_with_relopts_3', 'time');
+ hypertable_id | schema_name |        table_name        | created 
+---------------+-------------+--------------------------+---------
+            20 | public      | disttable_with_relopts_3 | t
+(1 row)
+
+INSERT INTO disttable_with_relopts_1 VALUES
+       ('2017-01-01 06:01', 1),
+       ('2017-01-01 09:11', 3),
+       ('2017-01-01 08:01', 1),
+       ('2017-01-02 08:01', 2),
+       ('2018-07-02 08:01', 87);
+INSERT INTO disttable_with_relopts_2 VALUES
+       ('2017-01-01 06:01', 1),
+       ('2017-01-01 09:11', 3),
+       ('2017-01-01 08:01', 1),
+       ('2017-01-02 08:01', 2),
+       ('2018-07-02 08:01', 87);
+SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname;
+         relname          |   reloptions    
+--------------------------+-----------------
+ disttable_with_relopts_1 | {fillfactor=10}
+(1 row)
+
+SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname;
+         relname          |             reloptions             
+--------------------------+------------------------------------
+ disttable_with_relopts_2 | {fillfactor=10,parallel_workers=1}
+(1 row)
+
+SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3' ORDER BY relname;
+         relname          | reloptions 
+--------------------------+------------
+ disttable_with_relopts_3 | 
+(1 row)
+
+SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname;
+           relname            |   reloptions    
+------------------------------+-----------------
+ disttable_with_relopts_3_idx | {fillfactor=20}
+(1 row)
+
+SELECT relname, reloptions FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+ORDER BY relname;
+         relname         |   reloptions    
+-------------------------+-----------------
+ _hyper_18_55_dist_chunk | {fillfactor=10}
+ _hyper_18_56_dist_chunk | {fillfactor=10}
+(2 rows)
+
+SELECT relname, reloptions FROM pg_class WHERE relname IN
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+ORDER BY relname;
+         relname         |             reloptions             
+-------------------------+------------------------------------
+ _hyper_19_57_dist_chunk | {fillfactor=10,parallel_workers=1}
+ _hyper_19_58_dist_chunk | {fillfactor=10,parallel_workers=1}
+(2 rows)
+
+-- Ensure parent tables has proper storage options
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname;
+$$);
+NOTICE:  [data_node_1]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname
+NOTICE:  [data_node_1]:
+relname                 |reloptions     
+------------------------+---------------
+disttable_with_relopts_1|{fillfactor=10}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname
+NOTICE:  [data_node_2]:
+relname                 |reloptions     
+------------------------+---------------
+disttable_with_relopts_1|{fillfactor=10}
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname
+NOTICE:  [data_node_3]:
+relname                 |reloptions     
+------------------------+---------------
+disttable_with_relopts_1|{fillfactor=10}
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname;
+$$);
+NOTICE:  [data_node_1]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname
+NOTICE:  [data_node_1]:
+relname                 |reloptions                        
+------------------------+----------------------------------
+disttable_with_relopts_2|{fillfactor=10,parallel_workers=1}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname
+NOTICE:  [data_node_2]:
+relname                 |reloptions                        
+------------------------+----------------------------------
+disttable_with_relopts_2|{fillfactor=10,parallel_workers=1}
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname
+NOTICE:  [data_node_3]:
+relname                 |reloptions                        
+------------------------+----------------------------------
+disttable_with_relopts_2|{fillfactor=10,parallel_workers=1}
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Ensure index has proper storage options set
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname;
+$$);
+NOTICE:  [data_node_1]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname
+NOTICE:  [data_node_1]:
+relname                     |reloptions     
+----------------------------+---------------
+disttable_with_relopts_3_idx|{fillfactor=20}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname
+NOTICE:  [data_node_2]:
+relname                     |reloptions     
+----------------------------+---------------
+disttable_with_relopts_3_idx|{fillfactor=20}
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname
+NOTICE:  [data_node_3]:
+relname                     |reloptions     
+----------------------------+---------------
+disttable_with_relopts_3_idx|{fillfactor=20}
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Make sure chunks derive parent reloptions
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+	ORDER BY relname;
+$$);
+NOTICE:  [data_node_1]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+	ORDER BY relname
+NOTICE:  [data_node_1]:
+relname                |reloptions     
+-----------------------+---------------
+_hyper_18_55_dist_chunk|{fillfactor=10}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+	ORDER BY relname
+NOTICE:  [data_node_2]:
+relname                |reloptions     
+-----------------------+---------------
+_hyper_18_56_dist_chunk|{fillfactor=10}
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+	ORDER BY relname
+NOTICE:  [data_node_3]:
+relname|reloptions
+-------+----------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+	ORDER BY relname;
+$$);
+NOTICE:  [data_node_1]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+	ORDER BY relname
+NOTICE:  [data_node_1]:
+relname                |reloptions                        
+-----------------------+----------------------------------
+_hyper_19_57_dist_chunk|{fillfactor=10,parallel_workers=1}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+	ORDER BY relname
+NOTICE:  [data_node_2]:
+relname                |reloptions                        
+-----------------------+----------------------------------
+_hyper_19_58_dist_chunk|{fillfactor=10,parallel_workers=1}
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+	SELECT relname, reloptions FROM pg_class WHERE relname IN
+	(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+	ORDER BY relname
+NOTICE:  [data_node_3]:
+relname|reloptions
+-------+----------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP TABLE disttable_with_relopts_1;
+DROP TABLE disttable_with_relopts_2;
+DROP TABLE disttable_with_relopts_3;

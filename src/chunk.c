@@ -560,28 +560,6 @@ ts_chunk_add_constraints(Chunk *chunk)
 	return num_added;
 }
 
-static List *
-get_reloptions(Oid relid)
-{
-	HeapTuple tuple;
-	Datum datum;
-	bool isnull;
-	List *options;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
-
-	options = untransformRelOptions(datum);
-
-	ReleaseSysCache(tuple);
-
-	return options;
-}
-
 /* applies the attributes and statistics target for columns on the hypertable
    to columns on the chunk */
 static void
@@ -725,7 +703,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.base.inhRelations = list_make1(makeRangeVar(namespace, hyper_name, 0)),
 		.base.tablespacename = tablespacename ? pstrdup(tablespacename) : NULL,
-		.base.options = get_reloptions(chunk->hypertable_relid),
+		.base.options = ts_get_reloptions(chunk->hypertable_relid),
 #if PG12_GE
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
 								 get_am_name_for_rel(chunk->hypertable_relid) :
