@@ -252,7 +252,7 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 /* create hypertable for the table referred by mat_tbloid
@@ -321,7 +321,7 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 		}
 	}
 	systable_endscan(tgscan);
-	heap_close(tgrel, AccessShareLock);
+	table_close(tgrel, AccessShareLock);
 	return trg_found;
 }
 

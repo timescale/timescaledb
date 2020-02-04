@@ -887,7 +887,7 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 		}
 	}
 
-	heap_close(relation, NoLock);
+	table_close(relation, NoLock);
 
 	return result;
 }

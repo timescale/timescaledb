@@ -449,7 +449,7 @@ ts_inheritance_parent_relid(Oid relid)
 		parent = ((Form_pg_inherits) GETSTRUCT(tuple))->inhparent;
 
 	systable_endscan(scan);
-	heap_close(catalog, AccessShareLock);
+	table_close(catalog, AccessShareLock);
 
 	return parent;
 }

@@ -902,7 +902,7 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	heap_close(r, NoLock);
+	table_close(r, NoLock);
 
 	/*
 	 * Set flags and access permissions.

@@ -131,7 +131,7 @@ ts_bgw_policy_compress_chunks_insert(BgwPolicyCompressChunks *policy)
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(ht_older_than);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 BgwPolicyCompressChunks *

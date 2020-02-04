@@ -193,7 +193,7 @@ chunk_constraints_insert(ChunkConstraints *ccs)
 		chunk_constraint_insert_relation(rel, &ccs->constraints[i]);
 
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 /*
@@ -211,7 +211,7 @@ chunk_constraint_insert(ChunkConstraint *constraint)
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk_constraint_insert_relation(rel, constraint);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static ChunkConstraint *
@@ -601,7 +601,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	}
 
 	systable_endscan(scan);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return num_added;
 }

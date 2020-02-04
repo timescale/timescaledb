@@ -422,5 +422,5 @@ append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
 	/* Lock will be released by the transaction end. Since this is called on the
 	 * commit hook, this should be soon.
 	 */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 }

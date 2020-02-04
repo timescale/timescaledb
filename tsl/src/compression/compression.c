@@ -189,7 +189,7 @@ truncate_relation(Oid table_oid)
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	if (OidIsValid(toast_relid))
 	{
@@ -200,7 +200,7 @@ truncate_relation(Oid table_oid)
 #endif
 		);
 		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
-		heap_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);

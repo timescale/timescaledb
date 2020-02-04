@@ -873,7 +873,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 							   chunk_target_size,
 							   num_dimensions,
 							   compressed);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static ScanTupleResult
@@ -1175,7 +1175,7 @@ table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 	Relation rel = table_open(table_relid, lockmode);
 	bool hastuples = relation_has_tuples(rel);
 
-	heap_close(rel, lockmode);
+	table_close(rel, lockmode);
 	return hastuples;
 }
 
@@ -1271,7 +1271,7 @@ hypertable_validate_constraints(Oid relid)
 	}
 
 	systable_endscan(scan);
-	heap_close(catalog, AccessShareLock);
+	table_close(catalog, AccessShareLock);
 }
 
 /*
@@ -1379,7 +1379,7 @@ old_insert_blocker_trigger_get(Oid relid)
 	}
 
 	systable_endscan(tgscan);
-	heap_close(tgrel, AccessShareLock);
+	table_close(tgrel, AccessShareLock);
 
 	return tgoid;
 }
@@ -1653,7 +1653,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		 * Unlock and return. Note that unlocking is analogous to what PG does
 		 * for ALTER TABLE ADD COLUMN IF NOT EXIST
 		 */
-		heap_close(rel, AccessExclusiveLock);
+		table_close(rel, AccessExclusiveLock);
 
 		if (if_not_exists)
 		{
@@ -1843,7 +1843,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	 * Note: we do not unlock here. We wait till the end of the txn instead.
 	 * Must close the relation before migrating data.
 	 */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	if (table_has_data)
 	{
@@ -2110,7 +2110,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
-		heap_close(rel, AccessExclusiveLock);
+		table_close(rel, AccessExclusiveLock);
 	}
 
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -2152,7 +2152,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 
 	insert_blocker_trigger_add(table_relid);
 	/* lock will be released after the transaction is done */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 	return true;
 }
 

@@ -392,7 +392,7 @@ compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid)
 		ts_catalog_restore_user(&sec_ctx);
 	}
 
-	heap_close(rel, NoLock); /*lock will be released at end of transaction only*/
+	table_close(rel, NoLock); /*lock will be released at end of transaction only*/
 }
 
 static void
@@ -790,7 +790,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	}
 
 	systable_endscan(scan);
-	heap_close(pg_constr, AccessShareLock);
+	table_close(pg_constr, AccessShareLock);
 	return conlist;
 }
 

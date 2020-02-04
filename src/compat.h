@@ -286,6 +286,7 @@
  */
 #if PG96 || PG10
 
+#define TupleTableSlotOps void
 #define TTSOpsVirtualP NULL
 #define TTSOpsHeapTupleP NULL
 #define TTSOpsMinimalTupleP NULL
@@ -324,6 +325,7 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void * tts_ops)
 }
 #elif PG12_LT
 
+#define TupleTableSlotOps void
 #define TTSOpsVirtualP NULL
 #define TTSOpsHeapTupleP NULL
 #define TTSOpsMinimalTupleP NULL

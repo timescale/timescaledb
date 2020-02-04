@@ -291,7 +291,7 @@ table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
 	Relation rel = table_open(relid, AccessShareLock);
 	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attname, attnum, minmax);
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return res != MINMAX_NO_INDEX;
 }
@@ -323,7 +323,7 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 		res = minmax_heapscan(rel, atttype, attnum, minmax);
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return res == MINMAX_FOUND;
 }

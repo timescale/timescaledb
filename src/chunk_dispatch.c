@@ -10,6 +10,8 @@
 #include <utils/rel.h>
 #include <catalog/pg_type.h>
 
+#include "compat.h"
+
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
 #include "subspace_store.h"
@@ -53,11 +55,8 @@ destroy_chunk_insert_state(void *cis)
  */
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
-										 bool *cis_changed_out
-#if PG12
-										, const TupleTableSlotOps *const ops
-#endif
-										 )
+										 bool *cis_changed_out,
+										 const TupleTableSlotOps *const ops)
 {
 	ChunkInsertState *cis;
 
@@ -74,11 +73,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (NULL == new_chunk)
 			elog(ERROR, "no chunk found or created");
 
-		cis = ts_chunk_insert_state_create(new_chunk, dispatch
-#if PG12
-				, ops
-#endif
-		);
+		cis = ts_chunk_insert_state_create(new_chunk, dispatch, ops);
 		ts_subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
 	}
 	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)

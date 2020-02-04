@@ -345,7 +345,7 @@ chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
 	rel = table_open(catalog_get_table_id(catalog, CHUNK_INDEX), RowExclusiveLock);
 	result =
 		chunk_index_insert_relation(rel, chunk_id, chunk_index, hypertable_id, hypertable_index);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 
 	return result;
 }
@@ -956,7 +956,7 @@ ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 
 	mark_index_clustered(rel, indexrelid, true);
 	CommandCounterIncrement();
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 TS_FUNCTION_INFO_V1(ts_chunk_index_clone);
@@ -1022,10 +1022,10 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 		new_index_oids = lappend_oid(new_index_oids, new_chunk_indexrelid);
 	}
 
-	heap_close(hypertable_rel, AccessShareLock);
+	table_close(hypertable_rel, AccessShareLock);
 
-	heap_close(dest_chunk_rel, NoLock);
-	heap_close(src_chunk_rel, NoLock);
+	table_close(dest_chunk_rel, NoLock);
+	table_close(src_chunk_rel, NoLock);
 
 	if (src_index_oids != NULL)
 		*src_index_oids = index_oids;
@@ -1066,9 +1066,9 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 													   OidIsValid(constraint_oid),
 													   InvalidOid);
 
-	heap_close(chunk_rel, NoLock);
+	table_close(chunk_rel, NoLock);
 
-	heap_close(hypertable_rel, AccessShareLock);
+	table_close(hypertable_rel, AccessShareLock);
 
 	relation_close(chunk_index_rel, AccessShareLock);
 

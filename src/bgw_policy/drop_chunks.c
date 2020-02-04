@@ -175,7 +175,7 @@ ts_bgw_policy_drop_chunks_insert(BgwPolicyDropChunks *policy)
 		table_open(catalog_get_table_id(catalog, BGW_POLICY_DROP_CHUNKS), RowExclusiveLock);
 
 	ts_bgw_policy_drop_chunks_insert_with_relation(rel, policy);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 TSDLLEXPORT int32

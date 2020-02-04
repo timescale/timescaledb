@@ -427,7 +427,7 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 							   destination_tablespace,
 							   index_tablespace);
 
-	/* NB: timescale_rebuild_relation does heap_close() on OldHeap */
+	/* NB: timescale_rebuild_relation does table_close() on OldHeap */
 }
 
 /*
@@ -460,7 +460,7 @@ timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wai
 	relpersistence = OldHeap->rd_rel->relpersistence;
 
 	/* Close relcache entry, but keep lock until transaction commit */
-	heap_close(OldHeap, NoLock);
+	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
 	OIDNewHeap = make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock);
@@ -885,8 +885,8 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	if (OldIndex != NULL)
 		index_close(OldIndex, NoLock);
-	heap_close(OldHeap, NoLock);
-	heap_close(NewHeap, NoLock);
+	table_close(OldHeap, NoLock);
+	table_close(NewHeap, NoLock);
 
 	/* Update pg_class to reflect the correct values of pages and tuples. */
 	relRelation = table_open(RelationRelationId, RowExclusiveLock);
@@ -905,7 +905,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	/* Clean up. */
 	heap_freetuple(reltup);
-	heap_close(relRelation, RowExclusiveLock);
+	table_close(relRelation, RowExclusiveLock);
 
 	/* Make the update visible */
 	CommandCounterIncrement();
@@ -940,7 +940,7 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 	{
 		Relation waiter = table_open(wait_id, AccessExclusiveLock);
 
-		heap_close(waiter, AccessExclusiveLock);
+		table_close(waiter, AccessExclusiveLock);
 	}
 #endif
 
@@ -1010,7 +1010,7 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 							frozenXid,
 							cutoffMulti);
 	}
-	heap_close(oldHeapRel, NoLock);
+	table_close(oldHeapRel, NoLock);
 
 	CommandCounterIncrement();
 
@@ -1311,7 +1311,7 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	heap_freetuple(reltup1);
 	heap_freetuple(reltup2);
 
-	heap_close(relRelation, RowExclusiveLock);
+	table_close(relRelation, RowExclusiveLock);
 
 	/*
 	 * Close both relcache entries' smgr links.  We need this kludge because

@@ -156,7 +156,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 
 	if (!isnull)
 	{
-		heap_close(rel, ShareRowExclusiveLock);
+		table_close(rel, ShareRowExclusiveLock);
 		return existing_value;
 	}
 
@@ -170,7 +170,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 
-	heap_close(rel, ShareRowExclusiveLock);
+	table_close(rel, ShareRowExclusiveLock);
 
 	return metadata_value;
 }

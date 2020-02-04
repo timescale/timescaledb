@@ -531,10 +531,7 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch
-#if PG12
-	, const TupleTableSlotOps *const ops
-#endif
+ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, const TupleTableSlotOps *const ops
 )
 {
 	ChunkInsertState *state;
@@ -606,7 +603,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch
 	if (state->tup_conv_map)
 		state->slot = MakeTupleTableSlotCompat(NULL, ops);
 
-	heap_close(parent_rel, AccessShareLock);
+	table_close(parent_rel, AccessShareLock);
 
 	MemoryContextSwitchTo(old_mcxt);
 
@@ -652,7 +649,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		return;
 
 	ExecCloseIndices(state->result_relation_info);
-	heap_close(state->rel, NoLock);
+	table_close(state->rel, NoLock);
 
 	/*
 	 * Postgres stores cached row types from `get_cached_rowtype` in the

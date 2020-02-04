@@ -178,7 +178,7 @@ ts_extension_schema_oid(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (schema == InvalidOid)
 		elog(ERROR, "extension schema not found");

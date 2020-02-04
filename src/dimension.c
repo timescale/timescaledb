@@ -637,7 +637,7 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 num_slices,
 											 partitioning_func,
 											 interval_length);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
 

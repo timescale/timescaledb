@@ -777,7 +777,7 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
 }
 

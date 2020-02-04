@@ -134,7 +134,7 @@ ts_bgw_policy_reorder_insert(BgwPolicyReorder *policy)
 	Relation rel = table_open(catalog_get_table_id(catalog, BGW_POLICY_REORDER), RowExclusiveLock);
 
 	ts_bgw_policy_reorder_insert_with_relation(rel, policy);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 TSDLLEXPORT int32

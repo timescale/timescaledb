@@ -367,7 +367,7 @@ ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 									  NULL,
 									  RowExclusiveLock))
 			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
-		heap_close(rel, ShareRowExclusiveLock);
+		table_close(rel, ShareRowExclusiveLock);
 	}
 }
 
@@ -448,7 +448,7 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 									  &next_start,
 									  RowExclusiveLock))
 			bgw_job_stat_insert_relation(rel, bgw_job_id, true, next_start);
-		heap_close(rel, ShareRowExclusiveLock);
+		table_close(rel, ShareRowExclusiveLock);
 	}
 }
 

@@ -119,7 +119,7 @@ ts_bgw_policy_chunk_stats_insert(BgwPolicyChunkStats *chunk_stats)
 		table_open(catalog_get_table_id(catalog, BGW_POLICY_CHUNK_STATS), RowExclusiveLock);
 
 	ts_bgw_policy_chunk_stats_insert_with_relation(rel, chunk_stats);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 BgwPolicyChunkStats *

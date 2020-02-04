@@ -56,7 +56,7 @@ bgw_log_insert(char *msg)
 
 	rel = table_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static emit_log_hook_type prev_emit_log_hook = NULL;

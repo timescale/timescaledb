@@ -16,6 +16,8 @@
 
 #include <dimension.h>
 
+#include "compat.h"
+
 #include "bgw/job.h"
 #include "bgw_policy/reorder.h"
 #include "errors.h"

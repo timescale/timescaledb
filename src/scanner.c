@@ -64,7 +64,7 @@ heap_scanner_endscan(InternalScannerCtx *ctx)
 static void
 heap_scanner_close(InternalScannerCtx *ctx)
 {
-	heap_close(ctx->tablerel, ctx->sctx->lockmode);
+	table_close(ctx->tablerel, ctx->sctx->lockmode);
 }
 
 /* Functions implementing index scans */
@@ -115,7 +115,7 @@ index_scanner_endscan(InternalScannerCtx *ctx)
 static void
 index_scanner_close(InternalScannerCtx *ctx)
 {
-	heap_close(ctx->tablerel, ctx->sctx->lockmode);
+	table_close(ctx->tablerel, ctx->sctx->lockmode);
 	index_close(ctx->indexrel, ctx->sctx->lockmode);
 }
 

@@ -390,7 +390,7 @@ ts_indexing_find_clustered_index(Oid table_relid)
 		index_relid = InvalidOid;
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return index_relid;
 }
@@ -440,7 +440,7 @@ ts_indexing_mark_as(Oid index_id, IndexValidity validity)
 	/* ... and write it back */
 	CatalogTupleUpdate(pg_index, &indexTuple->t_self, new_tuple);
 
-	heap_close(pg_index, RowExclusiveLock);
+	table_close(pg_index, RowExclusiveLock);
 	return was_valid;
 }
 

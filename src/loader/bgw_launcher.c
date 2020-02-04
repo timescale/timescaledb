@@ -376,7 +376,7 @@ populate_database_htab(HTAB *db_htab)
 #endif
 	}
 	heap_endscan(scan);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	CommitTransactionCommand();
 }

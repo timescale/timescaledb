@@ -1190,10 +1190,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
-			heap_close(newrelation, NoLock);
+			table_close(newrelation, NoLock);
 	}
 
-	heap_close(oldrelation, NoLock);
+	table_close(oldrelation, NoLock);
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
 

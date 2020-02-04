@@ -113,7 +113,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static void

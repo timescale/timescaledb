@@ -289,9 +289,11 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed,
 #if PG12
-				, TTSOpsHeapTupleP
+				TTSOpsHeapTupleP
+#else
+				NULL
 #endif
 		);
 
@@ -444,7 +446,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 			/* Close indices and then the relation itself */
 			ExecCloseIndices(resultRelInfo);
-			heap_close(resultRelInfo->ri_RelationDesc, NoLock);
+			table_close(resultRelInfo->ri_RelationDesc, NoLock);
 		}
 	}
 #else
@@ -663,7 +665,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
 	EndCopyFrom(cstate);
 
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 }
 
 static bool
@@ -732,7 +734,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	timescaledb_CopyFrom(ccstate, range_table, ht);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
-	heap_close(rel, lockmode);
+	table_close(rel, lockmode);
 
 	ExecuteTruncate(&stmt);
 }

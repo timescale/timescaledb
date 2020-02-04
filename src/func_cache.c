@@ -356,7 +356,7 @@ initialize_func_info()
 		ReleaseSysCache(tuple);
 	}
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 FuncInfo *

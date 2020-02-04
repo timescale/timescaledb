@@ -60,7 +60,7 @@ params_register_dsm_handle(dsm_handle handle)
 	ts_catalog_update(rel, tuple);
 	heap_freetuple(tuple);
 	heap_endscan(scan);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static dsm_handle
@@ -81,7 +81,7 @@ params_load_dsm_handle()
 	handle = fd->handle;
 	heap_freetuple(tuple);
 	heap_endscan(scan);
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 
 	return handle;
 }

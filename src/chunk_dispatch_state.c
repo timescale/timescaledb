@@ -113,9 +113,11 @@ chunk_dispatch_exec(CustomScanState *node)
 
 		/* Find or create the insert state matching the point */
 
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed,
 #if PG12
-				, state->slot->tts_ops
+				state->slot->tts_ops
+#else
+			    NULL
 #endif
 			);
 	if (cis_changed)

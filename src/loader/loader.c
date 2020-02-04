@@ -200,7 +200,7 @@ extension_owner(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (extension_owner == InvalidOid)
 		elog(ERROR, "extension not found while getting owner");

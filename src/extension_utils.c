@@ -103,7 +103,7 @@ extension_version(void)
 	}
 
 	systable_endscan(scandesc);
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	if (sql_version == NULL)
 	{

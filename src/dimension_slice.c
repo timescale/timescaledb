@@ -683,7 +683,7 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 	for (i = 0; i < num_slices; i++)
 		dimension_slice_insert_relation(rel, slices[i]);
 
-	heap_close(rel, RowExclusiveLock);
+	table_close(rel, RowExclusiveLock);
 }
 
 static ScanTupleResult
