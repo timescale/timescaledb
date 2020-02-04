@@ -11,6 +11,7 @@
 #include <access/htup_details.h>
 #include <access/htup.h>
 #include <access/xact.h>
+#include <access/reloptions.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_cast.h>
@@ -709,4 +710,29 @@ ts_has_row_security(Oid relid)
 	relforcerowsecurity = classform->relforcerowsecurity;
 	ReleaseSysCache(tuple);
 	return (relrowsecurity || relforcerowsecurity);
+}
+
+List *
+ts_get_reloptions(Oid relid)
+{
+	HeapTuple tuple;
+	Datum datum;
+	bool isnull;
+	List *options = NIL;
+
+	Assert(OidIsValid(relid));
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
+
+	if (!isnull && PointerIsValid(DatumGetPointer(datum)))
+		options = untransformRelOptions(datum);
+
+	ReleaseSysCache(tuple);
+
+	return options;
 }

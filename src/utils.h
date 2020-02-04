@@ -90,6 +90,8 @@ extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInf
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 
+extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
+
 #define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type)                                         \
 	(to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
 

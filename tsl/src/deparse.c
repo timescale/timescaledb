@@ -15,6 +15,7 @@
 #include <utils/fmgroids.h>
 #include <utils/rel.h>
 #include <commands/tablespace.h>
+#include <commands/defrem.h>
 #include <access/relscan.h>
 #include <catalog/pg_class.h>
 #include <catalog/indexing.h>
@@ -35,6 +36,8 @@
 #include <trigger.h>
 
 #include "deparse.h"
+#include "guc.h"
+#include "utils.h"
 
 /*
  * Deparse a table into a set of SQL commands that can be used to recreate it.
@@ -311,6 +314,31 @@ deparse_create_table_info(Oid relid)
 	return table_info;
 }
 
+static void
+deparse_get_tabledef_with(const TableInfo *table_info, StringInfo create_table)
+{
+	ListCell *cell;
+	List *opts = ts_get_reloptions(table_info->relid);
+
+	if (list_length(opts) == 0)
+		return;
+
+	appendStringInfoString(create_table, " WITH (");
+
+	foreach (cell, opts)
+	{
+		DefElem *def = (DefElem *) lfirst(cell);
+
+		appendStringInfo(create_table,
+						 "%s%s=%s",
+						 cell != list_head(opts) ? "," : "",
+						 def->defname,
+						 defGetString(def));
+	}
+
+	appendStringInfoChar(create_table, ')');
+}
+
 TableDef *
 deparse_get_tabledef(TableInfo *table_info)
 {
@@ -337,6 +365,7 @@ deparse_get_tabledef(TableInfo *table_info)
 	deparse_columns(create_table, rel);
 
 	appendStringInfoChar(create_table, ')');
+	deparse_get_tabledef_with(table_info, create_table);
 
 	appendStringInfoChar(create_table, ';');
 	table_def->create_cmd = create_table->data;
