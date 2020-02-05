@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
+#include <executor/tuptable.h>
 #include <catalog/pg_type.h>
 
 #include "catalog.h"
@@ -124,8 +125,7 @@ enum Anum_add_dimension
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
 extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
-extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple,
-														TupleDesc tupdesc);
+extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(Hyperspace *h, TupleTableSlot *slot);
 extern Dimension *ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
 extern TSDLLEXPORT Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type,
 														  Index n);

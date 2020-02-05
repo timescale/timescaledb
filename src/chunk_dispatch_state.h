@@ -20,22 +20,27 @@ typedef struct ChunkDispatchState
 	Plan *subplan;
 	Cache *hypertable_cache;
 	Oid hypertable_relid;
-
+	List *arbiter_indexes;
+#if PG11_LT
+	/* On PostgreSQL versions that use a shared projection slot for ON
+	 * CONFLICT, we set the slot's tuple descriptor based on the current
+	 * chunk's projection. If a chunk's tuple descriptor matches the
+	 * hypertable root, we can reuse its projection info and therefore need to
+	 * remember it's tuple descriptor to be able to reset it for those
+	 * chunks. */
+	TupleDesc conflproj_tupdesc;
+#endif
 	/*
-	 * Keep pointers to the original parsed Query and the ModifyTableState
-	 * plan node. We need these to compute and update the arbiter indexes for
-	 * each chunk we INSERT into.
+	 * Keep a reference to the parent ModifyTableState executor node since we
+	 * need to manipulate the current result relation on-the-fly for chunk
+	 * routing during inserts.
 	 */
-	ModifyTableState *parent;
-
+	ModifyTableState *mtstate;
 	/*
-	 * The chunk dispatch state. Keeps cached insert states (result relations)
-	 * for each chunk.
+	 * The chunk dispatch state. Keeps cached chunk insert states (with result
+	 * relations) for each chunk.
 	 */
 	ChunkDispatch *dispatch;
-#if PG12_GE
-	TupleTableSlot *slot;
-#endif
 } ChunkDispatchState;
 
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
