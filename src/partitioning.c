@@ -258,14 +258,13 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
 }
 
 TSDLLEXPORT Datum
-ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc,
-								 bool *isnull)
+ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, bool *isnull)
 {
 	Datum value;
 	bool null;
 	Oid collation;
 
-	value = heap_getattr(tuple, pinfo->column_attnum, desc, &null);
+	value = slot_getattr(slot, pinfo->column_attnum, &null);
 
 	if (NULL != isnull)
 		*isnull = null;
@@ -273,7 +272,7 @@ ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, Tuple
 	if (null)
 		return 0;
 
-	collation = TupleDescAttr(desc, pinfo->column_attnum - 1)->attcollation;
+	collation = TupleDescAttr(slot->tts_tupleDescriptor, pinfo->column_attnum - 1)->attcollation;
 
 	return ts_partitioning_func_apply(pinfo, collation, value);
 }

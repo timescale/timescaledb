@@ -19,7 +19,7 @@
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
 #include <executor/executor.h>
-/*#include <executor/tuptable.h>*/
+#include <executor/nodeModifyTable.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/bufmgr.h>
@@ -50,7 +50,7 @@
 typedef struct CopyChunkState CopyChunkState;
 
 typedef bool (*CopyFromFunc)(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
-							 bool *nulls, Oid *tuple_oid);
+							 bool *nulls);
 
 typedef struct CopyChunkState
 {
@@ -88,42 +88,49 @@ copy_chunk_state_destroy(CopyChunkState *ccstate)
 }
 
 static bool
-next_copy_from(CopyChunkState *ccstate, ExprContext *econtext, Datum *values, bool *nulls,
-			   Oid *tuple_oid)
+next_copy_from(CopyChunkState *ccstate, ExprContext *econtext, Datum *values, bool *nulls)
 {
 	Assert(ccstate->cstate != NULL);
-	return NextCopyFrom(ccstate->cstate,
-						econtext,
-						values,
-						nulls
-#if PG12_LT
-						,
-						tuple_oid
+#if PG12_GE
+	return NextCopyFrom(ccstate->cstate, econtext, values, nulls);
+#else
+	return NextCopyFrom(ccstate->cstate, econtext, values, nulls, NULL);
 #endif
-	);
+}
+
+/*
+ * Change to another chunk for inserts.
+ *
+ * Called every time we switch to another chunk for inserts.
+ */
+static void
+on_chunk_insert_state_changed(ChunkInsertState *state, void *data)
+{
+	BulkInsertState bistate = data;
+
+	/* Different chunk so must release BulkInsertState */
+	if (bistate->current_buf != InvalidBuffer)
+		ReleaseBuffer(bistate->current_buf);
+	bistate->current_buf = InvalidBuffer;
 }
 
 /*
  * Copy FROM file to relation.
  */
 static uint64
-timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
+copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 {
-	HeapTuple tuple;
-	TupleDesc tupDesc;
 	Datum *values;
 	bool *nulls;
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
-	TupleTableSlot *myslot;
-	TupleTableSlot *chunkslot = MakeSingleTupleTableSlotCompat(NULL, TTSOpsHeapTupleP);
+	TupleTableSlot *singleslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
-
 	ErrorContextCallback errcallback = { 0 };
 	CommandId mycid = GetCurrentCommandId(true);
-	int hi_options = 0; /* start with default heap_insert options */
+	int ti_options = 0; /* start with default options for insert */
 	BulkInsertState bistate;
 	uint64 processed = 0;
 
@@ -154,8 +161,6 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 					 errmsg("cannot copy to non-table relation \"%s\"",
 							RelationGetRelationName(ccstate->rel))));
 	}
-
-	tupDesc = RelationGetDescr(ccstate->rel);
 
 	/*----------
 	 * Check to see if we can avoid writing WAL
@@ -196,9 +201,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	if (ccstate->rel->rd_createSubid != InvalidSubTransactionId ||
 		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
 	{
-		hi_options |= HEAP_INSERT_SKIP_FSM;
+		ti_options |= HEAP_INSERT_SKIP_FSM;
 		if (!XLogIsNeeded())
-			hi_options |= HEAP_INSERT_SKIP_WAL;
+			ti_options |= HEAP_INSERT_SKIP_WAL;
 	}
 
 	/*
@@ -213,6 +218,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 								* which isn't dummy-nuf */
 							0);
 
+	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT);
+
 	ExecOpenIndices(resultRelInfo, false);
 
 	estate->es_result_relations = resultRelInfo;
@@ -220,15 +227,17 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	estate->es_result_relation_info = resultRelInfo;
 	estate->es_range_table = range_table;
 
-	/* Set up a tuple slot too */
-	myslot = ExecInitExtraTupleSlotCompat(estate, tupDesc, TTSOpsHeapTupleP);
+#if PG12_GE
+	ExecInitRangeTable(estate, estate->es_range_table);
+#else
 
-/* https://github.com/postgres/postgres/commit/ff11e7f4b9ae017585c3ba146db7ba39c31f209a#diff-aac4247fa1437143e61e9e991418d313
- */
-#if PG12_LT
-	/* Triggers might need a slot as well */
-	estate->es_trig_tuple_slot = ExecInitExtraTupleSlotCompat(estate, NULL, TTSOpsMinimalTupleP);
+	/* Triggers might need a slot as well. In PG12, the trigger slots were
+	 * moved to the ResultRelInfo and are lazily initialized during
+	 * executor execution. */
+	estate->es_trig_tuple_slot = ExecInitExtraTupleSlotCompat(estate, NULL, NULL);
 #endif
+
+	singleslot = table_slot_create(resultRelInfo->ri_RelationDesc, &estate->es_tupleTable);
 
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
@@ -241,8 +250,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	 */
 	ExecBSInsertTriggers(estate, resultRelInfo);
 
-	values = (Datum *) palloc(tupDesc->natts * sizeof(Datum));
-	nulls = (bool *) palloc(tupDesc->natts * sizeof(bool));
+	values = (Datum *) palloc(RelationGetDescr(ccstate->rel)->natts * sizeof(Datum));
+	nulls = (bool *) palloc(RelationGetDescr(ccstate->rel)->natts * sizeof(bool));
 
 	bistate = GetBulkInsertState();
 	econtext = GetPerTupleExprContext(estate);
@@ -262,38 +271,30 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 	for (;;)
 	{
-		TupleTableSlot *slot = chunkslot;
+		TupleTableSlot *myslot;
 		bool skip_tuple;
-		Oid loaded_oid = InvalidOid;
 		Point *point;
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
-		bool cis_changed;
-#if PG12_GE
-		bool should_free = false;
-#endif
 
 		CHECK_FOR_INTERRUPTS();
 
 		/* Reset the per-tuple exprcontext */
 		ResetPerTupleExprContext(estate);
+		myslot = singleslot;
 
 		/* Switch into its memory context */
 		MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-		if (!ccstate->next_copy_from(ccstate, econtext, values, nulls, &loaded_oid))
+		ExecClearTuple(myslot);
+
+		if (!ccstate->next_copy_from(ccstate, econtext, myslot->tts_values, myslot->tts_isnull))
 			break;
 
-		/* And now we can form the input tuple. */
-		tuple = heap_form_tuple(tupDesc, values, nulls);
-
-#if PG12_LT
-		if (loaded_oid != InvalidOid)
-			HeapTupleSetOid(tuple, loaded_oid);
-#endif
+		ExecStoreVirtualTuple(myslot);
 
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
-		point = ts_hyperspace_calculate_point(ht->space, tuple, tupDesc);
+		point = ts_hyperspace_calculate_point(ht->space, myslot);
 
 		/* Save the main table's (hypertable's) ResultRelInfo */
 		if (NULL == dispatch->hypertable_result_rel_info)
@@ -302,39 +303,17 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		/* Find or create the insert state matching the point */
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 													   point,
-													   &cis_changed,
-#if PG12_LT
-													   NULL
-#else
-													   TTSOpsHeapTupleP
-#endif
-		);
+													   on_chunk_insert_state_changed,
+													   bistate);
 
 		Assert(cis != NULL);
-
-		if (cis_changed)
-		{
-			/* Different chunk so must release BulkInsertState */
-			if (bistate->current_buf != InvalidBuffer)
-				ReleaseBuffer(bistate->current_buf);
-			bistate->current_buf = InvalidBuffer;
-		}
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);
 
-		/* Place tuple in tuple slot --- but slot shouldn't free it */
-		slot = chunkslot;
-
 		/* Convert the tuple to match the chunk's rowtype */
-		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, NULL);
-		ExecSetSlotDescriptor(chunkslot,
-							  RelationGetDescr(cis->result_relation_info->ri_RelationDesc));
-#if PG12_LT
-		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
-#else /* 29c94e */
-		ExecStoreHeapTuple(tuple, slot, false);
-#endif
+		if (NULL != cis->hyper_to_chunk_map)
+			myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -345,63 +324,66 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		resultRelInfo = cis->result_relation_info;
 		estate->es_result_relation_info = resultRelInfo;
 
-		/*
-		 * Constraints might reference the tableoid column, so initialize
-		 * t_tableOid before evaluating them.
-		 */
-		tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+		/* Set the right relation for triggers */
+		ts_tuptableslot_set_table_oid(myslot, RelationGetRelid(resultRelInfo->ri_RelationDesc));
 
 		skip_tuple = false;
 
 		/* BEFORE ROW INSERT Triggers */
 		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 		{
-			ExecBRInsertTriggersCompat(estate, resultRelInfo, slot);
+			ExecBRInsertTriggersCompat(estate, resultRelInfo, myslot);
 
-			if (slot == NULL) /* "do nothing" */
+			if (myslot == NULL) /* "do nothing" */
 				skip_tuple = true;
-			else /* trigger might have changed tuple */
-			{
-#if PG12_LT
-				tuple = ExecMaterializeSlot(slot);
-#else
-				tuple = ExecFetchSlotHeapTuple(slot, true, &should_free);
-#endif
-			}
 		}
 
 		if (!skip_tuple)
 		{
-			/* Check the constraints of the tuple */
-			if (ccstate->rel->rd_att->constr)
-				ExecConstraints(resultRelInfo, slot, estate);
-
+			bool has_instead_insert_row_trig = false;
+			/*
+			 * If there is an INSTEAD OF INSERT ROW trigger, let it handle the
+			 * tuple.  Otherwise, proceed with inserting the tuple into the
+			 * table or foreign table.
+			 */
+			if (has_instead_insert_row_trig)
+			{
+				ExecIRInsertTriggers(estate, resultRelInfo, myslot);
+			}
+			else
 			{
 				List *recheckIndexes = NIL;
 
-				/* OK, store the tuple and create index entries for it */
-				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid, hi_options, bistate);
 #if PG12_GE
-				/* re-store the tuple so the slot's ItemPointer is updated */
-				ExecStoreHeapTuple(tuple, slot, should_free);
+				/* Compute stored generated columns */
+				if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
+					resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+					ExecComputeStoredGenerated(estate, myslot);
 #endif
+				/*
+				 * If the target is a plain table, check the constraints of
+				 * the tuple.
+				 */
+				if (resultRelInfo->ri_FdwRoutine == NULL &&
+					resultRelInfo->ri_RelationDesc->rd_att->constr)
+					ExecConstraints(resultRelInfo, myslot, estate);
+
+				/* OK, store the tuple and create index entries for it */
+				table_tuple_insert(resultRelInfo->ri_RelationDesc,
+								   myslot,
+								   mycid,
+								   ti_options,
+								   bistate);
 
 				if (resultRelInfo->ri_NumIndices > 0)
-					recheckIndexes = ExecInsertIndexTuples(slot,
-#if PG12_LT
-														   &(tuple->t_self),
-#endif
-														   estate,
-														   false,
-														   NULL,
-														   NIL);
+					recheckIndexes = ExecInsertIndexTuplesCompat(myslot, estate, false, NULL, NIL);
 
-					/* AFTER ROW INSERT Triggers */
-#if PG12_LT
-				ExecARInsertTriggersCompat(estate, resultRelInfo, tuple, recheckIndexes);
-#else
-				ExecARInsertTriggersCompat(estate, resultRelInfo, slot, recheckIndexes);
-#endif
+				/* AFTER ROW INSERT Triggers */
+				ExecARInsertTriggersCompat(estate,
+										   resultRelInfo,
+										   myslot,
+										   recheckIndexes,
+										   NULL /* transition capture */);
 
 				list_free(recheckIndexes);
 			}
@@ -421,6 +403,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		}
 	}
 
+	estate->es_result_relation_info = ccstate->dispatch->hypertable_result_rel_info;
+
 	/* Done, clean up */
 	if (errcallback.previous)
 		error_context_stack = errcallback.previous;
@@ -429,9 +413,6 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	/*
-	 * if (cstate->copy_dest == COPY_OLD_FE) pq_endmsgread();
-	 */
 	/* Execute AFTER STATEMENT insertion triggers */
 	ExecASInsertTriggersCompat(estate, resultRelInfo);
 
@@ -474,10 +455,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	 * If we skipped writing WAL, then we need to sync the heap (but not
 	 * indexes since those use WAL anyway)
 	 */
-	if (hi_options & HEAP_INSERT_SKIP_WAL)
+	if (ti_options & HEAP_INSERT_SKIP_WAL)
 		heap_sync(ccstate->rel);
-
-	ExecDropSingleTupleTableSlot(chunkslot);
 
 	return processed;
 }
@@ -675,8 +654,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	}
 #endif
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
-
-	*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
+	*processed = copyfrom(ccstate, range_table, ht);
 	EndCopyFrom(cstate);
 
 	table_close(rel, NoLock);
@@ -684,7 +662,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 static bool
 next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
-							   bool *nulls, Oid *tuple_oid)
+							   bool *nulls)
 {
 	TableScanDesc scandesc = ccstate->scandesc;
 	HeapTuple tuple;
@@ -696,9 +674,6 @@ next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, D
 		return false;
 
 	heap_deform_tuple(tuple, RelationGetDescr(ccstate->rel), values, nulls);
-#if PG12_LT
-	*tuple_oid = HeapTupleGetOid(tuple);
-#endif
 
 	return true;
 }
@@ -748,7 +723,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
 	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
-	timescaledb_CopyFrom(ccstate, range_table, ht);
+	copyfrom(ccstate, range_table, ht);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
 	table_close(rel, lockmode);

@@ -719,7 +719,7 @@ point_create(int16 num_dimensions)
 }
 
 TSDLLEXPORT Point *
-ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
+ts_hyperspace_calculate_point(Hyperspace *hs, TupleTableSlot *slot)
 {
 	Point *p = point_create(hs->num_dimensions);
 	int i;
@@ -732,9 +732,9 @@ ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc
 		Oid dimtype;
 
 		if (NULL != d->partitioning)
-			datum = ts_partitioning_func_apply_tuple(d->partitioning, tuple, tupdesc, &isnull);
+			datum = ts_partitioning_func_apply_slot(d->partitioning, slot, &isnull);
 		else
-			datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
+			datum = slot_getattr(slot, d->column_attno, &isnull);
 
 		switch (d->type)
 		{

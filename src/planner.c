@@ -391,7 +391,7 @@ is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblE
 		if (parent_oid != InvalidOid && rte->relid != parent_oid)
 		{
 			if (ts_is_hypertable(parent_oid))
-							return parent_oid;
+				return parent_oid;
 		}
 #else
 		/* In PG12 UPDATE/DELETE on inheritance relations are planned in two

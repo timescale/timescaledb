@@ -6,7 +6,7 @@
 #ifndef BASE64_COMPAT_H
 #define BASE64_COMPAT_H
 
-#include <compat.h>
+#include "compat.h"
 
 #if PG10_GE
 

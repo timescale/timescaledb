@@ -6,9 +6,11 @@
 #ifndef TIMESCALEDB_COMPAT_H
 #define TIMESCALEDB_COMPAT_H
 
+#include <commands/trigger.h>
 #include <postgres.h>
 #include <pgstat.h>
 #include <utils/lsyscache.h>
+#include <utils/rel.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
@@ -228,13 +230,47 @@
 	DefineRelation(stmt, relkind, ownerid, typaddress, queryString)
 #endif
 
+#if PG12_GE
+#define ExecInsertIndexTuplesCompat(slot, estate, no_dup_err, spec_conflict, arbiter_indexes)      \
+	ExecInsertIndexTuples(slot, estate, no_dup_err, spec_conflict, arbiter_indexes);
+#else
+#define ExecInsertIndexTuplesCompat(slot, estate, no_dup_err, spec_conflict, arbiter_indexes)      \
+	ExecInsertIndexTuples(slot,                                                                    \
+						  &((slot)->tts_tuple->t_self),                                            \
+						  estate,                                                                  \
+						  no_dup_err,                                                              \
+						  spec_conflict,                                                           \
+						  arbiter_indexes)
+#endif
+
 /* ExecARInsertTriggers */
 #if PG96
-#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes)                \
-	ExecARInsertTriggers(estate, result_rel_info, tuple, recheck_indexes)
+#define ExecARInsertTriggersCompat(estate, relinfo, slot, recheck_indexes, transition_capture)     \
+	do                                                                                             \
+	{                                                                                              \
+		bool should_free;                                                                          \
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, true, &should_free);                        \
+		ExecARInsertTriggers(estate, relinfo, tuple, recheck_indexes);                             \
+		if (should_free)                                                                           \
+			heap_freetuple(tuple);                                                                 \
+	} while (0);
+#elif PG12_LT
+#define ExecARInsertTriggersCompat(estate, relinfo, slot, recheck_indexes, transition_capture)     \
+	do                                                                                             \
+	{                                                                                              \
+		bool should_free;                                                                          \
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, true, &should_free);                        \
+		ExecARInsertTriggers(estate, relinfo, tuple, recheck_indexes, transition_capture);         \
+		if (should_free)                                                                           \
+			heap_freetuple(tuple);                                                                 \
+	} while (0);
 #else
-#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes)                \
-	ExecARInsertTriggers(estate, result_rel_info, tuple, recheck_indexes, NULL)
+#define ExecARInsertTriggersCompat(estate,                                                         \
+								   result_rel_info,                                                \
+								   tuple,                                                          \
+								   recheck_indexes,                                                \
+								   transition_capture)                                             \
+	ExecARInsertTriggers(estate, result_rel_info, tuple, recheck_indexes, transition_capture)
 #endif
 
 /* ExecASInsertTriggers */
@@ -336,13 +372,14 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 #define ExecInitExtraTupleSlotCompat(estate, tupledesc, tts_ops)                                   \
 	ExecInitExtraTupleSlot(estate, tupledesc)
 #define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc)
-#define MakeSingleTupleTableSlotCompat(tupledesc, tts_ops) MakeSingleTupleTableSlot(tupledesc)
+#define MakeSingleTupleTableSlotCompat(tupdesc, tts_ops) MakeSingleTupleTableSlot(tupdesc)
 
 #else /* PG12_GE */
 
-#define ExecInitExtraTupleSlotCompat ExecInitExtraTupleSlot
-#define MakeTupleTableSlotCompat MakeTupleTableSlot
-#define MakeSingleTupleTableSlotCompat MakeSingleTupleTableSlot
+#define ExecInitExtraTupleSlotCompat(estate, tupdesc, tts_ops)                                     \
+	ExecInitExtraTupleSlot(estate, tupdesc, tts_ops)
+#define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc, tts_ops)
+#define MakeSingleTupleTableSlotCompat(tupdesc, tts_ops) MakeSingleTupleTableSlot(tupdesc, tts_ops)
 
 #endif
 
@@ -354,7 +391,8 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 		slot = ExecBRInsertTriggers(estate, relinfo, slot);                                        \
 	} while (0)
 #else
-#define ExecBRInsertTriggersCompat(estate, relinfo, slot) ExecBRInsertTriggers
+#define ExecBRInsertTriggersCompat(estate, relinfo, slot)                                          \
+	ExecBRInsertTriggers(estate, relinfo, slot)
 #endif
 
 /* fmgr
@@ -574,31 +612,6 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 				 NULL)
 #endif
 
-/* index_get_next
- *
- * index_get no longer exists as of c2fe139. As tables are now generalized to
- * cover non-heap-based things, it is incorrect to return a HeapTuple in the
- * general case. To allow us to migrate to the new APIs more incrementally, we
- * provide our own, temporary, implementation of index_get_next, which should be
- * removed at some point when all our usages are replaced with index_getnext_slot
- */
-// #if PG12
-
-// #include <access/genam.h>
-
-// static inline HeapTuple
-// index_getnext(IndexScanDesc scan, ScanDirection direction)
-// {
-// 	//FIXME this probably doesn't work
-// 	TupleTableSlot slot;
-// 	bool found = index_getnext_slot(scan, direction, &slot);
-// 	if (!found)
-// 		return false;
-// 	return slot.tts_ops->get_heap_tuple(&slot);
-// }
-
-// #endif
-
 /* InitResultRelInfo */
 #if PG96
 #define InitResultRelInfoCompat(result_rel_info,                                                   \
@@ -701,9 +714,9 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #define ResultRelInfo_OnConflictWhereCompat(rri) ((rri)->ri_onConflictSetWhere)
 #define ResultRelInfo_OnConflictNotNull(rri) true
 #else
-#define ResultRelInfo_OnConflictProjInfoCompat(rri) ((rri)->ri_onConflict->oc_ProjInfo)
-#define ResultRelInfo_OnConflictWhereCompat(rri) ((rri)->ri_onConflict->oc_WhereClause)
-#define ResultRelInfo_OnConflictNotNull(rri) ((rri)->ri_onConflict != NULL)
+#define ResultRelInfo_OnConflictProjInfoCompat(rri) (rri)->ri_onConflict->oc_ProjInfo
+#define ResultRelInfo_OnConflictWhereCompat(rri) (rri)->ri_onConflict->oc_WhereClause
+#define ResultRelInfo_OnConflictNotNull(rri) (rri)->ri_onConflict != NULL
 #endif
 
 /* RangeVarGetRelidExtended
@@ -815,6 +828,22 @@ extern int oid_cmp(const void *p1, const void *p2);
 #define likely(x) ((x) != 0)
 #define unlikely(x) ((x) != 0)
 #endif
+#endif
+
+/* Compatibility functions for table access method API introduced in PG12 */
+#if PG12_LT
+#include "compat/tupconvert.h"
+#include "compat/tuptable.h"
+#include "compat/tableam.h"
+
+#else
+#define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
+#endif
+
+#if PG12_GE
+#define ExecTypeFromTLCompat(tlist, hasoid) ExecTypeFromTL(tlist)
+#else
+#define ExecTypeFromTLCompat(tlist, hasoid) ExecTypeFromTL(tlist, hasoid)
 #endif
 
 /* backport pg_add_s64_overflow/pg_sub_s64_overflow */
