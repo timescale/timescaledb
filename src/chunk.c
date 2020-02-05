@@ -2597,38 +2597,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	foreach (lc, ht_oids)
 	{
 		Oid table_relid = lfirst_oid(lc);
-		List *fk_relids = NIL;
 		List *dc_temp = NIL;
-		ListCell *lf;
 
 		ts_hypertable_permissions_check(table_relid, GetUserId());
-
-		/* get foreign key tables associated with the hypertable */
-		{
-			List *cachedfkeys = NIL;
-			ListCell *lf;
-			Relation table_rel;
-
-			table_rel = heap_open(table_relid, AccessShareLock);
-
-			/*
-			 * this list is from the relcache and can disappear with a cache
-			 * flush, so no further catalog access till we save the fk relids
-			 */
-			cachedfkeys = RelationGetFKeyList(table_rel);
-			foreach (lf, cachedfkeys)
-			{
-				ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lf);
-
-				/*
-				 * conrelid should always be that of the table we're
-				 * considering
-				 */
-				Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
-				fk_relids = lappend_oid(fk_relids, cachedfk->confrelid);
-			}
-			heap_close(table_rel, AccessShareLock);
-		}
 
 		/*
 		 * We have a FK between hypertable H and PAR. Hypertable H has number
@@ -2642,10 +2613,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		 * acquisition for these could differ as well. Do not unlock - let the
 		 * transaction semantics take care of it.
 		 */
-		foreach (lf, fk_relids)
-		{
-			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
-		}
+		ts_hypertable_get_and_lock_referenced_tables(table_relid, AccessExclusiveLock);
 
 		/* Drop chunks and store their names for return */
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);

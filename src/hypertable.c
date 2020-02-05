@@ -1634,6 +1634,52 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(retval);
 }
 
+static List *
+hypertable_get_referenced_tables(const Oid table_relid)
+{
+	List *fk_relids = NIL;
+	List *cachedfkeys = NIL;
+	ListCell *lc;
+	Relation table_rel = heap_open(table_relid, AccessShareLock);
+
+	/*
+	 * this list is from the relcache and can disappear with a cache
+	 * flush, so no further catalog access till we save the fk relids
+	 */
+	cachedfkeys = RelationGetFKeyList(table_rel);
+	foreach (lc, cachedfkeys)
+	{
+		ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lc);
+
+		/*
+		 * conrelid should always be that of the table we're
+		 * considering
+		 */
+		Assert(cachedfk->conrelid == table_relid);
+		fk_relids = lappend_oid(fk_relids, cachedfk->confrelid);
+	}
+	heap_close(table_rel, AccessShareLock);
+
+	return fk_relids;
+}
+
+List *
+ts_hypertable_get_and_lock_referenced_tables(const Oid table_relid, const LOCKMODE lockmode)
+{
+	ListCell *lc;
+	List *fk_oids = NIL;
+
+	Assert(OidIsValid(table_relid));
+
+	fk_oids = hypertable_get_referenced_tables(table_relid);
+	foreach (lc, fk_oids)
+	{
+		LockRelationOid(lfirst_oid(lc), lockmode);
+	}
+
+	return fk_oids;
+}
+
 /* Creates a new hypertable.
  *
  * Flags are one of HypertableCreateFlags.
@@ -1677,7 +1723,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	 * lock upgrades, which are susceptible to deadlocks. If we aren't
 	 * migrating data, then shouldn't have much contention on the table thus
 	 * not worth optimizing.
+	 * Also obtaining locks on referenced tables through foreign keys to avoid
+	 * deadlocks, see issue 1652.
 	 */
+	ts_hypertable_get_and_lock_referenced_tables(table_relid, AccessExclusiveLock);
 	rel = heap_open(table_relid, AccessExclusiveLock);
 
 	/* recheck after getting lock */

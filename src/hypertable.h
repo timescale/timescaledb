@@ -79,6 +79,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hy
 extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
+extern List *ts_hypertable_get_and_lock_referenced_tables(Oid table_relid, LOCKMODE lockmode);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern TSDLLEXPORT Oid ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 
