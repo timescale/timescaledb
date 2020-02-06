@@ -104,7 +104,7 @@ mark_rte_hypertable_parent(RangeTblEntry *rte)
 }
 
 bool
-is_rte_hypertable(RangeTblEntry *rte)
+ts_is_rte_hypertable(RangeTblEntry *rte)
 {
 	return rte->ctename != NULL && strcmp(rte->ctename, CTE_NAME_HYPERTABLES) == 0;
 }
@@ -1371,7 +1371,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 	for (i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
-		if (is_rte_hypertable(in_rte) && !in_rte->inh)
+		if (ts_is_rte_hypertable(in_rte) && !in_rte->inh)
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
 			expand_hypertable_inheritance(root, in_rte->relid, in_rte->inh, in_rel);
@@ -1561,7 +1561,7 @@ expand_hypertable_inheritance(PlannerInfo *root, Oid relation_objectid, bool inh
 	 * run on many chunks so the expansion really cannot be called before this
 	 * hook.
 	 */
-	if (!rte->inh && is_rte_hypertable(rte))
+	if (!rte->inh && ts_is_rte_hypertable(rte))
 	{
 		Cache *hcache;
 		Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, false, &hcache);
@@ -1581,7 +1581,7 @@ involves_ts_hypertable_relid(PlannerInfo *root, Index relid)
 	if (relid == 0)
 		return false;
 
-	return is_rte_hypertable(planner_rt_fetch(relid, root));
+	return ts_is_rte_hypertable(planner_rt_fetch(relid, root));
 }
 
 static bool
