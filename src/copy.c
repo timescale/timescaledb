@@ -651,7 +651,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	 * We never actually write to the main table, but we need RowExclusiveLock
 	 * to ensure no one else is
 	 */
-	rel = heap_openrv(stmt->relation, RowExclusiveLock);
+	rel = table_openrv(stmt->relation, RowExclusiveLock);
 
 	attnums = timescaledb_CopyGetAttnums(RelationGetDescr(rel), rel, stmt->attlist);
 

@@ -684,8 +684,9 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #endif
 
 #if PG12_LT
-#define table_open heap_open
-#define table_close heap_close
+#define table_open(r, l) heap_open(r, l)
+#define table_openrv(r, l) heap_openrv(r, l)
+#define table_close(r, l) heap_close(r, l)
 #endif
 
 /*
