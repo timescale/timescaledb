@@ -218,7 +218,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	seg_attnolen = list_length(segmentby_cols);
-	rel = relation_open(srctbl_relid, AccessShareLock);
+	rel = table_open(srctbl_relid, AccessShareLock);
 	segorder_colindex = palloc0(sizeof(int32) * (rel->rd_att->natts));
 	tupdesc = rel->rd_att;
 	i = 1;
@@ -321,7 +321,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	cc->numcols = colno;
 	compresscolinfo_add_metadata_columns(cc, rel);
 	pfree(segorder_colindex);
-	relation_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 /* modify storage attributes for toast table columns attached to the

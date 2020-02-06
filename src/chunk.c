@@ -159,9 +159,9 @@ ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 
-	rel = relation_open(catalog_get_table_id(catalog, CHUNK), lock);
+	rel = table_open(catalog_get_table_id(catalog, CHUNK), lock);
 	chunk_insert_relation(rel, chunk);
-	relation_close(rel, lock);
+	table_close(rel, lock);
 }
 
 static void
