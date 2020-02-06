@@ -99,3 +99,41 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 2
 LIMIT 1;
+
+-- test sort optimizations
+
+-- test sort optimization with single member order by,
+-- should use index scan (no GapFill node for this one since we're not gapfilling)
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1;
+
+SET max_parallel_workers_per_gather TO 0;
+
+-- test sort optimizations with locf
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), locf(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+
+-- test sort optimizations with interpolate
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+
+RESET max_parallel_workers_per_gather;
+
+CREATE INDEX ON gapfill_plan_test(value, time);
+
+-- test sort optimization with ordering by multiple columns and time_bucket_gapfill not last,
+-- must not use index scan
+:EXPLAIN  SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1,2;
+
+-- test sort optimization with ordering by multiple columns and time_bucket as last member,
+-- should use index scan
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 2,1;
