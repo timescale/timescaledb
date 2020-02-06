@@ -226,7 +226,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 
 	foreach (lc, indexlist)
 	{
-		Relation idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
+		Relation idxrel = index_open(lfirst_oid(lc), AccessShareLock);
 
 		if (verify && (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion))
 			ts_indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
@@ -258,7 +258,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 					break;
 			}
 		}
-		relation_close(idxrel, AccessShareLock);
+		index_close(idxrel, AccessShareLock);
 	}
 
 	if (create_default)

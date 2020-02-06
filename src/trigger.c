@@ -77,7 +77,7 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 {
 	Relation rel;
 
-	rel = relation_open(relid, AccessShareLock);
+	rel = table_open(relid, AccessShareLock);
 
 	if (rel->trigdesc != NULL)
 	{
@@ -93,7 +93,7 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 		}
 	}
 
-	relation_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 static bool

@@ -1752,8 +1752,8 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * AccessShareLock, since we only need to prevent the index itself from
 	 * being ALTERed or DROPed during this part of index creation.
 	 */
-	chunk_rel = relation_open(chunk_relid, ShareLock);
-	hypertable_index_rel = relation_open(info->obj.objectId, AccessShareLock);
+	chunk_rel = table_open(chunk_relid, ShareLock);
+	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
 
@@ -1777,8 +1777,8 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 												   chunk_rel,
 												   info->extended_options.indexinfo);
 
-	relation_close(hypertable_index_rel, NoLock);
-	relation_close(chunk_rel, NoLock);
+	index_close(hypertable_index_rel, NoLock);
+	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
 
@@ -1931,17 +1931,17 @@ process_index_start(ProcessUtilityArgs *args)
 
 	/* we're about to release the hcache so store the main_table_relid for later */
 	info.main_table_relid = ht->main_table_relid;
-	main_table_relation = relation_open(ht->main_table_relid, AccessShareLock);
+	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
 	main_table_desc = RelationGetDescr(main_table_relation);
 
-	main_table_index_relation = relation_open(info.obj.objectId, AccessShareLock);
+	main_table_index_relation = index_open(info.obj.objectId, AccessShareLock);
 	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
 
 	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
 	info.extended_options.ht_hasoid = TupleDescHasOids(main_table_desc);
 
-	relation_close(main_table_index_relation, NoLock);
+	index_close(main_table_index_relation, NoLock);
 
 	/*
 	 * Lock the index for the remainder of the command. Since we're using
@@ -1954,7 +1954,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 */
 	LockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
 
-	relation_close(main_table_relation, NoLock);
+	table_close(main_table_relation, NoLock);
 
 	/*
 	 * mark the hypertable's index as invalid until all the chunk indexes
@@ -2070,10 +2070,10 @@ process_cluster_start(ProcessUtilityArgs *args)
 		 * which we will hold throughout CLUSTER
 		 */
 		LockRelationOid(ht->main_table_relid, AccessShareLock);
-		index_rel = relation_open(index_relid, AccessShareLock);
+		index_rel = index_open(index_relid, AccessShareLock);
 		cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
 
-		relation_close(index_rel, NoLock);
+		index_close(index_rel, NoLock);
 
 		/*
 		 * mark the main table as clustered, even though it has no data, so

@@ -954,7 +954,7 @@ static Oid
 chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk_index_oid,
 							Relation dest_chunk_rel, Oid index_tablespace)
 {
-	Relation chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
+	Relation chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
 	ChunkIndexMapping cim;
 	Oid constraint_oid;
 	Oid new_chunk_indexrelid;
@@ -969,7 +969,7 @@ chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk
 													   OidIsValid(constraint_oid),
 													   index_tablespace);
 
-	relation_close(chunk_index_rel, NoLock);
+	index_close(chunk_index_rel, NoLock);
 	return new_chunk_indexrelid;
 }
 
@@ -1035,7 +1035,7 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 	Chunk *chunk;
 	ChunkIndexMapping cim;
 
-	chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
+	chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
 
 	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
 	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
@@ -1059,7 +1059,7 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 
 	table_close(hypertable_rel, AccessShareLock);
 
-	relation_close(chunk_index_rel, AccessShareLock);
+	index_close(chunk_index_rel, AccessShareLock);
 
 	PG_RETURN_OID(new_chunk_indexrelid);
 }
@@ -1078,7 +1078,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	Oid constraint_oid;
 	char *name;
 
-	index_rel = relation_open(chunk_index_oid_old, ShareLock);
+	index_rel = index_open(chunk_index_oid_old, ShareLock);
 
 	/* check permissions */
 	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, 0, true);
@@ -1088,7 +1088,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	name = pstrdup(RelationGetRelationName(index_rel));
 	constraint_oid = get_index_constraint(chunk_index_oid_old);
 
-	relation_close(index_rel, NoLock);
+	index_close(index_rel, NoLock);
 
 	if (OidIsValid(constraint_oid))
 	{
