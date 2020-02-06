@@ -951,7 +951,8 @@ SELECT
   interpolate(avg(v1)) AS interpolate_v1,
   interpolate(avg(v2)) AS interpolate_v2
 FROM metrics_tstz
-GROUP BY 1,2;
+GROUP BY 1,2
+ORDER BY 1,2;
 
 SELECT
   time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
@@ -961,6 +962,15 @@ SELECT
     (SELECT ('2017-01-02'::timestamptz,2::float))
   )
 FROM metrics_tstz WHERE time < '2017-01-01' GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
+  interpolate(
+    avg(v1),
+    (SELECT ('2017-01-01'::timestamptz,1::float)),
+    (SELECT ('2017-01-02'::timestamptz,2::float))
+  )
+FROM metrics_tstz WHERE time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz) < '2017-01-01' GROUP BY 1;
 
 -- interpolation with correlated subquery lookup before interval
 SELECT
@@ -972,7 +982,7 @@ SELECT
   ),
   avg(v1)
 FROM metrics_tstz m1
-WHERE device_id=1 GROUP BY 1,2;
+WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
 
 -- interpolation with correlated subquery lookup after interval
 SELECT
@@ -982,7 +992,7 @@ SELECT
     avg(v1),
     next=>(SELECT (time,v2::float) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id ORDER BY time LIMIT 1)
   ),avg(v1)
-FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2;
+FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
 
 \set ON_ERROR_STOP 0
 -- bucket_width non simple expression

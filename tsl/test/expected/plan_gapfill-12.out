@@ -231,3 +231,91 @@ LIMIT 1;
  Mon Jan 01 00:00:00 2018 PST |           1
 (1 row)
 
+-- test sort optimizations
+-- test sort optimization with single member order by,
+-- should use index scan (no GapFill node for this one since we're not gapfilling)
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on gapfill_plan_test
+   Order: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_1_1_chunk_gapfill_plan_test_time_idx on _hyper_1_1_chunk
+   ->  Index Scan Backward using _hyper_1_2_chunk_gapfill_plan_test_time_idx on _hyper_1_2_chunk
+   ->  Index Scan Backward using _hyper_1_3_chunk_gapfill_plan_test_time_idx on _hyper_1_3_chunk
+   ->  Index Scan Backward using _hyper_1_4_chunk_gapfill_plan_test_time_idx on _hyper_1_4_chunk
+(6 rows)
+
+SET max_parallel_workers_per_gather TO 0;
+-- test sort optimizations with locf
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), locf(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+                                                                                                  QUERY PLAN                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   ->  GroupAggregate
+         Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time")
+         ->  Custom Scan (ChunkAppend) on gapfill_plan_test
+               Order: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_1_1_chunk_gapfill_plan_test_time_idx on _hyper_1_1_chunk
+               ->  Index Scan Backward using _hyper_1_2_chunk_gapfill_plan_test_time_idx on _hyper_1_2_chunk
+               ->  Index Scan Backward using _hyper_1_3_chunk_gapfill_plan_test_time_idx on _hyper_1_3_chunk
+               ->  Index Scan Backward using _hyper_1_4_chunk_gapfill_plan_test_time_idx on _hyper_1_4_chunk
+(9 rows)
+
+-- test sort optimizations with interpolate
+:EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 1;
+                                                                                                  QUERY PLAN                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   ->  GroupAggregate
+         Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time")
+         ->  Custom Scan (ChunkAppend) on gapfill_plan_test
+               Order: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_1_1_chunk_gapfill_plan_test_time_idx on _hyper_1_1_chunk
+               ->  Index Scan Backward using _hyper_1_2_chunk_gapfill_plan_test_time_idx on _hyper_1_2_chunk
+               ->  Index Scan Backward using _hyper_1_3_chunk_gapfill_plan_test_time_idx on _hyper_1_3_chunk
+               ->  Index Scan Backward using _hyper_1_4_chunk_gapfill_plan_test_time_idx on _hyper_1_4_chunk
+(9 rows)
+
+RESET max_parallel_workers_per_gather;
+CREATE INDEX ON gapfill_plan_test(value, time);
+-- test sort optimization with ordering by multiple columns and time_bucket_gapfill not last,
+-- must not use index scan
+:EXPLAIN  SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 1,2;
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone)), _hyper_1_1_chunk.value
+   ->  Result
+         ->  Append
+               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Seq Scan on _hyper_1_2_chunk
+               ->  Seq Scan on _hyper_1_3_chunk
+               ->  Seq Scan on _hyper_1_4_chunk
+(8 rows)
+
+-- test sort optimization with ordering by multiple columns and time_bucket as last member,
+-- should use index scan
+:EXPLAIN SELECT time_bucket_gapfill('5m',time),value
+FROM gapfill_plan_test
+ORDER BY 2,1;
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result
+   ->  Merge Append
+         Sort Key: _hyper_1_1_chunk.value, (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Index Only Scan using _hyper_1_1_chunk_value_time_idx on _hyper_1_1_chunk
+         ->  Index Only Scan using _hyper_1_2_chunk_value_time_idx on _hyper_1_2_chunk
+         ->  Index Only Scan using _hyper_1_3_chunk_value_time_idx on _hyper_1_3_chunk
+         ->  Index Only Scan using _hyper_1_4_chunk_value_time_idx on _hyper_1_4_chunk
+(7 rows)
+

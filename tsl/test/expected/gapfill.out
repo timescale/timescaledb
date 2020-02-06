@@ -1605,17 +1605,18 @@ SELECT
   interpolate(avg(v1)) AS interpolate_v1,
   interpolate(avg(v2)) AS interpolate_v2
 FROM metrics_tstz
-GROUP BY 1,2;
+GROUP BY 1,2
+ORDER BY 1,2;
      time_bucket_gapfill      | device_id | locf_v1 | locf_v2 | interpolate_v1 | interpolate_v2 
 ------------------------------+-----------+---------+---------+----------------+----------------
  Mon Jan 01 05:00:00 2018 PST |         1 |     0.5 |      10 |            0.5 |             10
- Mon Jan 01 06:00:00 2018 PST |         1 |     0.5 |      10 |           0.25 |              5
- Mon Jan 01 07:00:00 2018 PST |         1 |       0 |       0 |              0 |              0
  Mon Jan 01 05:00:00 2018 PST |         2 |     0.7 |      20 |            0.7 |             20
- Mon Jan 01 06:00:00 2018 PST |         2 |     0.7 |      20 |           1.05 |             30
- Mon Jan 01 07:00:00 2018 PST |         2 |     1.4 |      40 |            1.4 |             40
  Mon Jan 01 05:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
+ Mon Jan 01 06:00:00 2018 PST |         1 |     0.5 |      10 |           0.25 |              5
+ Mon Jan 01 06:00:00 2018 PST |         2 |     0.7 |      20 |           1.05 |             30
  Mon Jan 01 06:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
+ Mon Jan 01 07:00:00 2018 PST |         1 |       0 |       0 |              0 |              0
+ Mon Jan 01 07:00:00 2018 PST |         2 |     1.4 |      40 |            1.4 |             40
  Mon Jan 01 07:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
 (9 rows)
 
@@ -1634,6 +1635,21 @@ FROM metrics_tstz WHERE time < '2017-01-01' GROUP BY 1;
  Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
 (3 rows)
 
+SELECT
+  time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
+  interpolate(
+    avg(v1),
+    (SELECT ('2017-01-01'::timestamptz,1::float)),
+    (SELECT ('2017-01-02'::timestamptz,2::float))
+  )
+FROM metrics_tstz WHERE time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz) < '2017-01-01' GROUP BY 1;
+     time_bucket_gapfill      |    interpolate    
+------------------------------+-------------------
+ Sat Dec 31 16:00:00 2016 PST | 0.666666666666667
+ Sun Jan 01 04:00:00 2017 PST |  1.16666666666667
+ Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
+(3 rows)
+
 -- interpolation with correlated subquery lookup before interval
 SELECT
   time_bucket_gapfill('1h'::interval,time,'2018-01-01 3:00 PST'::timestamptz, '2018-01-01 8:00 PST'::timestamptz),
@@ -1644,7 +1660,7 @@ SELECT
   ),
   avg(v1)
 FROM metrics_tstz m1
-WHERE device_id=1 GROUP BY 1,2;
+WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
      time_bucket_gapfill      | device_id | interpolate | avg 
 ------------------------------+-----------+-------------+-----
  Mon Jan 01 03:00:00 2018 PST |         1 |         0.5 |    
@@ -1662,7 +1678,7 @@ SELECT
     avg(v1),
     next=>(SELECT (time,v2::float) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id ORDER BY time LIMIT 1)
   ),avg(v1)
-FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2;
+FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
      time_bucket_gapfill      | device_id | interpolate | avg 
 ------------------------------+-----------+-------------+-----
  Mon Jan 01 05:00:00 2018 PST |         1 |         0.5 | 0.5
