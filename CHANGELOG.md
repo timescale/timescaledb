@@ -15,11 +15,13 @@ accidentally triggering the load of a previous DB version.**
 * #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
 * #1668 Cannot add dimension if hypertable has empty chunks
 * #1674 Fix time_bucket_gapfill's interaction with GROUP BY
+* #1686 Fix order by queries on compressed hypertables that have char segment by column
 * #1687 Fix issue with disabling compression when foreign keys are present
 
 **Thanks**
 * @RJPhillips01 for reporting an issue with drop chunks.
 * @b4eEx for reporting an issue with disabling compression.
+* @dark048 for reporting an issue with order by on compressed hypertables
 
 ## 1.6.0 (2020-01-14)
 
