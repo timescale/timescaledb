@@ -90,13 +90,14 @@ make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno,
 	Assert(!get_rte_attribute_is_dropped(path->info->chunk_rte, chunk_attno));
 	Assert(!get_rte_attribute_is_dropped(path->info->compressed_rte, scan_varattno));
 
-	if (ht_info->algo_id == 0)
-		scan_var = makeVar(path->info->compressed_rel->relid,
-						   scan_varattno,
-						   get_atttype(path->info->ht_rte->relid, ht_attno),
-						   -1,
-						   0,
-						   0);
+	if (ht_info->algo_id == _INVALID_COMPRESSION_ALGORITHM)
+	{
+		Oid typid, collid;
+		int32 typmod;
+		get_atttypetypmodcoll(path->info->ht_rte->relid, ht_attno, &typid, &typmod, &collid);
+		scan_var =
+			makeVar(path->info->compressed_rel->relid, scan_varattno, typid, typmod, collid, 0);
+	}
 	else
 		scan_var = makeVar(path->info->compressed_rel->relid,
 						   scan_varattno,
