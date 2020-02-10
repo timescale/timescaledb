@@ -64,7 +64,7 @@ typedef struct CopyChunkState
 
 static CopyChunkState *
 copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyState cstate,
-						HeapScanDesc scandesc)
+						TableScanDesc scandesc)
 {
 	CopyChunkState *ccstate;
 	EState *estate = CreateExecutorState();
@@ -269,7 +269,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
 		bool cis_changed;
-#if PG12
+#if PG12_GE
 		bool should_free = false;
 #endif
 
@@ -303,10 +303,10 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 													   point,
 													   &cis_changed,
-#if PG12
-													   TTSOpsHeapTupleP
-#else
+#if PG12_LT
 													   NULL
+#else
+													   TTSOpsHeapTupleP
 #endif
 		);
 
@@ -381,7 +381,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 				/* OK, store the tuple and create index entries for it */
 				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid, hi_options, bistate);
-#if PG12
+#if PG12_GE
 				/* re-store the tuple so the slot's ItemPointer is updated */
 				ExecStoreHeapTuple(tuple, slot, should_free);
 #endif

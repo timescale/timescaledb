@@ -264,7 +264,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 	if (create_default)
 		create_default_indexes(ht, time_dim, space_dim, has_time_idx, has_time_space_idx);
 
-	relation_close(tblrel, AccessShareLock);
+	table_close(tblrel, AccessShareLock);
 }
 
 /* create the index on the root table of a hypertable.

@@ -11,7 +11,6 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
-#include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
@@ -33,7 +32,8 @@
 #endif
 
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
+#include <optimizer/clauses.h>
+#include <optimizer/var.h>
 #elif PG12_GE
 #include <optimizer/optimizer.h>
 #endif
@@ -518,7 +518,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
 
-#if PG12
+#if PG12_GE
 static List *
 remove_exclusion_fns(List *restrictinfo)
 {
@@ -1066,7 +1066,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	};
 	Size old_rel_array_len;
 	Index first_chunk_index = 0;
-#if PG12
+#if PG12_GE
 	Index i;
 #endif
 
@@ -1086,7 +1086,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 
-#if PG12
+#if PG12_GE
 	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);
 #endif
 
@@ -1131,11 +1131,11 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		RangeTblEntry *childrte;
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
-#if PG12
+#if PG12_LT
+		LOCKMODE chunk_lock = NoLock;
+#else
 		// FIXME this lock should not be needed...
 		LOCKMODE chunk_lock = rte->rellockmode;
-#else
-		LOCKMODE chunk_lock = NoLock;
 #endif
 
 		/* Open rel if needed */
@@ -1161,7 +1161,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		 * other base restriction clauses, so we don't need to do it here.
 		 */
 		childrte = copyObject(rte);
-#if PG12
+#if PG12_GE
 		childrte->rellockmode = rte->rellockmode;
 #endif
 		childrte->relid = child_oid;
@@ -1213,7 +1213,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	setup_append_rel_array(root);
 #endif
 
-#if PG12
+#if PG12_GE
 	/* In pg12 postgres will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
 	 * build_simple_rel will look things up in the append_rel_array, so we can

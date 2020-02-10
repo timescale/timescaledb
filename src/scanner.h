@@ -8,14 +8,11 @@
 
 #include <postgres.h>
 #include <access/genam.h>
-#include <access/relscan.h>
 #include <utils/fmgroids.h>
 #include <access/heapam.h>
-#include <nodes/lockoptions.h>
 #include <utils.h>
 
 #include "compat.h"
-#include "export.h"
 
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
@@ -24,7 +21,7 @@ typedef struct TupleInfo
 	/* TODO in PG12+ we should not materialize a HeapTuple unless needed */
 	HeapTuple tuple;
 	TupleDesc desc;
-#if PG12
+#if PG12_GE
 	TupleTableSlot *slot;
 #endif
 	/* return index tuple if it was requested -- only for index scans */

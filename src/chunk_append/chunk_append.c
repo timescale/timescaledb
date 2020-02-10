@@ -5,7 +5,6 @@
  */
 #include <postgres.h>
 #include <nodes/nodeFuncs.h>
-#include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
@@ -14,12 +13,12 @@
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/clauses.h>
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 
-#include "hypertable.h"
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
 #include "func_cache.h"
@@ -232,7 +231,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #endif
 				nested_children = lappend(nested_children, append);
 			}
-#if PG12
+#if PG12_GE
 			else if (list_length(merge_childs) == 0)
 			{
 				/* nop */

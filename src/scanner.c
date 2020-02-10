@@ -10,7 +10,6 @@
 #include <storage/bufmgr.h>
 #include <utils/rel.h>
 
-#include "compat.h"
 #include "scanner.h"
 
 enum ScannerType
@@ -174,7 +173,7 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 	ictx->tinfo.scanrel = ictx->tablerel;
 	ictx->tinfo.desc = tuple_desc;
 	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
-#if PG12 /* TODO we should not materialize a HeapTuple unless needed */
+#if PG12_GE /* TODO we should not materialize a HeapTuple unless needed */
 	ictx->tinfo.slot = MakeSingleTupleTableSlot(tuple_desc, &TTSOpsBufferHeapTuple);
 #endif
 
@@ -203,7 +202,7 @@ ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 	scanner->endscan(ictx);
 	scanner->closeheap(ictx);
-#if PG12
+#if PG12_GE
 	ExecDropSingleTupleTableSlot(ictx->tinfo.slot);
 #endif
 	ictx->closed = true;

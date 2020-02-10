@@ -6,8 +6,6 @@
 #include <postgres.h>
 #include <miscadmin.h>
 #include <parser/parse_oper.h>
-#include <optimizer/cost.h>
-#include <optimizer/clauses.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_proc.h>
@@ -21,8 +19,12 @@
 #include <utils/rel.h>
 
 #include "compat.h"
-
-#if PG12
+#if PG12_LT
+#include <nodes/relation.h>
+#include <optimizer/cost.h>
+#include <optimizer/clauses.h>
+#else
+#include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #endif
 
@@ -299,11 +301,11 @@ static HTAB *func_hash = NULL;
 static Oid
 proc_get_oid(HeapTuple tuple)
 {
-#if PG12
+#if PG12_LT
+	return HeapTupleGetOid(tuple);
+#else
 	Form_pg_proc form = (Form_pg_proc) GETSTRUCT(tuple);
 	return form->oid;
-#else
-	return HeapTupleGetOid(tuple);
 #endif
 }
 

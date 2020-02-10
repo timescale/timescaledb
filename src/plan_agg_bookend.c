@@ -32,39 +32,41 @@
  *
  *
  */
-#include "postgres.h"
+#include <postgres.h>
 
-#include "access/htup_details.h"
-#include "catalog/pg_aggregate.h"
-#include "catalog/pg_type.h"
-#include "nodes/makefuncs.h"
-#include "nodes/nodeFuncs.h"
-#include "optimizer/clauses.h"
-#include "optimizer/cost.h"
-#include "optimizer/pathnode.h"
-#include "optimizer/paths.h"
-#include "optimizer/planmain.h"
-#include "optimizer/subselect.h"
-#include "optimizer/tlist.h"
-#include "parser/parsetree.h"
-#include "parser/parse_clause.h"
-#include "parser/parse_func.h"
-#include "rewrite/rewriteManip.h"
-#include "utils/lsyscache.h"
-#include "utils/syscache.h"
-#include "catalog/pg_proc.h"
+#include <access/htup_details.h>
+#include <access/stratnum.h>
 #include <catalog/namespace.h>
-#include "utils/typcache.h"
-#include "access/stratnum.h"
-#include "plan_agg_bookend.h"
-#include "utils.h"
-#include "extension.h"
+#include <catalog/pg_aggregate.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <optimizer/cost.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
+#include <optimizer/planmain.h>
+#include <optimizer/subselect.h>
+#include <optimizer/tlist.h>
+#include <parser/parsetree.h>
+#include <parser/parse_clause.h>
+#include <parser/parse_func.h>
+#include <rewrite/rewriteManip.h>
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
+#include <utils/typcache.h>
 
 #include "compat.h"
-
-#if PG12
-#include "optimizer/optimizer.h"
+#if PG12_LT
+#include <optimizer/clauses.h>
+#else
+#include <optimizer/optimizer.h>
 #endif
+
+#include "plan_agg_bookend.h"
+#include "planner.h"
+#include "utils.h"
+#include "extension.h"
 
 typedef struct FirstLastAggInfo
 {
@@ -657,7 +659,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->tuple_fraction = 1.0;
 	subroot->limit_tuples = 1.0;
 
-#if PG12
+#if PG12_GE
 	{
 		ListCell *lc;
 		/* min/max optimizations ususally happen before
@@ -713,7 +715,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 							  first_last_qp_callback,
 							  NULL);
 
-#if PG12
+#if PG12_GE
 	{
 		ListCell *lc;
 		/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */

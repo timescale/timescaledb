@@ -8,10 +8,6 @@
 #define TIMESCALEDB_TSL_REORDER_H
 
 #include <postgres.h>
-#include <fmgr.h>
-#include <nodes/parsenodes.h>
-#include <storage/lock.h>
-#include <utils/relcache.h>
 
 extern Datum tsl_reorder_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_move_chunk(PG_FUNCTION_ARGS);

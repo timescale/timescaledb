@@ -638,7 +638,7 @@ process_vacuum(ProcessUtilityArgs *args)
 	PreventCommandDuringRecovery((stmt->options && VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
 	/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 	ExecVacuum(
-#if PG12
+#if PG12_GE
 		args->parse_state,
 #endif
 		stmt,
@@ -1100,7 +1100,7 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
 			ReindexTable(stmt->relation,
 						 stmt->options
-#if PG12
+#if PG12_GE
 						 ,
 						 stmt->concurrent /* TODO test */
 #endif
@@ -2705,7 +2705,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_SetNotNull:
-#if PG12
+#if PG12_GE
 		case AT_CheckNotNull: /*TODO test*/
 #endif
 		case AT_DropNotNull:

@@ -13,17 +13,17 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
+#include "compat.h"
+#if PG12_LT
+#include <utils/tqual.h>
+#endif
+
 #include "timer_mock.h"
 #include "log.h"
 #include "scanner.h"
 #include "catalog.h"
-#include "compat.h"
 #include "params.h"
 #include "bgw/launcher_interface.h"
-
-#if PG12_LT
-#include <utils/tqual.h>
-#endif
 
 static BackgroundWorkerHandle *bgw_handle = NULL;
 

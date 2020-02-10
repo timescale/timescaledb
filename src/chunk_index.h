@@ -12,8 +12,8 @@
 #include <fmgr.h>
 #include <utils/relcache.h>
 
-#include <compat.h>
-#include <export.h>
+#include "compat.h"
+#include "export.h"
 
 typedef struct Chunk Chunk;
 typedef struct Hypertable Hypertable;

@@ -7,11 +7,10 @@
 #define TIMESCALEDB_CHUNK_APPEND_H
 
 #include <postgres.h>
+#include <nodes/primnodes.h>
 
 #include "compat.h"
-
-#include <nodes/primnodes.h>
-#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
+#if PG12_LT
 #include <nodes/relation.h>
 #else
 #include <nodes/pathnodes.h>

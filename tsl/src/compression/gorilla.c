@@ -4,9 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-
-#include "compression/gorilla.h"
-
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
 #include <funcapi.h>
@@ -15,20 +12,16 @@
 #include <utils/memutils.h>
 
 #include "compat.h"
-#include "export.h"
-
-#include <utils.h>
-#include "utils.h"
-
-#include <adts/bit_array.h>
-#include <base64_compat.h>
-
-#include "compression/compression.h"
-#include "compression/simple8b_rle.h"
-
-#if PG12
+#if PG12_GE
 #include <port/pg_bitutils.h>
 #endif
+
+#include "compression/gorilla.h"
+#include "utils.h"
+#include "adts/bit_array.h"
+#include "base64_compat.h"
+#include "compression/compression.h"
+#include "compression/simple8b_rle.h"
 
 /*
  * Gorilla compressed data is stored as

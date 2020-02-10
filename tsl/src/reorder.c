@@ -669,7 +669,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 						get_namespace_name(RelationGetNamespace(OldHeap)),
 						RelationGetRelationName(OldHeap))));
 
-#if PG12
+#if PG12_GE
 	table_relation_copy_for_cluster(OldHeap,
 									NewHeap,
 									OldIndex,
@@ -1055,16 +1055,16 @@ finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *ne
 
 			RenameRelationInternalCompat(toastidx, NewToastName, true, true);
 		}
-		relation_close(newrel, NoLock);
+		table_close(newrel, NoLock);
 	}
-#if PG12
+#if PG12_GE
 	/* it's not a catalog table, clear any missing attribute settings */
 	{
 		Relation newrel;
 
 		newrel = table_open(OIDOldHeap, NoLock);
 		RelationClearMissing(newrel);
-		relation_close(newrel, NoLock);
+		table_close(newrel, NoLock);
 	}
 #endif
 }

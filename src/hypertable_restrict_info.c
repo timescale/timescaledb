@@ -5,13 +5,14 @@
  */
 #include <postgres.h>
 #include <utils/typcache.h>
-#include <optimizer/clauses.h>
 #include <utils/lsyscache.h>
 #include <parser/parsetree.h>
 #include <utils/array.h>
 
 #include "compat.h"
-#if PG12_GE
+#if PG12_LT
+#include <optimizer/clauses.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 

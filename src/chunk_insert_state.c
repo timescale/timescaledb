@@ -12,9 +12,6 @@
 #include <utils/guc.h>
 #include <nodes/plannodes.h>
 #include <access/xact.h>
-#include <optimizer/plancat.h>
-#include <optimizer/clauses.h>
-#include <optimizer/planner.h>
 #include <miscadmin.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
@@ -22,15 +19,18 @@
 #include <catalog/pg_type.h>
 
 #include "compat.h"
-#if PG12
+#if PG12_LT
+#include <optimizer/clauses.h>
+#include <optimizer/plancat.h>
+#include <optimizer/planner.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 
-#include "errors.h"
 #include "chunk_insert_state.h"
+#include "errors.h"
 #include "chunk_dispatch.h"
 #include "chunk_dispatch_state.h"
-#include "compat.h"
 #include "chunk_index.h"
 
 /*
@@ -89,7 +89,7 @@ create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
 
 	estate->es_range_table = lappend(estate->es_range_table, rte);
 
-#if PG12
+#if PG12_GE
 	Assert(list_length(estate->es_range_table) > estate->es_range_table_size);
 	if (estate->es_range_table_array != NULL)
 	{
@@ -238,17 +238,17 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 		rri->ri_onConflict = makeNode(OnConflictSetState);
 		rri->ri_onConflict->oc_ProjInfo = rri_orig->ri_onConflict->oc_ProjInfo;
 		rri->ri_onConflict->oc_WhereClause = rri_orig->ri_onConflict->oc_WhereClause;
-#if PG12
+#if PG12_GE
 		rri->ri_onConflict->oc_Existing = rri_orig->ri_onConflict->oc_Existing;
 		rri->ri_onConflict->oc_ProjSlot = rri_orig->ri_onConflict->oc_ProjSlot;
 		Assert(!TTS_FIXED(rri->ri_onConflict->oc_ProjSlot));
-#else
+#else  /* #if PG11 */
 		rri->ri_onConflict->oc_ProjTupdesc = rri_orig->ri_onConflict->oc_ProjTupdesc;
-#endif
+#endif /* PG12_GE */
 	}
 	else
 		rri->ri_onConflict = NULL;
-#endif
+#endif /* PG11_LT */
 
 	create_chunk_rri_constraint_expr(rri, rel);
 

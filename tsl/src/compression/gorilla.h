@@ -64,9 +64,9 @@
 #include <c.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include "compression/compression.h"
 
-#include <export.h>
+#include "compression/compression.h"
+#include "export.h"
 
 typedef struct GorillaCompressor GorillaCompressor;
 typedef struct GorillaCompressed GorillaCompressed;

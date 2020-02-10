@@ -6,7 +6,6 @@
 #ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H
 #define TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H
 #include <postgres.h>
-#include <nodes/parsenodes.h>
 
 #include "with_clause_parser.h"
 #include "continuous_agg.h"

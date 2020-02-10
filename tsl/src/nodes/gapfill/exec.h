@@ -8,7 +8,6 @@
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
-#include <executor/tuptable.h>
 
 /*
  * GapFillFetchState describes the state of subslot in GapFillState:

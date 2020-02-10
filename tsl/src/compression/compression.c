@@ -34,7 +34,7 @@
 #include <catalog.h>
 #include <utils.h>
 
-#include <compat.h>
+#include "compat.h"
 
 #include "array.h"
 #include "deltadelta.h"

@@ -4,10 +4,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#include "postgres.h"
-
-#include "compression/dictionary.h"
-
+#include <postgres.h>
 #include <access/htup_details.h>
 #include <access/tupmacs.h>
 #include <catalog/pg_aggregate.h>
@@ -21,9 +18,10 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include <base64_compat.h>
+#include "base64_compat.h"
 
 #include "compression/compression.h"
+#include "compression/dictionary.h"
 #include "compression/simple8b_rle.h"
 #include "compression/array.h"
 #include "compression/dictionary_hash.h"

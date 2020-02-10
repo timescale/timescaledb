@@ -447,15 +447,15 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	if (pfc->tce->hash_proc == InvalidOid)
 		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
 
-#if PG12
+#if PG12_LT
+	collation = InvalidOid;
+#else
 	/* use the supplied collation, if it exists, otherwise use the default for
 	 * the type
 	 */
 	collation = PG_GET_COLLATION();
 	if (!OidIsValid(collation))
 		collation = pfc->tce->typcollation;
-#else
-	collation = InvalidOid;
 #endif
 
 	hash = FunctionCall1Coll(&pfc->tce->hash_proc_finfo, collation, arg);

@@ -53,7 +53,10 @@
 #include <utils/typcache.h>
 
 #include "compat.h"
-#if PG12_GE
+#if PG12_LT
+#include <optimizer/clauses.h>
+#include <optimizer/tlist.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 

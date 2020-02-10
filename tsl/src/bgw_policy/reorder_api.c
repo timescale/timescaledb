@@ -25,9 +25,6 @@
 #include "license.h"
 #include "reorder_api.h"
 #include "utils.h"
-#include "hypertable.h"
-#include "bgw/job.h"
-#include <bgw_policy/reorder.h>
 
 /*
  * Default scheduled interval for reorder jobs should be 1/2 of the default chunk length.

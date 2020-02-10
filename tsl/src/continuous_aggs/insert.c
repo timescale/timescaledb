@@ -23,6 +23,8 @@
 #include <interval.h>
 #include <continuous_agg.h>
 
+#include "compat.h"
+
 #include "chunk.h"
 #include "dimension.h"
 #include "hypertable.h"
@@ -34,8 +36,6 @@
 #include "time_bucket.h"
 
 #include "continuous_aggs/insert.h"
-
-#include "compat.h"
 
 /*
  * When tuples in a hypertable that has a continuous aggregate are modified, the
