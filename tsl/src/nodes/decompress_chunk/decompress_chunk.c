@@ -465,14 +465,13 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
 										const char *column_name)
 {
 	AttrNumber attnum = get_attnum(compressed_relid, column_name);
+	Oid typid, collid;
+	int32 typmod;
 	Assert(attnum > 0);
-	compressed_rel->reltarget->exprs = lappend(compressed_rel->reltarget->exprs,
-											   makeVar(compressed_rel->relid,
-													   attnum,
-													   get_atttype(compressed_rel->relid, attnum),
-													   -1,
-													   0,
-													   0));
+	get_atttypetypmodcoll(compressed_relid, attnum, &typid, &typmod, &collid);
+	compressed_rel->reltarget->exprs =
+		lappend(compressed_rel->reltarget->exprs,
+				makeVar(compressed_rel->relid, attnum, typid, typmod, collid, 0));
 }
 
 /* copy over the vars from the chunk_rel->reltarget to the compressed_rel->reltarget
