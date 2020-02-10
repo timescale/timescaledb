@@ -25,8 +25,8 @@
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 

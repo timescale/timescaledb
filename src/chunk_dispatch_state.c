@@ -34,7 +34,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	state->hypertable_cache = hypertable_cache;
 	state->dispatch = ts_chunk_dispatch_create(ht, estate);
 	node->custom_ps = list_make1(ps);
-#if PG12
+#if PG12_GE
 	// TODO get from parent using table_slot_callbacks?
 	// TODO should this use ExecInitExtraTupleSlot?
 	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsBufferHeapTupleP);
@@ -62,7 +62,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		EState *estate = node->ss.ps.state;
 		MemoryContext old;
 		bool cis_changed;
-#if PG12
+#if PG12_GE
 		bool should_free_tuple = false;
 
 		/*
@@ -110,10 +110,10 @@ chunk_dispatch_exec(CustomScanState *node)
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 													   point,
 													   &cis_changed,
-#if PG12
-													   state->slot->tts_ops
-#else
+#if PG12_LT
 													   NULL
+#else
+													   state->slot->tts_ops
 #endif
 		);
 		if (cis_changed)
@@ -184,7 +184,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		}
 #endif
 
-#if PG12 /* from ExecPrepareTupleRouting */
+#if PG12_GE /* from ExecPrepareTupleRouting */
 		if (state->parent->mt_transition_capture != NULL)
 		{
 			/* TODO BEFORE triggers? */
@@ -276,7 +276,7 @@ chunk_dispatch_end(CustomScanState *node)
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
 	ts_cache_release(state->hypertable_cache);
-#if PG12
+#if PG12_GE
 	ExecDropSingleTupleTableSlot(state->slot);
 #endif
 }

@@ -9,8 +9,6 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
-#include "catalog.h"
-#include "dimension.h"
 #include "chunk_constraint.h"
 
 #define DIMENSION_SLICE_MAXVALUE ((int64) PG_INT64_MAX)

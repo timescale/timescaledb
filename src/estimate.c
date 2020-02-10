@@ -6,20 +6,22 @@
 #include <postgres.h>
 #include <parser/parse_oper.h>
 #include <catalog/pg_type.h>
-#include <optimizer/cost.h>
-#include <optimizer/clauses.h>
-#include <optimizer/tlist.h>
 #include <utils/selfuncs.h>
+
+#include "compat.h"
+#if PG12_LT
+#include <optimizer/clauses.h>
+#include <optimizer/cost.h>
+#include <optimizer/tlist.h>
+#else
+#include <optimizer/optimizer.h>
+#endif
 
 #include "func_cache.h"
 #include "estimate.h"
 #include "planner_import.h"
 #include "utils.h"
 
-#include "compat.h"
-#if PG12
-#include <optimizer/optimizer.h>
-#endif
 /*
  * This module contains functions for estimating, e.g., the number of groups
  * formed in various grouping expressions that involve time bucketing.

@@ -25,7 +25,7 @@
 #include <catalog/indexing.h>
 
 #include "compat.h"
-#if PG12
+#if PG12_GE
 #include <access/genam.h>
 #endif
 

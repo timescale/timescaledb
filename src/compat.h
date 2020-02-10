@@ -75,7 +75,7 @@
  * will only be activated in versions >=11 when we implement partition-wise
  * joins.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define adjust_appendrel_attrs_compat adjust_appendrel_attrs
 #else
 #define adjust_appendrel_attrs_compat(root, node, appinfo)                                         \
@@ -89,7 +89,7 @@
  * PG11 introduced flags to BackgroundWorker connection functions. PG96 & 10
  * interface kept for backwards compatibility.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define BackgroundWorkerInitializeConnectionByOidCompat(dboid, useroid)                            \
 	BackgroundWorkerInitializeConnectionByOid(dboid, useroid)
 #define BackgroundWorkerInitializeConnectionCompat(dbname, username)                               \
@@ -137,7 +137,7 @@
  * https://github.com/postgres/postgres/commit/17b7c302b5fc92bd0241c452599019e18df074dc
  * we use the PG11 version as it is more descriptive.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define ConstraintRelidTypidNameIndexId ConstraintRelidIndexId
 #endif
 
@@ -150,7 +150,7 @@
  * with it separately, we instead maintain backwards compatibility for the old
  * interface and continue to manage as before.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define CreateTriggerCompat CreateTrigger
 #else
 #define CreateTriggerCompat(stmt,                                                                  \
@@ -260,7 +260,6 @@
 	ExecBuildProjectionInfo(tl, exprContext, slot, parent, inputdesc)
 #endif
 
-/* https://github.com/postgres/postgres/commit/5db6df0c0117ff2a4e0cd87594d2db408cd5022f */
 #if PG12_LT
 #define TM_Result HTSU_Result
 
@@ -284,7 +283,7 @@
  * https://github.com/postgres/postgres/commit/ad7dbee368a7cd9e595d2a957be784326b08c943).
  * We adopt the PG11 conventions so that we can take advantage of JITing more easily in the future.
  */
-#if PG96 || PG10
+#if PG11_LT
 
 #define TupleTableSlotOps void
 #define TTSOpsVirtualP NULL
@@ -309,9 +308,7 @@ ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc, void *tts_ops)
  * ExecSetTupleBound is only available starting with PG11 so we map to a backported version
  * for PG9.6 and PG10
  */
-#if PG96 || PG10
 #define ExecSetTupleBound(tuples_needed, child_node) ts_ExecSetTupleBound(tuples_needed, child_node)
-#endif
 
 static inline TupleTableSlot *
 MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
@@ -323,7 +320,7 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 
 	return myslot;
 }
-#elif PG12_LT
+#elif PG11
 
 #define TupleTableSlotOps void
 #define TTSOpsVirtualP NULL
@@ -335,7 +332,7 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 #define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc)
 #define MakeSingleTupleTableSlotCompat(tupledesc, tts_ops) MakeSingleTupleTableSlot(tupledesc)
 
-#else
+#else /* PG12_GE */
 
 #define TTSOpsVirtualP (&TTSOpsVirtual)
 #define TTSOpsHeapTupleP (&TTSOpsHeapTuple)
@@ -432,7 +429,7 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
  * compatibility here and have a small static inline function to replicate the
  * behavior on older versions.
  */
-#if PG96 || PG10
+#if PG11_LT
 static inline char *
 get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 {
@@ -465,7 +462,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * can be null for pg_catalog tables, but must be provided otherwise), and
  * simply omit in earlier versions.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define heap_attisnull_compat(tup, attnum, tupledesc) heap_attisnull(tup, attnum)
 #else
 #define heap_attisnull_compat heap_attisnull
@@ -484,7 +481,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * by us, we might in the future want to use some of those flags depending on how
  * we eventually decide to work with declarative partitioning.
  */
-#if PG96 || PG10
+#if PG11_LT
 /* Index flags */
 #define INDEX_CREATE_IS_PRIMARY (1 << 0)
 #define INDEX_CREATE_ADD_CONSTRAINT (1 << 1)
@@ -656,7 +653,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  *
  * PG11 added a unit parameter to ExplainPropertyInteger
  */
-#if PG96 || PG10
+#if PG11_LT
 #define ExplainPropertyIntegerCompat(label, unit, value, es)                                       \
 	ExplainPropertyInteger(label, value, es)
 #else
@@ -679,7 +676,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * PG11 fixes some functions that return pointers to follow convention and end
  * with P.
  */
-#if PG96 || PG10
+#if PG11_LT
 #define PG_RETURN_JSONB_P PG_RETURN_JSONB
 #endif
 
@@ -697,7 +694,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * are nested.
  */
 
-#if PG96 || PG10
+#if PG11_LT
 #define ResultRelInfo_OnConflictProjInfoCompat(rri) ((rri)->ri_onConflictSetProj)
 #define ResultRelInfo_OnConflictWhereCompat(rri) ((rri)->ri_onConflictSetWhere)
 #define ResultRelInfo_OnConflictNotNull(rri) true
@@ -714,7 +711,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * https://github.com/postgres/postgres/commit/d87510a524f36a630cfb34cc392e95e959a1b0dc) We do not
  * define RVR_SKIP_LOCKED as cannot yet emulate it
  */
-#if PG96 || PG10
+#if PG11_LT
 #define RVR_MISSING_OK (1 << 0)
 #define RVR_NOWAIT (1 << 1)
 #define RangeVarGetRelidExtendedCompat(relation, lockmode, flags, callback, callback_arg)          \
@@ -746,7 +743,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * use one of the functions in this family, but making this general in case we
  * use the others in the future).
  */
-#if PG96 || PG10
+#if PG11_LT
 #define PreventInTransactionBlock PreventTransactionChain
 #endif
 
@@ -759,7 +756,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * see
  * https://github.com/postgres/postgres/commit/c2fe139c201c48f1133e9fbea2dd99b8efe2fadd#diff-79a1a60cd631a1067199e0296de47ec4
  */
-#if PG96 || PG10 || PG11
+#if PG12_LT
 #define TableScanDesc HeapScanDesc
 #define table_beginscan heap_beginscan
 #define table_beginscan_catalog heap_beginscan_catalog
@@ -786,7 +783,7 @@ extern int oid_cmp(const void *p1, const void *p2);
 #endif
 
 /* pq_sendint is deprecated in PG11, so create pq_sendint32 in 9.6 and 10 */
-#if PG96 || PG10
+#if PG11_LT
 #define pq_sendint32(buf, i) pq_sendint(buf, i, 4)
 #endif
 

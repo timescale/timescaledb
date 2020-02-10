@@ -15,9 +15,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/plannodes.h>
-#include <optimizer/clauses.h>
 #include <optimizer/plancat.h>
-#include <optimizer/prep.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/lsyscache.h>
@@ -25,8 +23,10 @@
 #include <utils/syscache.h>
 
 #include "compat.h"
-
-#if PG12_GE
+#if PG12_LT
+#include <optimizer/clauses.h>
+#include <optimizer/prep.h>
+#else
 #include <optimizer/appendinfo.h>
 #include <optimizer/optimizer.h>
 #endif
@@ -142,7 +142,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 		.parse = &parse,
 	};
 
-#if PG12
+#if PG12_GE
 	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
 #endif
 
@@ -292,7 +292,7 @@ ca_append_exec(CustomScanState *node)
 		if (TupIsNull(subslot))
 			return NULL;
 
-#if PG12
+#if PG12_GE
 		if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
 			ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
 
@@ -326,7 +326,7 @@ ca_append_end(CustomScanState *node)
 	{
 		ExecEndNode(linitial(node->custom_ps));
 	}
-#if PG12
+#if PG12_GE
 	ExecDropSingleTupleTableSlot(((ConstraintAwareAppendState *) node)->slot);
 #endif
 }

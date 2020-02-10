@@ -184,7 +184,7 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 {
 	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
 	HeapTuple tuple;
-#if PG12 /* TODO we should not materialize a HeapTuple unless needed */
+#if PG12_GE /* TODO we should not materialize a HeapTuple unless needed */
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
 	bool should_free = false;
 #endif
@@ -209,7 +209,7 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 		nulls[n++] = false;
 	}
 
-#if PG12
+#if PG12_GE
 	if (should_free)
 	{
 		heap_freetuple(tuple);
@@ -234,14 +234,14 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 		nulls[n++] = false;
 	}
 
-#if PG12
+#if PG12_GE
 	if (should_free)
 		heap_freetuple(tuple);
 #endif
 
 	index_endscan(scan);
 
-#if PG12
+#if PG12_GE
 	ExecDropSingleTupleTableSlot(slot);
 #endif
 

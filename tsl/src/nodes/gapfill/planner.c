@@ -11,15 +11,15 @@
 #include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
-#include <optimizer/planner.h>
 #include <optimizer/tlist.h>
 #include <utils/lsyscache.h>
 #include <parser/parse_func.h>
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/planner.h>
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 

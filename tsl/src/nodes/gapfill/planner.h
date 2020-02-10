@@ -7,7 +7,6 @@
 #define TIMESCALEDB_TSL_NODES_GAPFILL_PLANNER_H
 
 #include <postgres.h>
-#include <optimizer/planner.h>
 
 void plan_add_gapfill(PlannerInfo *, RelOptInfo *);
 void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,

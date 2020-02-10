@@ -272,7 +272,7 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 								   materialization_invalidation_threshold);
 	}
 
-	relation_close(materialization_invalidation_log_table_relation, NoLock);
+	table_close(materialization_invalidation_log_table_relation, NoLock);
 
 	if (!options->within_single_transaction)
 	{
@@ -1130,7 +1130,7 @@ invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold
 			Int64GetDatum(invalidation_threshold);
 
 		ts_catalog_insert_values(rel, desc, values, nulls);
-		relation_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 }
 
@@ -1547,6 +1547,6 @@ continuous_aggs_completed_threshold_set(int32 materialization_id, int64 complete
 			Int64GetDatum(completed_threshold);
 
 		ts_catalog_insert_values(rel, desc, values, nulls);
-		relation_close(rel, NoLock);
+		table_close(rel, NoLock);
 	}
 }

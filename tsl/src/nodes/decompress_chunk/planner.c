@@ -12,14 +12,8 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <optimizer/clauses.h>
-#include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
-#include <optimizer/placeholder.h>
-#include <optimizer/planmain.h>
-#include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
-#include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
@@ -27,11 +21,18 @@
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/clauses.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/placeholder.h>
+#include <optimizer/planmain.h>
+#include <optimizer/prep.h>
+#include <optimizer/subselect.h>
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 
+#include "compression/compression.h"
 #include "compression/create.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"

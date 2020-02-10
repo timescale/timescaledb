@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <math.h>
 #include <access/tsmapi.h>
 #include <nodes/plannodes.h>
 #include <parser/parsetree.h>
@@ -38,8 +39,8 @@
 #include "compat-msvc-exit.h"
 
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/var.h>
+#else
 #include <optimizer/appendinfo.h>
 #include <optimizer/optimizer.h>
 #endif
@@ -389,11 +390,8 @@ is_hypertable_chunk_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblE
 		parent_oid = appinfo->parent_reloid;
 		if (parent_oid != InvalidOid && rte->relid != parent_oid)
 		{
-			Cache *hcache = ts_hypertable_cache_pin();
-			Hypertable *parent_ht = ts_hypertable_cache_get_entry(hcache, parent_oid);
-			ts_cache_release(hcache);
-			if (parent_ht)
-				return parent_oid;
+			if (ts_is_hypertable(parent_oid))
+							return parent_oid;
 		}
 #else
 		/* In PG12 UPDATE/DELETE on inheritance relations are planned in two
@@ -502,7 +500,7 @@ timescaledb_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti
 	return;
 }
 
-#if PG12
+#if PG12_GE
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -1439,7 +1437,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	Oid ht_reloid = rte->relid;
 	Oid is_htdml;
 
-#if PG12
+#if PG12_GE
 	// if(inheritance_disabled_counter > inheritance_reenabled_counter)
 	reenable_inheritance(root, rel, rti, rte);
 #endif
@@ -1496,7 +1494,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	if (!ts_extension_is_loaded())
 		return;
 
-#if PG12
+#if PG12_GE
 	/* in earlier versions this is done during expand_hypertable_inheritance() below */
 	ts_plan_expand_timebucket_annotate(root, rel);
 #endif
@@ -1518,8 +1516,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		if (rte->relid == ht_oid)
 			return;
 
-		hcache = ts_hypertable_cache_pin();
-		ht = ts_hypertable_cache_get_entry(hcache, ht_oid, true);
+		ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, true, &hcache);
 
 		if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{

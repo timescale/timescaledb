@@ -10,14 +10,6 @@
 #include <nodes/bitmapset.h>
 #include <nodes/extensible.h>
 
-#include "compat.h"
-
-#if PG12_LT /* nodes/relation.h renamed in fa2cf16 */
-#include <nodes/relation.h>
-#else
-#include <nodes/pathnodes.h>
-#endif
-
 typedef struct ParallelChunkAppendState
 {
 	int next_plan;
@@ -72,7 +64,7 @@ typedef struct ChunkAppendState
 	ParallelChunkAppendState *pstate;
 	void (*choose_next_subplan)(struct ChunkAppendState *);
 
-#if PG12
+#if PG12_GE
 	TupleTableSlot *slot;
 #endif
 } ChunkAppendState;

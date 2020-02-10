@@ -21,23 +21,22 @@
 #include <executor/nodeAgg.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/paths.h>
 #include <optimizer/placeholder.h>
 #include <optimizer/planner.h>
-#include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
-#include <utils/selfuncs.h>
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/clauses.h>
+#include <optimizer/subselect.h>
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 

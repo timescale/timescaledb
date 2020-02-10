@@ -25,19 +25,17 @@
 
 #include "compat.h"
 #if PG12_LT
-#include <optimizer/var.h> /* f09346a */
-#elif PG12_GE
+#include <optimizer/var.h>
+#else
 #include <optimizer/optimizer.h>
 #endif
 
-#include "export.h"
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "catalog.h"
 #include "scanner.h"
 #include "chunk.h"
-#include "compat.h"
 
 static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
 							   const char *hypertable_index);

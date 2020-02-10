@@ -33,7 +33,7 @@ typedef struct ChunkDispatchState
 	 * for each chunk.
 	 */
 	ChunkDispatch *dispatch;
-#if PG12
+#if PG12_GE
 	TupleTableSlot *slot;
 #endif
 } ChunkDispatchState;

@@ -17,7 +17,7 @@
 #include <funcapi.h>
 #include <utils/typcache.h>
 
-#include <compat.h>
+#include "compat.h"
 
 typedef struct HashMeta
 {
@@ -86,7 +86,7 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 {
 	HashMeta *meta = palloc(sizeof(*meta));
 	Oid collation = InvalidOid;
-#if PG12
+#if PG12_GE
 	collation = tentry->typcollation;
 #endif
 

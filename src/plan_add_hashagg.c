@@ -21,7 +21,6 @@
 #include "utils.h"
 #include "guc.h"
 #include "estimate.h"
-#include "compat.h"
 
 /* Add a parallel HashAggregate plan.
  * This code is similar to parts of create_grouping_paths */

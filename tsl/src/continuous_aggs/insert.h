@@ -7,7 +7,6 @@
 #define TIMESCALEDB_TSL_CONTINUOUS_AGGS_INSERT_H
 
 #include <postgres.h>
-#include <fmgr.h>
 
 extern Datum continuous_agg_trigfn(PG_FUNCTION_ARGS);
 

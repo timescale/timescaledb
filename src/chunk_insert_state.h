@@ -11,11 +11,7 @@
 #include <funcapi.h>
 #include <access/tupconvert.h>
 
-#include "hypertable.h"
 #include "chunk.h"
-#include "cache.h"
-#include "chunk_dispatch_state.h"
-#include "compat.h"
 
 typedef struct ChunkInsertState
 {

@@ -18,12 +18,7 @@
 #define TIMESCALEDB_PLANNER_IMPORT_H
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
-#include <utils/lsyscache.h>
-#include <utils/relcache.h>
 #include <utils/selfuncs.h>
-
-#include "export.h"
 
 extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
 										 List **translated_vars);

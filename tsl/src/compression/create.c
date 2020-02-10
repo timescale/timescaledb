@@ -739,13 +739,13 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 										&is_null);
 			if (is_null)
 			{
-#if PG12
+#if PG12_LT
+				Oid oid = HeapTupleGetOid(tuple);
+#else
 				Oid oid = heap_getattr(tuple,
 									   Anum_pg_constraint_oid,
 									   RelationGetDescr(pg_constr),
 									   &is_null);
-#else
-				Oid oid = HeapTupleGetOid(tuple);
 #endif
 				elog(ERROR, "null conkey for constraint %u", oid);
 			}
