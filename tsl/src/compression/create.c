@@ -806,74 +806,17 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 	return conlist;
 }
 
-/*
- * enables compression for the passed in table by
- * creating a compression hypertable with special properties
-Note:
- caller should check security permissions
-*/
-bool
-tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-						   WithClauseResult *with_clause_options)
+static void
+check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options)
 {
-	int32 compress_htid;
-	struct CompressColInfo compress_cols;
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
-	Oid ownerid;
-	List *segmentby_cols;
-	List *orderby_cols;
-	bool compression_already_enabled;
 	bool compression_has_policy;
 	bool compressed_chunks_exist;
-	ContinuousAggHypertableStatus caggstat;
-	List *constraint_list = NIL;
-
-	/*check this is not a special internally created hypertable
-	 * continuous agg table
-	 * compression hypertable
-	 */
-	caggstat = ts_continuous_agg_hypertable_status(ht->fd.id);
-	if (!(caggstat == HypertableIsRawTable || caggstat == HypertableIsNotContinuousAgg))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("continuous aggregate tables do not support compression")));
-	}
-	if (ht->fd.compressed)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot compress internal compression hypertable")));
-	}
-
-	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
-	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
-
-	/* reload info after lock */
-	ht = ts_hypertable_get_by_id(ht->fd.id);
-	ownerid = ts_rel_get_owner(ht->main_table_relid);
-	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
-	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
-	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
-	compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
+	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
 	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
 	compression_has_policy =
 		compression_already_enabled && ts_bgw_policy_compress_chunks_find_by_hypertable(ht->fd.id);
-
-	if (!compress_enable)
-	{
-		if (!with_clause_options[CompressOrderBy].is_default ||
-			!with_clause_options[CompressSegmentBy].is_default)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg(
-						 "cannot set additional compression options when disabling compression")));
-
-		if (!compression_already_enabled)
-			/* compression is not enabled, so just return */
-			return false;
-	}
 
 	if (compressed_chunks_exist)
 		ereport(ERROR,
@@ -917,7 +860,98 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 					 errmsg("need to specify timescaledb.compress_segmentby if it was previously "
 							"set")));
 	}
+}
 
+static void
+drop_existing_compression_table(Hypertable *ht)
+{
+	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+	if (compressed == NULL)
+		elog(ERROR, "compression enabled but no compressed hypertable found");
+	/* need to drop the old compressed hypertable in case the segment by columns changed (and
+	 * thus the column types of compressed hypertable need to change) */
+	ts_hypertable_drop(compressed, DROP_RESTRICT);
+	ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
+	ts_hypertable_unset_compressed_id(ht);
+}
+
+static bool
+disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
+{
+	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
+	if (!with_clause_options[CompressOrderBy].is_default ||
+		!with_clause_options[CompressSegmentBy].is_default)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot set additional compression options when disabling compression")));
+
+	if (!compression_already_enabled)
+		/* compression is not enabled, so just return */
+		return false;
+	/* compression is enabled. can we turn it off? */
+	check_modify_compression_options(ht, with_clause_options);
+	drop_existing_compression_table(ht);
+	ts_hypertable_unset_compressed_id(ht);
+	return true;
+}
+
+/*
+ * enables compression for the passed in table by
+ * creating a compression hypertable with special properties
+Note:
+ caller should check security permissions
+*/
+bool
+tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
+						   WithClauseResult *with_clause_options)
+{
+	int32 compress_htid;
+	struct CompressColInfo compress_cols;
+	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
+	Oid ownerid;
+	List *segmentby_cols;
+	List *orderby_cols;
+	ContinuousAggHypertableStatus caggstat;
+	List *constraint_list = NIL;
+
+	/*check this is not a special internally created hypertable
+	 * i.e. continuous agg table or compression hypertable
+	 */
+	caggstat = ts_continuous_agg_hypertable_status(ht->fd.id);
+	if (!(caggstat == HypertableIsRawTable || caggstat == HypertableIsNotContinuousAgg))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous aggregate tables do not support compression")));
+	}
+	if (ht->fd.compressed)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot compress internal compression hypertable")));
+	}
+	/*check row security settings for the table */
+	if (ts_has_row_security(ht->main_table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compression cannot be used on table with row security")));
+
+	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
+	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
+
+	/* reload info after lock */
+	ht = ts_hypertable_get_by_id(ht->fd.id);
+	if (!compress_enable)
+	{
+		return disable_compression(ht, with_clause_options);
+	}
+	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+		check_modify_compression_options(ht, with_clause_options);
+
+	ownerid = ts_rel_get_owner(ht->main_table_relid);
+	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
+	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
 	compresscolinfo_init(&compress_cols, ht->main_table_relid, segmentby_cols, orderby_cols);
 	/* check if we can create a compressed hypertable with existing constraints */
 	constraint_list = validate_existing_constraints(ht, &compress_cols);
@@ -927,27 +961,10 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
 					RowExclusiveLock);
 
-	/*check row security settings for the table */
-	if (ts_has_row_security(ht->main_table_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression cannot be used on table with row security")));
-
-	if (compression_already_enabled || !compress_enable)
+	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
 	{
-		Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		if (compressed == NULL)
-			elog(ERROR, "compression enabled but no compressed hypertable found");
-		/* need to drop the old compressed hypertable in case the segment by columns changed (and
-		 * thus the column types of compressed hypertable need to change) */
-		ts_hypertable_drop(compressed, DROP_RESTRICT);
-		ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
-	}
-
-	if (!compress_enable)
-	{
-		ts_hypertable_unset_compressed_id(ht);
-		return true;
+		/* compression is enabled */
+		drop_existing_compression_table(ht);
 	}
 
 	compress_htid = create_compression_table(ownerid, &compress_cols);
