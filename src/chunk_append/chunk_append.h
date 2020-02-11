@@ -7,14 +7,6 @@
 #define TIMESCALEDB_CHUNK_APPEND_H
 
 #include <postgres.h>
-#include <nodes/primnodes.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <nodes/relation.h>
-#else
-#include <nodes/pathnodes.h>
-#endif
 
 #include "hypertable.h"
 
