@@ -209,3 +209,30 @@ select device_id, d from table_constr order by device_id, d;
 delete from fortable where col = 1 or col = 10;
 select device_id, d from table_constr order by device_id, d;
 
+--github issue 1661
+--disable compression after enabling it on a table that has fk constraints
+CREATE TABLE  table_constr2( device_id integer,
+                    timec integer ,
+                    location integer ,
+                   d integer references fortable(col),
+                    primary key ( device_id, timec)
+);
+SELECT table_name from create_hypertable('table_constr2', 'timec', chunk_time_interval=> 10);
+INSERT INTO fortable VALUES( 99 );
+INSERT INTO table_constr2 VALUES( 1000, 10, 5, 99);
+
+ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+
+ ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, d');
+
+--compress a chunk and try to disable compression, it should fail --
+SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
+SELECT compress_chunk(:'CHUNK_NAME');
+ALTER TABLE table_constr2 set (timescaledb.compress=false);
+
+--decompress all chunks and disable compression.
+SELECT decompress_chunk(:'CHUNK_NAME');
+ALTER TABLE table_constr2 SET (timescaledb.compress=false);
+
