@@ -784,6 +784,15 @@ extern int oid_cmp(const void *p1, const void *p2);
 	WaitLatch(latch, wakeEvents, timeout, PG_WAIT_EXTENSION)
 #endif
 
+/* create_merge_append_path */
+#if PG96
+#define create_merge_append_path_compat(root, rel, merge_childs, pathkeys, subpath)                \
+	create_merge_append_path(root, rel, merge_childs, pathkeys, subpath)
+#else
+#define create_merge_append_path_compat(root, rel, merge_childs, pathkeys, subpath)                \
+	create_merge_append_path(root, rel, merge_childs, pathkeys, subpath, NIL)
+#endif
+
 /* pq_sendint is deprecated in PG11, so create pq_sendint32 in 9.6 and 10 */
 #if PG11_LT
 #define pq_sendint32(buf, i) pq_sendint(buf, i, 4)

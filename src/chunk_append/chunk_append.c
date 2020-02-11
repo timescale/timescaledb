@@ -203,45 +203,37 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			foreach (lc_oid, current_oids)
 			{
 				/* postgres may have pruned away some children already */
-				if (lfirst_oid(lc_oid) ==
-					root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid)
+				Path *child = (Path *) lfirst(flat);
+				Oid parent_relid = child->parent->relid;
+				bool is_not_pruned =
+					lfirst_oid(lc_oid) == root->simple_rte_array[parent_relid]->relid;
+#if PG12_LT
+				Assert(is_not_pruned);
+#endif
+				if (is_not_pruned)
 				{
-					Assert(lfirst_oid(lc_oid) ==
-						   root->simple_rte_array[((Path *) lfirst(flat))->parent->relid]->relid);
-					merge_childs = lappend(merge_childs, lfirst(flat));
+					merge_childs = lappend(merge_childs, child);
 					flat = lnext(flat);
 				}
 			}
 
 			if (list_length(merge_childs) > 1)
 			{
-#if PG96
-				append = create_merge_append_path(root,
-												  rel,
-												  merge_childs,
-												  path->cpath.path.pathkeys,
-												  PATH_REQ_OUTER(subpath));
-#else
-				append = create_merge_append_path(root,
-												  rel,
-												  merge_childs,
-												  path->cpath.path.pathkeys,
-												  PATH_REQ_OUTER(subpath),
-												  NIL);
-#endif
+				append = create_merge_append_path_compat(root,
+														 rel,
+														 merge_childs,
+														 path->cpath.path.pathkeys,
+														 PATH_REQ_OUTER(subpath));
 				nested_children = lappend(nested_children, append);
 			}
-#if PG12_GE
-			else if (list_length(merge_childs) == 0)
-			{
-				/* nop */
-			}
-#endif
-			else
+			else if (list_length(merge_childs) == 1)
 			{
 				has_scan_childs = true;
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
+#if PG12_LT
+			Assert(list_length(merge_childs) > 0);
+#endif
 		}
 
 		Assert(flat == NULL);
