@@ -332,10 +332,12 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		/* BEFORE ROW INSERT Triggers */
 		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 		{
-			ExecBRInsertTriggersCompat(estate, resultRelInfo, myslot);
-
-			if (myslot == NULL) /* "do nothing" */
-				skip_tuple = true;
+#if PG12_LT
+			myslot = ExecBRInsertTriggers(estate, resultRelInfo, myslot);
+			skip_tuple = (myslot == NULL);
+#else
+			skip_tuple = !ExecBRInsertTriggers(estate, resultRelInfo, myslot);
+#endif
 		}
 
 		if (!skip_tuple)
