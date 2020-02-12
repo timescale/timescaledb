@@ -94,13 +94,13 @@ chunk_index_columns_changed(int hypertable_natts, bool hypertable_has_oid, Tuple
 	 * leaving junk attributes that aren't inherited by the chunk.
 	 */
 	return !(hypertable_natts == chunkdesc->natts &&
-			 hypertable_has_oid == TupleDescHasOids(chunkdesc));
+			 hypertable_has_oid == TUPLE_DESC_HAS_OIDS(chunkdesc));
 }
 
 static inline bool
 chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
 {
-	return chunk_index_columns_changed(htdesc->natts, TupleDescHasOids(htdesc), chunkdesc);
+	return chunk_index_columns_changed(htdesc->natts, TUPLE_DESC_HAS_OIDS(htdesc), chunkdesc);
 }
 
 #endif /* TIMESCALEDB_CHUNK_INDEX_H */

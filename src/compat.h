@@ -273,6 +273,23 @@
 #define TM_FailureData HeapUpdateFailureData
 #endif
 
+#if PG12_LT
+
+#define TupleTableSlotOps void
+#define TTSOpsVirtualP NULL
+#define TTSOpsHeapTupleP NULL
+#define TTSOpsMinimalTupleP NULL
+#define TTSOpsBufferHeapTupleP NULL
+
+#else
+
+#define TTSOpsVirtualP (&TTSOpsVirtual)
+#define TTSOpsHeapTupleP (&TTSOpsHeapTuple)
+#define TTSOpsMinimalTupleP (&TTSOpsMinimalTuple)
+#define TTSOpsBufferHeapTupleP (&TTSOpsBufferHeapTuple)
+
+#endif
+
 /*
  * ExecInitExtraTupleSlot & MakeTupleTableSlot
  *
@@ -284,12 +301,6 @@
  * We adopt the PG11 conventions so that we can take advantage of JITing more easily in the future.
  */
 #if PG11_LT
-
-#define TupleTableSlotOps void
-#define TTSOpsVirtualP NULL
-#define TTSOpsHeapTupleP NULL
-#define TTSOpsMinimalTupleP NULL
-#define TTSOpsBufferHeapTupleP NULL
 
 static inline TupleTableSlot *
 ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc, void *tts_ops)
@@ -322,11 +333,6 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 }
 #elif PG11
 
-#define TupleTableSlotOps void
-#define TTSOpsVirtualP NULL
-#define TTSOpsHeapTupleP NULL
-#define TTSOpsMinimalTupleP NULL
-#define TTSOpsBufferHeapTupleP NULL
 #define ExecInitExtraTupleSlotCompat(estate, tupledesc, tts_ops)                                   \
 	ExecInitExtraTupleSlot(estate, tupledesc)
 #define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc)
@@ -334,10 +340,6 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 
 #else /* PG12_GE */
 
-#define TTSOpsVirtualP (&TTSOpsVirtual)
-#define TTSOpsHeapTupleP (&TTSOpsHeapTuple)
-#define TTSOpsMinimalTupleP (&TTSOpsMinimalTuple)
-#define TTSOpsBufferHeapTupleP (&TTSOpsBufferHeapTuple)
 #define ExecInitExtraTupleSlotCompat ExecInitExtraTupleSlot
 #define MakeTupleTableSlotCompat MakeTupleTableSlot
 #define MakeSingleTupleTableSlotCompat MakeSingleTupleTableSlot
@@ -749,8 +751,8 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 
 /*
  * table_beginscan
- * PG12 generalizes table scans to those no directly dependant on the heap.
- * These are the functions we should generally use for version after 12. For
+ * PG12 generalizes table scans to those not directly dependent on the heap.
+ * These are the functions we should generally use for PG12 and later versions. For
  * earlier versions, we can assume that all tables are backed by the heap, so
  * we forward it to heap_beginscan.
  * see
@@ -791,9 +793,9 @@ extern int oid_cmp(const void *p1, const void *p2);
 #define pq_getmsgint32(buf) pq_getmsgint(buf, 4)
 
 #if PG12_LT
-#define TupleDescHasOids(desc) (desc)->tdhasoid
+#define TUPLE_DESC_HAS_OIDS(desc) (desc)->tdhasoid
 #else
-#define TupleDescHasOids(desc) false
+#define TUPLE_DESC_HAS_OIDS(desc) false
 #endif
 
 #if PG96

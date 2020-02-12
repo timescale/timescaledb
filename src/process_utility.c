@@ -1939,7 +1939,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
-	info.extended_options.ht_hasoid = TupleDescHasOids(main_table_desc);
+	info.extended_options.ht_hasoid = TUPLE_DESC_HAS_OIDS(main_table_desc);
 
 	index_close(main_table_index_relation, NoLock);
 
