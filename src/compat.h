@@ -383,18 +383,6 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 
 #endif
 
-/* ExecBRInsertTriggers */
-#if PG12_LT
-#define ExecBRInsertTriggersCompat(estate, relinfo, slot)                                          \
-	do                                                                                             \
-	{                                                                                              \
-		slot = ExecBRInsertTriggers(estate, relinfo, slot);                                        \
-	} while (0)
-#else
-#define ExecBRInsertTriggersCompat(estate, relinfo, slot)                                          \
-	ExecBRInsertTriggers(estate, relinfo, slot)
-#endif
-
 /* fmgr
  * In a9c35cf postgres changed how it calls SQL functions so that the number of
  * argument-slots allocated is chosen dynamically, instead of being fixed. This
