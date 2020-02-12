@@ -14,8 +14,10 @@ typedef struct BgwJobStat
 	FormData_bgw_job_stat fd;
 } BgwJobStat;
 
+/* Positive result numbers reserved for success */
 typedef enum JobResult
 {
+	JOB_FAILURE_TO_START = -1,
 	JOB_FAILURE = 0,
 	JOB_SUCCESS = 1,
 } JobResult;

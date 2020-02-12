@@ -322,6 +322,44 @@ FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
 
+CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+	num_runs INTEGER;
+	message TEXT;
+BEGIN
+	select format('[TESTING] Wait until %%, started at %s', started_at) into message;
+	FOR i in 1..spins
+	LOOP
+	SELECT COUNT(*) from bgw_log where msg LIKE message INTO num_runs;
+	if (num_runs > 0) THEN
+		RETURN true;
+	ELSE
+		PERFORM pg_sleep(0.1);
+	END IF;
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
+CREATE FUNCTION wait_for_job_3_to_finish(runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+	num_runs INTEGER;
+BEGIN
+	FOR i in 1..spins
+	LOOP
+	SELECT COUNT(*) from bgw_log where msg='After sleep job 3' INTO num_runs;
+	if (num_runs = runs) THEN
+		RETURN true;
+	ELSE
+		PERFORM pg_sleep(0.1);
+	END IF;
+	END LOOP;
+	RETURN false;
+END
+$BODY$;
+
 --
 -- Test starting more jobs than availlable workers
 --
@@ -330,6 +368,7 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
 --Our normal limit is 8 jobs (1 already taken up by the launcher, we don't register the test scheduler)
 --so start 8 workers. Make the schedule_INTERVAL long and the retry period short so that the
 --retries happen within the scheduler run time but everything only runs once.
@@ -345,7 +384,24 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
+SELECT ts_bgw_db_scheduler_test_run(25000); --quit at second 25
+--the first 7 jobs will run right away, but not the last one
+SELECT wait_for_timer_to_run(0);
+SELECT wait_for_job_3_to_finish(7);
+
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat
+ORDER BY job_id;
+
+--but after the first batch finishes and 1 second (START_RETRY_MS) passes, the last job will run.
+SELECT ts_bgw_params_reset_time(1000000, true); --set to second 1
+SELECT wait_for_timer_to_run(1000000);
+SELECT wait_for_job_3_to_finish(8);
+
+SELECT ts_bgw_params_reset_time(30000000, true); --set to second 30, which causes a quit.
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+--should have all 8 runs, all with success runs
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat
 ORDER BY job_id;
@@ -361,6 +417,7 @@ SELECT ts_bgw_params_destroy();
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
 DELETE FROM _timescaledb_config.bgw_job;
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
@@ -434,26 +491,6 @@ BEGIN
 	LOOP
 	SELECT COUNT(*) from bgw_log where msg='Execute job 1' INTO num_runs;
 	if (num_runs = runs) THEN
-		RETURN true;
-	ELSE
-		PERFORM pg_sleep(0.1);
-	END IF;
-	END LOOP;
-	RETURN false;
-END
-$BODY$;
-
-CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-	num_runs INTEGER;
-	message TEXT;
-BEGIN
-	select format('[TESTING] Wait until %%, started at %s', started_at) into message;
-	FOR i in 1..spins
-	LOOP
-	SELECT COUNT(*) from bgw_log where msg LIKE message INTO num_runs;
-	if (num_runs > 0) THEN
 		RETURN true;
 	ELSE
 		PERFORM pg_sleep(0.1);

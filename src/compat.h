@@ -676,4 +676,90 @@ pg_sub_s64_overflow(int64 a, int64 b, int64 *result)
 }
 #endif
 
+/* Backport of list_qsort() */
+#if PG11_LT
+typedef int (*list_qsort_comparator)(const void *a, const void *b);
+/*
+ * Sort a list as though by qsort.
+ *
+ * A new list is built and returned.  Like list_copy, this doesn't make
+ * fresh copies of any pointed-to data.
+ *
+ * The comparator function receives arguments of type ListCell **.
+ */
+
+static List *
+new_list(NodeTag type)
+{
+	List *new_list;
+	ListCell *new_head;
+
+	new_head = (ListCell *) palloc(sizeof(*new_head));
+	new_head->next = NULL;
+	/* new_head->data is left undefined! */
+
+	new_list = (List *) palloc(sizeof(*new_list));
+	new_list->type = type;
+	new_list->length = 1;
+	new_list->head = new_head;
+	new_list->tail = new_head;
+
+	return new_list;
+}
+
+static inline List *
+list_qsort(const List *list, list_qsort_comparator cmp)
+{
+	int len = list_length(list);
+	ListCell **list_arr;
+	List *newlist;
+	ListCell *newlist_prev;
+	ListCell *cell;
+	int i;
+
+	/* Empty list is easy */
+	if (len == 0)
+		return NIL;
+
+	/* Flatten list cells into an array, so we can use qsort */
+	list_arr = (ListCell **) palloc(sizeof(ListCell *) * len);
+	i = 0;
+	foreach (cell, list)
+		list_arr[i++] = cell;
+
+	qsort(list_arr, len, sizeof(ListCell *), cmp);
+
+	/* Construct new list (this code is much like list_copy) */
+	newlist = new_list(list->type);
+	newlist->length = len;
+
+	/*
+	 * Copy over the data in the first cell; new_list() has already allocated
+	 * the head cell itself
+	 */
+	newlist->head->data = list_arr[0]->data;
+
+	newlist_prev = newlist->head;
+	for (i = 1; i < len; i++)
+	{
+		ListCell *newlist_cur;
+
+		newlist_cur = (ListCell *) palloc(sizeof(*newlist_cur));
+		newlist_cur->data = list_arr[i]->data;
+		newlist_prev->next = newlist_cur;
+
+		newlist_prev = newlist_cur;
+	}
+
+	newlist_prev->next = NULL;
+	newlist->tail = newlist_prev;
+
+	/* Might as well free the workspace array */
+	pfree(list_arr);
+
+	return newlist;
+}
+
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

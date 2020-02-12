@@ -303,9 +303,12 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 
 		/*
 		 * Mark the next start at the end if the job itself hasn't (this may
-		 * have happened before failure)
+		 * have happened before failure) and the failure was not in starting.
+		 * If the failure was in starting, then next_start should have been
+		 * restored in `on_failure_to_start_job` and thus we don't change it here.
+		 * Even if it wasn't restored, then keep it as DT_NOBEGIN to mark it as highest priority.
 		 */
-		if (!bgw_job_stat_next_start_was_set(fd))
+		if (!bgw_job_stat_next_start_was_set(fd) && result_ctx->result != JOB_FAILURE_TO_START)
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
 															 result_ctx->job);
