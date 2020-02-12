@@ -27,9 +27,7 @@
 #if PG12_LT
 #include <optimizer/clauses.h>
 #include <optimizer/predtest.h>
-#include <nodes/relation.h>
 #else
-#include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #endif
 

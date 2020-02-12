@@ -493,11 +493,11 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 						   chunkrel,
 						   get_index_constraint(hypertable_idxoid));
 
-		relation_close(hypertable_idxrel, AccessShareLock);
+		index_close(hypertable_idxrel, AccessShareLock);
 	}
 
-	relation_close(chunkrel, NoLock);
-	relation_close(htrel, AccessShareLock);
+	table_close(chunkrel, NoLock);
+	table_close(htrel, AccessShareLock);
 }
 
 static int
@@ -988,7 +988,6 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 	List *new_index_oids = NIL;
 	Chunk *src_chunk;
 
-	/* TODO lock order? */
 	src_chunk_rel = table_open(src_chunkrelid, AccessShareLock);
 	dest_chunk_rel = table_open(dest_chunkrelid, ShareLock);
 

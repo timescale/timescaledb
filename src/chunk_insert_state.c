@@ -497,7 +497,7 @@ static inline bool
 tuple_conversion_needed(TupleDesc indesc, TupleDesc outdesc)
 {
 	return (indesc->natts != outdesc->natts ||
-			TupleDescHasOids(indesc) != TupleDescHasOids(outdesc));
+			TUPLE_DESC_HAS_OIDS(indesc) != TUPLE_DESC_HAS_OIDS(outdesc));
 }
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
