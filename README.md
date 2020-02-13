@@ -5,21 +5,29 @@
 
 ## TimescaleDB
 
-TimescaleDB is an open-source database designed to make SQL scalable for time-series data. It is engineered up from PostgreSQL and packaged as a PostgreSQL extension, providing automatic partitioning across time and space (partitioning key), as well as full SQL support.
+TimescaleDB is an open-source database designed to make SQL scalable for time-series data. 
+It is engineered up from PostgreSQL and packaged as a PostgreSQL extension, providing automatic 
+partitioning across time and space (partitioning key), as well as full SQL support.
 
-[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud) is our fully managed, hosted version of TimescaleDB, available in the cloud of your choice (pay-as-you-go, $300 in credits to start).
-To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts) for more information about our Apache-2 version, TimescaleDB Community (self-hosted) and Timescale Cloud (hosted), including: feature comparisons, FAQ, documentation, and support.
+[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud) is our fully managed, hosted version of 
+TimescaleDB, available in the cloud of your choice (pay-as-you-go, $300 in credits to start).
+To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts) 
+for more information about our Apache-2 version, TimescaleDB Community (self-hosted) and Timescale 
+Cloud (hosted), including: feature comparisons, FAQ, documentation, and support.
 
-Below is an introduction to TimescaleDB. For more information, please check out these other resources:
+Below is an introduction to TimescaleDB. For more information, please check out 
+these other resources:
 - [Developer Documentation](https://tsdb.co/GitHubTimescaleDocs)
 - [Slack Channel](https://slack-login.timescale.com)
 - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
 
-For reference and clarity, all code files in this repository reference licensing in their header (either Apache-2-open-source license or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)). Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+For reference and clarity, all code files in this repository reference licensing in their 
+header (either Apache-2-open-source license or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)). 
+Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
 [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 
-(Before building from source, see instructions [here](https://github.com/laceybutler/build-from-source)).
+(Before building from source, see instructions [here](https://github.com/timescale/timescaledb/blob/master/docs/BuildSource.md).)
 
 ### Using TimescaleDB
 
@@ -50,7 +58,8 @@ such.
 
 PostgreSQL's out-of-the-box settings are typically too conservative for modern
 servers and TimescaleDB. You should make sure your `postgresql.conf`
-settings are tuned, either by using [timescaledb-tune](https://github.com/timescale/timescaledb-tune) or doing it manually.
+settings are tuned, either by using [timescaledb-tune](https://github.com/timescale/timescaledb-tune) 
+or doing it manually.
 
 #### Creating a hypertable
 
@@ -112,11 +121,13 @@ TimescaleDB is available pre-packaged for several platforms:
 - [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
 - [Windows](https://tsdb.co/GitHubTimescaleWindows)
 
-[Timescale Cloud](https://tsdb.co/GitHubTimescaleInstallCloud) (database-as-a-service) is available via free trial. You create database instances in the cloud of your choice and use TimescaleDB to power your queries, automating common operational tasks and reducing management overhead.
+[Timescale Cloud](https://tsdb.co/GitHubTimescaleInstallCloud) (database-as-a-service) is available
+via free trial. You create database instances in the cloud of your choice and use TimescaleDB to power 
+your queries, automating common operational tasks and reducing management overhead.
 
 We recommend following our detailed [installation instructions](https://tsdb.co/GitHubTimescaleInstall).
 
-To build from source, see instructions [here](https://github.com/laceybutler/build-from-source)
+To build from source, see instructions [here](https://github.com/timescale/timescaledb/blob/master/docs/BuildSource.md).
 
 
 ## Resources
