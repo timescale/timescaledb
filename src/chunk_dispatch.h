@@ -25,7 +25,7 @@
 typedef struct ChunkDispatch
 {
 	/* Link to the executor state for INSERTs. This is not set for COPY path. */
-	struct ChunkDispatchState *dispatch_state;
+	const struct ChunkDispatchState *dispatch_state;
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
@@ -47,12 +47,12 @@ extern void ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
-extern bool ts_chunk_dispatch_has_returning(ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_returning_clauses(ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_arbiter_indexes(ChunkDispatch *dispatch);
-extern OnConflictAction ts_chunk_dispatch_get_on_conflict_action(ChunkDispatch *dispatch);
-extern List *ts_chunk_dispatch_get_on_conflict_set(ChunkDispatch *dispatch);
-extern Node *ts_chunk_dispatch_get_on_conflict_where(ChunkDispatch *dispatch);
-extern CmdType ts_chunk_dispatch_get_cmd_type(ChunkDispatch *dispatch);
+extern bool ts_chunk_dispatch_has_returning(const ChunkDispatch *dispatch);
+extern List *ts_chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch);
+extern List *ts_chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch);
+extern OnConflictAction ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
+extern List *ts_chunk_dispatch_get_on_conflict_set(const ChunkDispatch *dispatch);
+extern Node *ts_chunk_dispatch_get_on_conflict_where(const ChunkDispatch *dispatch);
+extern CmdType ts_chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch);
 
 #endif /* TIMESCALEDB_CHUNK_DISPATCH_H */

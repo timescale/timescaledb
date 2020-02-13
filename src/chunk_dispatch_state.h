@@ -31,9 +31,9 @@ typedef struct ChunkDispatchState
 	TupleDesc conflproj_tupdesc;
 #endif
 	/*
-	 * Keep a reference to the parent ModifyTableState executor node since we
-	 * need to manipulate the current result relation on-the-fly for chunk
-	 * routing during inserts.
+	 * Keep a pointer to the parent ModifyTableState executor node since we need
+	 * to manipulate the current result relation on-the-fly for chunk routing
+	 * during inserts.
 	 */
 	ModifyTableState *mtstate;
 	/*

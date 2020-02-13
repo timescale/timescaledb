@@ -187,13 +187,17 @@ ts_chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
 	return state;
 }
 
-#if PG11
+#if PG12_GE
+/* In PG12, tuple table slots moved to the result relation struct, which exists
+ * in one instance per relation (including chunks). Therefore, no changes to
+ * these slots are required when changing chunk.
+ */
+#define setup_tuple_slots_for_on_conflict_handling(state)
+#elif PG11
 /*
- * In PG11, tuple table slots for for ON CONFLICT handling are tied to the
- * format of the "root" table, unless partition routing is enabled (which
- * isn't the case for hypertables). In PG12, these slots moved to the result
- * relation struct, which exists in one instance per relation (including
- * chunks).
+ * In PG11, tuple table slots for ON CONFLICT handling are tied to the format of
+ * the "root" table, unless partition routing is enabled (which isn't the case
+ * for hypertables).
  *
  * We need to replace the PG11 slots with new ones (that aren't tied to the
  * tuple descriptor of the root table) since we need to be able to dynamically
@@ -250,8 +254,6 @@ setup_tuple_slots_for_on_conflict_handling(ChunkDispatchState *state)
 		state->conflproj_tupdesc = mtstate->mt_conflproj->tts_tupleDescriptor;
 	}
 }
-#else
-#define setup_tuple_slots_for_on_conflict_handling(state)
 #endif
 
 /*
