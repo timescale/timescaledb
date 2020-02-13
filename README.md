@@ -5,25 +5,21 @@
 
 ## TimescaleDB
 
-TimescaleDB is an open-source database designed to make SQL scalable for
-time-series data. It is engineered up from PostgreSQL, providing automatic
-partitioning across time and space (partitioning key), as well as full
-SQL support.
+TimescaleDB is an open-source database designed to make SQL scalable for time-series data. It is engineered up from PostgreSQL and packaged as a PostgreSQL extension, providing automatic partitioning across time and space (partitioning key), as well as full SQL support.
 
-TimescaleDB is packaged as a PostgreSQL extension.  All code is licensed
-under the Apache-2 open-source license, with the exception of source code
-under the `tsl` subdirectory, which is licensed under
-the [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE).
-For clarity, all code files reference licensing in their header.  [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
-
-Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud) is our fully managed, hosted version of TimescaleDB, available in the cloud of your choice (pay-as-you-go, $300 in credits to start).
+To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts) for more information about our Apache-2 version, TimescaleDB Community (self-hosted) and Timescale Cloud (hosted), including: feature comparisons, FAQ, documentation, and support.
 
 Below is an introduction to TimescaleDB. For more information, please check out these other resources:
-- [Developer Documentation](https://docs.timescale.com/)
+- [Developer Documentation](https://tsdb.co/GitHubTimescaleDocs)
 - [Slack Channel](https://slack-login.timescale.com)
-- [Support Email](mailto:support@timescale.com)
+- [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
 
-(Before building from source, see instructions below.)
+For reference and clarity, all code files in this repository reference licensing in their header (either Apache-2-open-source license or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)). Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+
+[Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
+
+(Before building from source, see instructions [here](https://github.com/laceybutler/build-from-source)).
 
 ### Using TimescaleDB
 
@@ -35,11 +31,11 @@ In other words, TimescaleDB exposes what look like regular tables, but
 are actually only an
 abstraction (or a virtual view) of many individual tables comprising the
 actual data. This single-table view, which we call a
-[hypertable](https://docs.timescale.com/introduction/architecture#hypertables),
+[hypertable](https://tsdb.co/GitHubTimescaleHypertable),
 is comprised of many chunks, which are created by partitioning
 the hypertable's data in either one or two dimensions: by a time
 interval, and by an (optional) "partition key" such as
-device id, location, user id, etc. ([Architecture discussion](https://docs.timescale.com/introduction/architecture))
+device id, location, user id, etc. ([Architecture discussion](https://tsdb.co/GitHubTimescaleArchitecture))
 
 Virtually all user interactions with TimescaleDB are with
 hypertables. Creating tables and indexes, altering tables, inserting
@@ -74,8 +70,8 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
 ```
 
-- [Quick start: Creating hypertables](https://docs.timescale.com/getting-started/creating-hypertables)
-- [Reference examples](https://docs.timescale.com/using-timescaledb/schema-management)
+- [Quick start: Creating hypertables](https://tsdb.co/GitHubTimescaleCreateHypertables)
+- [Reference examples](https://tsdb.co/GitHubTimescaleHypertableReference)
 
 #### Inserting and querying data
 
@@ -100,93 +96,30 @@ SELECT time_bucket('15 minutes', time) AS fifteen_min,
 In addition, TimescaleDB includes additional functions for time-series
 analysis that are not present in vanilla PostgreSQL. (For example, the `time_bucket` function above.)
 
-- [Quick start: Basic operations](https://docs.timescale.com/using-timescaledb/hypertables)
-- [Reference examples](https://docs.timescale.com/using-timescaledb/writing-data)
-- [TimescaleDB API](https://docs.timescale.com/api)
+- [Quick start: Basic operations](https://tsdb.co/GitHubTimescaleBasicOperations)
+- [Reference examples](https://tsdb.co/GitHubTimescaleWriteData)
+- [TimescaleDB API](https://tsdb.co/GitHubTimescaleAPI)
 
 ### Installation
 
 TimescaleDB is available pre-packaged for several platforms:
 
 - Linux:
-    - [RedHat / CentOS](https://docs.timescale.com/getting-started/installation/rhel-centos/installation-yum)
-    - [Ubuntu](https://docs.timescale.com/getting-started/installation/ubuntu/installation-apt-ubuntu)
-    - [Debian](https://docs.timescale.com/getting-started/installation/debian/installation-apt-debian)
-- [Docker](https://docs.timescale.com/getting-started/installation/docker/installation-docker)
-- [MacOS (Homebrew)](https://docs.timescale.com/getting-started/installation/macos/installation-homebrew)
-- [Windows](https://docs.timescale.com/getting-started/installation/windows/installation-windows)
+    - [RedHat / CentOS](https://tsdb.co/GitHubTimescaleRedHatCentOS)
+    - [Ubuntu](https://tsdb.co/GitHubTimescaleUbuntu)
+    - [Debian](https://tsdb.co/GitHubTimescaleDebian)
+- [Docker](https://tsdb.co/GitHubTimescaleDocker)
+- [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
+- [Windows](https://tsdb.co/GitHubTimescaleWindows)
 
-We recommend following our detailed [installation instructions](https://docs.timescale.com/getting-started/installation).
+[Timescale Cloud](https://tsdb.co/GitHubTimescaleInstallCloud) (database-as-a-service) is available via free trial. You create database instances in the cloud of your choice and use TimescaleDB to power your queries, automating common operational tasks and reducing management overhead.
 
-#### Building from source (Unix-based systems)
+We recommend following our detailed [installation instructions](https://tsdb.co/GitHubTimescaleInstall).
 
-If you are building from source for **non-development purposes**
-(i.e., you want to run TimescaleDB, not submit a patch), you should
-**always use a release-tagged commit and not build from `master`**.
-See the Releases tab for the latest release.
+To build from source, see instructions [here](https://github.com/laceybutler/build-from-source)
 
-**Prerequisites**:
 
-- A standard PostgreSQL 9.6, 10, or 11 installation with development
-environment (header files) (e.g., `postgresql-server-dev-11 `package
-for Linux, Postgres.app for MacOS)
-- C compiler (e.g., gcc or clang)
-- [CMake](https://cmake.org/) version 3.4 or greater
-
-```bash
-git clone git@github.com:timescale/timescaledb.git
-cd timescaledb
-# Find the latest release and checkout, e.g. for 1.3.0:
-git checkout 1.3.0
-# Bootstrap the build system
-./bootstrap
-# To build the extension
-cd build && make
-# To install
-make install
-```
-
-Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config` that should be used by using `./bootstrap -DPG_CONFIG=/path/to/pg_config`.
-
-Please see our [additional configuration instructions](https://docs.timescale.com/getting-started/installation).
-
-#### Building from source (Windows)
-
-If you are building from source for **non-development purposes**
-(i.e., you want to run TimescaleDB, not submit a patch), you should
-**always use a release-tagged commit and not build from `master`**.
-See the Releases tab for the latest release.
-
-**Prerequisites**:
-
-- A standard [PostgreSQL 9.6, 10, or 11 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
-- OpenSSL for Windows
-- Microsoft Visual Studio 2017 with CMake and Git components
-- OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
-- Make sure all relevant binaries are in your PATH: `pg_config` and `cmake`
-
-If using Visual Studio 2017 with the CMake and Git components, you
-should be able to simply clone the repo and open the folder in
-Visual Studio which will take care of the rest.
-
-If you are using an earlier version of Visual Studio, then it can
-be built in the following way:
-```bash
-git clone git@github.com:timescale/timescaledb.git
-cd timescaledb
-
-# Find the latest release and checkout, e.g. for 1.3.0:
-git checkout 1.3.0
-# Bootstrap the build system
-bootstrap.bat
-# To build the extension from command line
-cmake --build ./build --config Release
-# To install
-cmake --build ./build --config Release --target install
-
-# Alternatively, build in Visual Studio via its built-in support for
-# CMake or by opening the generated build/timescaledb.sln solution file.
-```
+## Resources
 
 ### Useful tools
 
@@ -197,19 +130,25 @@ set your PostgreSQL configuration settings based on your system's resources.
 
 ### Additional documentation
 
-- [Why use TimescaleDB?](https://docs.timescale.com/introduction)
-- [Migrating from PostgreSQL](https://docs.timescale.com/getting-started/setup/migrate-from-postgresql)
-- [Writing data](https://docs.timescale.com/using-timescaledb/writing-data)
-- [Querying and data analytics](https://docs.timescale.com/using-timescaledb/reading-data)
-- [Tutorials and sample data](https://docs.timescale.com/tutorials)
+- [Why use TimescaleDB?](https://tsdb.co/GitHubTimescaleIntro)
+- [Migrating from PostgreSQL](https://tsdb.co/GitHubTimescalePostgresMigrate)
+- [Writing data](https://tsdb.co/GitHubTimescaleWriteData)
+- [Querying and data analytics](https://tsdb.co/GitHubTimescaleReadData)
+- [Tutorials and sample data](https://tsdb.co/GitHubTimescaleTutorials)
 
-### Support
+### Community & help
 
 - [Slack Channel](https://slack.timescale.com)
 - [Github Issues](https://github.com/timescale/timescaledb/issues)
-- [Support Email](mailto:support@timescale.com)
+- [Timescale Support](https://tsdb.co/GitHubTimescaleSupport): see support options (community & subscription)
+
+### Releases & updates
+
+ - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes): see planned and in-progress updates and detailed information about current and past releases.
+ - [Subscribe to Timescale Release Notes](https://tsdb.co/GitHubTimescaleGetReleaseNotes) to get notified about new releases, fixes, and early access/beta programs. 
 
 ### Contributing
 
 - [Contributor instructions](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 - [Code style guide](https://github.com/timescale/timescaledb/blob/master/docs/StyleGuide.md)
+
