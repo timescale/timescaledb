@@ -13,7 +13,6 @@
 
 #include "chunk.h"
 #include "cache.h"
-#include "compat.h"
 
 typedef struct ChunkInsertState
 {

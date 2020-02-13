@@ -3,12 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include "compat/tupconvert.h"
+#include <postgres.h>
 #include <access/attnum.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
 #include <nodes/nodes.h>
-#include <postgres.h>
 
 #include <utils/rel.h>
 #include <utils/rls.h>
@@ -37,90 +36,7 @@
 #include "chunk_dispatch.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
-
-/*
- * Create a new RangeTblEntry for the chunk in the executor's range table and
- * return the index.
- */
-static inline Index
-create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
-{
-	RangeTblEntry *rte;
-	ListCell *lc;
-	Index rti = 1;
-	EState *estate = dispatch->estate;
-
-	/*
-	 * Check if we previously created an entry for this relation. This can
-	 * happen if we close a chunk insert state and then reopen it in the same
-	 * transaction. Reusing an entry ensures the range table never grows
-	 * larger than the number of chunks in a table, although it imposes a
-	 * penalty for looking up old entries.
-	 */
-	foreach (lc, estate->es_range_table)
-	{
-		rte = lfirst(lc);
-
-		if (rte->relid == RelationGetRelid(rel))
-			return rti;
-		rti++;
-	}
-
-	rte = makeNode(RangeTblEntry);
-	rte->rtekind = RTE_RELATION;
-	rte->relid = RelationGetRelid(rel);
-	rte->relkind = rel->rd_rel->relkind;
-	rte->requiredPerms = ACL_INSERT;
-
-	/*
-	 * If the hypertable has a rangetable entry, copy some information from
-	 * its eref to the chunk's eref so that explain analyze works correctly.
-	 */
-	if (0 != dispatch->hypertable_result_rel_info->ri_RangeTableIndex)
-	{
-		RangeTblEntry *hypertable_rte;
-
-		hypertable_rte = rt_fetch(dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
-								  estate->es_range_table);
-		rte->eref = hypertable_rte->eref;
-	}
-
-	/*
-	 * If this is the first tuple, we make a copy of the range table to avoid
-	 * modifying the old list.
-	 */
-	if (estate->es_processed == 0)
-		estate->es_range_table = list_copy(estate->es_range_table);
-
-	estate->es_range_table = lappend(estate->es_range_table, rte);
-
-#if PG12_GE
-	Assert(list_length(estate->es_range_table) > estate->es_range_table_size);
-	if (estate->es_range_table_array != NULL)
-	{
-		estate->es_range_table_size = list_length(estate->es_range_table);
-		estate->es_range_table_array =
-			repalloc(estate->es_range_table_array,
-					 estate->es_range_table_size * sizeof(*estate->es_range_table_array));
-		estate->es_range_table_array[rti - 1] = rte;
-		if (estate->es_relations != NULL)
-		{
-			estate->es_relations =
-				repalloc(estate->es_relations,
-						 estate->es_range_table_size * sizeof(*estate->es_relations));
-			estate->es_relations[rti - 1] = rel;
-			RelationIncrementReferenceCount(rel);
-		}
-	}
-	else
-	{
-		Assert(estate->es_range_table_size == 0);
-		Assert(estate->es_relations == NULL);
-	}
-#endif
-
-	return list_length(estate->es_range_table);
-}
+#include "compat/tupconvert.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -184,14 +100,14 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  * table's) is used as a template for the chunk's new ResultRelInfo.
  */
 static inline ResultRelInfo *
-create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index rti)
+create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 {
 	ResultRelInfo *rri, *rri_orig;
-
+	Index hyper_rti = dispatch->hypertable_result_rel_info->ri_RangeTableIndex;
 	rri = palloc0(sizeof(ResultRelInfo));
 	NodeSetTag(rri, T_ResultRelInfo);
 
-	InitResultRelInfoCompat(rri, rel, rti, dispatch->estate->es_instrument);
+	InitResultRelInfoCompat(rri, rel, hyper_rti, dispatch->estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri_orig = dispatch->hypertable_result_rel_info;
@@ -375,7 +291,7 @@ create_on_conflict_where_qual(List *clause)
 {
 	return ExecInitQual(clause, NULL);
 }
-#endif
+#endif /* PG96 */
 
 #if PG12_GE
 static TupleDesc
@@ -395,7 +311,7 @@ get_confl_slot(ChunkInsertState *state, ChunkDispatch *dispatch, TupleDesc projt
 {
 	ResultRelInfo *chunk_rri = get_chunk_rri(state);
 
-	/* PG12 has a per-relation projection slot for on conflict. Usually,
+	/* PG12 has a per-relation projection slot for ON CONFLICT. Usually,
 	 * these slots are tied to the executor's tuple table
 	 * (estate->es_tupleTable), which tracks all slots and cleans them up
 	 * at the end of exection. This doesn't work well in our case, since
@@ -426,7 +342,7 @@ get_default_confl_tupdesc(ChunkInsertState *state, ChunkDispatch *dispatch)
 	return get_hyper_rri(dispatch)->ri_onConflict->oc_ProjTupdesc;
 #else
 	return dispatch->dispatch_state->conflproj_tupdesc;
-#endif
+#endif /* PG11 */
 }
 
 static TupleTableSlot *
@@ -525,10 +441,10 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch, AttrNu
 	}
 }
 
+#if PG12_GE
 static void
 destroy_on_conflict_state(ChunkInsertState *state)
 {
-#if PG12_GE
 	/*
 	 * Clean up per-chunk tuple table slots created for ON CONFLICT handling.
 	 */
@@ -539,8 +455,10 @@ destroy_on_conflict_state(ChunkInsertState *state)
 	 * tuple descriptor didn't match the hypertable */
 	if (NULL != state->hyper_to_chunk_map && NULL != state->conflproj_slot)
 		ExecDropSingleTupleTableSlot(state->conflproj_slot);
-#endif
 }
+#else
+#define destroy_on_conflict_state(state)
+#endif
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
@@ -585,9 +503,9 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	if (ts_chunk_dispatch_has_returning(dispatch))
 	{
 		/*
-		 * we need the opposite map from cis->hyper_to_chunk_map. The map needs to have
-		 * the hypertable_desc in the out spot for map_variable_attnos to work
-		 * correctly in mapping hypertable attnos->chunk attnos
+		 * We need the opposite map from cis->hyper_to_chunk_map. The map needs
+		 * to have the hypertable_desc in the out spot for map_variable_attnos
+		 * to work correctly in mapping hypertable attnos->chunk attnos.
 		 */
 		chunk_attnos = convert_tuples_by_name_map(RelationGetDescr(chunk_rel),
 												  RelationGetDescr(hyper_rel),
@@ -626,7 +544,6 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
-	Index rti;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
@@ -651,10 +568,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (rel->rd_rel->relkind != RELKIND_RELATION)
 		elog(ERROR, "insert is not on a table");
 
-	rti = create_chunk_range_table_entry(dispatch, rel);
-
 	MemoryContextSwitchTo(cis_context);
-	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
+	resrelinfo = create_chunk_result_relation_info(dispatch, rel);
 	CheckValidResultRelCompat(resrelinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));

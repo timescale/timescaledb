@@ -710,8 +710,8 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  */
 
 #if PG11_LT
-#define ResultRelInfo_OnConflictProjInfoCompat(rri) ((rri)->ri_onConflictSetProj)
-#define ResultRelInfo_OnConflictWhereCompat(rri) ((rri)->ri_onConflictSetWhere)
+#define ResultRelInfo_OnConflictProjInfoCompat(rri) (rri)->ri_onConflictSetProj
+#define ResultRelInfo_OnConflictWhereCompat(rri) (rri)->ri_onConflictSetWhere
 #define ResultRelInfo_OnConflictNotNull(rri) true
 #else
 #define ResultRelInfo_OnConflictProjInfoCompat(rri) (rri)->ri_onConflict->oc_ProjInfo

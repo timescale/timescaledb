@@ -35,19 +35,19 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 }
 
 static inline ModifyTableState *
-get_modifytable_state(ChunkDispatch *dispatch)
+get_modifytable_state(const ChunkDispatch *dispatch)
 {
 	return dispatch->dispatch_state->mtstate;
 }
 
 static inline ModifyTable *
-get_modifytable(ChunkDispatch *dispatch)
+get_modifytable(const ChunkDispatch *dispatch)
 {
 	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
 }
 
 bool
-ts_chunk_dispatch_has_returning(ChunkDispatch *dispatch)
+ts_chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 {
 	if (NULL == dispatch->dispatch_state)
 		return false;
@@ -55,7 +55,7 @@ ts_chunk_dispatch_has_returning(ChunkDispatch *dispatch)
 }
 
 List *
-ts_chunk_dispatch_get_returning_clauses(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 {
 	ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
 
@@ -63,13 +63,13 @@ ts_chunk_dispatch_get_returning_clauses(ChunkDispatch *dispatch)
 }
 
 List *
-ts_chunk_dispatch_get_arbiter_indexes(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
 {
 	return dispatch->dispatch_state->arbiter_indexes;
 }
 
 OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
 	if (NULL == dispatch->dispatch_state)
 		return ONCONFLICT_NONE;
@@ -77,19 +77,19 @@ ts_chunk_dispatch_get_on_conflict_action(ChunkDispatch *dispatch)
 }
 
 List *
-ts_chunk_dispatch_get_on_conflict_set(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_on_conflict_set(const ChunkDispatch *dispatch)
 {
 	return get_modifytable(dispatch)->onConflictSet;
 }
 
 Node *
-ts_chunk_dispatch_get_on_conflict_where(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_on_conflict_where(const ChunkDispatch *dispatch)
 {
 	return get_modifytable(dispatch)->onConflictWhere;
 }
 
 CmdType
-ts_chunk_dispatch_get_cmd_type(ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 {
 	return dispatch->dispatch_state == NULL ? CMD_INSERT :
 											  dispatch->dispatch_state->mtstate->operation;

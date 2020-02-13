@@ -17,7 +17,6 @@
 #include <postgres_fe.h>
 #endif
 
-#include "compat.h"
 #include "base64_compat.h"
 #if PG96
 
