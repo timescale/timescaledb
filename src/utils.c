@@ -170,7 +170,9 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 			if (interval->month != 0)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("intervals must be defined in terms of days or smaller")));
+						 errmsg("months and years not supported"),
+						 errdetail("An interval must be defined as a fixed duration (such as "
+								   "weeks, days, hours, minutes, seconds, etc.).")));
 			return interval->time + (interval->day * USECS_PER_DAY);
 		}
 		default:
