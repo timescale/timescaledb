@@ -45,12 +45,9 @@ GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
 	VirtualTransactionId *ids = GetLockConflicts(locktag, lockmode);
 	if (countp != NULL)
 	{
-		VirtualTransactionId *i = ids;
-		*countp = 0;
-		while (VirtualTransactionIdIsValid(*i))
+		for (*countp = 0; VirtualTransactionIdIsValid(ids[*countp]); (*countp)++)
 		{
-			i += 1;
-			*countp += 1;
+			/* Counts the number of virtual transactions ids into countp */
 		}
 	}
 	return ids;
