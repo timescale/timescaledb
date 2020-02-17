@@ -110,6 +110,11 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
       dist_hypertable.sql.in
     )
   endif ()
+  if (${PG_VERSION_MAJOR} LESS "12")
+    list(APPEND TEST_FILES_DEBUG
+      dist_hypertable_with_oids.sql
+    )
+  endif()
 endif ()
 
 # Regression tests that vary with PostgreSQL version. Generated test
