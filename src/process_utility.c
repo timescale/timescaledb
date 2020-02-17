@@ -2920,6 +2920,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ValidateConstraintRecurse:
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
+		case AT_DropCluster:
+			foreach_chunk(ht, process_altertable_chunk, cmd);
+			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
 		case AT_ReplaceRelOptions:
@@ -2929,8 +2932,11 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropOids:
 		case AT_SetOptions:
 		case AT_ResetOptions:
-		case AT_DropCluster:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			/* Avoid running this command for distributed hypertable chunks
+			 * since PostgreSQL currently does not allow to alter
+			 * storage options for a foreign table. */
+			if (!hypertable_is_distributed(ht))
+				foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_SetTableSpace:
 			process_altertable_set_tablespace_end(ht, cmd);

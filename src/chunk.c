@@ -703,7 +703,10 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.base.inhRelations = list_make1(makeRangeVar(namespace, hyper_name, 0)),
 		.base.tablespacename = tablespacename ? pstrdup(tablespacename) : NULL,
-		.base.options = ts_get_reloptions(chunk->hypertable_relid),
+		/* Propagate storage options of the main table to a regular chunk
+		 * table, but avoid using it for a foreign chunk table. */
+		.base.options =
+			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 #if PG12_GE
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
 								 get_am_name_for_rel(chunk->hypertable_relid) :
