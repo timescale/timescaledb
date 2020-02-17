@@ -55,6 +55,7 @@ BEGIN
                       pg_class pgc,
                       pg_namespace pns
                       WHERE h.schema_name = %L
+                      AND c.dropped = false
                       AND h.table_name = %L
                       AND c.hypertable_id = h.id
                       AND pgc.relname = h.table_name
