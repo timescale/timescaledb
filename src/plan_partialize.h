@@ -8,7 +8,7 @@
 #include <postgres.h>
 #include <optimizer/planner.h>
 
-void ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel,
+bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel,
 									RelOptInfo *output_rel);
 
 #endif /* TIMESCALEDB_PLAN_PARTIALIZE_H */

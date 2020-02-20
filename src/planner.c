@@ -715,6 +715,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 								  RelOptInfo *output_rel)
 {
 	Query *parse = root->parse;
+	bool partials_found = false;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel);
@@ -723,6 +724,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 								  RelOptInfo *output_rel, void *extra)
 {
 	Query *parse = root->parse;
+	bool partials_found = false;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
@@ -739,11 +741,12 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
-
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{
-			/* modify aggregates that need to be partialized */
-			ts_plan_process_partialize_agg(root, input_rel, output_rel);
+			/* existing AggPaths are modified here.
+			 * No new AggPaths should be added after this if there
+			 * are partials*/
+			partials_found = ts_plan_process_partialize_agg(root, input_rel, output_rel);
 		}
 	}
 
@@ -752,10 +755,10 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 
 	if (!ts_guc_optimize_non_hypertables && !involves_hypertable(root, input_rel))
 		return;
-
-	if (UPPERREL_GROUP_AGG == stage && output_rel != NULL)
+	if (stage == UPPERREL_GROUP_AGG && output_rel != NULL)
 	{
-		ts_plan_add_hashagg(root, input_rel, output_rel);
+		if (!partials_found)
+			ts_plan_add_hashagg(root, input_rel, output_rel);
 
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
