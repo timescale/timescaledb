@@ -166,33 +166,33 @@ partialize_agg_paths(RelOptInfo *rel)
  * cases where the planner transparently reduces the having expression to a
  * simple filter (e.g., HAVING device > 3). In such cases, the HAVING clause is
  * removed and replaced by a filter on the input.
+ * Returns : true if partial aggs were found, false otherwise.
  */
-void
+bool
 ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
 {
 	Query *parse = root->parse;
-
 #if PG10_GE
 	Assert(IS_UPPER_REL(output_rel));
 #endif
 
 	if (CMD_SELECT != parse->commandType || !parse->hasAggs)
-		return;
+		return false;
 
-	if (has_partialize_function(parse))
-	{
-		/* We cannot check root->hasHavingqual here because sometimes the
-		 * planner can replace the HAVING clause with a simple filter. But
-		 * root->hashavingqual stays true to remember that the query had a
-		 * HAVING clause initially. */
-		if (NULL != parse->havingQual)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot partialize aggregate with HAVING clause"),
-					 errhint(
-						 "Any aggregates in a HAVING clause need to be partialized in the output "
+	if (!has_partialize_function(parse))
+		return false;
+
+	/* We cannot check root->hasHavingqual here because sometimes the
+	 * planner can replace the HAVING clause with a simple filter. But
+	 * root->hashavingqual stays true to remember that the query had a
+	 * HAVING clause initially. */
+	if (NULL != parse->havingQual)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot partialize aggregate with HAVING clause"),
+				 errhint("Any aggregates in a HAVING clause need to be partialized in the output "
 						 "target list.")));
 
-		partialize_agg_paths(output_rel);
-	}
+	partialize_agg_paths(output_rel);
+	return true;
 }

@@ -162,6 +162,9 @@ INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_internal.partialize_agg( max(b) ), _timescaledb_internal.partialize_agg( min(toastval)) from foo group by a;
 
+EXPLAIN (VERBOSE, COSTS OFF)
+create table t1 as select * from v1;
+
 create table t1 as select * from v1;
 
 insert into t1 select * from v1;
