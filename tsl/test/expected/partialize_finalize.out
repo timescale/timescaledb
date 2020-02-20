@@ -206,6 +206,22 @@ INSERT INTO foo VALUES(1,  '2005-10-19 10:23:54', repeat('I am a tall big giraff
 INSERT INTO foo values( 1, '2005-01-01 00:00:00+00', NULL);
 INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_internal.partialize_agg( max(b) ), _timescaledb_internal.partialize_agg( min(toastval)) from foo group by a;
+EXPLAIN (VERBOSE, COSTS OFF)
+create table t1 as select * from v1;
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Partial HashAggregate
+   Output: _hyper_1_1_chunk.a, _timescaledb_internal.partialize_agg(PARTIAL max(_hyper_1_1_chunk.b)), _timescaledb_internal.partialize_agg(PARTIAL min(_hyper_1_1_chunk.toastval))
+   Group Key: _hyper_1_1_chunk.a
+   ->  Append
+         ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.a, _hyper_1_1_chunk.b, _hyper_1_1_chunk.toastval
+         ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+               Output: _hyper_1_2_chunk.a, _hyper_1_2_chunk.b, _hyper_1_2_chunk.toastval
+         ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+               Output: _hyper_1_3_chunk.a, _hyper_1_3_chunk.b, _hyper_1_3_chunk.toastval
+(10 rows)
+
 create table t1 as select * from v1;
 insert into t1 select * from v1;
 select a, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partialb, null::timestamptz ) maxb,
