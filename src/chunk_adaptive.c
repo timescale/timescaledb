@@ -135,8 +135,8 @@ typedef enum MinMaxResult
 static MinMaxResult
 minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	TableScanDesc scan;
-	HeapTuple tuple;
 	TypeCacheEntry *tce;
 	bool nulls[2] = { true, true };
 
@@ -148,10 +148,10 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 
 	scan = table_beginscan(rel, GetTransactionSnapshot(), 0, NULL);
 
-	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
 		bool isnull;
-		Datum value = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
+		Datum value = slot_getattr(slot, attnum, &isnull);
 
 		if (isnull)
 			continue;
@@ -171,7 +171,8 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 		}
 	}
 
-	heap_endscan(scan);
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(slot);
 
 	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
 }
@@ -183,69 +184,32 @@ static MinMaxResult
 minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[2])
 {
 	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
-	HeapTuple tuple;
-#if PG12_GE /* TODO we should not materialize a HeapTuple unless needed */
-	TupleTableSlot *slot = MakeSingleTupleTableSlot(RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
-	bool should_free = false;
-#endif
-	bool isnull;
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	bool nulls[2] = { true, true };
-	int n = 0;
-	bool found_tuple;
+	int i;
 
-#if PG12_LT
-	tuple = index_getnext(scan, BackwardScanDirection);
-	found_tuple = HeapTupleIsValid(tuple);
-#else /* TODO we should not materialize a HeapTuple unless needed */
-	index_rescan(scan, NULL, 0, NULL, 0);
-	found_tuple = index_getnext_slot(scan, BackwardScanDirection, slot);
-	if (found_tuple)
-		tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
-#endif
-
-	if (found_tuple)
+	for (i = 0; i < 2; i++)
 	{
-		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
-		nulls[n++] = false;
+		static ScanDirection directions[2] = { BackwardScanDirection, ForwardScanDirection };
+		bool found_tuple;
+		bool isnull;
+
+		index_rescan(scan, NULL, 0, NULL, 0);
+		found_tuple = index_getnext_slot(scan, directions[i], slot);
+
+		if (!found_tuple)
+			break;
+
+		minmax[i] = slot_getattr(slot, attnum, &isnull);
+		nulls[i] = isnull;
 	}
-
-#if PG12_GE
-	if (should_free)
-	{
-		heap_freetuple(tuple);
-		should_free = false;
-	}
-#endif
-
-	index_rescan(scan, NULL, 0, NULL, 0);
-
-#if PG12_LT
-	tuple = index_getnext(scan, ForwardScanDirection);
-	found_tuple = HeapTupleIsValid(tuple);
-#else
-	found_tuple = index_getnext_slot(scan, ForwardScanDirection, slot);
-	if (found_tuple)
-		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
-#endif
-
-	if (found_tuple)
-	{
-		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
-		nulls[n++] = false;
-	}
-
-#if PG12_GE
-	if (should_free)
-		heap_freetuple(tuple);
-#endif
 
 	index_endscan(scan);
-
-#if PG12_GE
 	ExecDropSingleTupleTableSlot(slot);
-#endif
 
-	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
+	Assert((nulls[0] && nulls[1]) || (!nulls[0] && !nulls[1]));
+
+	return nulls[0] ? MINMAX_NO_TUPLES : MINMAX_FOUND;
 }
 
 /*

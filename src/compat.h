@@ -695,12 +695,6 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #define PG_RETURN_JSONB_P PG_RETURN_JSONB
 #endif
 
-#if PG12_LT
-#define table_open(r, l) heap_open(r, l)
-#define table_openrv(r, l) heap_openrv(r, l)
-#define table_close(r, l) heap_close(r, l)
-#endif
-
 /*
  * PG11 introduced a new level of nodes inside of ResultRelInfo for dealing with
  * ON CONFLICT behavior in partitions (see:
@@ -760,21 +754,6 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  */
 #if PG11_LT
 #define PreventInTransactionBlock PreventTransactionChain
-#endif
-
-/*
- * table_beginscan
- * PG12 generalizes table scans to those not directly dependent on the heap.
- * These are the functions we should generally use for PG12 and later versions. For
- * earlier versions, we can assume that all tables are backed by the heap, so
- * we forward it to heap_beginscan.
- * see
- * https://github.com/postgres/postgres/commit/c2fe139c201c48f1133e9fbea2dd99b8efe2fadd#diff-79a1a60cd631a1067199e0296de47ec4
- */
-#if PG12_LT
-#define TableScanDesc HeapScanDesc
-#define table_beginscan heap_beginscan
-#define table_beginscan_catalog heap_beginscan_catalog
 #endif
 
 /*
