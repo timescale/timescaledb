@@ -63,10 +63,6 @@ typedef struct ChunkAppendState
 	ParallelContext *pcxt;
 	ParallelChunkAppendState *pstate;
 	void (*choose_next_subplan)(struct ChunkAppendState *);
-
-#if PG12_GE
-	TupleTableSlot *slot;
-#endif
 } ChunkAppendState;
 
 extern Node *ts_chunk_append_state_create(CustomScan *cscan);

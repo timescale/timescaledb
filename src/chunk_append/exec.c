@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <fmgr.h>
 #include <miscadmin.h>
@@ -217,22 +216,35 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	ListCell *lc;
 	int i;
 
+#if PG12_GE
+	/* CustomScan hard-codes the scan and result tuple slot to a fixed
+	 * TTSOpsVirtual ops (meaning it expects the slot ops of the child tuple to
+	 * also have this type). Oddly, when reading slots from subscan nodes
+	 * (children), there is no knowing what tuple slot ops the child slot will
+	 * have (e.g., for ChunkAppend it is common that the child is a
+	 * seqscan/indexscan that produces a TTSOpsBufferHeapTuple
+	 * slot). Unfortunately, any mismatch between slot types when projecting is
+	 * asserted by PostgreSQL. To avoid this issue, we mark the scanops as
+	 * non-fixed and reinitialize the projection state with this new setting.
+	 *
+	 * Alternatively, we could copy the child tuple into the scan slot to get
+	 * the expected ops before projection, but this would require materializing
+	 * and copying the tuple unnecessarily.
+	 */
+	node->ss.ps.scanopsfixed = false;
+
+	/* Since we sometimes return the scan slot directly from the subnode, the
+	 * result slot is not fixed either. */
+	node->ss.ps.resultopsfixed = false;
+	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
+#endif
+
 	initialize_constraints(state, lthird(cscan->custom_private));
 
 	if (state->startup_exclusion)
 		do_startup_exclusion(state);
 
 	state->num_subplans = list_length(state->filtered_subplans);
-
-#if PG12_GE
-	ExecInitResultTupleSlotTL(&node->ss.ps, TTSOpsVirtualP);
-
-	/* node returns slots from each of its subnodes, therefore not fixed */
-	node->ss.ps.resultopsset = true;
-	node->ss.ps.resultopsfixed = false;
-
-	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
-#endif
 
 	if (state->num_subplans == 0)
 	{
@@ -355,11 +367,12 @@ static TupleTableSlot *
 chunk_append_exec(CustomScanState *node)
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
-	TupleTableSlot *subslot;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	ProjectionInfo *projinfo = node->ss.ps.ps_ProjInfo;
+	TupleTableSlot *subslot;
 #if PG96
 	TupleTableSlot *resultslot;
-	ExprDoneCond isDone;
+	ExprDoneCond isdone;
 #endif
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
@@ -368,9 +381,9 @@ chunk_append_exec(CustomScanState *node)
 #if PG96
 	if (node->ss.ps.ps_TupFromTlist)
 	{
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
+		resultslot = ExecProject(projinfo, &isdone);
 
-		if (isDone == ExprMultipleResult)
+		if (isdone == ExprMultipleResult)
 			return resultslot;
 
 		node->ss.ps.ps_TupFromTlist = false;
@@ -387,7 +400,6 @@ chunk_append_exec(CustomScanState *node)
 			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
 
 		Assert(state->current >= 0 && state->current < state->num_subplans);
-
 		subnode = state->subplanstates[state->current];
 
 		/*
@@ -397,42 +409,28 @@ chunk_append_exec(CustomScanState *node)
 
 		if (!TupIsNull(subslot))
 		{
-#if PG12_GE
-			/* convert to Virtual tuple, so the tts_ops don't conflict */
-			if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
-				ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
-
-			ExecCopySlot(state->slot, subslot);
-			subslot = state->slot;
-#endif
-
 			/*
 			 * If the subplan gave us something check if we need
 			 * to do projection otherwise return as is.
 			 */
-			if (node->ss.ps.ps_ProjInfo == NULL)
+			if (projinfo == NULL)
 				return subslot;
 
 			ResetExprContext(econtext);
-
 			econtext->ecxt_scantuple = subslot;
 
 #if PG96
-			resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
+			resultslot = ExecProject(projinfo, &isdone);
 
-			if (isDone != ExprEndResult)
+			if (isdone != ExprEndResult)
 			{
-				node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
+				node->ss.ps.ps_TupFromTlist = (isdone == ExprMultipleResult);
 				return resultslot;
 			}
 #else
-			return ExecProject(node->ss.ps.ps_ProjInfo);
+			return ExecProject(projinfo);
 #endif
 		}
-
-#if PG12_GE
-		ExecClearTuple(state->slot);
-#endif
 
 		state->choose_next_subplan(state);
 
@@ -584,10 +582,6 @@ chunk_append_end(CustomScanState *node)
 	{
 		ExecEndNode(state->subplanstates[i]);
 	}
-
-#if PG12_GE
-	ExecDropSingleTupleTableSlot(state->slot);
-#endif
 }
 
 /*
@@ -813,7 +807,6 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 	/*
 	 * We assume the relation has already been safely locked.
 	 */
-	// FIXME this lock should not be needed...
 	relation = table_open(relationObjectId, AccessShareLock);
 
 	constr = relation->rd_att->constr;
