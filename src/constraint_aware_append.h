@@ -19,9 +19,6 @@ typedef struct ConstraintAwareAppendState
 	CustomScanState csstate;
 	Plan *subplan;
 	Size num_append_subplans;
-#if PG12_GE
-	TupleTableSlot *slot;
-#endif
 } ConstraintAwareAppendState;
 
 typedef struct Hypertable Hypertable;

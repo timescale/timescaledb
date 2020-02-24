@@ -143,7 +143,26 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	};
 
 #if PG12_GE
-	state->slot = MakeSingleTupleTableSlot(NULL, TTSOpsVirtualP);
+	/* CustomScan hard-codes the scan and result tuple slot to a fixed
+	 * TTSOpsVirtual ops (meaning it expects the slot ops of the child tuple to
+	 * also have this type). Oddly, when reading slots from subscan nodes
+	 * (children), there is no knowing what tuple slot ops the child slot will
+	 * have (e.g., for ChunkAppend it is common that the child is a
+	 * seqscan/indexscan that produces a TTSOpsBufferHeapTuple
+	 * slot). Unfortunately, any mismatch between slot types when projecting is
+	 * asserted by PostgreSQL. To avoid this issue, we mark the scanops as
+	 * non-fixed and reinitialize the projection state with this new setting.
+	 *
+	 * Alternatively, we could copy the child tuple into the scan slot to get
+	 * the expected ops before projection, but this would require materializing
+	 * and copying the tuple unnecessarily.
+	 */
+	node->ss.ps.scanopsfixed = false;
+
+	/* Since we sometimes return the scan slot directly from the subnode, the
+	 * result slot is not fixed either. */
+	node->ss.ps.resultopsfixed = false;
+	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
 #endif
 
 	switch (nodeTag(subplan))
@@ -292,14 +311,6 @@ ca_append_exec(CustomScanState *node)
 		if (TupIsNull(subslot))
 			return NULL;
 
-#if PG12_GE
-		if (state->slot->tts_tupleDescriptor != subslot->tts_tupleDescriptor)
-			ExecSetSlotDescriptor(state->slot, subslot->tts_tupleDescriptor);
-
-		ExecCopySlot(state->slot, subslot);
-		subslot = state->slot;
-#endif
-
 		if (!node->ss.ps.ps_ProjInfo)
 			return subslot;
 
@@ -326,9 +337,6 @@ ca_append_end(CustomScanState *node)
 	{
 		ExecEndNode(linitial(node->custom_ps));
 	}
-#if PG12_GE
-	ExecDropSingleTupleTableSlot(((ConstraintAwareAppendState *) node)->slot);
-#endif
 }
 
 static void
