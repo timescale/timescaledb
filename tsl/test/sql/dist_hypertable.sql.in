@@ -29,6 +29,23 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
+-- Import testsupport.sql file to data nodes
+\unset ECHO
+\o /dev/null
+\c data_node_1
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c data_node_2
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c data_node_3
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\o
+SET client_min_messages TO NOTICE;
+\set ECHO all
+
 SET ROLE :ROLE_1;
 
 -- Verify lack of tables
@@ -1235,3 +1252,51 @@ $$);
 DROP TABLE disttable_with_relopts_1;
 DROP TABLE disttable_with_relopts_2;
 DROP TABLE disttable_with_relopts_3;
+
+-- Test SERIAL type column support for distributed hypertables
+--
+CREATE TABLE disttable_serial(time timestamptz NOT NULL, device int, id1 SERIAL, id2 SMALLSERIAL, id3 BIGSERIAL);
+SELECT create_distributed_hypertable('disttable_serial', 'time', 'device');
+
+-- Show created columns (AN and DN tables must be exact)
+SELECT * FROM test.show_columns('disttable_serial');
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+	SELECT * FROM test.show_columns('disttable_serial');
+$$);
+
+-- Ensure DEFAULT expression is applied on the AN only
+SELECT column_name, column_default
+FROM information_schema.columns
+WHERE table_name  = 'disttable_serial';
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+	SELECT column_name, column_default
+	FROM information_schema.columns
+	WHERE table_name  = 'disttable_serial';
+$$);
+
+-- Ensure sequences were created on the AN only
+INSERT INTO disttable_serial VALUES
+       ('2017-01-01 06:01', 1),
+       ('2017-01-01 09:11', 3),
+       ('2017-01-01 08:01', 1),
+       ('2017-01-02 08:01', 2),
+       ('2018-07-02 08:01', 87);
+SELECT currval('disttable_serial_id1_seq'::regclass),
+       currval('disttable_serial_id2_seq'::regclass),
+       currval('disttable_serial_id3_seq'::regclass);
+\set ON_ERROR_STOP 0
+SELECT * FROM test.remote_exec('{ data_node_1 }',$$
+	SELECT currval('disttable_serial_id1_seq'::regclass);
+$$);
+\set ON_ERROR_STOP 1
+
+-- Verify that the data is getting spread over multiple data nodes with the
+-- serial values being set correctly
+SELECT * from disttable_serial ORDER BY id1;
+
+SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+	SELECT * from disttable_serial ORDER BY id1;
+$$);
+
+DROP TABLE disttable_serial;
