@@ -1,0 +1,726 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set TEST_BASE_NAME continuous_aggs_query
+SELECT
+       format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
+       format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
+       format('%s/results/%s_results_table.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_TABLE"
+\gset
+SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "DIFF_CMD",
+      format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
+\gset
+\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+SET client_min_messages TO LOG;
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+insert into conditions values ( '2018-01-01 09:00:00-08', 'SFO', 55, 45);
+insert into conditions values ( '2018-01-02 09:00:00-08', 'por', 100, 100);
+insert into conditions values ( '2018-01-02 09:00:00-08', 'SFO', 65, 45);
+insert into conditions values ( '2018-01-02 09:00:00-08', 'NYC', 65, 45);
+insert into conditions values ( '2018-11-01 09:00:00-08', 'NYC', 45, 30);
+insert into conditions values ( '2018-11-01 10:00:00-08', 'NYC', 55, 35);
+insert into conditions values ( '2018-11-01 11:00:00-08', 'NYC', 65, 40);
+insert into conditions values ( '2018-11-01 12:00:00-08', 'NYC', 75, 45);
+insert into conditions values ( '2018-11-01 13:00:00-08', 'NYC', 85, 50);
+insert into conditions values ( '2018-11-02 09:00:00-08', 'NYC', 10, 10);
+insert into conditions values ( '2018-11-02 10:00:00-08', 'NYC', 20, 15);
+insert into conditions values ( '2018-11-02 11:00:00-08', 'NYC', null, null);
+insert into conditions values ( '2018-11-03 09:00:00-08', 'NYC', null, null);
+create table location_tab( locid integer, locname text );
+insert into location_tab values( 1, 'SFO');
+insert into location_tab values( 2, 'NYC');
+insert into location_tab values( 3, 'por');
+create or replace view mat_m1( location, timec, minl, sumt , sumh)
+WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+as
+select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by time_bucket('1day', timec), location;
+NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+--compute time_bucketted max+bucket_width for the materialized view
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+REFRESH MATERIALIZED VIEW mat_m1;
+LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
+--test first/last
+create or replace view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
+WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+as
+select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
+from conditions
+group by time_bucket('1day', timec), location;
+NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, timec)
+--time that refresh assumes as now() for repeatability
+SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
+REFRESH MATERIALIZED VIEW mat_m2;
+LOG:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
+--normal view --
+create or replace view regview( location, timec, minl, sumt , sumh)
+as
+select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
+from conditions
+group by location, time_bucket('1day', timec);
+set enable_hashagg = false;
+-- NO pushdown cases ---
+--when we have addl. attrs in order by that are not in the
+-- group by, we will still need a sort
+:EXPLAIN
+select * from mat_m1 order by sumh, sumt, minl, timec ;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), _materialized_hypertable_2.timec
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                                 Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.agg_3_3, _hyper_2_3_chunk.agg_4_4, _hyper_2_3_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+(35 rows)
+
+:EXPLAIN
+select * from regview order by timec desc;
+                                                                                                QUERY PLAN                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
+   ->  GroupAggregate
+         Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
+         Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+         ->  Sort
+               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+               Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               ->  Result
+                     Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                 Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+(16 rows)
+
+-- PUSHDOWN cases --
+-- all group by elts in order by , reorder group by elts to match
+-- group by order
+-- This should prevent an additional sort after GroupAggregate
+:EXPLAIN
+select * from mat_m1 order by timec desc, location;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                                 Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.agg_3_3, _hyper_2_3_chunk.agg_4_4, _hyper_2_3_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+(35 rows)
+
+:EXPLAIN
+select * from mat_m1 order by location, timec desc;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec DESC
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                                 Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.agg_3_3, _hyper_2_3_chunk.agg_4_4, _hyper_2_3_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+(35 rows)
+
+:EXPLAIN
+select * from mat_m1 order by location, timec asc;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                                 Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.agg_3_3, _hyper_2_3_chunk.agg_4_4, _hyper_2_3_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+(35 rows)
+
+:EXPLAIN
+select * from mat_m1 where timec > '2018-10-01' order by timec desc;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(33 rows)
+
+-- outer sort is used by mat_m1 for grouping. But doesn't avoid a sort after the join ---
+:EXPLAIN
+select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
+                                                                                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: l.locid, _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: l.locid, _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+         Hash Cond: (l.locname = _materialized_hypertable_2.location)
+         ->  Seq Scan on public.location_tab l
+               Output: l.locid, l.locname
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+               ->  Append
+                     ->  GroupAggregate
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+                           Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                           ->  Sort
+                                 Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                 Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                                 ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                                       Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                             Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                             Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Sort
+                                 Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                                 ->  Custom Scan (ChunkAppend) on public.conditions
+                                       Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                             Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                             Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(40 rows)
+
+:EXPLAIN
+select * from mat_m2 where timec > '2018-10-01' order by timec desc;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+   Sort Key: _materialized_hypertable_3.timec DESC
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision)
+               Group Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+               ->  Sort
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                     Sort Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                           Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                                 Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
+                                 Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                 Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(33 rows)
+
+:EXPLAIN
+select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc ) as q limit 1;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+   ->  Sort
+         Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+         Sort Key: _materialized_hypertable_3.timec DESC
+         ->  Append
+               ->  GroupAggregate
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision)
+                     Group Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                     ->  Sort
+                           Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                           Sort Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                           ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                                 Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                                       Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
+                                       Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(35 rows)
+
+:EXPLAIN
+select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+   ->  Sort
+         Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+         Sort Key: _materialized_hypertable_3.timec DESC, _materialized_hypertable_3.location NULLS FIRST
+         ->  Append
+               ->  GroupAggregate
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision)
+                     Group Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                     ->  Sort
+                           Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                           Sort Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                           ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                                 Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                                       Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
+                                       Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                       Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(35 rows)
+
+--plans with CTE
+:EXPLAIN
+with m1 as (
+Select * from mat_m2 where timec > '2018-10-01' order by timec desc ) 
+select * from m1;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+   Sort Key: _materialized_hypertable_3.timec DESC
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision)
+               Group Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+               ->  Sort
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                     Sort Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                           Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                                 Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
+                                 Index Cond: ((_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                 Index Cond: ((_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(33 rows)
+
+-- should reorder mat_m1 group by only based on mat_m1 order-by
+:EXPLAIN
+select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)), _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)), _materialized_hypertable_3.location, _materialized_hypertable_3.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision))
+         Hash Cond: (_materialized_hypertable_3.timec = _materialized_hypertable_2.timec)
+         ->  Append
+               ->  GroupAggregate
+                     Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _materialized_hypertable_3.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_6_6, NULL::double precision)
+                     Group Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                     ->  Sort
+                           Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                           Sort Key: _materialized_hypertable_3.timec, _materialized_hypertable_3.location
+                           ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_3
+                                 Output: _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.agg_3_3, _materialized_hypertable_3.agg_4_4, _materialized_hypertable_3.agg_5_5, _materialized_hypertable_3.agg_6_6
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan using _hyper_3_5_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_5_chunk
+                                       Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.agg_3_3, _hyper_3_5_chunk.agg_4_4, _hyper_3_5_chunk.agg_5_5, _hyper_3_5_chunk.agg_6_6
+                                       Index Cond: (_hyper_3_5_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                                 ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
+                                       Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
+                                       Index Cond: (_hyper_3_6_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+               ->  GroupAggregate
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), first(conditions.humidity, conditions.timec), last(conditions.humidity, conditions.timec), max(conditions.temperature), min(conditions.temperature)
+                     Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Sort
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.humidity, conditions.timec, conditions.temperature
+                           Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Custom Scan (ChunkAppend) on public.conditions
+                                 Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.humidity, conditions.timec, conditions.temperature
+                                 Startup Exclusion: true
+                                 Runtime Exclusion: false
+                                 Chunks excluded during startup: 1
+                                 ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
+                                       Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+               ->  Append
+                     ->  GroupAggregate
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+                           Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                           ->  Sort
+                                 Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                 Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                                 ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                                       Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                             Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                             Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), min(conditions_1.location), sum(conditions_1.temperature), sum(conditions_1.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                           ->  Sort
+                                 Output: conditions_1.location, (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.temperature, conditions_1.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions_1.timec)), conditions_1.location
+                                 ->  Custom Scan (ChunkAppend) on public.conditions conditions_1
+                                       Output: conditions_1.location, time_bucket('@ 1 day'::interval, conditions_1.timec), conditions_1.temperature, conditions_1.humidity
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
+                                             Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
+                                             Index Cond: ((_hyper_1_2_chunk_1.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(70 rows)
+
+--should reorder only for mat_m1.
+:EXPLAIN
+select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
+                                                                                                                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)), _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Sort Key: _materialized_hypertable_2.timec DESC
+   ->  Hash Join
+         Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)), _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+         Hash Cond: ((time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) = _materialized_hypertable_2.timec)
+         ->  GroupAggregate
+               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
+               Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               ->  Sort
+                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                     ->  Result
+                           Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                           ->  Append
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                       Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+         ->  Hash
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+               ->  Append
+                     ->  GroupAggregate
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+                           Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                           ->  Sort
+                                 Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                 Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                                 ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                                       Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                             Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                             Index Cond: ((_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+                           Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                           ->  Sort
+                                 Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                                 Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                                 ->  Custom Scan (ChunkAppend) on public.conditions
+                                       Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                                       Startup Exclusion: true
+                                       Runtime Exclusion: false
+                                       Chunks excluded during startup: 0
+                                       ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk _hyper_1_2_chunk_1
+                                             Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
+                                             Index Cond: ((_hyper_1_2_chunk_1.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
+(51 rows)
+
+select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
+ locid | location |            timec             | minl | sumt | sumh 
+-------+----------+------------------------------+------+------+------
+     2 | NYC      | Fri Nov 02 17:00:00 2018 PDT | NYC  |      |     
+     2 | NYC      | Thu Nov 01 17:00:00 2018 PDT | NYC  |   30 |   25
+     2 | NYC      | Wed Oct 31 17:00:00 2018 PDT | NYC  |  325 |  200
+(3 rows)
+
+\set ECHO none
+---- Run the same queries with hash agg enabled now 
+set enable_hashagg = true;
+\set ECHO none
+--- Run the queries directly on the table now
+set enable_hashagg = true;
+\set ECHO none
+-- diff results view select and table select
+:DIFF_CMD
+:DIFF_CMD2
+--check if the guc works , reordering will not work
+set timescaledb.enable_cagg_reorder_groupby = false;
+set enable_hashagg = false;
+:EXPLAIN
+select * from mat_m1 order by timec desc, location;
+                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision))
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
+   ->  Append
+         ->  GroupAggregate
+               Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _materialized_hypertable_2.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_5_5, NULL::double precision)
+               Group Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+               ->  Sort
+                     Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                     Sort Key: _materialized_hypertable_2.timec, _materialized_hypertable_2.location
+                     ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_2
+                           Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.agg_3_3, _materialized_hypertable_2.agg_4_4, _materialized_hypertable_2.agg_5_5
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 0
+                           ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+                                 Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.agg_3_3, _hyper_2_3_chunk.agg_4_4, _hyper_2_3_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_3_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+                           ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
+                                 Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
+                                 Index Cond: (_hyper_2_4_chunk.timec < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+               ->  Sort
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.temperature, conditions.humidity
+                     Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)), conditions.location
+                     ->  Custom Scan (ChunkAppend) on public.conditions
+                           Output: conditions.location, time_bucket('@ 1 day'::interval, conditions.timec), conditions.temperature, conditions.humidity
+                           Startup Exclusion: true
+                           Runtime Exclusion: false
+                           Chunks excluded during startup: 1
+                           ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
+                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Index Cond: (_hyper_1_2_chunk.timec >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone))
+(35 rows)
+
