@@ -152,8 +152,11 @@ ts_cache_memory_ctx(Cache *cache)
 void *
 ts_cache_fetch(Cache *cache, CacheQuery *query)
 {
+	HASHACTION action = HASH_ENTER;
 	bool found;
-	HASHACTION action = cache->create_entry == NULL ? HASH_FIND : HASH_ENTER;
+
+	if (cache->create_entry == NULL || query->noresolve)
+		action = HASH_FIND;
 
 	if (cache->htab == NULL)
 		elog(ERROR, "hash %s is not initialized", cache->name);
@@ -171,7 +174,7 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 	{
 		cache->stats.misses++;
 
-		if (cache->create_entry != NULL)
+		if (cache->create_entry != NULL && action == HASH_ENTER)
 		{
 			cache->stats.numelements++;
 			query->result = cache->create_entry(cache, query);

@@ -348,10 +348,13 @@ select device_id, d from table_constr order by device_id, d;
 (2 rows)
 
 delete from fortable where col = 1 or col = 10;
+ERROR:  cannot update/delete rows from chunk "_hyper_16_7_chunk" as it is compressed
 select device_id, d from table_constr order by device_id, d;
- device_id | d 
------------+---
-(0 rows)
+ device_id | d  
+-----------+----
+      1000 |  1
+      1000 | 10
+(2 rows)
 
 --github issue 1661
 --disable compression after enabling it on a table that has fk constraints

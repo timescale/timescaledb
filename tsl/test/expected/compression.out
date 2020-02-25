@@ -201,7 +201,9 @@ insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
+ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from _timescaledb_internal._hyper_1_2_chunk;
+ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 --TEST2d decompress the chunk and try DML
 select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
             decompress_chunk            
@@ -428,12 +430,14 @@ toast_size     | 8192 bytes
 total_size     | 184 kB
 
 \x
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
-            decompress_chunk             
+SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) AS chunk
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id and ht.table_name LIKE 'conditions'
+ORDER BY chunk;
+                  chunk                  
 -----------------------------------------
- _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_5_13_chunk
 (2 rows)
 
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;

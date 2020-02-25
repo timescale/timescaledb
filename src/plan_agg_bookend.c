@@ -230,7 +230,7 @@ contains_first_last_node(List *sortClause, List *targetList)
  *  - generate FirstLastAggInfo that wraps MinMaxAggInfo
  *  - generate subquery (path) for FIRST/LAST (we reuse MinMaxAggPath)
  *  - replace Aggref node with Param node
- * 	- reject ORDER BY on FIRST/LAST
+ *	- reject ORDER BY on FIRST/LAST
  */
 void
 ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
@@ -539,7 +539,7 @@ find_first_last_aggs_walker(Node *node, List **context)
  *		Given a FIRST/LAST aggregate, try to build an indexscan Path it can be
  *		optimized with.
  *		We will generate subquery with value and sort target, where we
- * 	    SELECT value and we ORDER BY sort.
+ *		SELECT value and we ORDER BY sort.
  *
  * If successful, stash the best path in *mminfo and return TRUE.
  * Otherwise, return FALSE.
@@ -670,8 +670,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		 */
 		foreach (lc, subroot->parse->rtable)
 		{
-			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-			if (ts_is_rte_hypertable(rte))
+			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+
+			if (ts_rte_is_hypertable(rte))
 			{
 				ListCell *prev = NULL;
 				ListCell *next = list_head(subroot->append_rel_list);
@@ -721,11 +722,10 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
 		foreach (lc, root->parse->rtable)
 		{
-			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-			if (ts_is_rte_hypertable(rte))
-			{
+			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+
+			if (ts_rte_is_hypertable(rte))
 				rte->inh = true;
-			}
 		}
 	}
 #endif
