@@ -14,6 +14,8 @@
 
 typedef struct CacheQuery
 {
+	/* Do not resolve/create a new entry in case of a cache miss */
+	bool noresolve;
 	void *result;
 	void *data;
 } CacheQuery;

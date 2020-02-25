@@ -524,6 +524,7 @@ remove_exclusion_fns(List *restrictinfo)
 {
 	ListCell *prev = NULL;
 	ListCell *lc = list_head(restrictinfo);
+
 	while (lc != NULL)
 	{
 		RestrictInfo *rinfo = lfirst(lc);
@@ -548,41 +549,15 @@ remove_exclusion_fns(List *restrictinfo)
 	}
 	return restrictinfo;
 }
-
-static bool
-remove_exclusion_fns_walker(Node *node, void *ctx)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, FromExpr))
-	{
-		FromExpr *f = castNode(FromExpr, node);
-		f->quals = (Node *) remove_exclusion_fns((List *) f->quals);
-	}
-	else if (IsA(node, JoinExpr))
-	{
-		JoinExpr *j = castNode(JoinExpr, node);
-		j->quals = (Node *) remove_exclusion_fns((List *) j->quals);
-	}
-
-	/* skip processing if we found a chunks_in call for current relation */
-	// if (ctx->chunk_exclusion_func != NULL)
-	// 	return true;
-
-	// return expression_tree_walker(node, remove_exclusion_fns_walker, ctx);
-	return false;
-}
 #endif
 
 static Node *
 timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 {
 	ListCell *lc;
-	ListCell *prev = NULL;
 	List *additional_quals = NIL;
 
-	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
+	foreach (lc, castNode(List, quals))
 	{
 		Expr *qual = lfirst(lc);
 		Relids relids = pull_varnos((Node *) qual);
@@ -752,22 +727,6 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
 }
 
-bool
-ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
-										   RangeTblEntry *rte)
-{
-	if (ht == NULL ||
-		/* inheritance enabled */
-		rte->inh == false ||
-		/* row locks not necessary */
-		parse->rowMarks != NIL ||
-		/* not update and/or delete */
-		0 != parse->resultRelation)
-		return false;
-
-	return true;
-}
-
 /*  get chunk oids specified by explicit chunk exclusion function */
 static List *
 get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
@@ -855,20 +814,18 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		if (rel->fdw_private != NULL &&
 			should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
 		{
-			TimescaleDBPrivate *private = (TimescaleDBPrivate *) rel->fdw_private;
+			TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
 			List **nested_oids = NULL;
 
-		  private
-			->appends_ordered = true;
-		  private
-			->order_attno = order_attno;
+			priv->appends_ordered = true;
+			priv->order_attno = order_attno;
 
 			/*
 			 * for space partitioning we need extra information about the
 			 * time slices of the chunks
 			 */
 			if (ht->space->num_dimensions > 1)
-				nested_oids = &private->nested_oids;
+				nested_oids = &priv->nested_oids;
 
 			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
 																	  ht,
@@ -1044,10 +1001,10 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_oid, bool inhparent,
-								 RelOptInfo *rel)
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
+	Oid parent_oid = rte->relid;
 	List *inh_oids;
 	ListCell *l;
 	Relation oldrelation = table_open(parent_oid, NoLock);
@@ -1072,7 +1029,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
+
 	oldrc = get_plan_rowmark(root->rowMarks, rti);
+
 	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
 		elog(ERROR, "unexpected permissions requested");
 
@@ -1114,7 +1073,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	memset(root->simple_rte_array + old_rel_array_len,
 		   0,
 		   list_length(inh_oids) * sizeof(*root->simple_rte_array));
-	// TODO use expand_planner_arrays
 
 #if PG11_GE
 	/* Adding partition info will make PostgreSQL consider the inheritance
@@ -1134,7 +1092,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 #if PG12_LT
 		LOCKMODE chunk_lock = NoLock;
 #else
-		// FIXME this lock should not be needed...
 		LOCKMODE chunk_lock = rte->rellockmode;
 #endif
 
@@ -1161,9 +1118,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		 * other base restriction clauses, so we don't need to do it here.
 		 */
 		childrte = copyObject(rte);
-#if PG12_GE
-		childrte->rellockmode = rte->rellockmode;
-#endif
 		childrte->relid = child_oid;
 		childrte->relkind = newrelation->rd_rel->relkind;
 		childrte->inh = false;
@@ -1178,10 +1132,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		root->simple_rte_array[child_rtindex] = childrte;
 #if PG12_LT
 		root->simple_rel_array[child_rtindex] = NULL;
-#endif
-
-#if PG10_GE
-		Assert(childrte->relkind != RELKIND_PARTITIONED_TABLE);
 #endif
 
 		appinfo = makeNode(AppendRelInfo);

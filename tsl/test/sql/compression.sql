@@ -172,8 +172,10 @@ where table_name like 'foo' or table_name like 'conditions'
 order by table_name;
 \x
 
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) AS chunk
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id and ht.table_name LIKE 'conditions'
+ORDER BY chunk;
 
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
 --check that the compressed chunk is dropped

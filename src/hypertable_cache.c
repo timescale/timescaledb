@@ -129,8 +129,9 @@ ts_hypertable_cache_invalidate_callback(void)
 }
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
-TSDLLEXPORT Hypertable *
-ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool missing_ok)
+static Hypertable *
+hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool missing_ok,
+						   const bool noresolve)
 {
 	Hypertable *ht;
 
@@ -142,7 +143,7 @@ ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool mi
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
 	}
 	else
-		ht = ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
+		ht = ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL, noresolve);
 
 	if (!missing_ok && ht == NULL)
 	{
@@ -158,6 +159,18 @@ ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool mi
 	}
 
 	return ht;
+}
+
+TSDLLEXPORT Hypertable *
+ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const bool missing_ok)
+{
+	return hypertable_cache_get_entry(cache, relid, missing_ok, false);
+}
+
+Hypertable *
+ts_hypertable_cache_get_entry_no_resolve(Cache *cache, Oid relid)
+{
+	return hypertable_cache_get_entry(cache, relid, true, true);
 }
 
 /*
@@ -185,16 +198,17 @@ ts_hypertable_cache_get_entry_by_id(Cache *cache, int32 hypertable_id)
 
 Hypertable *
 ts_hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schema,
-										 const char *table)
+										 const char *table, const bool noresolve)
 {
 	HypertableCacheQuery query = {
+		.q.noresolve = noresolve,
 		.relid = relid,
 		.schema = schema,
 		.table = table,
 	};
 	HypertableCacheEntry *entry = ts_cache_fetch(cache, &query.q);
 
-	return entry->hypertable;
+	return entry == NULL ? NULL : entry->hypertable;
 }
 
 extern TSDLLEXPORT Cache *
