@@ -139,10 +139,14 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	FormData_ts_interval *older_than;
 	DropChunksMeta meta;
 	Oid mapped_oid;
+	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
 	ts_hypertable_permissions_check(ht_oid, GetUserId());
+
+	/* Verify that the hypertable owner can create a background worker */
+	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_DROP_CHUNKS);
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
 	hcache = ts_hypertable_cache_pin();

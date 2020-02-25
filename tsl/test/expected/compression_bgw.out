@@ -12,6 +12,8 @@ CREATE OR REPLACE FUNCTION test_compress_chunks_policy(job_id INTEGER)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_auto_compress_chunks'
 LANGUAGE C VOLATILE STRICT;
+CREATE ROLE NOLOGIN_ROLE WITH nologin noinherit;
+GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE conditions (
       time        TIMESTAMPTZ       NOT NULL,
@@ -180,3 +182,27 @@ order by chunk_name;
  test_table_int  | _timescaledb_internal._hyper_3_6_chunk | 24 kB                    | 16 kB
 (2 rows)
 
+--TEST 8
+--hypertable owner lacks permission to start background worker
+SET ROLE NOLOGIN_ROLE;
+CREATE TABLE test_table_nologin(time bigint, val int);
+SELECT create_hypertable('test_table_nologin', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (5,public,test_table_nologin,t)
+(1 row)
+
+SELECT set_integer_now_func('test_table_nologin', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+ALTER TABLE test_table_nologin set (timescaledb.compress);
+\set ON_ERROR_STOP 0
+SELECT add_compress_chunks_policy('test_table_nologin', 2::int);
+ERROR:  permission denied to start compress_chunks background process as role "nologin_role"
+\set ON_ERROR_STOP 1
+RESET ROLE;
+REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;

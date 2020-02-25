@@ -58,6 +58,8 @@ extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_jo
 
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
 
+extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner, JobType type);
+
 extern bool ts_bgw_job_execute(BgwJob *job);
 
 extern Oid ts_bgw_job_owner(BgwJob *job);

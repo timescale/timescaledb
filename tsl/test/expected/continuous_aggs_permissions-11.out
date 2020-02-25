@@ -106,7 +106,7 @@ REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
 WARNING:  Timescale License expired
-ERROR:  insufficient permssions to alter job 1000
+ERROR:  insufficient permissions to alter job 1000
 --make sure that commands fail
 ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ERROR:  must be owner of view mat_refresh_test

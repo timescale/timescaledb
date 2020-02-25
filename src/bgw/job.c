@@ -7,11 +7,13 @@
 #include <miscadmin.h>
 #include <pgstat.h>
 #include <access/xact.h>
+#include <catalog/pg_authid.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <tcop/tcopprot.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
+#include <utils/syscache.h>
 #include <utils/timestamp.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
@@ -449,8 +451,28 @@ ts_bgw_job_permission_check(BgwJob *job)
 	if (!has_privs_of_role(GetUserId(), owner_oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permssions to alter job %d", job->fd.id)));
+				 errmsg("insufficient permissions to alter job %d", job->fd.id)));
 }
+
+void
+ts_bgw_job_validate_job_owner(Oid owner, JobType type)
+{
+	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
+	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
+
+	if (!rform->rolcanlogin)
+	{
+		ReleaseSysCache(role_tup);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
+				 errmsg("permission denied to start %s background process as role \"%s\"",
+						job_type_names[type],
+						rform->rolname.data),
+				 errhint("Hypertable owner must have LOGIN permission to run background tasks.")));
+	}
+	ReleaseSysCache(role_tup);
+}
+
 bool
 ts_bgw_job_execute(BgwJob *job)
 {
