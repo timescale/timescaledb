@@ -936,7 +936,7 @@ select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_c
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
-ERROR:  insufficient permssions to alter job 1015
+ERROR:  insufficient permissions to alter job 1015
 select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
-ERROR:  insufficient permssions to alter job 1016
+ERROR:  insufficient permissions to alter job 1016
 \set ON_ERROR_STOP 1

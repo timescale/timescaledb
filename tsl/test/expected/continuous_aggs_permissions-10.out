@@ -105,7 +105,7 @@ REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
-ERROR:  insufficient permssions to alter job 1000
+ERROR:  insufficient permissions to alter job 1000
 --make sure that commands fail
 ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ERROR:  must be owner of relation mat_refresh_test

@@ -10,6 +10,9 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_auto_compress_chunks'
 LANGUAGE C VOLATILE STRICT;
 
+CREATE ROLE NOLOGIN_ROLE WITH nologin noinherit;
+GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE conditions (
@@ -87,3 +90,15 @@ where hypertable_name::text like 'test_table_int'
 and compression_status like 'Compressed'
 order by chunk_name;
 
+--TEST 8
+--hypertable owner lacks permission to start background worker
+SET ROLE NOLOGIN_ROLE;
+CREATE TABLE test_table_nologin(time bigint, val int);
+SELECT create_hypertable('test_table_nologin', 'time', chunk_time_interval => 1);
+SELECT set_integer_now_func('test_table_nologin', 'dummy_now');
+ALTER TABLE test_table_nologin set (timescaledb.compress);
+\set ON_ERROR_STOP 0
+SELECT add_compress_chunks_policy('test_table_nologin', 2::int);
+\set ON_ERROR_STOP 1
+RESET ROLE;
+REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
