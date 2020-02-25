@@ -124,6 +124,29 @@ get_rule_cmds(List *rule_oids)
 	return get_cmds(rule_oids, get_rule_cmd);
 }
 
+static bool
+column_is_serial(Relation rel, Name column)
+{
+	const char *relation_name;
+	LOCAL_FCINFO(fcinfo, 2);
+
+	/* Prepare call to pg_get_serial_sequence() function.
+	 *
+	 * We have to manually prepare the function call context here instead
+	 * of using the DirectFunctionCall2() because we expect to get
+	 * NULL return value. */
+	relation_name = quote_qualified_identifier(get_namespace_name(rel->rd_rel->relnamespace),
+											   NameStr(rel->rd_rel->relname));
+	InitFunctionCallInfoData(*fcinfo, NULL, 2, InvalidOid, NULL, NULL);
+	FC_ARG(fcinfo, 0) = CStringGetTextDatum(relation_name);
+	FC_ARG(fcinfo, 1) = CStringGetTextDatum(column->data);
+	FC_NULL(fcinfo, 0) = false;
+	FC_NULL(fcinfo, 1) = false;
+	pg_get_serial_sequence(fcinfo);
+
+	return !fcinfo->isnull;
+}
+
 static void
 deparse_columns(StringInfo stmt, Relation rel)
 {
@@ -160,7 +183,14 @@ deparse_columns(StringInfo stmt, Relation rel)
 
 				if (attr->attnum == attr_def.adnum)
 				{
-					char *attr_default =
+					char *attr_default;
+
+					/* Skip default expression in case if column is serial
+					 * (has dependant sequence object) */
+					if (column_is_serial(rel, &attr->attname))
+						break;
+
+					attr_default =
 						TextDatumGetCString(DirectFunctionCall2(pg_get_expr,
 																CStringGetTextDatum(attr_def.adbin),
 																ObjectIdGetDatum(rel->rd_id)));
