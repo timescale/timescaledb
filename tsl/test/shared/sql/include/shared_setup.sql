@@ -47,7 +47,8 @@ ANALYZE metrics_compressed;
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL;
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC;
 
 -- create hypertable with space partitioning and compression
 CREATE TABLE metrics_space_compressed(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 float, v2 float, v3 float);
@@ -66,5 +67,5 @@ ANALYZE metrics_space_compressed;
 -- compress chunks
 ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_space_compressed' and c.compressed_chunk_id IS NULL;
-
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hypertable_id = ht.id and ht.table_name = 'metrics_space_compressed' and c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC;
