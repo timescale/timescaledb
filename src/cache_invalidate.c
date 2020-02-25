@@ -53,6 +53,7 @@ static void
 cache_invalidate_all(void)
 {
 	ts_hypertable_cache_invalidate_callback();
+	ts_bgw_job_cache_invalidate_callback();
 }
 
 /*
@@ -80,6 +81,9 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
 		ts_bgw_job_cache_invalidate_callback();
+
+	if (relid == InvalidOid)
+		cache_invalidate_all();
 }
 
 TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
