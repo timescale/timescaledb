@@ -165,6 +165,7 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
@@ -237,7 +238,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
 -------
@@ -394,7 +395,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
  count 
 -------
@@ -489,6 +490,7 @@ ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 CREATE INDEX new_name_idx ON new_name(chunk_id);
 SELECT * FROM new_name;
  time_bucket |      agg_2_2       | chunk_id 
@@ -551,7 +553,7 @@ NOTICE:  adding index _materialized_hypertable_10_case_time_idx ON _timescaledb_
 NOTICE:  adding index _materialized_hypertable_10_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(coalesce, time)
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
-INFO:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
+LOG:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------

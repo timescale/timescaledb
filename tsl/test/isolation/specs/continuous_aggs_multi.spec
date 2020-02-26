@@ -41,12 +41,14 @@ step "I2"   { INSERT INTO ts_continuous_test SELECT 40, 1000 ; }
 step "S1"	{ SELECT count(*) FROM ts_continuous_test; }
 
 session "R1"
+setup { SET client_min_messages TO LOG; }
 step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view_1; }
 
 session "R1_sel"
 step "Refresh1_sel"	{ select * from continuous_view_1 where bkt = 0 or bkt > 30 }
 
 session "R2"
+setup { SET client_min_messages TO LOG; }
 step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view_2; }
 
 session "R2_sel"

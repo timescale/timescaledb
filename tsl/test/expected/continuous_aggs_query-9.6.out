@@ -9,9 +9,9 @@ SELECT _timescaledb_internal.stop_background_workers();
  t
 (1 row)
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-\set TEST_BASE_NAME continuous_aggs_query 
-SELECT 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set TEST_BASE_NAME continuous_aggs_query
+SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
        format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
        format('%s/results/%s_results_table.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_TABLE"
@@ -20,6 +20,7 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "
       format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
 \gset
 \set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+SET client_min_messages TO LOG;
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -58,7 +59,7 @@ group by time_bucket('1day', timec), location;
 NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_m1;
-INFO:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
+LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
 --test first/last
 create or replace view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
@@ -70,7 +71,7 @@ NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescal
 --time that refresh assumes as now() for repeatability
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_m2;
-INFO:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
+LOG:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as
