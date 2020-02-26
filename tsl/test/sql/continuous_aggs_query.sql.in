@@ -114,16 +114,16 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
 
 --plans with CTE
-explain verbose
+:EXPLAIN
 with m1 as (
 Select * from mat_m2 where timec > '2018-10-01' order by timec desc ) 
 select * from m1;
 
 -- should reorder mat_m1 group by only based on mat_m1 order-by
-explain verbose
+:EXPLAIN
 select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
 --should reorder only for mat_m1.
-explain verbose
+:EXPLAIN
 select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
 
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;

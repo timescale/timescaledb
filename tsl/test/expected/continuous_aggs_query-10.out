@@ -272,94 +272,94 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
 (12 rows)
 
 --plans with CTE
-explain verbose
+:EXPLAIN
 with m1 as (
 Select * from mat_m2 where timec > '2018-10-01' order by timec desc ) 
 select * from m1;
                                                                                                                                                                                                                                                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                    
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- CTE Scan on m1  (cost=24.48..27.14 rows=133 width=72)
+ CTE Scan on m1
    Output: m1.location, m1.timec, m1.firsth, m1.lasth, m1.maxtemp, m1.mintemp
    CTE m1
-     ->  GroupAggregate  (cost=18.17..23.15 rows=133 width=72)
+     ->  GroupAggregate
            Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_6_chunk.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_6_chunk.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_6_chunk.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_6_chunk.agg_6_6, NULL::double precision)
            Group Key: _hyper_3_6_chunk.timec, _hyper_3_6_chunk.location
-           ->  Sort  (cost=18.17..18.50 rows=133 width=168)
+           ->  Sort
                  Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
                  Sort Key: _hyper_3_6_chunk.timec DESC, _hyper_3_6_chunk.location
-                 ->  Append  (cost=0.15..13.48 rows=133 width=168)
-                       ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk  (cost=0.15..13.48 rows=133 width=168)
+                 ->  Append
+                       ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
                              Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
                              Index Cond: (_hyper_3_6_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
 (13 rows)
 
 -- should reorder mat_m1 group by only based on mat_m1 order-by
-explain verbose
+:EXPLAIN
 select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Join  (cost=114.02..123.82 rows=160 width=160)
+ Merge Join
    Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _hyper_2_4_chunk.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_5_5, NULL::double precision)), _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_6_6, NULL::double precision))
    Merge Cond: (_hyper_2_4_chunk.timec = _hyper_3_5_chunk.timec)
-   ->  GroupAggregate  (cost=19.81..25.01 rows=160 width=88)
+   ->  GroupAggregate
          Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _hyper_2_4_chunk.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_5_5, NULL::double precision)
          Group Key: _hyper_2_4_chunk.timec, _hyper_2_4_chunk.location
-         ->  Sort  (cost=19.81..20.21 rows=160 width=136)
+         ->  Sort
                Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
                Sort Key: _hyper_2_4_chunk.timec DESC, _hyper_2_4_chunk.location
-               ->  Append  (cost=0.15..13.95 rows=160 width=136)
-                     ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk  (cost=0.15..13.95 rows=160 width=136)
+               ->  Append
+                     ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                            Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
                            Index Cond: (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-   ->  Sort  (cost=94.22..94.72 rows=200 width=72)
+   ->  Sort
          Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, (_timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_3_3, NULL::double precision)), (_timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_5_5, NULL::double precision)), (_timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_6_6, NULL::double precision))
          Sort Key: _hyper_3_5_chunk.timec DESC
-         ->  GroupAggregate  (cost=66.58..84.58 rows=200 width=72)
+         ->  GroupAggregate
                Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _timescaledb_internal.finalize_agg('first(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_3_3, NULL::double precision), _timescaledb_internal.finalize_agg('last(anyelement,"any")'::text, NULL::name, NULL::name, '{{pg_catalog,float8},{pg_catalog,timestamptz}}'::name[], _hyper_3_5_chunk.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_5_5, NULL::double precision), _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_3_5_chunk.agg_6_6, NULL::double precision)
                Group Key: _hyper_3_5_chunk.timec, _hyper_3_5_chunk.location
-               ->  Sort  (cost=66.58..68.58 rows=800 width=168)
+               ->  Sort
                      Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.agg_3_3, _hyper_3_5_chunk.agg_4_4, _hyper_3_5_chunk.agg_5_5, _hyper_3_5_chunk.agg_6_6
                      Sort Key: _hyper_3_5_chunk.timec, _hyper_3_5_chunk.location
-                     ->  Append  (cost=0.00..28.00 rows=800 width=168)
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk  (cost=0.00..14.00 rows=400 width=168)
+                     ->  Append
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk
                                  Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.agg_3_3, _hyper_3_5_chunk.agg_4_4, _hyper_3_5_chunk.agg_5_5, _hyper_3_5_chunk.agg_6_6
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk  (cost=0.00..14.00 rows=400 width=168)
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk
                                  Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.agg_3_3, _hyper_3_6_chunk.agg_4_4, _hyper_3_6_chunk.agg_5_5, _hyper_3_6_chunk.agg_6_6
 (27 rows)
 
 --should reorder only for mat_m1.
-explain verbose
+:EXPLAIN
 select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
                                                                                                                                                                                                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                           
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Join  (cost=230.64..240.44 rows=160 width=176)
+ Merge Join
    Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, (_timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _hyper_2_4_chunk.agg_3_3, NULL::text)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_4_4, NULL::double precision)), (_timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_5_5, NULL::double precision)), _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
    Merge Cond: (_hyper_2_4_chunk.timec = (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)))
-   ->  GroupAggregate  (cost=19.81..25.01 rows=160 width=88)
+   ->  GroupAggregate
          Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _timescaledb_internal.finalize_agg('min(text)'::text, 'pg_catalog'::name, 'default'::name, '{{pg_catalog,text}}'::name[], _hyper_2_4_chunk.agg_3_3, NULL::text), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_4_4, NULL::double precision), _timescaledb_internal.finalize_agg('sum(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _hyper_2_4_chunk.agg_5_5, NULL::double precision)
          Group Key: _hyper_2_4_chunk.timec, _hyper_2_4_chunk.location
-         ->  Sort  (cost=19.81..20.21 rows=160 width=136)
+         ->  Sort
                Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
                Sort Key: _hyper_2_4_chunk.timec DESC, _hyper_2_4_chunk.location
-               ->  Append  (cost=0.15..13.95 rows=160 width=136)
-                     ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk  (cost=0.15..13.95 rows=160 width=136)
+               ->  Append
+                     ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                            Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.agg_3_3, _hyper_2_4_chunk.agg_4_4, _hyper_2_4_chunk.agg_5_5
                            Index Cond: (_hyper_2_4_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-   ->  Sort  (cost=210.84..211.34 rows=200 width=88)
+   ->  Sort
          Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
-         ->  GroupAggregate  (cost=169.59..201.19 rows=200 width=88)
+         ->  GroupAggregate
                Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
                Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
-               ->  Sort  (cost=169.59..174.44 rows=1940 width=56)
+               ->  Sort
                      Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
                      Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
-                     ->  Result  (cost=0.00..63.65 rows=1940 width=56)
+                     ->  Result
                            Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                           ->  Append  (cost=0.00..39.40 rows=1940 width=56)
-                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk  (cost=0.00..19.70 rows=970 width=56)
+                           ->  Append
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
                                        Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk  (cost=0.00..19.70 rows=970 width=56)
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
                                        Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
 (29 rows)
 
