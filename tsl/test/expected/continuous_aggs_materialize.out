@@ -18,7 +18,7 @@ SELECT _timescaledb_internal.stop_background_workers();
  t
 (1 row)
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE continuous_agg_test(time BIGINT, data BIGINT, dummy BOOLEAN);
 select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "time"
@@ -36,9 +36,9 @@ NOTICE:  adding not-null constraint to column "time_bucket"
  (2,public,materialization,t)
 (1 row)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 14);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- simulated continuous_agg insert view
 CREATE VIEW test_view(time_bucket, value) AS
     SELECT time_bucket(2, time), COUNT(data) as value
@@ -123,10 +123,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 (1 row)
 
 -- materialize the rest of the data
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 16);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 12, 17, 2);
  run_continuous_agg_materialization 
 ------------------------------------
@@ -200,10 +200,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- test gaps
 INSERT INTO continuous_agg_test VALUES
     (9, 0), (10, 1), (11, 2), (12, 3), (13, 4), (20, 1), (21, 1);
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 22);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 9, 2);
  run_continuous_agg_materialization 
 ------------------------------------
@@ -266,10 +266,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- the bucket containing big_int_max should not be materialized, but all others should
 SELECT  9223372036854775807 as big_int_max \gset
 SELECT -9223372036854775808	 as big_int_min \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, :big_int_max-1);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 INSERT INTO continuous_agg_test VALUES
     (:big_int_max - 4, 1), (:big_int_max - 3, 5), (:big_int_max - 2, 7), (:big_int_max - 1, 9), (:big_int_max, 11),
     (:big_int_min, 22), (:big_int_min + 1, 23);
@@ -504,10 +504,10 @@ SELECT * FROM continuous_agg_test_t;
 (4 rows)
 
 TRUNCATE materialization;
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 4:00 UTC'::TIMESTAMPTZ));
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 CREATE VIEW test_view_t(time_bucket, value) AS
@@ -566,11 +566,11 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
                   4 | 2019-02-02 04:00:00+00
 (1 row)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 5;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 6:00 UTC'::TIMESTAMPTZ));
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 SELECT run_continuous_agg_materialization('continuous_agg_test_t', 'materialization', 'test_view_t'::NAME, '2019-02-02 4:00 UTC'::TIMESTAMPTZ, '2019-02-02 5:00 UTC'::TIMESTAMPTZ, '2 hours'::INTERVAL);
@@ -604,12 +604,13 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 ----------------------------
 ----------------------------
 -- test with a real continuous aggregate
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
+SET client_min_messages TO LOG;
 SELECT * FROM continuous_agg_test_t;
           time          | data 
 ------------------------+------
@@ -635,11 +636,11 @@ SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 UPDATE _timescaledb_catalog.continuous_agg
     SET refresh_lag=7200000000
     WHERE mat_hypertable_id=:mat_hypertable_id;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 SELECT _timescaledb_internal.to_interval(refresh_lag)
@@ -682,9 +683,9 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 
 SET timescaledb.current_timestamp_mock = '2019-02-02 5:00 UTC';
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 02:00:00+00 as of 2019-02-02 05:00:00+00
-INFO:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 02:00:00+00 as of 2019-02-02 05:00:00+00
+LOG:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
  time_bucket | agg_2_2 | chunk_id 
 -------------+---------+----------
@@ -713,9 +714,9 @@ SELECT hypertable_id, _timescaledb_internal.to_timestamp(watermark) FROM _timesc
 (0 rows)
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 02:00:00+00 as of 2019-02-02 05:00:00+00
-INFO:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 02:00:00+00 as of 2019-02-02 05:00:00+00
+LOG:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.test_t_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME" ORDER BY 1;
  time_bucket | agg_2_2 | chunk_id 
 -------------+---------+----------
@@ -757,7 +758,7 @@ SELECT * FROM continuous_agg_test_t ORDER BY 1;
 (5 rows)
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-INFO:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, new range up to 2019-02-02 04:00:00+00
+LOG:  materializing continuous aggregate public.test_t_mat_view: nothing to invalidate, new range up to 2019-02-02 04:00:00+00
 SELECT * FROM test_t_mat_view ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
@@ -791,8 +792,8 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 (1 row)
 
 REFRESH MATERIALIZED VIEW test_t_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 04:00:00+00 as of 2019-02-02 07:00:00+00
-INFO:  materializing continuous aggregate public.test_t_mat_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.continuous_agg_test_t (time column time): not enough new data past completion threshold of 2019-02-02 04:00:00+00 as of 2019-02-02 07:00:00+00
+LOG:  materializing continuous aggregate public.test_t_mat_view: processing invalidations, no new range
 SELECT * FROM test_t_mat_view ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
@@ -850,9 +851,9 @@ CREATE TRIGGER continuous_agg_insert_trigger
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id=:raw_table_id \gset
 -- EMPTY table should be a nop
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  new materialization range not found for public.continuous_agg_extreme (time column time): no data in table
-INFO:  materializing continuous aggregate public.extreme_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.extreme_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_extreme (time column time): no data in table
+LOG:  materializing continuous aggregate public.extreme_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.extreme_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM extreme_view;
  time_bucket | value 
 -------------+-------
@@ -876,9 +877,9 @@ SELECT hypertable_id, watermark
 INSERT INTO continuous_agg_extreme VALUES
     (:big_int_min,   1);
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  new materialization range not found for public.continuous_agg_extreme (time column time): not enough data that satisfies the refresh lag criterion as of -9223372036854775808
-INFO:  materializing continuous aggregate public.extreme_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.extreme_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_extreme (time column time): not enough data that satisfies the refresh lag criterion as of -9223372036854775808
+LOG:  materializing continuous aggregate public.extreme_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.extreme_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM extreme_view;
  time_bucket | value 
 -------------+-------
@@ -902,7 +903,7 @@ SELECT hypertable_id, watermark
 INSERT INTO continuous_agg_extreme VALUES
     (:big_int_min+10, 11);
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  materializing continuous aggregate public.extreme_view: nothing to invalidate, new range up to -9223372036854775800
+LOG:  materializing continuous aggregate public.extreme_view: nothing to invalidate, new range up to -9223372036854775800
 SELECT * FROM extreme_view;
      time_bucket      | value 
 ----------------------+-------
@@ -936,7 +937,7 @@ INSERT INTO continuous_agg_extreme VALUES
     (:big_int_max-1,          201),
     (:big_int_max,   :big_int_max);
 REFRESH MATERIALIZED VIEW extreme_view;
-INFO:  materializing continuous aggregate public.extreme_view: nothing to invalidate, new range up to 9223372036854775805
+LOG:  materializing continuous aggregate public.extreme_view: nothing to invalidate, new range up to 9223372036854775805
 SELECT * FROM extreme_view ORDER BY 1;
      time_bucket      | value 
 ----------------------+-------
@@ -994,7 +995,7 @@ CREATE VIEW negative_view_5
 INSERT INTO continuous_agg_negative
     SELECT i, i FROM generate_series(0, 11) AS i;
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 10
+LOG:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 10
 SELECT * FROM negative_view_5 ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1006,7 +1007,7 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 -- even though the time_bucket would require us INSERT 14
 INSERT INTO continuous_agg_negative VALUES (12, 12), (13, 13);
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 15
+LOG:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 15
 SELECT * FROM negative_view_5 ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1018,8 +1019,8 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 -- bucket is finished as normal with the additional value
 INSERT INTO continuous_agg_negative VALUES (14, 14);
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  new materialization range not found for public.continuous_agg_negative (time column time): not enough new data past completion threshold of 15 as of 14
-INFO:  materializing continuous aggregate public.negative_view_5: processing invalidations, no new range
+LOG:  new materialization range not found for public.continuous_agg_negative (time column time): not enough new data past completion threshold of 15 as of 14
+LOG:  materializing continuous aggregate public.negative_view_5: processing invalidations, no new range
 SELECT * FROM negative_view_5 ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1030,11 +1031,10 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 
 --inserting a really large value does not work because of max_interval_per_job
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
-SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  new materialization range for public.continuous_agg_negative (time column time) larger than allowed in one run, truncating 9223372036854775805 to 115
-INFO:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 115
-RESET client_min_messages;
+LOG:  new materialization range for public.continuous_agg_negative (time column time) larger than allowed in one run, truncating 9223372036854775805 to 115
+LOG:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 115
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM negative_view_5 ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1055,7 +1055,6 @@ AS SELECT time_bucket('5', time), COUNT(data) as value
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
 SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, new range up to 9223372036854775805
 RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
      time_bucket     | value 
@@ -1063,13 +1062,10 @@ SELECT * FROM negative_view_5 ORDER BY 1;
  9223372036854775800 |     1
 (1 row)
 
--- even when the subrtraction would make a completion time greater than max
+-- even when the subtraction would make a completion time greater than max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-1, 201);
 SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
-INFO:  new materialization range not found for public.continuous_agg_negative (time column time): not enough new data past completion threshold of 9223372036854775805 as of 9223372036854775805
-INFO:  materializing continuous aggregate public.negative_view_5: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.negative_view_5: no new range to materialize or invalidations found, exiting early
 RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
      time_bucket     | value 
@@ -1103,10 +1099,11 @@ CREATE VIEW max_mat_view
         FROM continuous_agg_max_mat
         GROUP BY 1;
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 10) AS i;
+SET client_min_messages TO LOG;
 -- first run create two materializations
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range for public.continuous_agg_max_mat (time column time) larger than allowed in one run, truncating 12 to 4
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 4
+LOG:  new materialization range for public.continuous_agg_max_mat (time column time) larger than allowed in one run, truncating 12 to 4
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 4
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
@@ -1117,8 +1114,8 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 -- repeated runs will eventually materialize all the data
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range for public.continuous_agg_max_mat (time column time) larger than allowed in one run, truncating 12 to 8
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 8
+LOG:  new materialization range for public.continuous_agg_max_mat (time column time) larger than allowed in one run, truncating 12 to 8
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 8
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
@@ -1130,7 +1127,7 @@ SELECT * FROM max_mat_view ORDER BY 1;
 (4 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 12
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, new range up to 12
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1143,9 +1140,9 @@ SELECT * FROM max_mat_view ORDER BY 1;
 (6 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1160,7 +1157,7 @@ SELECT * FROM max_mat_view ORDER BY 1;
 --one invalidation covered by max_interval refreshed right away
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 3) AS i;
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
@@ -1175,16 +1172,16 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 --nothing to do
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 --one invalidation too big for max_interval will be split
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 6) AS i;
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
@@ -1199,19 +1196,19 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 --nothing to do
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 --many invalidation too big for max_interval will be split
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 1) AS i;
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(2, 3) AS i;
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(4, 5) AS i;
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1225,17 +1222,17 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 --nothing to do
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 12 as of 10
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 --one invalidation + new entries  requires two refreshes if the refresh budget taken up by invalidation
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 3) AS i;
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(11, 12) AS i;
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, new range up to 14
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, new range up to 14
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1250,14 +1247,14 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 --nothing to do
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 14 as of 12
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 14 as of 12
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 --one invalidation + new entries  done in one refresh if the refresh budget allows
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 1) AS i;
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(14, 15) AS i;
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  materializing continuous aggregate public.max_mat_view: processing invalidations, new range up to 16
+LOG:  materializing continuous aggregate public.max_mat_view: processing invalidations, new range up to 16
 SELECT * FROM max_mat_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
@@ -1273,9 +1270,9 @@ SELECT * FROM max_mat_view ORDER BY 1;
 
 --nothing to do.
 REFRESH MATERIALIZED VIEW max_mat_view;
-INFO:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 16 as of 15
-INFO:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat (time column time): not enough new data past completion threshold of 16 as of 15
+LOG:  materializing continuous aggregate public.max_mat_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view: no new range to materialize or invalidations found, exiting early
 -- time type
 CREATE TABLE continuous_agg_max_mat_t(time TIMESTAMPTZ, data TIMESTAMPTZ);
 SELECT create_hypertable('continuous_agg_max_mat_t', 'time');
@@ -1297,8 +1294,8 @@ INSERT INTO continuous_agg_max_mat_t
 SET timescaledb.current_timestamp_mock = '2019-09-09 10:00 UTC';
 -- first run create two materializations
 REFRESH MATERIALIZED VIEW max_mat_view_t;
-INFO:  new materialization range for public.continuous_agg_max_mat_t (time column time) larger than allowed in one run, truncating 2019-09-09 12:00:00+00 to 2019-09-09 04:00:00+00
-INFO:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 04:00:00+00
+LOG:  new materialization range for public.continuous_agg_max_mat_t (time column time) larger than allowed in one run, truncating 2019-09-09 12:00:00+00 to 2019-09-09 04:00:00+00
+LOG:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 04:00:00+00
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
@@ -1309,8 +1306,8 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 
 -- repeated runs will eventually materialize all the data
 REFRESH MATERIALIZED VIEW max_mat_view_t;
-INFO:  new materialization range for public.continuous_agg_max_mat_t (time column time) larger than allowed in one run, truncating 2019-09-09 12:00:00+00 to 2019-09-09 08:00:00+00
-INFO:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 08:00:00+00
+LOG:  new materialization range for public.continuous_agg_max_mat_t (time column time) larger than allowed in one run, truncating 2019-09-09 12:00:00+00 to 2019-09-09 08:00:00+00
+LOG:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 08:00:00+00
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
@@ -1322,7 +1319,7 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 (4 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view_t;
-INFO:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 12:00:00+00
+LOG:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, new range up to 2019-09-09 12:00:00+00
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
@@ -1335,9 +1332,9 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 (6 rows)
 
 REFRESH MATERIALIZED VIEW max_mat_view_t;
-INFO:  new materialization range not found for public.continuous_agg_max_mat_t (time column time): not enough new data past completion threshold of 2019-09-09 12:00:00+00 as of 2019-09-09 10:00:00+00
-INFO:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.max_mat_view_t: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.continuous_agg_max_mat_t (time column time): not enough new data past completion threshold of 2019-09-09 12:00:00+00 as of 2019-09-09 10:00:00+00
+LOG:  materializing continuous aggregate public.max_mat_view_t: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.max_mat_view_t: no new range to materialize or invalidations found, exiting early
 SELECT * FROM max_mat_view_t ORDER BY 1;
       time_bucket       | value 
 ------------------------+-------
@@ -1367,7 +1364,7 @@ INSERT INTO continuous_agg_max_mat_timestamp
     SELECT generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour');
 -- first materializes everything
 REFRESH MATERIALIZED VIEW max_mat_view_timestamp;
-INFO:  materializing continuous aggregate public.max_mat_view_timestamp: nothing to invalidate, new range up to 2019-09-09 12:00:00
+LOG:  materializing continuous aggregate public.max_mat_view_timestamp: nothing to invalidate, new range up to 2019-09-09 12:00:00
 SELECT * FROM max_mat_view_timestamp ORDER BY 1;
      time_bucket     
 ---------------------
@@ -1399,7 +1396,7 @@ SET timescaledb.current_timestamp_mock = '2019-09-09 01:00 UTC';
 --SET timescaledb.current_timestamp_mock = '2019-09-09 01:01:01 UTC';
 -- first materializes everything
 REFRESH MATERIALIZED VIEW max_mat_view_date;
-INFO:  materializing continuous aggregate public.max_mat_view_date: nothing to invalidate, new range up to 2019-09-16
+LOG:  materializing continuous aggregate public.max_mat_view_date: nothing to invalidate, new range up to 2019-09-16
 SELECT * FROM max_mat_view_date ORDER BY 1;
  time_bucket 
 -------------

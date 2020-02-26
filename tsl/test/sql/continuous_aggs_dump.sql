@@ -103,6 +103,7 @@ AS :QUERY_AFTER;
 
 --materialize mat_before
 
+SET client_min_messages TO LOG;
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_before;
 

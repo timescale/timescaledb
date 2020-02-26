@@ -15,7 +15,7 @@ CREATE OR REPLACE FUNCTION run_continuous_agg_materialization(
 
 -- stop the continous aggregate background workers from interfering
 SELECT _timescaledb_internal.stop_background_workers();
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE TABLE continuous_agg_test(time BIGINT, data BIGINT, dummy BOOLEAN);
 select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
@@ -24,9 +24,9 @@ select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10
 CREATE TABLE materialization(time_bucket BIGINT, value BIGINT);
 select create_hypertable('materialization', 'time_bucket', chunk_time_interval => 100);
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 14);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- simulated continuous_agg insert view
 CREATE VIEW test_view(time_bucket, value) AS
@@ -59,10 +59,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 
 -- materialize the rest of the data
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 16);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 12, 17, 2);
 
 SELECT * FROM materialization ORDER BY 1;
@@ -90,10 +90,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 INSERT INTO continuous_agg_test VALUES
     (9, 0), (10, 1), (11, 2), (12, 3), (13, 4), (20, 1), (21, 1);
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 22);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT run_continuous_agg_materialization('continuous_agg_test', 'materialization', 'test_view', 9, 9, 2);
 
@@ -111,10 +111,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT  9223372036854775807 as big_int_max \gset
 SELECT -9223372036854775808	 as big_int_min \gset
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 1;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, :big_int_max-1);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 INSERT INTO continuous_agg_test VALUES
     (:big_int_max - 4, 1), (:big_int_max - 3, 5), (:big_int_max - 2, 7), (:big_int_max - 1, 9), (:big_int_max, 11),
@@ -211,10 +211,10 @@ SELECT * FROM continuous_agg_test_t;
 
 TRUNCATE materialization;
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 4:00 UTC'::TIMESTAMPTZ));
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 
@@ -240,11 +240,11 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
     FROM _timescaledb_catalog.continuous_aggs_completed_threshold
     WHERE materialization_id = 4;
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 DELETE FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold WHERE hypertable_id = 5;
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (5, _timescaledb_internal.time_to_internal('2019-02-02 6:00 UTC'::TIMESTAMPTZ));
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 
@@ -262,12 +262,13 @@ SELECT materialization_id, _timescaledb_internal.to_timestamp(watermark)
 
 -- test with a real continuous aggregate
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 TRUNCATE _timescaledb_catalog.continuous_aggs_completed_threshold;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
+SET client_min_messages TO LOG;
 
 SELECT * FROM continuous_agg_test_t;
 
@@ -283,11 +284,11 @@ SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        job_id
     FROM _timescaledb_catalog.continuous_agg;
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 UPDATE _timescaledb_catalog.continuous_agg
     SET refresh_lag=7200000000
     WHERE mat_hypertable_id=:mat_hypertable_id;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET SESSION timezone TO 'UTC';
 SET SESSION datestyle TO 'ISO';
 
@@ -474,9 +475,7 @@ SELECT * FROM negative_view_5 ORDER BY 1;
 
 --inserting a really large value does not work because of max_interval_per_job
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
-SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
-RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
 DROP VIEW negative_view_5 CASCADE;
@@ -496,7 +495,7 @@ RESET client_min_messages;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
 
--- even when the subrtraction would make a completion time greater than max
+-- even when the subtraction would make a completion time greater than max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-1, 201);
 SET client_min_messages TO error;
 REFRESH MATERIALIZED VIEW negative_view_5;
@@ -520,6 +519,7 @@ CREATE VIEW max_mat_view
         GROUP BY 1;
 
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 10) AS i;
+SET client_min_messages TO LOG;
 
 -- first run create two materializations
 REFRESH MATERIALIZED VIEW max_mat_view;

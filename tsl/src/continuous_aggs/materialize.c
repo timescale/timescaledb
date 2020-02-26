@@ -262,7 +262,7 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 														time_column_type));
 		else
 			appendStringInfo(msg, "no new range");
-		elog(INFO, "%s", msg->data);
+		elog(LOG, "%s", msg->data);
 	}
 
 	if (materializing_new_range)
@@ -303,7 +303,7 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 	if (!materializing_new_range && range_length(invalidation_range) == 0)
 	{
 		if (options->verbose)
-			elog(INFO,
+			elog(LOG,
 				 "materializing continuous aggregate %s.%s: no new range to materialize or "
 				 "invalidations found, exiting early",
 				 NameStr(cagg_data.user_view_schema),
@@ -408,7 +408,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 		if (!found)
 		{
 			if (verbose)
-				elog(INFO,
+				elog(LOG,
 					 "new materialization range not found for %s.%s (time column %s): no data in "
 					 "table",
 					 NameStr(*hypertable.schema),
@@ -423,7 +423,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	if (refresh_lag >= 0 && now_time <= PG_INT64_MIN + refresh_lag)
 	{
 		if (verbose)
-			elog(INFO,
+			elog(LOG,
 				 "new materialization range not found for %s.%s (time column %s): not enough data "
 				 "that satisfies the refresh lag criterion as of %s",
 				 NameStr(*hypertable.schema),
@@ -448,7 +448,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	if (end_time <= start_time)
 	{
 		if (verbose)
-			elog(INFO,
+			elog(LOG,
 				 "new materialization range not found for %s.%s (time column %s): "
 				 "not enough new data past completion threshold of %s as of %s",
 				 NameStr(*hypertable.schema),
@@ -470,7 +470,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 											  start_time + max_interval_per_job,
 											  time_column_type);
 		if (verbose)
-			elog(INFO,
+			elog(LOG,
 				 "new materialization range for %s.%s (time column %s) larger than allowed in one "
 				 "run, truncating %s "
 				 "to %s",

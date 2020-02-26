@@ -17,7 +17,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 SELECT _timescaledb_internal.stop_background_workers();
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
@@ -69,12 +69,12 @@ group by time_bucket(1, a) , a ;
 select * from mat_m1 order by a ;
 
 --check triggers on user hypertable --
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class
 where tgrelid = pg_class.oid and pg_class.relname like 'foo'
 order by tgname;
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- TEST2 ---
 drop view mat_m1 cascade;
@@ -115,7 +115,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1day', timec), _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity))
@@ -123,7 +123,7 @@ select
 from conditions
 group by time_bucket('1day', timec) ;
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --should have same results --
 select timec, minl, sumt, sumh
 from mat_m1
@@ -177,14 +177,14 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --should have same results --
 select timec, minl, sumth, stddevh
@@ -224,7 +224,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
@@ -232,7 +232,7 @@ select
 from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --should have same results --
 select timec, minl, sumth, stddevh
@@ -270,14 +270,14 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- should have same results --
 select * from mat_m1
@@ -417,7 +417,7 @@ where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
@@ -425,7 +425,7 @@ select
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --should have same results --
 select timec, minl, sumth, stddevh
@@ -445,10 +445,10 @@ where view_name::text like 'mat_m1';
 
 --TEST6 -- select from internal view
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select * from :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --lets drop the view and check
 drop view mat_m1 cascade;
@@ -594,6 +594,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
 
+SET client_min_messages TO LOG;
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_drop_test;
 

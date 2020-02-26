@@ -3,12 +3,13 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
 -- stop the continous aggregate background workers from interfering
 SELECT _timescaledb_internal.stop_background_workers();
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-\set TEST_BASE_NAME continuous_aggs_query 
-SELECT 
+\set TEST_BASE_NAME continuous_aggs_query
+SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
        format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
        format('%s/results/%s_results_table.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_TABLE"
@@ -19,6 +20,8 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "
 
 
 \set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+
+SET client_min_messages TO LOG;
 
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,

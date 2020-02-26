@@ -165,6 +165,7 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
@@ -237,7 +238,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
 -------
@@ -394,7 +395,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 15
 SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
  count 
 -------
@@ -489,6 +490,7 @@ ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 CREATE INDEX new_name_idx ON new_name(chunk_id);
 SELECT * FROM new_name;
  time_bucket |      agg_2_2       | chunk_id 
@@ -551,7 +553,7 @@ NOTICE:  adding index _materialized_hypertable_10_case_time_idx ON _timescaledb_
 NOTICE:  adding index _materialized_hypertable_10_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(coalesce, time)
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
-INFO:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
+LOG:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
@@ -599,8 +601,8 @@ SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now
 ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
 \set ON_ERROR_STOP 1
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 25 to 10
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 10
+LOG:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 25 to 10
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 10
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 \set ON_ERROR_STOP 0
 --still too far behind
@@ -608,16 +610,16 @@ SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now
 ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
 \set ON_ERROR_STOP 1
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 25 to 20
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 20
+LOG:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 25 to 20
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 20
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 25
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 25
 --now, this works
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_13_chunk
@@ -641,11 +643,11 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(20, 35) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 40 to 30
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, new range up to 30
+LOG:  new materialization range for public.drop_chunks_table (time column time) larger than allowed in one run, truncating 40 to 30
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, new range up to 30
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 40
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 40
 --this is invalidated but beyond ignore_invalidation_threshold so will never be seen (current time is 29)
 INSERT INTO drop_chunks_table SELECT i, 100 FROM generate_series(10, 19) AS i;
 --this will be seen after the drop its within the invalidation window and will be dropped
@@ -672,7 +674,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --dropping tables will cause the invalidation to be processed
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_14_chunk
@@ -757,12 +759,12 @@ SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY ti
 (21 rows)
 
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 40 as of 39
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 40 as of 39
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
 --change to bucket 31 also seen
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
  time_bucket | max 
@@ -798,12 +800,12 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --should see multiple rounds of invalidation in the log messages
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
-INFO:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_17_chunk
@@ -830,7 +832,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 ALTER VIEW drop_chunks_view SET (timescaledb.max_interval_per_job = 100);
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(50,55) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 60
+LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 60
 --one command and thus one range that spans 46 (which will be processed by drop_chunks) and (51 which won't, but will be later)
 INSERT INTO drop_chunks_table VALUES (46, 400), (51, 500);
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(56,59) AS i;
@@ -854,7 +856,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_18_chunk
@@ -879,8 +881,8 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 (12 rows)
 
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 59
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 59
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 --the change in bucket 50 is seen
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
  time_bucket | max 
@@ -978,11 +980,11 @@ INSERT INTO drop_chunks_table SELECT generate_series(1,35), 100;
 update drop_chunks_table set data = 250 where time = 25;
 update drop_chunks_table set data = 290 where time = 29;
 REFRESH materialized view drop_chunks_view;
-INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 REFRESH materialized view drop_chunks_view;
-INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 --now we have chunks in both mat and raw hypertables
 select * from drop_chunks_view order by 1;
  time_bucket | max 
@@ -1059,8 +1061,8 @@ INFO:  dropping chunk _timescaledb_internal._hyper_13_22_chunk
 --can also drop chunks by specifying materialized hypertable name
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-INFO:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 55
-INFO:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 55
+LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen');
                chunk_table                |   ranges    
 ------------------------------------------+-------------
