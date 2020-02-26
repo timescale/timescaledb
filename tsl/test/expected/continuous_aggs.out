@@ -17,7 +17,7 @@ SELECT _timescaledb_internal.stop_background_workers();
 (1 row)
 
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_config.bgw_job;
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period 
 ----+------------------+----------+-------------------+-------------+-------------+--------------
@@ -86,7 +86,7 @@ select * from mat_m1 order by a ;
 (3 rows)
 
 --check triggers on user hypertable --
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class
 where tgrelid = pg_class.oid and pg_class.relname like 'foo'
 order by tgname;
@@ -96,7 +96,7 @@ order by tgname;
  ts_insert_blocker            |      7 | O         | foo
 (2 rows)
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- TEST2 ---
 drop view mat_m1 cascade;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
@@ -138,14 +138,14 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1day', timec), _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity))
 ,1
 from conditions
 group by time_bucket('1day', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --should have same results --
 select timec, minl, sumt, sumh
 from mat_m1
@@ -212,14 +212,14 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --should have same results --
 select timec, minl, sumth, stddevh
 from mat_m1
@@ -268,7 +268,7 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
@@ -276,7 +276,7 @@ select
 from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --should have same results --
 select timec, minl, sumth, stddevh
 from mat_m1
@@ -322,14 +322,14 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- should have same results --
 select * from mat_m1
 order by sumth;
@@ -515,7 +515,7 @@ order by attnum, attname;
       7 | chunk_id
 (7 rows)
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
@@ -523,7 +523,7 @@ select
 ,1
 from conditions
 group by time_bucket('1week', timec) ;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --should have same results --
 select timec, minl, sumth, stddevh
 from mat_m1
@@ -563,10 +563,10 @@ where view_name::text like 'mat_m1';
 (1 row)
 
 --TEST6 -- select from internal view
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select * from :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --lets drop the view and check
 drop view mat_m1 cascade;
 NOTICE:  drop cascades to 2 other objects
@@ -760,10 +760,11 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_drop_test'
 \gset
+SET client_min_messages TO LOG;
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW mat_drop_test;
-INFO:  new materialization range for public.conditions (time column timec) larger than allowed in one run, truncating Fri Dec 28 16:00:00 2018 PST to Tue Nov 20 16:00:00 2018 PST
-INFO:  materializing continuous aggregate public.mat_drop_test: nothing to invalidate, new range up to Tue Nov 20 16:00:00 2018 PST
+LOG:  new materialization range for public.conditions (time column timec) larger than allowed in one run, truncating Fri Dec 28 16:00:00 2018 PST to Tue Nov 20 16:00:00 2018 PST
+LOG:  materializing continuous aggregate public.mat_drop_test: nothing to invalidate, new range up to Tue Nov 20 16:00:00 2018 PST
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 --force invalidation
 insert into conditions
@@ -1038,7 +1039,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 (0 rows)
 
 REFRESH MATERIALIZED VIEW space_view;
-INFO:  materializing continuous aggregate public.space_view: nothing to invalidate, new range up to 12
+LOG:  materializing continuous aggregate public.space_view: nothing to invalidate, new range up to 12
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1058,8 +1059,8 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (3, 2, 1);
 REFRESH MATERIALIZED VIEW space_view;
-INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold of 12 as of 11
-INFO:  materializing continuous aggregate public.space_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold of 12 as of 11
+LOG:  materializing continuous aggregate public.space_view: processing invalidations, no new range
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1079,8 +1080,8 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (2, 3, 1);
 REFRESH MATERIALIZED VIEW space_view;
-INFO:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold of 12 as of 11
-INFO:  materializing continuous aggregate public.space_view: processing invalidations, no new range
+LOG:  new materialization range not found for public.space_table (time column time): not enough new data past completion threshold of 12 as of 11
+LOG:  materializing continuous aggregate public.space_view: processing invalidations, no new range
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1160,7 +1161,7 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test
 from conditions
 group by time_bucket(100, timec);
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
-INFO:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
+LOG:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_ffunc_test;
 WARNING:  type integer text
 WARNING:  type integer text
@@ -1181,7 +1182,7 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigin
 from conditions
 group by time_bucket(100, timec);
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
-INFO:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
+LOG:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_ffunc_test;
 WARNING:  type integer bigint
 WARNING:  type integer bigint
@@ -1206,7 +1207,7 @@ NOTICE:  adding index _materialized_hypertable_29_location_time_partition_col_id
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 REFRESH MATERIALIZED VIEW mat_refresh_test;
-INFO:  materializing continuous aggregate public.mat_refresh_test: nothing to invalidate, new range up to 400
+LOG:  materializing continuous aggregate public.mat_refresh_test: nothing to invalidate, new range up to 400
 SELECT * FROM mat_refresh_test order by 1,2 ;
  location | max 
 ----------+-----
@@ -1223,7 +1224,7 @@ from conditions
 group by time_bucket(100, timec), location;
 NOTICE:  adding index _materialized_hypertable_30_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_30 USING BTREE(grp_3_3, time_bucket)
 REFRESH MATERIALIZED VIEW conditions_grpby_view;
-INFO:  materializing continuous aggregate public.conditions_grpby_view: nothing to invalidate, new range up to 400
+LOG:  materializing continuous aggregate public.conditions_grpby_view: nothing to invalidate, new range up to 400
 select * from conditions_grpby_view order by 1, 2;
  time_bucket | sum 
 -------------+-----
@@ -1241,7 +1242,7 @@ having avg(temperature) > 0
 ;
 NOTICE:  adding index _materialized_hypertable_31_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_31 USING BTREE(grp_3_3, time_bucket)
 REFRESH MATERIALIZED VIEW conditions_grpby_view2;
-INFO:  materializing continuous aggregate public.conditions_grpby_view2: nothing to invalidate, new range up to 400
+LOG:  materializing continuous aggregate public.conditions_grpby_view2: nothing to invalidate, new range up to 400
 select * from conditions_grpby_view2 order by 1, 2;
  time_bucket | sum 
 -------------+-----
@@ -1278,7 +1279,7 @@ SET timescaledb.current_timestamp_mock = '2001-03-11';
 insert into conditions values('2001-03-10', '1');
 insert into conditions values('2001-03-10', '2');
 REFRESH MATERIALIZED VIEW mat_test5;
-INFO:  materializing continuous aggregate public.mat_test5: nothing to invalidate, new range up to Sun Mar 11 16:00:00 2001 PST
+LOG:  materializing continuous aggregate public.mat_test5: nothing to invalidate, new range up to Sun Mar 11 16:00:00 2001 PST
 SELECT * FROM mat_test5;
             timec             | maxt 
 ------------------------------+------
@@ -1288,8 +1289,8 @@ SELECT * FROM mat_test5;
 insert into conditions values('2001-02-15', '1');
 insert into conditions values('2001-01-15', '1');
 REFRESH MATERIALIZED VIEW mat_test5;
-INFO:  new materialization range not found for public.conditions (time column time): not enough new data past completion threshold of Sun Mar 11 16:00:00 2001 PST as of Sun Mar 11 00:00:00 2001 PST
-INFO:  materializing continuous aggregate public.mat_test5: processing invalidations, no new range
+LOG:  new materialization range not found for public.conditions (time column time): not enough new data past completion threshold of Sun Mar 11 16:00:00 2001 PST as of Sun Mar 11 00:00:00 2001 PST
+LOG:  materializing continuous aggregate public.mat_test5: processing invalidations, no new range
 --will see the feb but not the january change
 SELECT * FROM mat_test5;
             timec             | maxt 
@@ -1306,7 +1307,7 @@ SET timescaledb.current_timestamp_mock = '2001-05-11';
 --but not this one
 insert into conditions values('2001-02-20', '4');
 REFRESH MATERIALIZED VIEW mat_test5;
-INFO:  materializing continuous aggregate public.mat_test5: processing invalidations, new range up to Fri May 11 17:00:00 2001 PDT
+LOG:  materializing continuous aggregate public.mat_test5: processing invalidations, new range up to Fri May 11 17:00:00 2001 PDT
 SELECT * FROM mat_test5;
             timec             | maxt 
 ------------------------------+------

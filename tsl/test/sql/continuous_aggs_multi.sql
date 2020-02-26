@@ -2,14 +2,14 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-
--- stop the continous aggregate background workers from interfering
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- stop the continous aggregate background workers from interfering
 SELECT _timescaledb_internal.stop_background_workers();
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+SET client_min_messages TO LOG;
 
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
@@ -129,10 +129,10 @@ refresh materialized view cagg_1;
 select * from cagg_1 order by 1;
 refresh materialized view cagg_2;
 select * from cagg_2 order by 1;
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_SUPERUSER;
 select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order by 1;
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --this insert will be processed only by cagg_1 and cagg_2 will process the previous
 --one
 insert into continuous_agg_test values( 18, -2, 200); 

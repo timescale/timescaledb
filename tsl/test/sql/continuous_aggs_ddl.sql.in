@@ -127,6 +127,7 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -303,6 +304,7 @@ ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET client_min_messages TO LOG;
 
 CREATE INDEX new_name_idx ON new_name(chunk_id);
 

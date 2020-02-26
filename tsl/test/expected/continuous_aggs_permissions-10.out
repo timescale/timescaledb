@@ -45,7 +45,6 @@ NOTICE:  adding index _materialized_hypertable_2_location_time_partition_col_idx
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 REFRESH MATERIALIZED VIEW  mat_refresh_test;
-INFO:  materializing continuous aggregate public.mat_refresh_test: nothing to invalidate, new range up to 200
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
 SELECT materialization_hypertable FROM timescaledb_information.continuous_aggregates  WHERE view_name = 'mat_refresh_test'::regclass \gset 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
@@ -157,7 +156,6 @@ NOTICE:  adding index _materialized_hypertable_7_location_time_partition_col_idx
 NOTICE:  adding index _materialized_hypertable_7_get_constant_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_7 USING BTREE(get_constant, time_partition_col)
 --this should fail
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
-INFO:  materializing continuous aggregate public.mat_perm_view_test: nothing to invalidate, new range up to 200
 ERROR:  permission denied for function get_constant
 DROP VIEW mat_perm_view_test CASCADE;
 --can create a mat view on something with select and trigger grants
@@ -169,7 +167,6 @@ from conditions_for_perm_check_w_grant
 group by time_bucket(100, timec), location;
 NOTICE:  adding index _materialized_hypertable_8_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(location, time_partition_col)
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
-INFO:  materializing continuous aggregate public.mat_perm_view_test: nothing to invalidate, new range up to 200
 SELECT * FROM mat_perm_view_test;
  location | max 
 ----------+-----

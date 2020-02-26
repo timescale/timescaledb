@@ -38,13 +38,15 @@ session "SV"
 step "SV1"	{ SELECT * FROM continuous_view order by 1; }
 
 session "R"
+setup { SET client_min_messages TO LOG; }
 step "Refresh"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 
 session "R1"
+setup { SET client_min_messages TO LOG; }
 step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 
 session "R2"
-setup { SET lock_timeout = '50ms'; SET deadlock_timeout = '10ms';  }
+setup { SET lock_timeout = '50ms'; SET deadlock_timeout = '10ms'; }
 step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 teardown { SET lock_timeout TO default; SET deadlock_timeout to default; }
 
