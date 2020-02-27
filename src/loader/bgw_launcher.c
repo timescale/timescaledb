@@ -40,6 +40,9 @@
 /* for allocating the htab storage */
 #include <utils/memutils.h>
 
+/* for getting settings correct before loading the versioned scheduler */
+#include "catalog/pg_db_role_setting.h"
+
 #include "../compat.h"
 #include "../extension_constants.h"
 #include "loader.h"
@@ -843,6 +846,39 @@ database_is_template_check(void)
 }
 
 /*
+ * Before we morph into the scheduler, we also need to reload configs from their
+ * defaults if the database default has changed. Defaults are changed in the
+ * post_restore function where we change the db default for the restoring guc
+ * wait until the txn commits and then must see if the txn made the change.
+ * Checks for changes are normally run at connection startup, but because we
+ * have to connect in order to wait on the txn we have to re-run after the wait.
+ * This function is based on the postgres function in postinit.c by the same
+ * name.
+ */
+
+static void
+process_settings(Oid databaseid)
+{
+	Relation relsetting;
+	Snapshot snapshot;
+
+	if (!IsUnderPostmaster)
+		return;
+
+	relsetting = heap_open(DbRoleSettingRelationId, AccessShareLock);
+
+	/* read all the settings under the same snapshot for efficiency */
+	snapshot = RegisterSnapshot(GetCatalogSnapshot(DbRoleSettingRelationId));
+
+	/* Later settings are ignored if set earlier. */
+	ApplySetting(snapshot, databaseid, InvalidOid, relsetting, PGC_S_DATABASE);
+	ApplySetting(snapshot, InvalidOid, InvalidOid, relsetting, PGC_S_GLOBAL);
+
+	UnregisterSnapshot(snapshot);
+	heap_close(relsetting, AccessShareLock);
+}
+
+/*
  * This can be run either from the cluster launcher at db_startup time, or
  * in the case of an install/uninstall/update of the extension, in the
  * first case, we have no vxid that we're waiting on. In the second case,
@@ -890,6 +926,8 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 * so, as we don't want to run in template dbs.
 	 */
 	database_is_template_check();
+	/*  Process any config changes caused by an ALTER DATABASE */
+	process_settings(MyDatabaseId);
 	ts_installed = ts_loader_extension_exists();
 	if (ts_installed)
 		StrNCpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
