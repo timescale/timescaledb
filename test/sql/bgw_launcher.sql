@@ -157,10 +157,21 @@ SELECT ((current_setting('server_version_num')::int < 100000) OR wait_greater(:'
 -- Make sure running pre_restore function stops background workers
 SELECT timescaledb_pre_restore();
 SELECT wait_worker_counts(1,0,0,0);
---And post_restore starts them
+-- Make sure a restart with restoring on first starts the background worker 
+BEGIN;
+SELECT _timescaledb_internal.restart_background_workers();
+SELECT wait_worker_counts(1,0,1,0);
+COMMIT;
+-- Then the worker dies when it sees that restoring is on after the txn commits
+SELECT wait_worker_counts(1,0,0,0);
+
+--And post_restore starts them 
+BEGIN;
 SELECT timescaledb_post_restore();
 SELECT wait_worker_counts(1,0,1,0);
-
+COMMIT;
+-- And they stay started
+SELECT wait_worker_counts(1,0,1,0);
 
 -- Make sure dropping the extension means that the scheduler is stopped
 BEGIN;
