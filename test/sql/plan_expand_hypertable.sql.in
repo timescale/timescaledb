@@ -31,3 +31,5 @@ SET timescaledb.disable_optimizations= 'on';
 \o
 
 :DIFF_CMD
+\set ECHO queries
+\qecho '--TEST END--'

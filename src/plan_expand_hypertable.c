@@ -436,7 +436,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
  * will throw an error when executed.
  */
 static Node *
-process_quals(Node *quals, CollectQualCtx *ctx)
+process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 {
 	ListCell *lc;
 	ListCell *prev = NULL;
@@ -496,7 +496,11 @@ process_quals(Node *quals, CollectQualCtx *ctx)
 			}
 		}
 
-		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
+		/* Do not include this restriction if this is an outer join. Including
+		 * the restriction would exclude chunks and thus rows of the outer
+		 * relation when it should show all rows */
+		if (!is_outer_join)
+			ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -519,7 +523,7 @@ process_quals(Node *quals, CollectQualCtx *ctx)
  * a JOIN.
  */
 static void
-collect_join_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
+collect_join_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 {
 	ListCell *lc;
 
@@ -532,7 +536,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
 		/*
 		 * collect quals to propagate to join relations
 		 */
-		if (num_rels == 1 && propagate && IsA(qual, OpExpr) &&
+		if (num_rels == 1 && !is_outer_join && IsA(qual, OpExpr) &&
 			list_length(castNode(OpExpr, qual)->args) == 2)
 			ctx->all_quals = lappend(ctx->all_quals, qual);
 
@@ -556,7 +560,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool propagate)
 				{
 					ctx->join_conditions = lappend(ctx->join_conditions, op);
 
-					if (propagate)
+					if (!is_outer_join)
 						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
 				}
 			}
@@ -574,14 +578,14 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	if (IsA(node, FromExpr))
 	{
 		FromExpr *f = castNode(FromExpr, node);
-		f->quals = process_quals(f->quals, ctx);
-		collect_join_quals(f->quals, ctx, true);
+		f->quals = process_quals(f->quals, ctx, false);
+		collect_join_quals(f->quals, ctx, false);
 	}
 	else if (IsA(node, JoinExpr))
 	{
 		JoinExpr *j = castNode(JoinExpr, node);
-		j->quals = process_quals(j->quals, ctx);
-		collect_join_quals(j->quals, ctx, !IS_OUTER_JOIN(j->jointype));
+		j->quals = process_quals(j->quals, ctx, IS_OUTER_JOIN(j->jointype));
+		collect_join_quals(j->quals, ctx, IS_OUTER_JOIN(j->jointype));
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
