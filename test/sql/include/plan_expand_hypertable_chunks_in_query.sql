@@ -35,8 +35,9 @@ SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[104]);
 SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(ROW(1,2), ARRAY[104]);
 -- passing func as chunk id
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, array_append(ARRAY[1],current_setting('server_version_num')::int));
+-- NULL chunk IDs not allowed in chunk array
+SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);
 \set ON_ERROR_STOP 1
 
 -- chunks_in is STRICT function and for NULL arguments a null result is returned
 SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
-SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);

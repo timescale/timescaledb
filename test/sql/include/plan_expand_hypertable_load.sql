@@ -68,6 +68,13 @@ INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 2;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval), 3;
 
+--create a second table to test joins with
+CREATE TABLE metrics_timestamptz_2 (LIKE metrics_timestamptz);
+SELECT create_hypertable('metrics_timestamptz_2','time');
+INSERT INTO metrics_timestamptz_2
+SELECT * FROM metrics_timestamptz;
+INSERT INTO metrics_timestamptz_2 VALUES ('2000-12-01'::timestamptz, 3);
+
 CREATE TABLE metrics_date(time date);
 SELECT create_hypertable('metrics_date','time');
 INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date,'2000-02-01'::date,'1d'::interval);
@@ -81,4 +88,3 @@ ANALYZE hyper_timefunc;
 -- create normal table for JOIN tests
 CREATE TABLE regular_timestamptz(time timestamptz);
 INSERT INTO regular_timestamptz SELECT generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval);
-
