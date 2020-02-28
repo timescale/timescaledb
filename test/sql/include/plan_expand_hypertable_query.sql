@@ -140,19 +140,23 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 
 \qecho test constraint exclusion for constraints in ON clause of JOINs
-
 \qecho should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+
 \qecho should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+
 \qecho must not exclude on m1
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+
 \qecho should exclude chunks on m2
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+
 \qecho should exclude chunks on m1
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+
 \qecho must not exclude chunks on m2
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
@@ -205,71 +209,71 @@ SELECT * FROM cte ORDER BY value;
 RESET constraint_exclusion;
 
 \qecho nothing to propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz_2 m2 WHERE m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time ORDER BY m1.time;
 
 \qecho OR constraints should not propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' OR m1.time > '2001-01-01' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' OR m1.time > '2001-01-01' ORDER BY m1.time;
 
 \qecho test single constraint
 \qecho constraint should be on both scans
 \qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz_2 m2 WHERE m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test 2 constraints on single relation
 \qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz_2 m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test 2 constraints with 1 constraint on each relation
 \qecho these will propagate even for LEFT/RIGHT JOIN because the constraints are not in the ON clause and therefore imply a NOT NULL condition on the JOIN column
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1, metrics_timestamptz_2 m2 WHERE m1.time = m2.time AND m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test constraints in ON clause of INNER JOIN
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test constraints in ON clause of LEFT JOIN
 \qecho must not propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 LEFT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test constraints in ON clause of RIGHT JOIN
 \qecho must not propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time > '2000-01-01' AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test equality condition not in ON clause
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test constraints not joined on
 \qecho device_id constraint must not propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
 
 \qecho test multiple join conditions
 \qecho device_id constraint should propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
 
 \qecho test join with 3 tables
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time INNER JOIN metrics_timestamptz m3 ON m2.time=m3.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time INNER JOIN metrics_timestamptz m3 ON m2.time=m3.time WHERE m1.time > '2000-01-01' AND m1.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho test non-Const constraints
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10'::text::timestamptz ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < '2000-01-10'::text::timestamptz ORDER BY m1.time;
 
 \qecho test now()
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < now() ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < now() ORDER BY m1.time;
 
 \qecho test volatile function
 \qecho should not propagate
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m1.time < clock_timestamp() ORDER BY m1.time;
-:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz m2 ON m1.time = m2.time WHERE m2.time < clock_timestamp() ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m1.time < clock_timestamp() ORDER BY m1.time;
+:PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time WHERE m2.time < clock_timestamp() ORDER BY m1.time;
 
 \qecho test JOINs with normal table
 \qecho will not propagate because constraints are only added to hypertables
