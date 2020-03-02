@@ -1399,8 +1399,8 @@ deparse_insert_stmt(DeparsedInsertStmt *stmt, RangeTblEntry *rte, Index rtindex,
 		stmt->returning = buf.data;
 }
 
-static AttrNumber
-append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, AttrNumber pindex)
+static int
+append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, int pindex)
 {
 	bool first = true;
 	int i;
@@ -1448,7 +1448,7 @@ deparsed_insert_stmt_get_sql_internal(DeparsedInsertStmt *stmt, StringInfo buf, 
 		}
 		else
 		{
-			AttrNumber pindex = 1;
+			int pindex = 1;
 			int64 i;
 
 			for (i = 0; i < num_rows; i++)
