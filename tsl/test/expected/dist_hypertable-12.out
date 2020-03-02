@@ -4315,3 +4315,160 @@ Sun Jan 01 09:11:00 2017 PST|     3|  2|  2|  2
 (1 row)
 
 DROP TABLE disttable_serial;
+-- Test insert batching case which will hit the limit of arguments for 
+-- prepared statements (65k).
+--
+-- Issue: #1702
+-- distributed hypertable insert fails when # of columns are more than 65
+--
+-- Use default value
+SET timescaledb.max_insert_batch_size TO 1000;
+CREATE TABLE test_1702 (
+	id varchar(100) NOT NULL,
+	time timestamp NOT NULL,
+	dummy1	int	,
+	dummy2	int	,
+	dummy4	int	,
+	dummy5	int	,
+	dummy6	int	,
+	dummy7	int	,
+	dummy8	int	,
+	dummy9	int	,
+	dummy10	int	,
+	dummy11	int	,
+	dummy12	int	,
+	dummy13	int	,
+	dummy14	int	,
+	dummy15	int	,
+	dummy16	int	,
+	dummy17	int	,
+	dummy18	int	,
+	dummy19	int	,
+	dummy20	int	,
+	dummy21	int	,
+	dummy22	int	,
+	dummy23	int	,
+	dummy24	int	,
+	dummy25	int	,
+	dummy26	int	,
+	dummy27	int	,
+	dummy28	int	,
+	dummy29	int	,
+	dummy30	int	,
+	dummy31	int	,
+	dummy32	int	,
+	dummy33	int	,
+	dummy34	int	,
+	dummy35	int	,
+	dummy36	int	,
+	dummy37	int	,
+	dummy38	int	,
+	dummy39	int	,
+	dummy40	int	,
+	dummy41	int	,
+	dummy42	int	,
+	dummy43	int	,
+	dummy44	int	,
+	dummy45	int	,
+	dummy46	int	,
+	dummy47	int	,
+	dummy48	int	,
+	dummy49	int	,
+	dummy50	int	,
+	dummy51	int	,
+	dummy52	int	,
+	dummy53	int	,
+	dummy54	int	,
+	dummy55	int	,
+	dummy56	int	,
+	dummy57	int	,
+	dummy58	int	,
+	dummy59	int	,
+	dummy60	int	,
+	dummy61	int	,
+	dummy62	int	,
+	dummy63	int	,
+	dummy64	int	,
+	dummy65	int	,
+	dummy66	int	,
+	dummy67	int	,
+	dummy68	int	,
+	dummy69	int	,
+	dummy70	int	,
+	dummy71	int	
+);
+SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+ create_distributed_hypertable 
+-------------------------------
+ (22,public,test_1702,t)
+(1 row)
+
+-- Original issue case
+--
+-- Expect batch size to be lower than defined max_insert_batch_size
+--
+EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=506)
+ Insert on distributed hypertable test_1702
+   ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=506)
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=506)
+               Batch size: 910
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=506)
+                     ->  Result  (cost=0.00..0.01 rows=1 width=506)
+(7 rows)
+
+INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+EXPLAIN INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..37.50 rows=1499 width=506)
+ Insert on distributed hypertable test_1702
+   ->  Insert on test_1702  (cost=0.00..37.50 rows=1499 width=506)
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..37.50 rows=1499 width=506)
+               Batch size: 910
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..37.50 rows=1499 width=506)
+                     ->  Subquery Scan on "*SELECT*"  (cost=0.00..37.50 rows=1499 width=506)
+                           ->  ProjectSet  (cost=0.00..7.52 rows=1499 width=12)
+                                 ->  Result  (cost=0.00..0.01 rows=1 width=0)
+(9 rows)
+
+INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
+SELECT count(*) from test_1702;
+ count 
+-------
+  1500
+(1 row)
+
+DROP TABLE test_1702;
+--
+-- Expect batch size to be similair to max_insert_batch_size
+--
+CREATE TABLE test_1702 (
+	id varchar(100) NOT NULL,
+	time timestamp NOT NULL,
+	dummy1	int	,
+	dummy2	int	,
+	dummy4	int	,
+	dummy5	int
+	);
+SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+ create_distributed_hypertable 
+-------------------------------
+ (23,public,test_1702,t)
+(1 row)
+
+EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=242)
+ Insert on distributed hypertable test_1702
+   ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=242)
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=242)
+               Batch size: 1000
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=242)
+                     ->  Result  (cost=0.00..0.01 rows=1 width=242)
+(7 rows)
+
+DROP TABLE test_1702;

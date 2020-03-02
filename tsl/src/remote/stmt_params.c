@@ -46,6 +46,25 @@ typedef struct StmtParams
 } StmtParams;
 
 /*
+ * Check that chosen num_tuples value does not reach the maximum number of
+ * prepared statement parameters.
+ *
+ * Otherwise recalculate and return max num_tuples value that will
+ * respect the limit.
+ */
+int
+stmt_params_validate_num_tuples(int num_params, int num_tuples)
+{
+	Assert(num_params <= MAX_PG_STMT_PARAMS);
+
+	/* Sanity check num_params and avoid division by zero */
+	if (num_params > 0 && ((num_params * num_tuples) > MAX_PG_STMT_PARAMS))
+		return MAX_PG_STMT_PARAMS / num_params;
+
+	return num_tuples;
+}
+
+/*
  * ctid should be set to true if we're going to send it
  * num_tuples is used for batching
  * mctx memory context where we'll allocate StmtParams with all the values
@@ -70,9 +89,8 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 	tmp_ctx = AllocSetContextCreate(new, "stmt params conversion", ALLOCSET_DEFAULT_SIZES);
 
 	params = palloc(sizeof(StmtParams));
-
-	Assert(num_tuples > 0);
 	params->num_params = ctid ? list_length(target_attr_nums) + 1 : list_length(target_attr_nums);
+	Assert(num_tuples > 0);
 	if (params->num_params * num_tuples > MAX_PG_STMT_PARAMS)
 		elog(ERROR, "too many parameters in prepared statement. Max is %d", MAX_PG_STMT_PARAMS);
 	params->conv_funcs = palloc(sizeof(FmgrInfo) * params->num_params);

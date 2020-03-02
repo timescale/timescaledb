@@ -15,6 +15,7 @@
 
 typedef struct StmtParams StmtParams;
 
+extern int stmt_params_validate_num_tuples(int num_params, int num_tuples);
 extern StmtParams *stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc,
 									  int num_tuples);
 extern StmtParams *stmt_params_create_from_values(const char **param_values, int n_params);

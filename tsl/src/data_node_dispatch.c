@@ -165,6 +165,7 @@ typedef struct DataNodeDispatchState
 							  * RETURNING state */
 	int replication_factor;  /* > 1 if we replicate tuples across data nodes */
 	StmtParams *stmt_params; /* Parameters to send with statement. Format can be binary or text */
+	int flush_threshold;	 /* Batch size used for this dispatch state */
 	TupleTableSlot *batch_slot; /* Slot used for sending tuples to data
 								 * nodes. Note that this needs to be a
 								 * MinimalTuple slot, so we cannot use the
@@ -183,6 +184,7 @@ enum CustomScanPrivateIndex
 	CustomScanPrivateDeparsedInsertStmt,
 	CustomScanPrivateSetProcessed,
 	CustomScanPrivateUserId,
+	CustomScanPrivateFlushThreshold
 };
 
 #define HAS_RETURNING(sds) ((sds)->stmt.returning != NULL)
@@ -326,6 +328,8 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	sds->target_attrs = list_nth(cscan->custom_private, CustomScanPrivateTargetAttrs);
 	sds->userid = intVal(list_nth(cscan->custom_private, CustomScanPrivateUserId));
 	sds->set_processed = intVal(list_nth(cscan->custom_private, CustomScanPrivateSetProcessed));
+	sds->flush_threshold = intVal(list_nth(cscan->custom_private, CustomScanPrivateFlushThreshold));
+
 	sds->mcxt = mcxt;
 	sds->nodestates = hash_create("DataNodeDispatch tuple stores",
 								  list_length(available_nodes),
@@ -336,8 +340,7 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 								   list_nth(cscan->custom_private,
 											CustomScanPrivateDeparsedInsertStmt));
 	/* Setup output functions to generate string values for each target attribute */
-	sds->stmt_params =
-		stmt_params_create(sds->target_attrs, false, tupdesc, TUPSTORE_FLUSH_THRESHOLD);
+	sds->stmt_params = stmt_params_create(sds->target_attrs, false, tupdesc, sds->flush_threshold);
 
 	if (HAS_RETURNING(sds))
 		sds->tupfactory = tuplefactory_create_for_rel(rel, sds->stmt.retrieved_attrs);
@@ -449,7 +452,7 @@ send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 	int response_type = FORMAT_TEXT;
 
 	Assert(sds->state == SD_FLUSH || sds->state == SD_LAST_FLUSH);
-	Assert(NUM_STORED_TUPLES(ss) <= TUPSTORE_FLUSH_THRESHOLD);
+	Assert(NUM_STORED_TUPLES(ss) <= sds->flush_threshold);
 	Assert(NUM_STORED_TUPLES(ss) > 0);
 
 	ss->num_tuples_sent = 0;
@@ -493,7 +496,7 @@ send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 					prepare_data_node_insert_stmt(sds,
 												  ss->conn,
 												  stmt_params_total_values(sds->stmt_params));
-			Assert(ss->num_tuples_sent == TUPSTORE_FLUSH_THRESHOLD);
+			Assert(ss->num_tuples_sent == sds->flush_threshold);
 			req = async_request_send_prepared_stmt_with_params(ss->pstmt,
 															   sds->stmt_params,
 															   response_type);
@@ -502,7 +505,7 @@ send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 			sql_stmt = deparsed_insert_stmt_get_sql(&sds->stmt,
 													stmt_params_converted_tuples(sds->stmt_params));
 			Assert(sql_stmt != NULL);
-			Assert(ss->num_tuples_sent < TUPSTORE_FLUSH_THRESHOLD);
+			Assert(ss->num_tuples_sent < sds->flush_threshold);
 			req =
 				async_request_send_with_params(ss->conn, sql_stmt, sds->stmt_params, response_type);
 			break;
@@ -552,7 +555,7 @@ should_flush_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 
 	if (sds->state == SD_FLUSH)
 	{
-		if (num_tuples >= TUPSTORE_FLUSH_THRESHOLD)
+		if (num_tuples >= sds->flush_threshold)
 			return true;
 		return false;
 	}
@@ -721,7 +724,7 @@ handle_read(DataNodeDispatchState *sds)
 
 				/* Once one data node has reached the batch size, we stop
 				 * reading. */
-				if (sds->state != SD_FLUSH && NUM_STORED_TUPLES(ss) >= TUPSTORE_FLUSH_THRESHOLD)
+				if (sds->state != SD_FLUSH && NUM_STORED_TUPLES(ss) >= sds->flush_threshold)
 					data_node_dispatch_set_state(sds, SD_FLUSH);
 
 				primary_data_node = false;
@@ -987,7 +990,7 @@ data_node_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState 
 {
 	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 
-	ExplainPropertyIntegerCompat("Batch size", NULL, TUPSTORE_FLUSH_THRESHOLD, es);
+	ExplainPropertyIntegerCompat("Batch size", NULL, sds->flush_threshold, es);
 
 	/*
 	 * Add remote query, when VERBOSE option is specified.
@@ -995,7 +998,7 @@ data_node_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState 
 	if (es->verbose)
 	{
 		const char *explain_sql =
-			deparsed_insert_stmt_get_sql_explain(&sds->stmt, TUPSTORE_FLUSH_THRESHOLD);
+			deparsed_insert_stmt_get_sql_explain(&sds->stmt, sds->flush_threshold);
 
 		ExplainPropertyText("Remote SQL", explain_sql, es);
 	}
@@ -1069,6 +1072,7 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 	List *returning_list = NIL;
 	bool do_nothing = false;
 	Oid userid;
+	int flush_threshold;
 
 	/*
 	 * Core code already has some lock on each rel being planned, so we can
@@ -1111,15 +1115,21 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 						do_nothing,
 						returning_list);
 
-	sql = deparsed_insert_stmt_get_sql(&stmt, TUPSTORE_FLUSH_THRESHOLD);
+	/* Set suitable flush threshold value that takes into account the max number
+	 * of prepared statement arguments */
+	flush_threshold =
+		stmt_params_validate_num_tuples(list_length(target_attrs), TUPSTORE_FLUSH_THRESHOLD);
+
+	sql = deparsed_insert_stmt_get_sql(&stmt, flush_threshold);
 
 	table_close(rel, NoLock);
 
-	return list_make5(makeString((char *) sql),
-					  target_attrs,
-					  deparsed_insert_stmt_to_list(&stmt),
-					  makeInteger(sdpath->mtpath->canSetTag),
-					  makeInteger(userid));
+	return lcons(makeString((char *) sql),
+				 list_make5(target_attrs,
+							deparsed_insert_stmt_to_list(&stmt),
+							makeInteger(sdpath->mtpath->canSetTag),
+							makeInteger(userid),
+							makeInteger(flush_threshold)));
 }
 
 static Plan *
