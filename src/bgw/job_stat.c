@@ -19,6 +19,7 @@
 #include <utils/fmgrprotos.h>
 #endif
 #define MAX_INTERVALS_BACKOFF 5
+#define MAX_FAILURES_MULTIPLIER 20
 #define MIN_WAIT_AFTER_CRASH_MS (5 * 60 * 1000)
 
 static bool
@@ -186,17 +187,22 @@ calculate_jitter_percent()
 	return ldexp((double) (16 - (int) (percent % 32)), -7);
 }
 
-/* For failures we have standard exponential backoff based on consecutive failures
- * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF */
+/* For failures we have additive backoff based on consecutive failures
+ * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF
+ * We also limit the additive backoff in case of consecutive failures as we don't
+ * want to pass in input that leads to out of range timestamps and don't want to
+ * put off the next start time for the job indefinitely
+ */
 static TimestampTz
 calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job)
 {
 	float8 jitter = calculate_jitter_percent();
 	/* consecutive failures includes this failure */
-	float8 multiplier = 1 << (consecutive_failures - 1);
 	TimestampTz res;
 	volatile bool res_set = false;
 	TimestampTz last_finish = finish_time;
+	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
+																		  consecutive_failures);
 	MemoryContext oldctx;
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
@@ -207,7 +213,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	BeginInternalSubTransaction("next start on failure");
 	PG_TRY();
 	{
-		/* ival = retry_period * 2^(consecutive_failures - 1)  */
+		/* ival = retry_period * (consecutive_failures)  */
 		Datum ival = DirectFunctionCall2(interval_mul,
 										 IntervalPGetDatum(&job->fd.retry_period),
 										 Float8GetDatum(multiplier));
@@ -231,8 +237,13 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	}
 	PG_CATCH();
 	{
-		RollbackAndReleaseCurrentSubTransaction();
+		ErrorData *errdata = CopyErrorData();
+		ereport(LOG,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("calculate_next_start_on_failure ran into an error, resetting value"),
+				 errdetail("Error: %s", errdata->message)));
 		FlushErrorState();
+		RollbackAndReleaseCurrentSubTransaction();
 	}
 	PG_END_TRY();
 	MemoryContextSwitchTo(oldctx);

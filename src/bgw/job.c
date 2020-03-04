@@ -257,7 +257,7 @@ lock_job(int32 job_id, LOCKMODE mode, JobLockLifetime lock_type, LOCKTAG *tag, b
 
 static BgwJob *
 ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_lock_mode,
-						  JobLockLifetime lock_type, bool block)
+						  JobLockLifetime lock_type, bool block, bool *got_lock)
 {
 	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
 	 * be released after the scan */
@@ -267,7 +267,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	LOCKTAG tag;
 
 	/* take advisory lock before relation lock */
-	if (!lock_job(bgw_job_id, tuple_lock_mode, lock_type, &tag, block))
+	if (!(*got_lock = lock_job(bgw_job_id, tuple_lock_mode, lock_type, &tag, block)))
 	{
 		/* return NULL if lock could not be acquired */
 		Assert(!block);
@@ -291,15 +291,31 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 /* Take a lock on the job for the duration of the txn. This prevents
  *  the job from being deleted.
  *
- *  Returns whether or not the job still exists.
+ *  Returns true if the job is found ( we block till we can acquire a lock
+ *                               so we will always lock here)
+ *          false if the job is missing.
  */
 bool
 ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx)
 {
+	bool got_lock;
 	/* note the mode here is equivalent to FOR SHARE row locks */
-	BgwJob *job = ts_bgw_job_find_with_lock(bgw_job_id, mctx, RowShareLock, TXN_LOCK, true);
+	BgwJob *job = ts_bgw_job_find_with_lock(bgw_job_id,
+											mctx,
+											RowShareLock,
+											TXN_LOCK,
+											true /* block */
+											,
+											&got_lock);
 	if (job != NULL)
 	{
+		if (!got_lock)
+		{
+			/* since we blocked for a lock , this is an unexpected condition */
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("could not acquire share lock for job=%d", bgw_job_id)));
+		}
 		pfree(job);
 		return true;
 	}
@@ -579,6 +595,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	int32 job_id;
 	BgwJob *job;
 	JobResult res = JOB_FAILURE;
+	bool got_lock;
 
 	if (sscanf(MyBgworkerEntry->bgw_extra, "%u %d", &user_uid, &job_id) != 2)
 		elog(ERROR, "job entrypoint got invalid bgw_extra");
@@ -606,7 +623,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									TopMemoryContext,
 									RowShareLock,
 									SESSION_LOCK,
-									/* block */ true);
+									/* block */ true,
+									&got_lock);
 	CommitTransactionCommand();
 
 	if (job == NULL)
@@ -662,7 +680,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 										TopMemoryContext,
 										RowShareLock,
 										TXN_LOCK,
-										/* block */ false);
+										/* block */ false,
+										&got_lock);
 		if (job != NULL)
 		{
 			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
@@ -675,7 +694,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * the rethrow will log the error; but also log which job threw the
 		 * error
 		 */
-		elog(DEBUG1, "job %d threw an error", job_id);
+		elog(LOG, "job %d threw an error", job_id);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();

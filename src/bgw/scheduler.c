@@ -173,6 +173,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			elog(WARNING,
 				 "scheduler detected that job %d was deleted after job quit",
 				 sjob->job.fd.id);
+			ts_bgw_job_cache_invalidate_callback();
 			sjob->may_need_mark_end = false;
 			return;
 		}
@@ -188,6 +189,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 * a signal (cancel or terminate), it won't be able to so we
 			 * should.
 			 */
+			elog(LOG, "job %d failed", sjob->job.fd.id);
 			mark_job_as_ended(sjob, JOB_FAILURE);
 			/* reload updated value */
 			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
@@ -226,12 +228,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
-			if (!ts_bgw_job_stat_should_execute(job_stat, &sjob->job))
-			{
-				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_DISABLED);
-				return;
-			}
-
 			Assert(!sjob->reserved_worker);
 			sjob->next_start = ts_bgw_job_stat_next_start(job_stat, &sjob->job);
 			break;
@@ -247,7 +243,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				elog(WARNING,
 					 "scheduler detected that job %d was deleted when starting job",
 					 sjob->job.fd.id);
-				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				ts_bgw_job_cache_invalidate_callback();
 				CommitTransactionCommand();
 				return;
 			}
@@ -311,9 +307,12 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 {
 	StartTransactionCommand();
 	if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+	{
 		elog(WARNING,
 			 "scheduler detected that job %d was deleted while failing to start",
 			 sjob->job.fd.id);
+		ts_bgw_job_cache_invalidate_callback();
+	}
 	else
 	{
 		/* restore the original next_start to maintain priority (it is unset during mark_start) */
