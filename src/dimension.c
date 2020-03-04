@@ -939,7 +939,7 @@ ts_dimension_update(Oid table_relid, Name dimname, DimensionType dimtype, Datum 
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid dimension type")));
 
-	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	if (NULL == dimname)
 	{
@@ -1340,7 +1340,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 				 errmsg("could not lock hypertable \"%s\" for update",
 						get_rel_name(info.table_relid))));
 
-	info.ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, false, &hcache);
+	info.ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, CACHE_FLAG_NONE, &hcache);
 
 	if (info.num_slices_is_set && OidIsValid(info.interval_type))
 		ereport(ERROR,

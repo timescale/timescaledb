@@ -161,7 +161,7 @@ chunk_dml_trigger_drop(Oid relid)
 static void
 compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
 {
-	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, false);
+	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Hypertable *compress_ht;
 	Chunk *srcchunk;
 
@@ -249,7 +249,9 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 {
 	Cache *hcache;
 	Hypertable *uncompressed_hypertable =
-		ts_hypertable_cache_get_cache_and_entry(uncompressed_hypertable_relid, false, &hcache);
+		ts_hypertable_cache_get_cache_and_entry(uncompressed_hypertable_relid,
+												CACHE_FLAG_NONE,
+												&hcache);
 	Hypertable *compressed_hypertable;
 	Chunk *uncompressed_chunk;
 	Chunk *compressed_chunk;

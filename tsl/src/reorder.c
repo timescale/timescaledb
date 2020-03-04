@@ -182,7 +182,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is a compressed chunk", get_rel_name(chunk_id))));
 
-	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Our check gives better error messages, but keep the original one too. */
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());

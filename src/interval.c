@@ -101,7 +101,7 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
 
 	ts_hypertable_permissions_check(relid, GetUserId());
 
-	hypertable = ts_hypertable_cache_get_cache_and_entry(relid, false, &hcache);
+	hypertable = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
 
 	/* validate that the open dimension uses a time type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);

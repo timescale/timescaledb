@@ -498,7 +498,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 							NameStr(*tspcname),
 							GetUserNameFromId(ownerid, true))));
 	}
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	if (ts_hypertable_has_tablespace(ht, tspc_oid))
 	{
@@ -534,7 +534,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	if (ts_hypertable_has_tablespace(ht, tspcoid))
 		ret = ts_tablespace_delete(ht->fd.id, tspcname);
@@ -565,7 +565,7 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	ret = ts_tablespace_delete(ht->fd.id, NULL);
 
@@ -650,7 +650,7 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 
 	funcctx = SRF_PERCALL_SETUP();
 	hcache = funcctx->user_fctx;
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid, false);
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid, CACHE_FLAG_NONE);
 
 	tspcs = ts_tablespace_scan(ht->fd.id);
 

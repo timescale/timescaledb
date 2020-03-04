@@ -178,22 +178,20 @@ planner_hcache_get(void)
  * hypertable.
  */
 static Hypertable *
-get_hypertable(Oid relid, bool noresolve)
+get_hypertable(const Oid relid, const unsigned int flags)
 {
 	Cache *cache = planner_hcache_get();
 
 	if (NULL == cache)
 		return NULL;
 
-	if (noresolve)
-		return ts_hypertable_cache_get_entry_no_resolve(cache, relid);
-	return ts_hypertable_cache_get_entry(cache, relid, false);
+	return ts_hypertable_cache_get_entry(cache, relid, flags);
 }
 
 bool
 ts_rte_is_hypertable(const RangeTblEntry *rte)
 {
-	return get_hypertable(rte->relid, true) != NULL;
+	return get_hypertable(rte->relid, CACHE_FLAG_CHECK) != NULL;
 }
 
 #define IS_UPDL_CMD(parse)                                                                         \
@@ -245,7 +243,7 @@ preprocess_query(Node *node, Query *rootquery)
 					break;
 				case RTE_RELATION:
 					/* This lookup will warm the cache with all hypertables in the query */
-					ht = ts_hypertable_cache_get_entry(hcache, rte->relid, true);
+					ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 
 					if (NULL != ht)
 					{
@@ -394,7 +392,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 	{
 		case RELOPT_BASEREL:
 			rte = planner_rt_fetch(rel->relid, root);
-			ht = get_hypertable(rte->relid, true);
+			ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
 			if (NULL != ht)
 				reltype = TS_REL_HYPERTABLE;
@@ -411,7 +409,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 				if (NULL != chunk)
 				{
 					reltype = TS_REL_CHUNK;
-					ht = get_hypertable(chunk->hypertable_relid, false);
+					ht = get_hypertable(chunk->hypertable_relid, CACHE_FLAG_NONE);
 					Assert(ht != NULL);
 				}
 			}
@@ -419,7 +417,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 		case RELOPT_OTHER_MEMBER_REL:
 			rte = planner_rt_fetch(rel->relid, root);
 			parent_rte = get_parent_rte(root, rel->relid);
-			ht = get_hypertable(parent_rte->relid, true);
+			ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
 
 			if (NULL != ht)
 			{
@@ -570,7 +568,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		if (rte_should_expand(in_rte))
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
-			Hypertable *ht = get_hypertable(in_rte->relid, true);
+			Hypertable *ht = get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
 
 			Assert(ht != NULL);
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel);
@@ -937,7 +935,7 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 		{
 			ModifyTablePath *mt = (ModifyTablePath *) path;
 			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
-			Hypertable *ht = get_hypertable(rte->relid, true);
+			Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
 			if (NULL != ht)
 				path = ts_hypertable_insert_path_create(root, mt);

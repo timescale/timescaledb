@@ -83,7 +83,7 @@ compress_chunks_add_policy(PG_FUNCTION_ARGS)
 											"compress_chunks_add_policy");
 
 	/* check if this is a table with compression enabled */
-	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, false, &hcache);
+	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 	if (!TS_HYPERTABLE_HAS_COMPRESSION(hypertable))
 	{
 		ts_cache_release(hcache);

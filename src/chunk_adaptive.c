@@ -760,7 +760,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(info.table_relid, GetUserId());
 
-	ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Get the first open dimension that we will adapt on */
 	dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);

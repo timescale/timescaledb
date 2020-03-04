@@ -296,7 +296,7 @@ int32
 ts_hypertable_relid_to_id(Oid relid)
 {
 	Cache *hcache;
-	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	int result = (ht == NULL) ? -1 : ht->fd.id;
 
 	ts_cache_release(hcache);
@@ -1123,7 +1123,7 @@ static inline Oid
 hypertable_relid_lookup(Oid relid)
 {
 	Cache *hcache;
-	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, true, &hcache);
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	Oid result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
 
 	ts_cache_release(hcache);
@@ -1642,7 +1642,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 											 associated_table_prefix,
 											 &chunk_sizing_info);
 
-	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 	retval = create_hypertable_datum(fcinfo, ht, created);
 	ts_cache_release(hcache);
 
@@ -1853,7 +1853,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  false);
 
 	/* Get the a Hypertable object via the cache */
-	time_dim_info->ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
+	time_dim_info->ht =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Add validated dimensions */
 	ts_dimension_add_from_info(time_dim_info);
@@ -1867,7 +1868,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	ts_cache_release(hcache);
 
-	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Verify that existing indexes are compatible with a hypertable */
 	ts_indexing_verify_indexes(ht);
@@ -2073,7 +2074,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 
-	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, false, &hcache);
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
