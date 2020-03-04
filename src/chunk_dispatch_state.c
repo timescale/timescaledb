@@ -30,7 +30,9 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Cache *hypertable_cache;
 	PlanState *ps;
 
-	ht = ts_hypertable_cache_get_cache_and_entry(state->hypertable_relid, false, &hypertable_cache);
+	ht = ts_hypertable_cache_get_cache_and_entry(state->hypertable_relid,
+												 CACHE_FLAG_NONE,
+												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
 	state->dispatch = ts_chunk_dispatch_create(ht, estate);

@@ -824,19 +824,19 @@ chunk_fill_from_stub(Chunk *result, ChunkStub *chunk_stub, bool tuplock)
 	result->constraints = chunk_stub->constraints;
 	result->cube = chunk_stub->cube;
 	ctx = (ScannerCtx) {
-        .table = catalog_get_table_id(catalog, CHUNK),
-        .index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
-        .nkeys = 1,
-        .scankey = scankey,
-        .data = result,
-        .tuple_found = chunk_tuple_found,
-        .lockmode = AccessShareLock,
-        .tuplock = {
-            .lockmode = LockTupleShare,
-            .enabled = tuplock,
-        },
-        .scandirection = ForwardScanDirection,
-    };
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = result,
+		.tuple_found = chunk_tuple_found,
+		.lockmode = AccessShareLock,
+		.tuplock = {
+			.lockmode = LockTupleShare,
+			.enabled = tuplock,
+		},
+		.scandirection = ForwardScanDirection,
+	};
 
 	/*
 	 * Perform an index scan on chunk ID.
@@ -1462,7 +1462,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 	}
 	else
 	{
-		ht = ts_hypertable_cache_get_entry(hypertable_cache, table_relid, false);
+		ht = ts_hypertable_cache_get_entry(hypertable_cache, table_relid, CACHE_FLAG_NONE);
 		hypertables = list_make1(ht);
 	}
 
@@ -2323,7 +2323,7 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 				 errmsg("must use older_than parameter to drop_chunks with "
 						"cascade_to_materializations")));
 
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, false, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
 	older_than_time = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
 																 time_dimension,

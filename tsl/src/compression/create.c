@@ -392,7 +392,8 @@ static void
 create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compress_cols)
 {
 	Cache *hcache;
-	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(compresstable_relid, false, &hcache);
+	Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(compresstable_relid, CACHE_FLAG_NONE, &hcache);
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,

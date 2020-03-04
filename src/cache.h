@@ -12,10 +12,19 @@
 
 #include "export.h"
 
+typedef enum CacheQueryFlags
+{
+	CACHE_FLAG_NONE = 0,
+	CACHE_FLAG_MISSING_OK = 1 << 0,
+	CACHE_FLAG_NOCREATE = 1 << 1,
+} CacheQueryFlags;
+
+#define CACHE_FLAG_CHECK (CACHE_FLAG_MISSING_OK | CACHE_FLAG_NOCREATE)
+
 typedef struct CacheQuery
 {
-	/* Do not resolve/create a new entry in case of a cache miss */
-	bool noresolve;
+	/* CacheQueryFlags as defined above */
+	const unsigned int flags;
 	void *result;
 	void *data;
 } CacheQuery;
@@ -39,6 +48,8 @@ typedef struct Cache
 	void *(*get_key)(struct CacheQuery *);
 	void *(*create_entry)(struct Cache *, CacheQuery *);
 	void *(*update_entry)(struct Cache *, CacheQuery *);
+	void (*missing_error)(const struct Cache *, const CacheQuery *);
+	bool (*valid_result)(const void *);
 	void (*pre_destroy_hook)(struct Cache *);
 	bool release_on_commit; /* This should be false if doing
 							 * cross-commit operations like CLUSTER or
