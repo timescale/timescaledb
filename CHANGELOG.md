@@ -19,10 +19,14 @@ accidentally triggering the load of a previous DB version.**
 * #1674 Fix time_bucket_gapfill's interaction with GROUP BY
 * #1686 Fix order by queries on compressed hypertables that have char segment by column
 * #1687 Fix issue with disabling compression when foreign keys are present
+* #1704 Fix bad plan for continuous aggregate materialization
+* #1713 Fix miscellaneous background worker issues
 * #1715 Fix issue with overly aggressive chunk exclusion in outer joins
+* #1720 Add scheduler cache invalidations
 * #1727 Fix compressing INTERVAL columns
 * #1728 Handle Sort nodes in ConstraintAwareAppend
 * #1730 Fix partial index handling on chunks
+* #1740 Fix copy of continuous aggregate invalidation entries
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now

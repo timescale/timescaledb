@@ -165,7 +165,7 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 commit:
 	if (started)
 		CommitTransactionCommand();
-
+	elog(LOG, "job %d completed reordering", job_id);
 	return true;
 }
 
@@ -234,7 +234,7 @@ execute_drop_chunks_policy(int32 job_id)
 	);
 
 	ts_cache_release(hcache);
-	elog(LOG, "completed dropping chunks");
+	elog(LOG, "job %d completed dropping chunks", job_id);
 
 	if (started)
 	{
@@ -343,6 +343,7 @@ execute_compress_chunks_policy(BgwJob *job)
 		PopActiveSnapshot();
 		CommitTransactionCommand();
 	}
+	elog(LOG, "job %d completed compressing chunk", job_id);
 	return true;
 }
 

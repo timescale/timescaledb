@@ -258,8 +258,9 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+------------------+--------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      1 |         0 | test_job_2       | Error job 2
-(3 rows)
+      1 |         0 | test_job_2       | job 1001 threw an error
+      2 |         0 | test_job_2       | Error job 2
+(4 rows)
 
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
          last_finish          | last_successful_finish | last_run_success 
@@ -286,12 +287,14 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+------------------+-----------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      1 |         0 | test_job_2       | Error job 2
+      1 |         0 | test_job_2       | job 1001 threw an error
+      2 |         0 | test_job_2       | Error job 2
       0 |     25000 | DB Scheduler     | [TESTING] Wait until 98438, started at 25000
       1 |     98438 | DB Scheduler     | [TESTING] Registered new background worker
       2 |     98438 | DB Scheduler     | [TESTING] Wait until 150000, started at 98438
-      1 |     98438 | test_job_2       | Error job 2
-(7 rows)
+      1 |     98438 | test_job_2       | job 1001 threw an error
+      2 |     98438 | test_job_2       | Error job 2
+(9 rows)
 
 --The job runs and fails again a few more times increasing the wait time each time.
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
@@ -302,9 +305,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
 
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+----------------+------------------+------------+-----------------+----------------+---------------
-   1001 | @ 0.39375 secs | f                |          3 |               0 |              3 |             0
+ job_id |   until_next    | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+-----------------+------------------+------------+-----------------+----------------+---------------
+   1001 | @ 0.295312 secs | f                |          3 |               0 |              3 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -312,16 +315,19 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      1 |         0 | test_job_2       | Error job 2
+      1 |         0 | test_job_2       | job 1001 threw an error
+      2 |         0 | test_job_2       | Error job 2
       0 |     25000 | DB Scheduler     | [TESTING] Wait until 98438, started at 25000
       1 |     98438 | DB Scheduler     | [TESTING] Registered new background worker
       2 |     98438 | DB Scheduler     | [TESTING] Wait until 150000, started at 98438
-      1 |     98438 | test_job_2       | Error job 2
+      1 |     98438 | test_job_2       | job 1001 threw an error
+      2 |     98438 | test_job_2       | Error job 2
       0 |    150000 | DB Scheduler     | [TESTING] Wait until 295313, started at 150000
       1 |    295313 | DB Scheduler     | [TESTING] Registered new background worker
       2 |    295313 | DB Scheduler     | [TESTING] Wait until 375000, started at 295313
-      1 |    295313 | test_job_2       | Error job 2
-(11 rows)
+      1 |    295313 | test_job_2       | job 1001 threw an error
+      2 |    295313 | test_job_2       | Error job 2
+(14 rows)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -331,9 +337,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
 
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id |   until_next    | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+-----------------+------------------+------------+-----------------+----------------+---------------
-   1001 | @ 0.492188 secs | f                |          4 |               0 |              4 |             0
+ job_id |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+----------------+------------------+------------+-----------------+----------------+---------------
+   1001 | @ 0.39375 secs | f                |          4 |               0 |              4 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -341,20 +347,24 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      1 |         0 | test_job_2       | Error job 2
+      1 |         0 | test_job_2       | job 1001 threw an error
+      2 |         0 | test_job_2       | Error job 2
       0 |     25000 | DB Scheduler     | [TESTING] Wait until 98438, started at 25000
       1 |     98438 | DB Scheduler     | [TESTING] Registered new background worker
       2 |     98438 | DB Scheduler     | [TESTING] Wait until 150000, started at 98438
-      1 |     98438 | test_job_2       | Error job 2
+      1 |     98438 | test_job_2       | job 1001 threw an error
+      2 |     98438 | test_job_2       | Error job 2
       0 |    150000 | DB Scheduler     | [TESTING] Wait until 295313, started at 150000
       1 |    295313 | DB Scheduler     | [TESTING] Registered new background worker
       2 |    295313 | DB Scheduler     | [TESTING] Wait until 375000, started at 295313
-      1 |    295313 | test_job_2       | Error job 2
-      0 |    375000 | DB Scheduler     | [TESTING] Wait until 689063, started at 375000
-      1 |    689063 | DB Scheduler     | [TESTING] Registered new background worker
-      2 |    689063 | DB Scheduler     | [TESTING] Wait until 800000, started at 689063
-      1 |    689063 | test_job_2       | Error job 2
-(15 rows)
+      1 |    295313 | test_job_2       | job 1001 threw an error
+      2 |    295313 | test_job_2       | Error job 2
+      0 |    375000 | DB Scheduler     | [TESTING] Wait until 590625, started at 375000
+      1 |    590625 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |    590625 | DB Scheduler     | [TESTING] Wait until 800000, started at 590625
+      1 |    590625 | test_job_2       | job 1001 threw an error
+      2 |    590625 | test_job_2       | Error job 2
+(19 rows)
 
 --Once the wait time reaches 500ms it stops increasion
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
@@ -371,28 +381,33 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                       msg                        
---------+-----------+------------------+--------------------------------------------------
+ msg_no | mock_time | application_name |                       msg                       
+--------+-----------+------------------+-------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
-      1 |         0 | test_job_2       | Error job 2
+      1 |         0 | test_job_2       | job 1001 threw an error
+      2 |         0 | test_job_2       | Error job 2
       0 |     25000 | DB Scheduler     | [TESTING] Wait until 98438, started at 25000
       1 |     98438 | DB Scheduler     | [TESTING] Registered new background worker
       2 |     98438 | DB Scheduler     | [TESTING] Wait until 150000, started at 98438
-      1 |     98438 | test_job_2       | Error job 2
+      1 |     98438 | test_job_2       | job 1001 threw an error
+      2 |     98438 | test_job_2       | Error job 2
       0 |    150000 | DB Scheduler     | [TESTING] Wait until 295313, started at 150000
       1 |    295313 | DB Scheduler     | [TESTING] Registered new background worker
       2 |    295313 | DB Scheduler     | [TESTING] Wait until 375000, started at 295313
-      1 |    295313 | test_job_2       | Error job 2
-      0 |    375000 | DB Scheduler     | [TESTING] Wait until 689063, started at 375000
-      1 |    689063 | DB Scheduler     | [TESTING] Registered new background worker
-      2 |    689063 | DB Scheduler     | [TESTING] Wait until 800000, started at 689063
-      1 |    689063 | test_job_2       | Error job 2
-      0 |    800000 | DB Scheduler     | [TESTING] Wait until 1181251, started at 800000
-      1 |   1181251 | DB Scheduler     | [TESTING] Registered new background worker
-      2 |   1181251 | DB Scheduler     | [TESTING] Wait until 1325000, started at 1181251
-      1 |   1181251 | test_job_2       | Error job 2
-(19 rows)
+      1 |    295313 | test_job_2       | job 1001 threw an error
+      2 |    295313 | test_job_2       | Error job 2
+      0 |    375000 | DB Scheduler     | [TESTING] Wait until 590625, started at 375000
+      1 |    590625 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |    590625 | DB Scheduler     | [TESTING] Wait until 800000, started at 590625
+      1 |    590625 | test_job_2       | job 1001 threw an error
+      2 |    590625 | test_job_2       | Error job 2
+      0 |    800000 | DB Scheduler     | [TESTING] Wait until 984375, started at 800000
+      1 |    984375 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |    984375 | DB Scheduler     | [TESTING] Wait until 1325000, started at 984375
+      1 |    984375 | test_job_2       | job 1001 threw an error
+      2 |    984375 | test_job_2       | Error job 2
+(24 rows)
 
 --
 -- Test timeout logic
@@ -438,7 +453,8 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | DB Scheduler     | [TESTING] Wait until 20000, started at 0
       2 |     20000 | DB Scheduler     | terminating background worker "test_job_3_long" due to timeout
       3 |     20000 | DB Scheduler     | [TESTING] Wait until 200000, started at 20000
-(4 rows)
+      4 |    200000 | DB Scheduler     | job 1002 failed
+(5 rows)
 
 --Check that the scheduler does not kill a job with infinite timeout
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -529,7 +545,8 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | test_job_3_long  | Job got term signal
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
       3 |         0 | test_job_3_long  | terminating connection due to administrator command
-(6 rows)
+      2 |    300000 | DB Scheduler     | job 1004 failed
+(7 rows)
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -562,11 +579,12 @@ SELECT * FROM sorted_bgw_log;
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
       3 |         0 | test_job_3_long  | terminating connection due to administrator command
       0 |    300000 | DB Scheduler     | [TESTING] Wait until 792188, started at 300000
+      2 |    300000 | DB Scheduler     | job 1004 failed
       1 |    792188 | DB Scheduler     | [TESTING] Registered new background worker
       2 |    792188 | DB Scheduler     | [TESTING] Wait until 1200000, started at 792188
       0 |    792188 | test_job_3_long  | Before sleep job 3
       1 |    792188 | test_job_3_long  | After sleep job 3
-(11 rows)
+(12 rows)
 
 --Test sending a SIGHUP to a job
 \c :TEST_DBNAME :ROLE_SUPERUSER
