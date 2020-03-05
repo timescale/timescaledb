@@ -87,11 +87,11 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
                27
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -229,11 +229,11 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
                 5
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -350,11 +350,11 @@ SELECT 'test4' AS "HYPERTABLE_NAME" \gset
                 1
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -471,11 +471,11 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
                10
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -560,11 +560,11 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
                 5
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
@@ -644,11 +644,11 @@ INSERT INTO test7
                 1
 (1 row)
 
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.

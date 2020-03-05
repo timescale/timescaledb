@@ -9,11 +9,11 @@ CREATE USER dump_unprivileged CREATEDB;
 \c template1 dump_unprivileged
 CREATE database dump_unprivileged;
 \! utils/pg_dump_unprivileged.sh
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
