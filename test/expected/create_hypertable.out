@@ -67,9 +67,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- Check that the insert block trigger exists
 SELECT * FROM test.show_triggers('test_schema.test_table');
-      Trigger      | Type |               Function               |                                                            Definition                                                            
--------------------+------+--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema.test_table FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+      Trigger      | Type |               Function               
+-------------------+------+--------------------------------------
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
 (1 row)
 
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');

@@ -22,6 +22,10 @@
 #include <executor/nodeModifyTable.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <parser/parse_expr.h>
+#include <parser/parse_coerce.h>
+#include <parser/parse_collate.h>
+#include <parser/parse_relation.h>
 #include <storage/bufmgr.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
@@ -36,6 +40,10 @@
 #include "chunk_dispatch.h"
 #include "subspace_store.h"
 #include "compat.h"
+
+#if PG12_GE
+#include <optimizer/optimizer.h>
+#endif
 
 /*
  * Copy from a file to a hypertable.
@@ -60,6 +68,7 @@ typedef struct CopyChunkState
 	CopyFromFunc next_copy_from;
 	CopyState cstate;
 	TableScanDesc scandesc;
+	Node *where_clause;
 } CopyChunkState;
 
 static CopyChunkState *
@@ -76,6 +85,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate->cstate = cstate;
 	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;
+	ccstate->where_clause = NULL;
 
 	return ccstate;
 }
@@ -133,6 +143,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	int ti_options = 0; /* start with default options for insert */
 	BulkInsertState bistate;
 	uint64 processed = 0;
+#if PG12_GE
+	ExprState *qualexpr;
+#endif
 
 	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
@@ -242,6 +255,11 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
 
+#if PG12_GE
+	if (ccstate->where_clause)
+		qualexpr = ExecInitQual(castNode(List, ccstate->where_clause), NULL);
+#endif
+
 	/*
 	 * Check BEFORE STATEMENT insertion triggers. It's debatable whether we
 	 * should do this for COPY, since it's not really an "INSERT" statement as
@@ -314,6 +332,15 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		/* Convert the tuple to match the chunk's rowtype */
 		if (NULL != cis->hyper_to_chunk_map)
 			myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
+
+#if PG12_GE
+		if (ccstate->where_clause)
+		{
+			econtext->ecxt_scantuple = myslot;
+			if (!ExecQual(qualexpr, econtext))
+				continue;
+		}
+#endif
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -396,13 +423,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			 * tuples inserted by an INSERT command.
 			 */
 			processed++;
-
-			if (saved_resultRelInfo)
-			{
-				resultRelInfo = saved_resultRelInfo;
-				estate->es_result_relation_info = resultRelInfo;
-			}
 		}
+
+		resultRelInfo = saved_resultRelInfo;
+		estate->es_result_relation_info = resultRelInfo;
 	}
 
 	estate->es_result_relation_info = ccstate->dispatch->hypertable_result_rel_info;
@@ -605,6 +629,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	Relation rel;
 	List *range_table = NIL;
 	List *attnums = NIL;
+	Node *where_clause = NULL;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
@@ -652,10 +677,41 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 							   NULL,
 							   stmt->attlist,
 							   stmt->options);
+#if PG12_GE
+		if (stmt->relation && stmt->whereClause)
+		{
+			LOCKMODE lockmode = stmt->is_from ? RowExclusiveLock : AccessShareLock;
+			RangeTblEntry *rte;
+
+			Assert(!stmt->query);
+
+			/* Open and lock the relation, using the appropriate lock type. */
+			rel = table_openrv(stmt->relation, lockmode);
+
+			rte = addRangeTableEntryForRelation(pstate, rel, lockmode, NULL, false, false);
+			rte->requiredPerms = (stmt->is_from ? ACL_INSERT : ACL_SELECT);
+
+			/* Add rte to column namespace  */
+			addRTEtoQuery(pstate, rte, false, true, true);
+
+			where_clause = transformExpr(pstate, stmt->whereClause, EXPR_KIND_COPY_WHERE);
+
+			where_clause = coerce_to_boolean(pstate, where_clause, "WHERE");
+			assign_expr_collations(pstate, where_clause);
+
+			where_clause = eval_const_expressions(NULL, where_clause);
+
+			where_clause = (Node *) canonicalize_qual((Expr *) where_clause, false);
+			where_clause = (Node *) make_ands_implicit((Expr *) where_clause);
+
+			table_close(rel, lockmode);
+		}
+#endif
 		free_parsestate(pstate);
 	}
 #endif
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
+	ccstate->where_clause = where_clause;
 	*processed = copyfrom(ccstate, range_table, ht);
 	EndCopyFrom(cstate);
 

@@ -122,7 +122,7 @@ if(${PG_VERSION_MAJOR} EQUAL "11")
   )
 endif()
 
-if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
+if (${PG_VERSION_MAJOR} GREATER_EQUAL "11")
   list(APPEND TEST_FILES
     join.sql
     partitionwise.sql
@@ -132,6 +132,7 @@ endif()
 if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
   list(APPEND TEST_FILES
     generated_columns.sql
+    misc.sql
   )
 endif()
 
