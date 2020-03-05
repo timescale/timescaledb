@@ -38,11 +38,11 @@
 #include <optimizer/optimizer.h>
 #endif
 
+#include "import/planner.h"
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "planner.h"
-#include "planner_import.h"
 #include "chunk_append/chunk_append.h"
 #include "guc.h"
 #include "extension.h"

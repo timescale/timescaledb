@@ -31,7 +31,7 @@
 #include "chunk_append/planner.h"
 #include "chunk_append/exec.h"
 #include "chunk_append/transform.h"
-#include "planner_import.h"
+#include "import/planner.h"
 #include "guc.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,

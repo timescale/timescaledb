@@ -46,7 +46,6 @@ set(SOURCES
   plan_add_hashagg.c
   plan_agg_bookend.c
   plan_partialize.c
-  planner_import.c
   process_utility.c
   scanner.c
   scan_iterator.c
