@@ -152,46 +152,24 @@ if (ENABLE_CODECOVERAGE)
 endif (ENABLE_CODECOVERAGE)
 
 # Search paths for Postgres binaries
-if (WIN32)
+if(WIN32)
   find_path(PG_PATH
-    bin/postgres
-    HINTS
-    "C:/PostgreSQL"
-    "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES
-    bin
-    10/bin
-    96/bin
-    pg96/bin
-    DOC
-    "The path to a PostgreSQL installation")
-endif (WIN32)
-
-if (UNIX)
+    postgres.exe
+    PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
+    PATH_SUFFIXES bin 11/bin 10/bin 96/bin pg96/bin
+    DOC "The path to a PostgreSQL installation")
+elseif(UNIX)
   find_path(PG_PATH
-    bin/postgres
-    HINTS
-    $ENV{HOME}
-    /opt/local/pgsql
-    /usr/local/pgsql
-    /usr/lib/postgresql
-    PATH_SUFFIXES
-    bin
-    10/bin
-    9.6/bin
-    96/bin
-    pg96/bin
-    DOC
-    "The path to a PostgreSQL installation")
-endif (UNIX)
+    postgres
+    PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
+    PATH_SUFFIXES bin 11/bin 10/bin 9.6/bin 96/bin pg96/bin
+    DOC "The path to a PostgreSQL installation")
+endif()
 
 find_program(PG_CONFIG pg_config
-  HINTS
-  ${PG_PATH}
-  PATH_SUFFIXES
-  bin
-  DOC
-  "The path to the pg_config of the PostgreSQL version to compile against")
+  HINTS ${PG_PATH}
+  PATH_SUFFIXES bin
+  DOC "The path to the pg_config of the PostgreSQL version to compile against")
 
 if (NOT PG_CONFIG)
   message(FATAL_ERROR "Unable to find 'pg_config'")
@@ -324,7 +302,7 @@ endif (USE_OPENSSL AND (NOT PG_USE_OPENSSL))
 
 if (USE_OPENSSL)
   # Try to find a local OpenSSL installation
-  include(FindOpenSSL)
+  find_package(OpenSSL)
 
   if (NOT OPENSSL_FOUND)
     message(FATAL_ERROR "TimescaleDB requires OpenSSL but it wasn't found. If you want to continue without OpenSSL, re-run bootstrap with `-DUSE_OPENSSL=0`")
@@ -334,6 +312,18 @@ if (USE_OPENSSL)
     message(FATAL_ERROR "TimescaleDB requires OpenSSL version 1.0 or greater")
   endif ()
 
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND MSVC)
+    set(_libraries)
+    foreach(_path ${OPENSSL_LIBRARIES})
+      get_filename_component(_dir ${_path} DIRECTORY)
+      get_filename_component(_name ${_path} NAME_WE)
+      string(REGEX REPLACE "[Dd]$" "" _fixed ${_name})
+      get_filename_component(_ext ${_path} EXT)
+      list(APPEND _libraries "${_dir}/${_fixed}${_ext}")
+    endforeach()
+    set(OPENSSL_LIBRARIES ${_libraries})
+  endif()
+  message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
 endif (USE_OPENSSL)
 
