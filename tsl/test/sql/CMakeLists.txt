@@ -61,7 +61,14 @@ if (${PG_VERSION_MAJOR} GREATER "9")
       transparent_decompression.sql.in
       )
   endif(CMAKE_BUILD_TYPE MATCHES Debug)
-endif ()
+
+  if (${PG_VERSION_MAJOR} LESS "12")
+    list(APPEND TEST_FILES_DEBUG
+      compression_with_oids.sql
+    )
+  endif()
+
+endif()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})

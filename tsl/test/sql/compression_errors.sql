@@ -20,10 +20,6 @@ ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"b
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd DESC');
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'd');
 
-create table with_oids (a integer, b integer) WITH OIDS;
-select table_name from create_hypertable('with_oids', 'a', chunk_time_interval=> 10);
-ALTER TABLE with_oids set (timescaledb.compress, timescaledb.compress_orderby='a');
-
 create table with_rls (a integer, b integer);
 ALTER TABLE with_rls ENABLE ROW LEVEL SECURITY;
 select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 10);
