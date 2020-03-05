@@ -380,9 +380,8 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch, AttrNu
 	Relation chunk_rel = state->result_relation_info->ri_RelationDesc;
 	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
 	Relation first_rel = hyper_rel;
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 
-	Assert(onconflict_action == ONCONFLICT_UPDATE);
+	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
 	init_basic_on_conflict_state(hyper_rri, chunk_rri);
 
 	/* Setup default slots for ON CONFLICT handling, in case of no tuple
