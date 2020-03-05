@@ -37,7 +37,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/exec.h"
-#include "planner_import.h"
+#include "import/planner.h"
 #include "guc.h"
 #include "custom_type_cache.h"
 

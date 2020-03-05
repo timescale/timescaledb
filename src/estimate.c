@@ -19,7 +19,7 @@
 
 #include "func_cache.h"
 #include "estimate.h"
-#include "planner_import.h"
+#include "import/planner.h"
 #include "utils.h"
 
 /*
