@@ -182,14 +182,11 @@ $BODY$;
 CREATE OR REPLACE FUNCTION test.show_triggers(rel regclass, show_internal boolean = false)
 RETURNS TABLE("Trigger" name,
               "Type" smallint,
-              "Function" regproc,
-              "Definition" text) LANGUAGE SQL STABLE AS
+              "Function" regproc) LANGUAGE SQL STABLE AS
 $BODY$
     SELECT t.tgname,
     t.tgtype,
-    t.tgfoid::regproc,
-    -- remove 'CREATE TRIGGER' part from definition
-    substring(pg_get_triggerdef(t.oid) from 15)
+    t.tgfoid::regproc
     FROM pg_trigger t
     WHERE t.tgrelid = rel
     AND t.tgisinternal = show_internal
@@ -200,8 +197,7 @@ CREATE OR REPLACE FUNCTION test.show_triggersp(pattern text, show_internal boole
 RETURNS TABLE("Table" regclass,
               "Trigger" name,
               "Type" smallint,
-              "Function" regproc,
-              "Definition" text) LANGUAGE PLPGSQL STABLE AS
+              "Function" regproc) LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     schema_name name = split_part(pattern, '.', 1);
@@ -216,9 +212,7 @@ BEGIN
     SELECT t.tgrelid::regclass,
     t.tgname,
     t.tgtype,
-    t.tgfoid::regproc,
-    -- remove 'CREATE TRIGGER' part from definition
-    substring(pg_get_triggerdef(t.oid) from 15)
+    t.tgfoid::regproc
     FROM pg_class cl, pg_trigger t
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
     AND t.tgrelid = cl.oid

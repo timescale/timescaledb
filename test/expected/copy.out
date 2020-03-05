@@ -95,6 +95,49 @@ SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10);
 (1 row)
 
 \copy hyper2 from data/copy_data.csv with csv header ;
+-- test copy with blocking trigger
+CREATE FUNCTION gt_10() RETURNS trigger AS
+$func$
+BEGIN
+    IF NEW."time" < 11
+        THEN RETURN NULL;
+    END IF;
+    RETURN NEW;
+END
+$func$ LANGUAGE plpgsql;
+CREATE TABLE "trigger_test" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('trigger_test', 'time', chunk_time_interval => 10);
+     create_hypertable     
+---------------------------
+ (4,public,trigger_test,t)
+(1 row)
+
+CREATE TRIGGER check_time BEFORE INSERT ON trigger_test
+FOR EACH ROW EXECUTE PROCEDURE gt_10();
+\copy trigger_test from data/copy_data.csv with csv header ;
+SELECT * FROM trigger_test ORDER BY time;
+ time |       value        
+------+--------------------
+   11 |  0.795640022493899
+   12 |  0.631451691035181
+   13 | 0.0958626130595803
+   14 |  0.929304684977978
+   15 |  0.524866581428796
+   16 |  0.919249163009226
+   17 |  0.878917074296623
+   18 |   0.68551931809634
+   19 |  0.594833800103515
+   20 |  0.819584367796779
+   21 |  0.474171321373433
+   22 |  0.938535195309669
+   23 |  0.333933369256556
+   24 |  0.274582070298493
+   25 |  0.602348630782217
+(15 rows)
+
 ----------------------------------------------------------------
 -- Testing COPY TO.
 ----------------------------------------------------------------

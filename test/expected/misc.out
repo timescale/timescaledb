@@ -1,0 +1,106 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- This file contains tests for functionality introduced in PG12
+------- TEST 1: Restrictive copy from file
+CREATE TABLE "copy_golden" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+\COPY copy_golden (time, value) FROM data/copy_data.csv WITH CSV HEADER
+SELECT * FROM copy_golden ORDER BY TIME;
+ time |       value        
+------+--------------------
+    1 |  0.951734602451324
+    2 |  0.717823888640851
+    3 |  0.543408489786088
+    4 |  0.641131274402142
+    5 |   0.12689296528697
+    6 | 0.0126486560329795
+    7 |  0.213605496101081
+    8 |  0.132784110959619
+    9 |  0.381155731156468
+   10 |  0.284836102742702
+   11 |  0.795640022493899
+   12 |  0.631451691035181
+   13 | 0.0958626130595803
+   14 |  0.929304684977978
+   15 |  0.524866581428796
+   16 |  0.919249163009226
+   17 |  0.878917074296623
+   18 |   0.68551931809634
+   19 |  0.594833800103515
+   20 |  0.819584367796779
+   21 |  0.474171321373433
+   22 |  0.938535195309669
+   23 |  0.333933369256556
+   24 |  0.274582070298493
+   25 |  0.602348630782217
+(25 rows)
+
+CREATE TABLE "copy_control" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+\COPY copy_control (time, value) FROM data/copy_data.csv WITH CSV HEADER WHERE time > 10;
+SELECT * FROM copy_control ORDER BY TIME;
+ time |       value        
+------+--------------------
+   11 |  0.795640022493899
+   12 |  0.631451691035181
+   13 | 0.0958626130595803
+   14 |  0.929304684977978
+   15 |  0.524866581428796
+   16 |  0.919249163009226
+   17 |  0.878917074296623
+   18 |   0.68551931809634
+   19 |  0.594833800103515
+   20 |  0.819584367796779
+   21 |  0.474171321373433
+   22 |  0.938535195309669
+   23 |  0.333933369256556
+   24 |  0.274582070298493
+   25 |  0.602348630782217
+(15 rows)
+
+CREATE TABLE "copy_test" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('copy_test', 'time', chunk_time_interval => 10);
+   create_hypertable    
+------------------------
+ (1,public,copy_test,t)
+(1 row)
+
+\COPY copy_test (time, value) FROM data/copy_data.csv WITH CSV HEADER WHERE time > 10;
+SELECT * FROM copy_test ORDER BY TIME;
+ time |       value        
+------+--------------------
+   11 |  0.795640022493899
+   12 |  0.631451691035181
+   13 | 0.0958626130595803
+   14 |  0.929304684977978
+   15 |  0.524866581428796
+   16 |  0.919249163009226
+   17 |  0.878917074296623
+   18 |   0.68551931809634
+   19 |  0.594833800103515
+   20 |  0.819584367796779
+   21 |  0.474171321373433
+   22 |  0.938535195309669
+   23 |  0.333933369256556
+   24 |  0.274582070298493
+   25 |  0.602348630782217
+(15 rows)
+
+-- Verify attempting to use subqueries fails the same as non-hypertables
+\set ON_ERROR_STOP 0
+\COPY copy_control (time, value) FROM data/copy_data.csv WITH CSV HEADER WHERE time IN (SELECT time FROM copy_golden);
+ERROR:  cannot use subquery in COPY FROM WHERE condition at character 74
+\COPY copy_test (time, value) FROM data/copy_data.csv WITH CSV HEADER WHERE time IN (SELECT time FROM copy_golden);
+ERROR:  cannot use subquery in COPY FROM WHERE condition at character 71
+\set ON_ERROR_STOP 1
+DROP TABLE copy_golden;
+DROP TABLE copy_control;
+DROP TABLE copy_test;

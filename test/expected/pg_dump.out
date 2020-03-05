@@ -155,16 +155,16 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               |                                                              Definition                                                               
--------------------+------+--------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
- restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION test_trigger()
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+      Trigger      | Type |               Function               
+-------------------+------+--------------------------------------
+ restore_trigger   |    7 | test_trigger
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                      Definition                                                       
------------------+------+--------------+-----------------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE FUNCTION test_trigger()
+     Trigger     | Type |   Function   
+-----------------+------+--------------
+ restore_trigger |    7 | test_trigger
 (1 row)
 
 SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
@@ -399,16 +399,16 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function               |                                                              Definition                                                               
--------------------+------+--------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
- restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION test_trigger()
- ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+      Trigger      | Type |               Function               
+-------------------+------+--------------------------------------
+ restore_trigger   |    7 | test_trigger
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker
 (2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                      Definition                                                       
------------------+------+--------------+-----------------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE FUNCTION test_trigger()
+     Trigger     | Type |   Function   
+-----------------+------+--------------
+ restore_trigger |    7 | test_trigger
 (1 row)
 
 --data should be the same
