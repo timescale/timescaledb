@@ -847,7 +847,7 @@ find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
  * we find a hypertable that has integer_now_func set.
  */
 TSDLLEXPORT Dimension *
-ts_continous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
+ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 {
 	int32 raw_htid = mat_htid;
 	Dimension *par_dim = NULL;
