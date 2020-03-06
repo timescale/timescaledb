@@ -53,3 +53,116 @@ select * from test_chartab order by mac_id , ts limit 2;
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
 (2 rows)
 
+-- test constraintawareappend sort node handling
+SET enable_hashagg TO false;
+CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
+SELECT create_hypertable('merge_sort', 'time');
+    create_hypertable    
+-------------------------
+ (3,public,merge_sort,t)
+(1 row)
+
+ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
+NOTICE:  adding index _compressed_hypertable_4_measure_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(measure_id, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_4_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(device_id, _ts_meta_sequence_num)
+INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
+ANALYZE merge_sort;
+--compress first chunk
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'merge_sort'
+ORDER BY c.id LIMIT 1;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+(1 row)
+
+-- this should have a MergeAppend with children wrapped in Sort nodes
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+  last(time, time) as time,
+  device_id,
+  measure_id,
+  last(value, time) AS value
+FROM merge_sort
+WHERE time < now()
+GROUP BY 2, 3;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   Group Key: merge_sort.device_id, merge_sort.measure_id
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=745 loops=1)
+         Hypertable: merge_sort
+         Chunks left after exclusion: 5
+         ->  Merge Append (actual rows=745 loops=1)
+               Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
+                     Filter: ("time" < now())
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: compress_hyper_4_10_chunk.device_id, compress_hyper_4_10_chunk.measure_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+               ->  Sort (actual rows=168 loops=1)
+                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=168 loops=1)
+                           Filter: ("time" < now())
+               ->  Sort (actual rows=168 loops=1)
+                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=168 loops=1)
+                           Filter: ("time" < now())
+               ->  Sort (actual rows=168 loops=1)
+                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=168 loops=1)
+                           Filter: ("time" < now())
+               ->  Sort (actual rows=121 loops=1)
+                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
+                           Filter: ("time" < now())
+(33 rows)
+
+-- this should exclude the decompressed chunk
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+  last(time, time) as time,
+  device_id,
+  measure_id,
+  last(value, time) AS value
+FROM merge_sort
+WHERE time > '2000-01-10'::text::timestamp
+GROUP BY 2, 3;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   Group Key: merge_sort.device_id, merge_sort.measure_id
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=528 loops=1)
+         Hypertable: merge_sort
+         Chunks left after exclusion: 4
+         ->  Merge Append (actual rows=528 loops=1)
+               Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
+               ->  Sort (actual rows=71 loops=1)
+                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=71 loops=1)
+                           Index Cond: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+               ->  Sort (actual rows=168 loops=1)
+                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=168 loops=1)
+                           Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+               ->  Sort (actual rows=168 loops=1)
+                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=168 loops=1)
+                           Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+               ->  Sort (actual rows=121 loops=1)
+                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
+                           Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+(27 rows)
+
+RESET enable_hashagg;

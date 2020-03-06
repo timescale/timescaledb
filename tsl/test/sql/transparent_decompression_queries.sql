@@ -26,4 +26,44 @@ select * from test_chartab order by mac_id , ts limit 2;
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 select * from test_chartab order by mac_id , ts limit 2;
 
+-- test constraintawareappend sort node handling
+SET enable_hashagg TO false;
+
+CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
+SELECT create_hypertable('merge_sort', 'time');
+ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
+
+INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
+
+ANALYZE merge_sort;
+
+--compress first chunk
+SELECT
+  compress_chunk(c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
+WHERE ht.table_name = 'merge_sort'
+ORDER BY c.id LIMIT 1;
+
+-- this should have a MergeAppend with children wrapped in Sort nodes
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+  last(time, time) as time,
+  device_id,
+  measure_id,
+  last(value, time) AS value
+FROM merge_sort
+WHERE time < now()
+GROUP BY 2, 3;
+
+-- this should exclude the decompressed chunk
+EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+  last(time, time) as time,
+  device_id,
+  measure_id,
+  last(value, time) AS value
+FROM merge_sort
+WHERE time > '2000-01-10'::text::timestamp
+GROUP BY 2, 3;
+
+RESET enable_hashagg;
 
