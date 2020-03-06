@@ -229,11 +229,11 @@ NOTICE:  test_sql_drop: index
 NOTICE:  test_ddl_command_end: DROP INDEX
 DROP TABLE htable;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE htable;
-NOTICE:  test_sql_drop: table: public.htable
 NOTICE:  test_sql_drop: constraint: public.htable.temp_chk
 NOTICE:  test_sql_drop: index
-NOTICE:  test_sql_drop: trigger
 NOTICE:  test_sql_drop: index
+NOTICE:  test_sql_drop: table: public.htable
+NOTICE:  test_sql_drop: trigger
 NOTICE:  test_ddl_command_end: DROP TABLE
 DROP TABLE non_htable;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE non_htable;
@@ -257,10 +257,10 @@ NOTICE:  adding not-null constraint to column "time"
 DROP SCHEMA htable_schema CASCADE;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP SCHEMA htable_schema CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  test_sql_drop: schema: htable_schema
+NOTICE:  test_sql_drop: index
 NOTICE:  test_sql_drop: table: htable_schema.non_htable
 NOTICE:  test_sql_drop: table: htable_schema.htable
-NOTICE:  test_sql_drop: index
+NOTICE:  test_sql_drop: schema: htable_schema
 NOTICE:  test_sql_drop: trigger
 -- DROP column cascades to index drop
 CREATE TABLE htable(time timestamptz, device int, color int, temp float);
@@ -283,8 +283,8 @@ NOTICE:  test_sql_drop: index
 NOTICE:  test_ddl_command_end: ALTER TABLE
 DROP TABLE htable;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE htable;
-NOTICE:  test_sql_drop: table: public.htable
 NOTICE:  test_sql_drop: index
+NOTICE:  test_sql_drop: table: public.htable
 NOTICE:  test_sql_drop: trigger
 NOTICE:  test_ddl_command_end: DROP TABLE
 -- DROP foreign key
@@ -306,10 +306,10 @@ NOTICE:  adding not-null constraint to column "time"
 DROP TABLE non_htable CASCADE;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE non_htable CASCADE;
 NOTICE:  drop cascades to constraint htable_device_fkey on table htable
-NOTICE:  test_sql_drop: table: public.non_htable
 NOTICE:  test_sql_drop: constraint: public.non_htable.non_htable_pkey
-NOTICE:  test_sql_drop: index
 NOTICE:  test_sql_drop: constraint: public.htable.htable_device_fkey
+NOTICE:  test_sql_drop: index
+NOTICE:  test_sql_drop: table: public.non_htable
 NOTICE:  test_sql_drop: trigger
 NOTICE:  test_sql_drop: trigger
 NOTICE:  test_sql_drop: trigger
