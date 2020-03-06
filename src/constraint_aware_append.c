@@ -54,18 +54,19 @@ static Plan *
 get_plans_for_exclusion(Plan *plan)
 {
 	/* Optimization: If we want to be able to prune */
-	/* when the node is a T_Result, then we need to peek */
+	/* when the node is a T_Result or T_Sort, then we need to peek */
 	/* into the subplans of this Result node. */
-	if (IsA(plan, Result))
-	{
-		Result *res = (Result *) plan;
 
-		if (res->plan.lefttree != NULL && res->plan.righttree == NULL)
-			return res->plan.lefttree;
-		if (res->plan.righttree != NULL && res->plan.lefttree == NULL)
-			return res->plan.righttree;
+	switch (nodeTag(plan))
+	{
+		case T_Result:
+		case T_Sort:
+			Assert(plan->lefttree != NULL && plan->righttree == NULL);
+			return plan->lefttree;
+
+		default:
+			return plan;
 	}
-	return plan;
 }
 
 static bool
@@ -228,7 +229,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				if (can_exclude_chunk(&root, estate, scanrelid, restrictinfos))
 					continue;
 
-				*appendplans = lappend(*appendplans, plan);
+				*appendplans = lappend(*appendplans, lfirst(lc_plan));
 				break;
 			}
 			default:
