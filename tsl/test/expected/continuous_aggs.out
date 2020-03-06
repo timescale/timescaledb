@@ -637,7 +637,7 @@ ERROR:  cannot drop the partial/direct view because it is required by a continuo
 DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW mat_test;
-ERROR:  dropping a continous aggregate requires using CASCADE
+ERROR:  dropping a continuous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
 --catalog entry still there;
 SELECT count(*)

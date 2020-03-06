@@ -104,7 +104,7 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid, Oid older_than_ty
 		partitioning_type = ts_dimension_get_partition_type(open_dim);
 		if (IS_INTEGER_TYPE(partitioning_type))
 		{
-			open_dim = ts_continous_agg_find_integer_now_func_by_materialization_id(mat_id);
+			open_dim = ts_continuous_agg_find_integer_now_func_by_materialization_id(mat_id);
 		}
 		older_than = ts_interval_from_sql_input_internal(open_dim,
 														 older_than_datum,
