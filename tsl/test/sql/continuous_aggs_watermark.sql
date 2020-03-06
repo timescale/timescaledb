@@ -2,11 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- stop the continous aggregate background workers from interfering
-SELECT _timescaledb_internal.stop_background_workers();
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
 CREATE TABLE continuous_agg_test(time int, data int);
 select create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
 CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM continuous_agg_test $$;

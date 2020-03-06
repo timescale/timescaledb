@@ -2,16 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ON_ERROR_STOP 0
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- stop the background workers 
-SELECT _timescaledb_internal.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,

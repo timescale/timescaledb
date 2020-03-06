@@ -71,7 +71,6 @@ END
 $BODY$;
 
 -- Remove any default jobs, e.g., telemetry
-SELECT _timescaledb_internal.stop_background_workers();
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
