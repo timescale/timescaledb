@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
 SET timescaledb.license_key='CommunityLicense';
 
 CREATE OR REPLACE FUNCTION test_reorder(job_id INTEGER)

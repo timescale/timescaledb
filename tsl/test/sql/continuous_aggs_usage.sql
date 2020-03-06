@@ -3,11 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- TEST SETUP --
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- stop the continous aggregate background workers from interfering, nothing will be scheduled.
--- In normal execution you wouldn't do this, but for tests we need to be reproducible regardless of what the scheduler does.
-SELECT _timescaledb_internal.stop_background_workers();
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 SET client_min_messages TO LOG;
 

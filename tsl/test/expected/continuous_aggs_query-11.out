@@ -1,15 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- stop the continous aggregate background workers from interfering
-SELECT _timescaledb_internal.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set TEST_BASE_NAME continuous_aggs_query
 SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",

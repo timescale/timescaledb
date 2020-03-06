@@ -2,11 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- stop the continous aggregate background workers from interfering
-SELECT _timescaledb_internal.stop_background_workers();
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (

@@ -12,9 +12,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 
--- stop the background workers from locking up the tables,
--- and remove any default jobs, e.g., telemetry so bgw_job isn't polluted
-SELECT _timescaledb_internal.stop_background_workers();
+-- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
