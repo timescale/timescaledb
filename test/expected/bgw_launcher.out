@@ -3,6 +3,13 @@
 -- LICENSE-APACHE for a copy of the license.
 \set TEST_DBNAME_2 :TEST_DBNAME _2
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- start bgw since they are stopped for tests by default
+SELECT _timescaledb_internal.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
 CREATE DATABASE :TEST_DBNAME_2;
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \ir include/bgw_launcher_utils.sql

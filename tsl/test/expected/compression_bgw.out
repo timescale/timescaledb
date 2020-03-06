@@ -2,12 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
 SELECT _timescaledb_internal.enterprise_enabled();
  enterprise_enabled 
 --------------------

@@ -13,8 +13,6 @@ CREATE OR REPLACE FUNCTION run_continuous_agg_materialization(
     input_view_schema NAME = 'public'
 ) RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_run_continuous_agg_materialization' LANGUAGE C VOLATILE;
 
--- stop the continous aggregate background workers from interfering
-SELECT _timescaledb_internal.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE TABLE continuous_agg_test(time BIGINT, data BIGINT, dummy BOOLEAN);
