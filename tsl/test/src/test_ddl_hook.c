@@ -104,14 +104,38 @@ test_ddl_command_end(EventTriggerData *command)
 	tsl_delayed_execution_list = NIL;
 }
 
+static int
+event_trigger_event_cmp(const void *obj1, const void *obj2)
+{
+	const EventTriggerDropObject *obj[] = { *((const EventTriggerDropObject **) obj1),
+											*((const EventTriggerDropObject **) obj2) };
+
+	/* This only orders on object type for simplicity. Thus it is assumed that
+	 * the order of objects with the same type is predictible across
+	 * PostgreSQL versions */
+	return obj[0]->type - obj[1]->type;
+}
+
 static void
 test_sql_drop(List *dropped_objects)
 {
 	ListCell *lc;
+	int num_objects = list_length(dropped_objects);
+	EventTriggerDropObject **objects = palloc(num_objects * sizeof(EventTriggerDropObject *));
+	int i = 0;
 
+	/* Sort the list of dropped objects for predictible order in tests across
+	 * PostgreSQL versions. Note that PG11 introduced a list_qsort function,
+	 * but it is not available in earlier PostgreSQL versions so we're doing
+	 * our own sorting. */
 	foreach (lc, dropped_objects)
+		objects[i++] = lfirst(lc);
+
+	qsort(objects, num_objects, sizeof(EventTriggerDropObject *), event_trigger_event_cmp);
+
+	for (i = 0; i < num_objects; i++)
 	{
-		EventTriggerDropObject *obj = lfirst(lc);
+		EventTriggerDropObject *obj = objects[i];
 
 		switch (obj->type)
 		{
