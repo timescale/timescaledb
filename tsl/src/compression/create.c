@@ -81,27 +81,18 @@ get_default_algorithm_id(Oid typeoid)
 		case INT4OID:
 		case INT2OID:
 		case INT8OID:
-		case INTERVALOID:
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-		{
 			return COMPRESSION_ALGORITHM_DELTADELTA;
-		}
+
 		case FLOAT4OID:
 		case FLOAT8OID:
-		{
 			return COMPRESSION_ALGORITHM_GORILLA;
-		}
+
 		case NUMERICOID:
-		{
 			return COMPRESSION_ALGORITHM_ARRAY;
-		}
-		case TEXTOID:
-		case CHAROID:
-		{
-			return COMPRESSION_ALGORITHM_DICTIONARY;
-		}
+
 		default:
 		{
 			/* use dictitionary if possible, otherwise use array */

@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Minor Features**
 * #1666 Support drop_chunks API for continuous aggregates
+* #1711 Change log level for continuous aggregate materialization messages
 
 **Bugfixes**
 * #1648 Drop chunks from materialized hypertable
@@ -18,7 +19,8 @@ accidentally triggering the load of a previous DB version.**
 * #1674 Fix time_bucket_gapfill's interaction with GROUP BY
 * #1686 Fix order by queries on compressed hypertables that have char segment by column
 * #1687 Fix issue with disabling compression when foreign keys are present
-* Fix issue with overly aggressive chunk exclusion in outer joins
+* #1715 Fix issue with overly aggressive chunk exclusion in outer joins
+* #1727 Fix compressing INTERVAL columns
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now
