@@ -21,6 +21,8 @@ accidentally triggering the load of a previous DB version.**
 * #1687 Fix issue with disabling compression when foreign keys are present
 * #1715 Fix issue with overly aggressive chunk exclusion in outer joins
 * #1727 Fix compressing INTERVAL columns
+* #1728 Handle Sort nodes in ConstraintAwareAppend
+* #1730 Fix partial index handling on chunks
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now
@@ -31,6 +33,9 @@ accidentally triggering the load of a previous DB version.**
 * @RJPhillips01 for reporting an issue with drop chunks.
 * @b4eEx for reporting an issue with disabling compression.
 * @dark048 for reporting an issue with order by on compressed hypertables
+* @mrechte for reporting an issue with compressing INTERVAL columns
+* @tstaehli for reporting an issue with ConstraintAwareAppend
+* @chadshowalter for reporting an issue with partial index on hypertables
 
 ## 1.6.0 (2020-01-14)
 
