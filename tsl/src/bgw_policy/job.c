@@ -182,7 +182,7 @@ get_open_dimension_for_hypertable(Hypertable *ht)
 		 * integer_now function
 		 */
 
-		open_dim = ts_continous_agg_find_integer_now_func_by_materialization_id(mat_id);
+		open_dim = ts_continuous_agg_find_integer_now_func_by_materialization_id(mat_id);
 		if (open_dim == NULL)
 		{
 			elog(ERROR,

@@ -1053,7 +1053,7 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 		if (ts_continuous_agg_view_type(&cagg->data, schema, name) == ContinuousAggUserView)
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-					 errmsg("dropping a continous aggregate requires using CASCADE")));
+					 errmsg("dropping a continuous aggregate requires using CASCADE")));
 	}
 }
 

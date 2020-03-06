@@ -177,9 +177,9 @@ ERROR:  cannot drop table _timescaledb_internal._materialized_hypertable_3 becau
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW mat_before;
-ERROR:  dropping a continous aggregate requires using CASCADE
+ERROR:  dropping a continuous aggregate requires using CASCADE
 DROP VIEW mat_after;
-ERROR:  dropping a continous aggregate requires using CASCADE
+ERROR:  dropping a continuous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
 --materialize mat_after
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
