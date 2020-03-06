@@ -261,3 +261,38 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSI
 --cannot pushdown when op collation does not match column's collation since min/max used different collation than what op needs
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
+
+--test datatypes
+CREATE TABLE datatype_test(
+  time timestamptz NOT NULL,
+  int2_column int2,
+  int4_column int4,
+  int8_column int8,
+  float4_column float4,
+  float8_column float8,
+  date_column date,
+  timestamp_column timestamp,
+  timestamptz_column timestamptz,
+  interval_column interval,
+  numeric_column numeric,
+  decimal_column decimal,
+  text_column text,
+  char_column char
+);
+
+SELECT create_hypertable('datatype_test','time');
+ALTER TABLE datatype_test SET (timescaledb.compress);
+INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-01-01 12:00','2001-01-01 6:00','1 week', 3.41, 4.2, 'text', 'x');
+
+SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
+and ht.table_name like 'datatype_test' ORDER BY ch1.id;
+
+SELECT
+  attname, alg.name
+FROM _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable_compression htc ON ht.id=htc.hypertable_id
+  INNER JOIN _timescaledb_catalog.compression_algorithm alg ON alg.id=htc.compression_algorithm_id
+WHERE ht.table_name='datatype_test'
+ORDER BY attname;
+
