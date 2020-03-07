@@ -89,14 +89,20 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 static void
 adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 {
+	List *vars = NIL;
 	ListCell *lc;
 
 	/* Get a list of references to all Vars in the expression */
-	List *vars = pull_var_clause((Node *) ii->ii_Expressions, 0);
+	if (ii->ii_Expressions != NIL)
+		vars = list_concat(vars, pull_var_clause((Node *) ii->ii_Expressions, 0));
+
+	/* Get a list of references to all Vars in the predicate */
+	if (ii->ii_Predicate != NIL)
+		vars = list_concat(vars, pull_var_clause((Node *) ii->ii_Predicate, 0));
 
 	foreach (lc, vars)
 	{
-		Var *var = lfirst(lc);
+		Var *var = lfirst_node(Var, lc);
 
 		char *attname = get_attname_compat(ht_relid, var->varattno, false);
 		var->varattno = get_attnum(chunkrel->rd_id, attname);
@@ -144,11 +150,13 @@ ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation template
 	 *
 	 * We need to handle two cases: (1) regular indexes that reference columns
 	 * directly, and (2) expression indexes that reference columns in expressions.
+	 *
+	 * Additionally we need to adjust column references in predicates.
 	 */
 	if (list_length(indexinfo->ii_Expressions) == 0)
 		chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
-	else
-		adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
+
+	adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
 }
 
 #define CHUNK_INDEX_TABLESPACE_OFFSET 1
@@ -202,26 +210,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 	 * hypertable
 	 */
 	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
-	{
-		/*
-		 * Adjust a hypertable's index attribute numbers to match a chunk.
-		 *
-		 * A hypertable's IndexInfo for one of its indexes references the attributes
-		 * (columns) in the hypertable by number. These numbers might not be the same
-		 * for the corresponding attribute in one of its chunks. To be able to use an
-		 * IndexInfo from a hypertable's index to create a corresponding index on a
-		 * chunk, we need to adjust the attribute numbers to match the chunk.
-		 *
-		 * We need to handle two cases: (1) regular indexes that reference columns
-		 * directly, and (2) expression indexes that reference columns in expressions.
-		 */
-		if (list_length(indexinfo->ii_Expressions) == 0)
-			chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
-		else
-		{
-			adjust_expr_attnos(htrel->rd_id, indexinfo, chunkrel);
-		}
-	}
+		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, template_indexrel, chunkrel);
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
 
