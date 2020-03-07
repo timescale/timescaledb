@@ -220,3 +220,12 @@ CREATE INDEX tag_idx ON idx_expr_test((t1||t2||t3));
 INSERT INTO idx_expr_test(time, t1, t2, t3) VALUES ('2000-01-01', 'foo', 'bar', 'baz');
 DROP TABLE idx_expr_test CASCADE;
 
+-- test index with predicate and dropped columns
+CREATE TABLE idx_predicate_test(filler int, time timestamptz);
+SELECT table_name FROM create_hypertable('idx_predicate_test', 'time');
+ALTER TABLE idx_predicate_test DROP COLUMN filler;
+ALTER TABLE idx_predicate_test ADD COLUMN b1 bool;
+CREATE INDEX idx_predicate_test_b1 ON idx_predicate_test(b1) WHERE b1=true;
+INSERT INTO idx_predicate_test VALUES ('2000-01-01',true);
+DROP TABLE idx_predicate_test;
+
