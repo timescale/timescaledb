@@ -111,7 +111,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	TupleTableSlot *myslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
 
-	ErrorContextCallback errcallback;
+	ErrorContextCallback errcallback = { 0 };
 	CommandId mycid = GetCurrentCommandId(true);
 	int hi_options = 0; /* start with default heap_insert options */
 	BulkInsertState bistate;
