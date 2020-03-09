@@ -144,7 +144,8 @@ refresh materialized view cagg_1;
 select * from cagg_1 where timed = 18 ;
 --copied over for cagg_2 to process later?
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
-
+DROP VIEW cagg_1 cascade;
+DROP VIEW cagg_2 cascade;
 
 --test the ignore_invalidation_older_than setting
 CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);
@@ -193,7 +194,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 --move the time up (40), but invalidation logic should apply to old time (12)
 INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES (32,4,2),(36,5,5),(40,3,9);
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 refresh materialized view cagg_iia1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 --should see change to the 12, 10 bucket but not the 4 or 1 bucket
 select * from cagg_iia1 order by 1;
 --should see change to the 12, 10 and 4 bucket but not the 1 bucket
@@ -203,11 +206,13 @@ select * from cagg_iia2 order by 1;
 refresh materialized view cagg_iia3;
 select * from cagg_iia3 order by 1;
 
---tes UPDATES
+--test UPDATES
 UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=200 where timeval=32;
 UPDATE continuous_agg_test_ignore_invalidation_older_than  set col1=NULL, col2=120 where timeval=36;
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 refresh materialized view cagg_iia1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 --should see change only for the 36 bucket not 32
 select * from cagg_iia1 order by 1;
 --should see change to the 36 and 32
@@ -221,7 +226,9 @@ select * from cagg_iia3 order by 1;
 DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 32;
 DELETE FROM continuous_agg_test_ignore_invalidation_older_than WHERE timeval = 36;
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 refresh materialized view cagg_iia1;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 --should see change only for the 36 bucket not 32
 select * from cagg_iia1 order by 1;
 --should see change to the 36 and 32
@@ -236,5 +243,8 @@ ALTER VIEW cagg_iia3 set (timescaledb.ignore_invalidation_older_than = 100);
 INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
  (10, -3, 20);
 --sees the change now
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 refresh materialized view cagg_iia3;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+
 select * from cagg_iia3 order by 1;
