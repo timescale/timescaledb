@@ -1998,6 +1998,15 @@ process_index_start(ProcessUtilityArgs *args)
 	return true;
 }
 
+static int
+chunk_index_mappings_cmp(const void *p1, const void *p2)
+{
+	const ChunkIndexMapping *mapping[] = { *((ChunkIndexMapping *const *) p1),
+										   *((ChunkIndexMapping *const *) p2) };
+
+	return mapping[0]->chunkoid - mapping[1]->chunkoid;
+}
+
 /*
  * Cluster a hypertable.
  *
@@ -2033,6 +2042,8 @@ process_cluster_start(ProcessUtilityArgs *args)
 		ListCell *lc;
 		MemoryContext old, mcxt;
 		LockRelId cluster_index_lockid;
+		ChunkIndexMapping **mappings = NULL;
+		int i;
 
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 
@@ -2098,6 +2109,26 @@ process_cluster_start(ProcessUtilityArgs *args)
 		 */
 		old = MemoryContextSwitchTo(mcxt);
 		chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+
+		if (list_length(chunk_indexes) > 0)
+		{
+			/* Sort the mappings on chunk OID. This makes the verbose output more
+			 * predictible in tests, but isn't strictly necessary. We could also do
+			 * it only for "verbose" output, but this doesn't seem worth it as the
+			 * cost of sorting is quickly amortized over the actual work to cluster
+			 * the chunks. */
+			mappings = palloc(sizeof(ChunkIndexMapping *) * list_length(chunk_indexes));
+
+			i = 0;
+			foreach (lc, chunk_indexes)
+				mappings[i++] = lfirst(lc);
+
+			qsort(mappings,
+				  list_length(chunk_indexes),
+				  sizeof(ChunkIndexMapping *),
+				  chunk_index_mappings_cmp);
+		}
+
 		MemoryContextSwitchTo(old);
 
 		hcache->release_on_commit = false;
@@ -2106,9 +2137,9 @@ process_cluster_start(ProcessUtilityArgs *args)
 		PopActiveSnapshot();
 		CommitTransactionCommand();
 
-		foreach (lc, chunk_indexes)
+		for (i = 0; i < list_length(chunk_indexes); i++)
 		{
-			ChunkIndexMapping *cim = lfirst(lc);
+			ChunkIndexMapping *cim = mappings[i];
 
 			/* Start a new transaction for each relation. */
 			StartTransactionCommand();
