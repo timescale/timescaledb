@@ -21,10 +21,10 @@ INSERT INTO cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1),
        ('2017-01-21T09:00:01', 21.3, 2);
 -- Run cluster
 CLUSTER VERBOSE cluster_test USING cluster_test_time_idx;
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using index scan on "_hyper_1_2_chunk_cluster_test_time_idx"
-INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using index scan on "_hyper_1_1_chunk_cluster_test_time_idx"
 INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using index scan on "_hyper_1_2_chunk_cluster_test_time_idx"
+INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 -- Create a third chunk
 INSERT INTO cluster_test VALUES ('2017-01-22T09:00:01', 19.5, 3);
 -- Show clustered indexes
@@ -40,12 +40,12 @@ WHERE indisclustered = true ORDER BY 1;
 
 -- Reorder just our table
 CLUSTER VERBOSE cluster_test;
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
-INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
 INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
+INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 -- Show clustered indexes, including new chunk
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
@@ -62,21 +62,21 @@ WHERE indisclustered = true ORDER BY 1;
 CLUSTER VERBOSE;
 INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
 INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
 INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "public.cluster_test" using sequential scan and sort
 INFO:  "cluster_test": found 0 removable, 0 nonremovable row versions in 0 pages
 -- Change the clustered index
 CREATE INDEX ON cluster_test (time, location);
 CLUSTER VERBOSE cluster_test using cluster_test_time_location_idx;
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
-INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
 INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 -- Show updated clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
@@ -104,12 +104,12 @@ ORDER BY 1,2;
 (4 rows)
 
 CLUSTER VERBOSE cluster_test;
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
-INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
 INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  "_hyper_1_2_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
 ALTER TABLE cluster_test SET WITHOUT CLUSTER;
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index

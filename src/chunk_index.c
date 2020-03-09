@@ -505,7 +505,7 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func
 				 tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
 	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanCtx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CHUNK_INDEX),
 		.index = catalog_get_index(catalog, CHUNK_INDEX, indexid),
 		.nkeys = nkeys,
@@ -517,7 +517,7 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func
 		.scandirection = ForwardScanDirection,
 	};
 
-	return ts_scanner_scan(&scanCtx);
+	return ts_scanner_scan(&scanctx);
 }
 
 #define chunk_index_scan_update(idxid, scankey, nkeys, tuple_found, tuple_filter, data)            \
