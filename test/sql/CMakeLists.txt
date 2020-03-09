@@ -129,6 +129,12 @@ if (${PG_VERSION_MAJOR} EQUAL "11" OR ${PG_VERSION_MAJOR} GREATER "11")
   )
 endif()
 
+if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
+  list(APPEND TEST_FILES
+    generated_columns.sql
+  )
+endif()
+
 set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
