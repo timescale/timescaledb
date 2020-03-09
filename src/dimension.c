@@ -1199,6 +1199,23 @@ ts_dimension_info_validate(DimensionInfo *info)
 
 	info->set_not_null = !DatumGetBool(datum);
 
+	/* PG12 check that the column is not generated */
+#if PG12_GE
+	{
+		bool isgenerated;
+
+		datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attgenerated, &isnull);
+		Assert(!isnull);
+		isgenerated = (DatumGetChar(datum) == ATTRIBUTE_GENERATED_STORED);
+
+		if (isgenerated)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid partitioning column"),
+					 errhint("Generated columns cannot be used as partitioning dimensions.")));
+	}
+#endif
+
 	ReleaseSysCache(tuple);
 
 	if (NULL != info->ht)
