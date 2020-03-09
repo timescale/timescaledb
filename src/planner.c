@@ -441,29 +441,6 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
 static inline bool
-should_optimize_append(const Path *path)
-{
-	RelOptInfo *rel = path->parent;
-	ListCell *lc;
-
-	if (!ts_guc_constraint_aware_append || constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
-		return false;
-
-	/*
-	 * If there are clauses that have mutable functions, this path is ripe for
-	 * execution-time optimization.
-	 */
-	foreach (lc, rel->baserestrictinfo)
-	{
-		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
-
-		if (contain_mutable_functions((Node *) rinfo->clause))
-			return true;
-	}
-	return false;
-}
-
-static inline bool
 should_chunk_append(PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered, int order_attno)
 {
 	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append)
@@ -691,7 +668,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 															   false,
 															   ordered,
 															   nested_oids);
-					else if (should_optimize_append(*pathptr))
+					else if (ts_constraint_aware_append_possible(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:
@@ -710,7 +687,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(root, rel, *pathptr, false, 0))
 						*pathptr =
 							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
-					else if (should_optimize_append(*pathptr))
+					else if (ts_constraint_aware_append_possible(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				default:

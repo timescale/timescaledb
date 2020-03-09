@@ -8157,25 +8157,22 @@ FROM device_tbl d, metrics_ordered_idx m
 WHERE m.device_id = d.device_id 
 and m.time > '2019-01-01' and m.time < now()
 order by m.v0;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=3 loops=1)
    Sort Key: m.v0
    Sort Method: quicksort 
    ->  Hash Join (actual rows=3 loops=1)
          Hash Cond: (m.device_id = d.device_id)
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=5 loops=1)
-               Hypertable: metrics_ordered_idx
-               Chunks left after exclusion: 1
-               ->  Append (actual rows=5 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk m_1 (actual rows=5 loops=1)
-                           Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < now()))
-                           ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=5 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+         ->  Append (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk m (actual rows=5 loops=1)
+                     Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < now()))
+                     ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=5 loops=1)
+                           Filter: (_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
          ->  Hash (actual rows=7 loops=1)
                Buckets: 1024  Batches: 1 
                ->  Seq Scan on device_tbl d (actual rows=7 loops=1)
-(16 rows)
+(13 rows)
 
 -- no matches in metrics_ordered_idx but one row in device_tbl
 :PREFIX SELECT d.*, m.* 
@@ -8183,8 +8180,8 @@ FROM device_tbl d LEFT OUTER JOIN  metrics_ordered_idx m
 ON m.device_id = d.device_id and m.time > '2019-01-01' and m.time < now()
 WHERE d.device_id = 8 
 order by m.v0;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
    Sort Key: m.v0
    Sort Method: quicksort 
@@ -8193,16 +8190,13 @@ order by m.v0;
          ->  Seq Scan on device_tbl d (actual rows=1 loops=1)
                Filter: (device_id = 8)
                Rows Removed by Filter: 6
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=0 loops=1)
-               Hypertable: metrics_ordered_idx
-               Chunks left after exclusion: 1
-               ->  Append (actual rows=0 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk m_1 (actual rows=0 loops=1)
-                           Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < now()))
-                           ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=0 loops=1)
-                                 Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (device_id = 8))
-                                 Rows Removed by Filter: 5
-(17 rows)
+         ->  Append (actual rows=0 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_15_1442_chunk m (actual rows=0 loops=1)
+                     Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < now()))
+                     ->  Seq Scan on compress_hyper_16_1447_chunk (actual rows=0 loops=1)
+                           Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (device_id = 8))
+                           Rows Removed by Filter: 5
+(14 rows)
 
 -- no matches in device_tbl but 1 row in metrics_ordered_idx
 :PREFIX SELECT d.*, m.* 

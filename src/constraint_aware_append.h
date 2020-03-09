@@ -23,8 +23,9 @@ typedef struct ConstraintAwareAppendState
 
 typedef struct Hypertable Hypertable;
 
-Path *ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath);
-
-void _constraint_aware_append_init(void);
+extern bool ts_constraint_aware_append_possible(Path *path);
+extern Path *ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht,
+													Path *subpath);
+extern void _constraint_aware_append_init(void);
 
 #endif /* TIMESCALEDB_CONSTRAINT_AWARE_APPEND_H */

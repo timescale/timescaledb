@@ -106,14 +106,14 @@ INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 3;
 ANALYZE metrics_timestamptz;
 -- create space partitioned hypertable
-CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float);
+CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int NOT NULL, v1 float, v2 float, v3 text);
 SELECT create_hypertable('metrics_space','time','device_id',3);
      create_hypertable      
 ----------------------------
  (6,public,metrics_space,t)
 (1 row)
 
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75 FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
 ANALYZE metrics_space;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -315,15 +315,15 @@ WHERE time < '2016-03-22'
 AND date_part('dow', time) between 1 and 5
 GROUP BY t
 ORDER BY t DESC;
-                        QUERY PLAN                         
------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  GroupAggregate (actual rows=0 loops=1)
    Group Key: (date_trunc('year'::text, "time"))
    ->  Sort (actual rows=0 loops=1)
          Sort Key: (date_trunc('year'::text, "time")) DESC
          Sort Method: quicksort 
-         ->  Result (actual rows=0 loops=1)
-               One-Time Filter: false
+         ->  Custom Scan (ChunkAppend) on append_test (actual rows=0 loops=1)
+               Chunks excluded during startup: 0
 (7 rows)
 
 -- a parameterized query can safely constify params, so won't be
@@ -421,14 +421,14 @@ psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
-            btime             |       value        
-------------------------------+--------------------
- Fri Mar 03 16:00:00 2017 PST |               22.5
- Sun Apr 02 17:00:00 2017 PDT |                   
- Tue May 02 17:00:00 2017 PDT | 25.700000000000003
- Thu Jun 01 17:00:00 2017 PDT |                   
- Sat Jul 01 17:00:00 2017 PDT |                   
- Mon Jul 31 17:00:00 2017 PDT |               34.1
+            btime             | value 
+------------------------------+-------
+ Fri Mar 03 16:00:00 2017 PST |  22.5
+ Sun Apr 02 17:00:00 2017 PDT |      
+ Tue May 02 17:00:00 2017 PDT |  25.7
+ Thu Jun 01 17:00:00 2017 PDT |      
+ Sat Jul 01 17:00:00 2017 PDT |      
+ Mon Jul 31 17:00:00 2017 PDT |  34.1
 (6 rows)
 
 -- force nested loop join with no materialization. This tests that the
@@ -1276,6 +1276,95 @@ reset enable_material;
                Heap Fetches: 385
 (16 rows)
 
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (VALUES(1)) ORDER BY time;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=1152 loops=1)
+   Order: metrics_space."time"
+   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=767 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         Heap Fetches: 767
+   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
+         Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         Heap Fetches: 385
+(8 rows)
+
+:PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND v3 IN (VALUES('1')) ORDER BY time;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=1152 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=767 loops=1)
+         Sort Key: _hyper_6_23_chunk."time"
+         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=767 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 2301
+         ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 3068
+         ->  Index Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 1534
+   ->  Merge Append (actual rows=385 loops=1)
+         Sort Key: _hyper_6_24_chunk."time"
+         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 1155
+         ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 1540
+         ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0 loops=1)
+               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (v3 = '1'::text)
+               Rows Removed by Filter: 770
+(30 rows)
+
+:PREFIX SELECT * FROM metrics_space
+WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
+  AND v3 NOT IN (VALUES ('1'));
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
+   Chunks excluded during startup: 0
+   Chunks excluded during runtime: 9
+   InitPlan 1 (returns $0)
+     ->  Result (actual rows=1 loops=1)
+   ->  Index Scan using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+         SubPlan 2
+           ->  Result (never executed)
+   ->  Index Scan using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+   ->  Index Scan using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (never executed)
+         Index Cond: ("time" = $0)
+         Filter: (NOT (hashed SubPlan 2))
+(34 rows)
+
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
@@ -1528,31 +1617,31 @@ WHERE time > '2000-01-10'::timestamptz
 ORDER BY time DESC, device_id;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Sort (actual rows=527 loops=1)
+ Sort (actual rows=510 loops=1)
    Sort Key: _hyper_6_30_chunk."time" DESC, _hyper_6_30_chunk.device_id
    Sort Method: quicksort 
-   ->  Append (actual rows=527 loops=1)
-         ->  Sample Scan on _hyper_6_30_chunk (actual rows=40 loops=1)
+   ->  Append (actual rows=510 loops=1)
+         ->  Sample Scan on _hyper_6_30_chunk (actual rows=35 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sample Scan on _hyper_6_27_chunk (actual rows=68 loops=1)
+         ->  Sample Scan on _hyper_6_27_chunk (actual rows=61 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sample Scan on _hyper_6_24_chunk (actual rows=68 loops=1)
+         ->  Sample Scan on _hyper_6_24_chunk (actual rows=61 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sample Scan on _hyper_6_29_chunk (actual rows=61 loops=1)
+         ->  Sample Scan on _hyper_6_29_chunk (actual rows=69 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Rows Removed by Filter: 117
-         ->  Sample Scan on _hyper_6_26_chunk (actual rows=145 loops=1)
+               Rows Removed by Filter: 109
+         ->  Sample Scan on _hyper_6_26_chunk (actual rows=142 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Rows Removed by Filter: 233
-         ->  Sample Scan on _hyper_6_23_chunk (actual rows=145 loops=1)
+               Rows Removed by Filter: 226
+         ->  Sample Scan on _hyper_6_23_chunk (actual rows=142 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Rows Removed by Filter: 233
+               Rows Removed by Filter: 226
 (25 rows)
 
 -- test runtime exclusion
@@ -1888,627 +1977,6 @@ ORDER BY time DESC, device_id;
                Heap Fetches: 3744
 (11 rows)
 
--- test prepared statements
--- executor startup exclusion with no chunks excluded
-PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < now() AND device_id = 1 ORDER BY time;
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=8929 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=1537 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1537
-(18 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=8929 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=1537 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1537
-(18 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=8929 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=1537 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1537
-(18 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=8929 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=1537 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1537
-(18 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=8929 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=1537 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1537
-(18 rows)
-
-DEALLOCATE prep;
--- executor startup exclusion with no chunks excluded and space partitioning
-PREPARE prep AS SELECT time FROM metrics_space WHERE time < now() AND device_id = 1 ORDER BY time;
-:PREFIX EXECUTE prep;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3745 loops=1)
-   Order: metrics_space."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 385
-(12 rows)
-
-:PREFIX EXECUTE prep;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3745 loops=1)
-   Order: metrics_space."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 385
-(12 rows)
-
-:PREFIX EXECUTE prep;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3745 loops=1)
-   Order: metrics_space."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 385
-(12 rows)
-
-:PREFIX EXECUTE prep;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3745 loops=1)
-   Order: metrics_space."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 385
-(12 rows)
-
-:PREFIX EXECUTE prep;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3745 loops=1)
-   Order: metrics_space."time"
-   Chunks excluded during startup: 0
-   ->  Index Only Scan Backward using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 1344
-   ->  Index Only Scan Backward using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=2016 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 2016
-   ->  Index Only Scan Backward using _hyper_6_24_chunk_metrics_space_device_id_time_idx on _hyper_6_24_chunk (actual rows=385 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < now()))
-         Heap Fetches: 385
-(12 rows)
-
-DEALLOCATE prep;
--- executor startup exclusion with chunks excluded
-PREPARE prep AS SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz AND device_id = 1 ORDER BY time;
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=2592 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=1248 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1248
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=2592 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=1248 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1248
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=2592 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=1248 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1248
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=2592 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=1248 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1248
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=2592 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=1344 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1344
-   ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=1248 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-         Heap Fetches: 1248
-(9 rows)
-
-DEALLOCATE prep;
--- runtime exclusion with LATERAL and 2 hypertables
-PREPARE prep AS SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
-:PREFIX EXECUTE prep;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop Left Join (actual rows=26787 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787 loops=1)
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032 loops=1)
-               Heap Fetches: 4032
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=4611 loops=1)
-               Heap Fetches: 4611
-   ->  Limit (actual rows=1 loops=26787)
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2 (actual rows=1 loops=26787)
-               Chunks excluded during runtime: 4
-               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1 (actual rows=1 loops=4032)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4032
-               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1 loops=4611)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4611
-(31 rows)
-
-:PREFIX EXECUTE prep;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop Left Join (actual rows=26787 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787 loops=1)
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032 loops=1)
-               Heap Fetches: 4032
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=4611 loops=1)
-               Heap Fetches: 4611
-   ->  Limit (actual rows=1 loops=26787)
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2 (actual rows=1 loops=26787)
-               Chunks excluded during runtime: 4
-               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1 (actual rows=1 loops=4032)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4032
-               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1 loops=4611)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4611
-(31 rows)
-
-:PREFIX EXECUTE prep;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop Left Join (actual rows=26787 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787 loops=1)
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032 loops=1)
-               Heap Fetches: 4032
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=4611 loops=1)
-               Heap Fetches: 4611
-   ->  Limit (actual rows=1 loops=26787)
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2 (actual rows=1 loops=26787)
-               Chunks excluded during runtime: 4
-               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1 (actual rows=1 loops=4032)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4032
-               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1 loops=4611)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4611
-(31 rows)
-
-:PREFIX EXECUTE prep;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop Left Join (actual rows=26787 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787 loops=1)
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032 loops=1)
-               Heap Fetches: 4032
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=4611 loops=1)
-               Heap Fetches: 4611
-   ->  Limit (actual rows=1 loops=26787)
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2 (actual rows=1 loops=26787)
-               Chunks excluded during runtime: 4
-               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1 (actual rows=1 loops=4032)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4032
-               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1 loops=4611)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4611
-(31 rows)
-
-:PREFIX EXECUTE prep;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop Left Join (actual rows=26787 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787 loops=1)
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032 loops=1)
-               Heap Fetches: 4032
-         ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_3 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_4 (actual rows=6048 loops=1)
-               Heap Fetches: 6048
-         ->  Index Only Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=4611 loops=1)
-               Heap Fetches: 4611
-   ->  Limit (actual rows=1 loops=26787)
-         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m2 (actual rows=1 loops=26787)
-               Chunks excluded during runtime: 4
-               ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_1 (actual rows=1 loops=4032)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4032
-               ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m2_3 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m2_4 (actual rows=1 loops=6048)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 6048
-               ->  Index Only Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1 loops=4611)
-                     Index Cond: ("time" = m1."time")
-                     Heap Fetches: 4611
-(31 rows)
-
-DEALLOCATE prep;
--- executor startup exclusion with subquery
-PREPARE prep AS SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
-:PREFIX EXECUTE prep;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 4032
-   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 3744
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 4032
-   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 3744
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 4032
-   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 3744
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 4032
-   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 3744
-(9 rows)
-
-:PREFIX EXECUTE prep;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776 loops=1)
-   Order: metrics_timestamptz."time"
-   Chunks excluded during startup: 3
-   ->  Index Only Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 4032
-   ->  Index Only Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-         Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         Heap Fetches: 3744
-(9 rows)
-
-DEALLOCATE prep;
--- test constraint exclusion for subqueries with ConstraintAwareAppend
-SET timescaledb.enable_chunk_append TO false;
-PREPARE prep AS SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
-:PREFIX EXECUTE prep;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
-   Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
-   ->  Merge Append (actual rows=7776 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
-         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 4032
-         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 3744
-(11 rows)
-
-:PREFIX EXECUTE prep;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
-   Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
-   ->  Merge Append (actual rows=7776 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
-         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 4032
-         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 3744
-(11 rows)
-
-:PREFIX EXECUTE prep;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
-   Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
-   ->  Merge Append (actual rows=7776 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
-         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 4032
-         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 3744
-(11 rows)
-
-:PREFIX EXECUTE prep;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
-   Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
-   ->  Merge Append (actual rows=7776 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
-         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 4032
-         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 3744
-(11 rows)
-
-:PREFIX EXECUTE prep;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
-   Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
-   ->  Merge Append (actual rows=7776 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
-         ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 4032
-         ->  Index Only Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744 loops=1)
-               Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 3744
-(11 rows)
-
-DEALLOCATE prep;
-RESET timescaledb.enable_chunk_append;
 -- test LIMIT pushdown
 -- no aggregates/window functions/SRF should pushdown limit
 :PREFIX SELECT FROM metrics_timestamptz ORDER BY time LIMIT 1;
@@ -2648,7 +2116,7 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:366: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit
