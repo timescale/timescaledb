@@ -15,7 +15,9 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/plannodes.h>
+#include <nodes/parsenodes.h>
 #include <optimizer/plancat.h>
+#include <optimizer/cost.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/lsyscache.h>
@@ -34,6 +36,7 @@
 #include "constraint_aware_append.h"
 #include "hypertable.h"
 #include "chunk_append/transform.h"
+#include "guc.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -557,6 +560,48 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 	return &path->cpath.path;
 }
 
+bool
+ts_constraint_aware_append_possible(Path *path)
+{
+	RelOptInfo *rel = path->parent;
+	ListCell *lc;
+	int num_children;
+
+	if (ts_guc_disable_optimizations || !ts_guc_constraint_aware_append ||
+		constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
+		return false;
+
+	switch (nodeTag(path))
+	{
+		case T_AppendPath:
+			num_children = list_length(castNode(AppendPath, path)->subpaths);
+			break;
+		case T_MergeAppendPath:
+			num_children = list_length(castNode(MergeAppendPath, path)->subpaths);
+			break;
+		default:
+			return false;
+	}
+
+	/* Never use constraint-aware append with only one child, since PG12 will
+	 * later prune the (Merge)Append node from such plans, leaving us with an
+	 * unexpected child node. */
+	if (num_children <= 1)
+		return false;
+
+	/*
+	 * If there are clauses that have mutable functions, this path is ripe for
+	 * execution-time optimization.
+	 */
+	foreach (lc, rel->baserestrictinfo)
+	{
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+		if (contain_mutable_functions((Node *) rinfo->clause))
+			return true;
+	}
+	return false;
+}
 void
 _constraint_aware_append_init(void)
 {
