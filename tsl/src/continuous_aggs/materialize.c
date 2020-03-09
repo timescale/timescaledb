@@ -811,6 +811,7 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 		foreach (lc2, invalidations)
 		{
 			Invalidation *entry = (Invalidation *) lfirst(lc2);
+			int64 lowest_modified_value = entry->lowest_modified_value;
 			int64 minimum_invalidation_time =
 				ts_continuous_aggs_get_minimum_invalidation_time(entry->modification_time,
 																 ignore_invalidation_older_than);
@@ -818,7 +819,7 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 				continue;
 
 			if (entry->lowest_modified_value < minimum_invalidation_time)
-				entry->lowest_modified_value = minimum_invalidation_time;
+				lowest_modified_value = minimum_invalidation_time;
 
 			values[AttrNumberGetAttrOffset(
 				Anum_continuous_aggs_materialization_invalidation_log_materialization_id)] =
@@ -828,7 +829,7 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 				Int64GetDatum(entry->modification_time);
 			values[AttrNumberGetAttrOffset(
 				Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value)] =
-				Int64GetDatum(entry->lowest_modified_value);
+				Int64GetDatum(lowest_modified_value);
 			values[AttrNumberGetAttrOffset(
 				Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value)] =
 				Int64GetDatum(entry->greatest_modified_value);
