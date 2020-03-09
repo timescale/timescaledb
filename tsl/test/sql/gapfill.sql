@@ -1239,10 +1239,10 @@ GROUP BY 1;
 
 -- time_bucket_gapfill with now() as start
 SELECT
- time_bucket_gapfill('1d'::interval,t)
+ time_bucket_gapfill('1h'::interval,t)
 FROM (VALUES (now()),(now())) v(t)
 WHERE
- t >= now() AND t < now() - '1d'::interval
+ t >= now() AND t < now() - '1h'::interval
 GROUP BY 1;
 
 -- time_bucket_gapfill with multiple constraints
