@@ -37,12 +37,10 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 \c postgres :ROLE_SUPERUSER
 
 \setenv PGOPTIONS '--client-min-messages=warning'
-\! ${PG_BINDIR}/pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
-\! ${PG_BINDIR}/dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
-\! ${PG_BINDIR}/createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
+\! utils/pg_dump_aux_dump.sh dump/instmeta.sql
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
 -- Redirect to /dev/null to suppress NOTICE
-\! ${PG_BINDIR}/pg_restore -h ${TEST_PGHOST} -U super_user -d "${TEST_DBNAME}" dump/instmeta.sql > /dev/null 2>&1
+\! utils/pg_dump_aux_restore.sh dump/instmeta.sql
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
