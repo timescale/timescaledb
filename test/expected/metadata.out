@@ -80,20 +80,18 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 -- Now make sure that only the exported_uuid is exported on pg_dump
 \c postgres :ROLE_SUPERUSER
 \setenv PGOPTIONS '--client-min-messages=warning'
-\! ${PG_BINDIR}/pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+\! utils/pg_dump_aux_dump.sh dump/instmeta.sql
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   hypertable
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: NOTICE: there are circular foreign-key constraints on this table:
+pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump:   chunk
 pg_dump: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: Consider using a full dump instead of a --data-only dump to avoid this problem.
-\! ${PG_BINDIR}/dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
-\! ${PG_BINDIR}/createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
 -- Redirect to /dev/null to suppress NOTICE
-\! ${PG_BINDIR}/pg_restore -h ${TEST_PGHOST} -U super_user -d "${TEST_DBNAME}" dump/instmeta.sql > /dev/null 2>&1
+\! utils/pg_dump_aux_restore.sh dump/instmeta.sql
 ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Should have all 3 row, because pg_dump includes the insertion of uuid and timestamp.

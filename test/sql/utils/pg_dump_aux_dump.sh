@@ -1,7 +1,8 @@
-export PGOPTIONS
-
-DUMPFILE=$1
+DUMPFILE=${DUMPFILE:-$1}
+# Override PGOPTIONS to remove verbose output
 PGOPTIONS='--client-min-messages=warning'
+
+export PGOPTIONS
 
 # PG12 changed client logging so NOTICE messages are now warning.
 # We adopt this also for older PG versions to make tests compatible.
