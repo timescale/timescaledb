@@ -497,9 +497,9 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 				AttrNumber segment_max_attr_number =
 					get_attnum(compressed_table->rd_id, segment_max_col_name);
 				if (segment_min_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column %s", segment_min_col_name);
+					elog(ERROR, "couldn't find metadata column \"%s\"", segment_min_col_name);
 				if (segment_max_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column %s", segment_max_col_name);
+					elog(ERROR, "couldn't find metadata column \"%s\"", segment_max_col_name);
 				segment_min_attr_offset = AttrNumberGetAttrOffset(segment_min_attr_number);
 				segment_max_attr_offset = AttrNumberGetAttrOffset(segment_max_attr_number);
 				segment_min_max_builder =
@@ -518,7 +518,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		{
 			if (column_attr->atttypid != compressed_column_attr->atttypid)
 				elog(ERROR,
-					 "expected segment by column '%s' to be same type as uncompressed column",
+					 "expected segment by column \"%s\" to be same type as uncompressed column",
 					 compression_info->attname.data);
 			*column = (PerColumn){
 				.segment_info = segment_info_new(column_attr),

@@ -260,7 +260,7 @@ FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_drop_chunks_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
-ERROR:  cannot add drop chunks policy to compresed hypertable "_compressed_hypertable_15"
+ERROR:  cannot add drop chunks policy to compressed hypertable "_compressed_hypertable_15"
 --Constraint checking for compression
 create table fortable(col integer primary key);
 create table  table_constr( device_id integer,
