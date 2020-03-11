@@ -61,7 +61,7 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid, Oid older_than_ty
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot add drop chunks policy to compresed hypertable \"%s\"",
+					 errmsg("cannot add drop chunks policy to compressed hypertable \"%s\"",
 							get_rel_name(user_htoid)),
 					 errhint("Please add the policy to the corresponding uncompressed hypertable "
 							 "instead.")));
