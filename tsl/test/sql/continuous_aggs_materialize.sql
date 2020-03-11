@@ -655,3 +655,44 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
 
 SELECT view_name, refresh_lag, max_interval_per_job
     FROM timescaledb_information.continuous_aggregates ORDER BY 1;
+
+-- test timezone is respected when materializing cagg with TIMESTAMP time column
+RESET timescaledb.current_timestamp_mock;
+RESET client_min_messages;
+SET SESSION timezone TO 'GMT+5';
+
+CREATE TABLE timezone_test(time timestamp NOT NULL);
+SELECT table_name FROM create_hypertable('timezone_test','time');
+INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
+
+CREATE VIEW timezone_test_summary
+    WITH (timescaledb.continuous)
+    AS SELECT time_bucket('5m', time)
+        FROM timezone_test
+        GROUP BY 1;
+
+REFRESH MATERIALIZED VIEW timezone_test_summary;
+
+-- this must return 1 as only 1 row is in the materialization interval
+SELECT count(*) FROM timezone_test_summary;
+DROP TABLE timezone_test CASCADE;
+
+-- repeat test with timezone with negative offset
+SET SESSION timezone TO 'GMT-5';
+
+CREATE TABLE timezone_test(time timestamp NOT NULL);
+SELECT table_name FROM create_hypertable('timezone_test','time');
+INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
+
+CREATE VIEW timezone_test_summary
+    WITH (timescaledb.continuous)
+    AS SELECT time_bucket('5m', time)
+        FROM timezone_test
+        GROUP BY 1;
+
+REFRESH MATERIALIZED VIEW timezone_test_summary;
+
+-- this must return 1 as only 1 row is in the materialization interval
+SELECT count(*) FROM timezone_test_summary;
+DROP TABLE timezone_test CASCADE;
+

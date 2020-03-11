@@ -374,6 +374,14 @@ ts_get_now_internal(Dimension *open_dim)
 #else
 		Datum now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
 #endif
+
+		/*
+		 * If the type of the partitioning column is TIMESTAMP or DATE
+		 * we need to adjust the return value for the local timezone.
+		 */
+		if (dim_post_part_type == TIMESTAMPOID || dim_post_part_type == DATEOID)
+			now_datum = DirectFunctionCall1(timestamptz_timestamp, now_datum);
+
 		return ts_time_value_to_internal(now_datum, TIMESTAMPTZOID);
 	}
 }
