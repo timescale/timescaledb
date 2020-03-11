@@ -139,7 +139,7 @@ chunk_dml_blocker_trigger_add(Oid relid)
 	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
 
 	if (!OidIsValid(objaddr.objectId))
-		elog(ERROR, "could not create dml blocker trigger");
+		elog(ERROR, "could not create DML blocker trigger");
 
 	return;
 }
@@ -180,7 +180,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	/* user has to be the owner of the compression table too */
 	ts_hypertable_permissions_check(compress_ht->main_table_relid, GetUserId());
 
-	if (!srcht->space) // something is wrong
+	if (!srcht->space) /* something is wrong */
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
 	/* refetch the srcchunk with all attributes filled in */
@@ -216,10 +216,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 					AccessShareLock);
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
-	// get compression properties for hypertable
+	/* get compression properties for hypertable */
 	htcols_list = ts_hypertable_compression_get(cxt.srcht->fd.id);
 	htcols_listlen = list_length(htcols_list);
-	// create compressed chunk DDL and compress the data
+	/* create compressed chunk DDL and compress the data */
 	compress_ht_chunk = create_compress_chunk_table(cxt.compress_ht, cxt.srcht_chunk);
 	/* convert list to array of pointers for compress_chunk */
 	colinfo_array = palloc(sizeof(ColumnCompressionInfo *) * htcols_listlen);
@@ -334,7 +334,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
 	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unkown chunk id %d", uncompressed_chunk_id);
+		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
 
 	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
 							   uncompressed_chunk_id,

@@ -609,7 +609,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 							  get_tablespace_name(get_rel_tablespace(src_chunk->table_id)));
 
 	if (!OidIsValid(compress_chunk->table_id))
-		elog(ERROR, "could not create compress chunk table");
+		elog(ERROR, "could not create compressed chunk table");
 
 	/* Create the chunk's constraints*/
 	ts_chunk_constraints_create(compress_chunk->constraints,
@@ -729,13 +729,13 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 		{
 			int j, numkeys;
 			int16 *attnums;
-			bool isNull;
+			bool is_null;
 			/* Extract the conkey array, ie, attnums of PK's columns */
 			Datum adatum = heap_getattr(tuple,
 										Anum_pg_constraint_conkey,
 										RelationGetDescr(pg_constr),
-										&isNull);
-			if (isNull)
+										&is_null);
+			if (is_null)
 				elog(ERROR, "null conkey for constraint %u", HeapTupleGetOid(tuple));
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
 			numkeys = ARR_DIMS(arr)[0];
@@ -763,7 +763,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 										"column for compression",
 										NameStr(form->conname),
 										NameStr(col_def->attname)),
-								 errhint("Only segment by columns can be used in foreign key"
+								 errhint("Only segment by columns can be used in foreign key "
 										 "constraints on hypertables that are compressed.")));
 					}
 					else
