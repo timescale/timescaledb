@@ -296,3 +296,29 @@ FROM _timescaledb_catalog.hypertable ht
 WHERE ht.table_name='datatype_test'
 ORDER BY attname;
 
+--try to compress a hypertable that has a continuous aggregate
+CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
+SELECT create_hypertable('metrics','time');
+
+INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
+
+-- check expressions in view definition
+CREATE VIEW cagg_expr WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1d', time) AS time,
+  'Const'::text AS Const,
+  4.3::numeric AS "numeric",
+  first(metrics,time),
+  CASE WHEN true THEN 'foo' ELSE 'bar' END,
+  COALESCE(NULL,'coalesce'),
+  avg(v1) + avg(v2) AS avg1,
+  avg(v1+v2) AS avg2
+FROM metrics
+GROUP BY 1;
+
+SET timescaledb.current_timestamp_mock = '2000-01-10';
+REFRESH MATERIALIZED VIEW cagg_expr;
+SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
+
+ALTER TABLE metrics set(timescaledb.compress);
