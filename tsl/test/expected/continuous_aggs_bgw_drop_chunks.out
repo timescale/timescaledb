@@ -113,3 +113,15 @@ SELECT count(c) from show_chunks('_timescaledb_internal._materialized_hypertable
      1
 (1 row)
 
+SELECT remove_drop_chunks_policy('drop_chunks_view1');
+ remove_drop_chunks_policy 
+---------------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT remove_drop_chunks_policy('unknown');
+ERROR:  relation "unknown" does not exist at character 34
+SELECT remove_drop_chunks_policy('1');
+ERROR:  OID 1 does not refer to a hypertable or continuous aggregate
+\set ON_ERROR_STOP 1
