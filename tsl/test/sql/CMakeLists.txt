@@ -14,6 +14,7 @@ set(TEST_FILES_DEBUG
   continuous_aggs.sql
   continuous_aggs_bgw.sql
   continuous_aggs_bgw_drop_chunks.sql
+  continuous_aggs_ddl.sql
   continuous_aggs_dump.sql
   continuous_aggs_materialize.sql
   continuous_aggs_multi.sql
@@ -29,8 +30,6 @@ set(TEST_TEMPLATES
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
-    # parallel plans are different between postgres versions
-    continuous_aggs_ddl.sql.in
     #current_timestamp_mock available only in debug mode
     continuous_aggs_query.sql.in
     )
@@ -88,4 +87,3 @@ foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
   file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
 endforeach(TEST_FILE)
-

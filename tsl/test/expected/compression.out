@@ -863,3 +863,44 @@ ORDER BY attname;
  timestamptz_column | COMPRESSION_ALGORITHM_DELTADELTA
 (14 rows)
 
+--try to compress a hypertable that has a continuous aggregate
+CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
+SELECT create_hypertable('metrics','time');
+NOTICE:  adding not-null constraint to column "time"
+   create_hypertable   
+-----------------------
+ (13,public,metrics,t)
+(1 row)
+
+INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
+-- check expressions in view definition
+CREATE VIEW cagg_expr WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1d', time) AS time,
+  'Const'::text AS Const,
+  4.3::numeric AS "numeric",
+  first(metrics,time),
+  CASE WHEN true THEN 'foo' ELSE 'bar' END,
+  COALESCE(NULL,'coalesce'),
+  avg(v1) + avg(v2) AS avg1,
+  avg(v1+v2) AS avg2
+FROM metrics
+GROUP BY 1;
+NOTICE:  adding index _materialized_hypertable_14_const_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(const, time)
+NOTICE:  adding index _materialized_hypertable_14_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(numeric, time)
+NOTICE:  adding index _materialized_hypertable_14_case_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(case, time)
+NOTICE:  adding index _materialized_hypertable_14_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(coalesce, time)
+SET timescaledb.current_timestamp_mock = '2000-01-10';
+REFRESH MATERIALIZED VIEW cagg_expr;
+SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
+             time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
+------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
+ Fri Dec 31 16:00:00 1999 PST | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sat Jan 01 16:00:00 2000 PST | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sun Jan 02 16:00:00 2000 PST | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Mon Jan 03 16:00:00 2000 PST | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+(5 rows)
+
+ALTER TABLE metrics set(timescaledb.compress);
