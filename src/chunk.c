@@ -442,7 +442,7 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 	chunk_scan_ctx_destroy(&scanctx);
 }
 
-TSDLLEXPORT int
+int
 ts_chunk_add_constraints(Chunk *chunk)
 {
 	int num_added;
@@ -1419,7 +1419,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 	return chunks_return_srf(fcinfo);
 }
 
-TSDLLEXPORT Chunk *
+Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
 								  MemoryContext mctx, uint64 *num_chunks_returned,
@@ -1737,14 +1737,19 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 						   fail_if_not_found);
 }
 
-TSDLLEXPORT Chunk *
+Chunk *
 ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 {
 	char *schema;
 	char *table;
 
 	if (!OidIsValid(relid))
-		return NULL;
+	{
+		if (fail_if_not_found)
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		else
+			return NULL;
+	}
 
 	schema = get_namespace_name(get_rel_namespace(relid));
 	table = get_rel_name(relid);
@@ -1754,7 +1759,7 @@ ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 /* Lookup a chunk_id from a chunk's relid.
  * Optimize with memoization
  */
-TSDLLEXPORT Datum
+Datum
 ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 {
 	static Oid last_relid = InvalidOid;
