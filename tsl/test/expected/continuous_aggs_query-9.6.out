@@ -49,8 +49,16 @@ from conditions
 group by time_bucket('1day', timec), location;
 NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+--compute time_bucketted max+bucket_width for the materialized view
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
 REFRESH MATERIALIZED VIEW mat_m1;
-LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
+LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
 --test first/last
 create or replace view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
@@ -61,8 +69,15 @@ group by time_bucket('1day', timec), location;
 NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, timec)
 --time that refresh assumes as now() for repeatability
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
+         time_bucket          
+------------------------------
+ Sat Nov 03 17:00:00 2018 PDT
+(1 row)
+
 REFRESH MATERIALIZED VIEW mat_m2;
-LOG:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Fri Dec 28 16:00:00 2018 PST
+LOG:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as

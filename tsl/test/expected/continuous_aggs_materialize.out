@@ -1493,3 +1493,107 @@ SELECT count(*) FROM timezone_test_summary;
 DROP TABLE timezone_test CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_44_chunk
+-- TESTS for integer based table to verify watermark limited by max value of time column and not by now
+CREATE TABLE continuous_agg_int(time BIGINT, data BIGINT);
+SELECT create_hypertable('continuous_agg_int', 'time', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable         
+----------------------------------
+ (24,public,continuous_agg_int,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_continuous_agg_max() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT BIGINT '9223372036854775807' $$;
+SELECT set_integer_now_func('continuous_agg_int', 'integer_now_continuous_agg_max');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE VIEW continuous_agg_int_max 
+    WITH (timescaledb.continuous, timescaledb.refresh_lag='0')
+    AS SELECT time_bucket('10', time), COUNT(data) as value
+        FROM continuous_agg_int
+        GROUP BY 1;
+INSERT INTO continuous_agg_int values (-10, 100), (1,100), (10, 100);
+select chunk_table, ranges from chunk_relation_size('continuous_agg_int');
+               chunk_table                |   ranges    
+------------------------------------------+-------------
+ _timescaledb_internal._hyper_24_45_chunk | {"[-10,0)"}
+ _timescaledb_internal._hyper_24_46_chunk | {"[0,10)"}
+ _timescaledb_internal._hyper_24_47_chunk | {"[10,20)"}
+(3 rows)
+
+REFRESH MATERIALIZED VIEW continuous_agg_int_max;
+REFRESH MATERIALIZED VIEW continuous_agg_int_max;
+REFRESH MATERIALIZED VIEW continuous_agg_int_max;
+select * from continuous_agg_int_max;
+ time_bucket | value 
+-------------+-------
+         -10 |     1
+           0 |     1
+          10 |     1
+(3 rows)
+
+--watermark is 20
+SELECT view_name, completed_threshold, invalidation_threshold
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'continuous_agg_int_max';
+       view_name        | completed_threshold | invalidation_threshold 
+------------------------+---------------------+------------------------
+ continuous_agg_int_max | 20                  | 20
+(1 row)
+
+-- TEST that watermark is limited by max value from data and not by now() 
+CREATE TABLE continuous_agg_ts_max_t(timecol TIMESTAMPTZ, data integer);
+SELECT create_hypertable('continuous_agg_ts_max_t', 'timecol', chunk_time_interval=>'365 days'::interval);
+NOTICE:  adding not-null constraint to column "timecol"
+           create_hypertable           
+---------------------------------------
+ (26,public,continuous_agg_ts_max_t,t)
+(1 row)
+
+CREATE VIEW continuous_agg_ts_max_view
+    WITH (timescaledb.continuous, timescaledb.max_interval_per_job='365 days', timescaledb.refresh_lag='-2 hours')
+    AS SELECT time_bucket('2 hours', timecol), COUNT(data) as value
+        FROM continuous_agg_ts_max_t
+        GROUP BY 1;
+INSERT INTO continuous_agg_ts_max_t
+    values ('1969-01-01 1:00'::timestamptz, 10);
+REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;
+SELECT view_name, completed_threshold, invalidation_threshold
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'continuous_agg_ts_max_view';
+         view_name          |  completed_threshold   | invalidation_threshold 
+----------------------------+------------------------+------------------------
+ continuous_agg_ts_max_view | 1969-01-01 03:00:00+05 | 1969-01-01 03:00:00+05
+(1 row)
+
+INSERT INTO continuous_agg_ts_max_t
+    values ('1970-01-01 1:00'::timestamptz, 10);
+select chunk_table, ranges from chunk_relation_size('continuous_agg_ts_max_t');
+               chunk_table                |                ranges                 
+------------------------------------------+---------------------------------------
+ _timescaledb_internal._hyper_26_50_chunk | {"[-63072000000000,-31536000000000)"}
+ _timescaledb_internal._hyper_26_52_chunk | {"[-31536000000000,0)"}
+(2 rows)
+
+REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;
+REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;
+SELECT view_name, completed_threshold, invalidation_threshold
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'continuous_agg_ts_max_view';
+         view_name          |  completed_threshold   | invalidation_threshold 
+----------------------------+------------------------+------------------------
+ continuous_agg_ts_max_view | 1970-01-01 03:00:00+05 | 1970-01-01 03:00:00+05
+(1 row)
+
+-- no more new data to materialize, threshold should not change
+REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;
+SELECT view_name, completed_threshold, invalidation_threshold
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'continuous_agg_ts_max_view';
+         view_name          |  completed_threshold   | invalidation_threshold 
+----------------------------+------------------------+------------------------
+ continuous_agg_ts_max_view | 1970-01-01 03:00:00+05 | 1970-01-01 03:00:00+05
+(1 row)
+

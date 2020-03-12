@@ -101,7 +101,7 @@ NOTICE:  adding index _materialized_hypertable_4_location_bucket_idx ON _timesca
 SET client_min_messages TO LOG;
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
 REFRESH MATERIALIZED VIEW mat_before;
-LOG:  materializing continuous aggregate public.mat_before: nothing to invalidate, new range up to Sun Feb 24 16:00:00 2019 PST
+LOG:  materializing continuous aggregate public.mat_before: nothing to invalidate, new range up to Sun Jan 06 16:00:00 2019 PST
 SELECT count(*) FROM conditions_before;
  count 
 -------

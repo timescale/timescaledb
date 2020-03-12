@@ -53,6 +53,9 @@ from conditions
 group by time_bucket('1day', timec), location;
 
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+--compute time_bucketted max+bucket_width for the materialized view
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
 REFRESH MATERIALIZED VIEW mat_m1;
 
 --test first/last
@@ -64,6 +67,8 @@ from conditions
 group by time_bucket('1day', timec), location;
 --time that refresh assumes as now() for repeatability
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
+SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
+FROM ( select max(timec)as timeval from conditions ) as q; 
 REFRESH MATERIALIZED VIEW mat_m2;
 
 --normal view --

@@ -23,7 +23,7 @@ lock_mattable
 
                
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1; <waiting ...>
-LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 35
+LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 30
 step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2; <waiting ...>
 step UnlockCompleted: ROLLBACK;
 step Refresh2: <... completed>
@@ -49,7 +49,7 @@ step Setup2:
 
 LOG:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 30
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1;
-LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 35
+LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 30
 step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2;
 step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE;
 step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
@@ -59,7 +59,7 @@ lock_mattable
                
 step I1: INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i;
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1; <waiting ...>
-LOG:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold of 35 as of 29
+LOG:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold of 30 as of 29
 LOG:  materializing continuous aggregate public.continuous_view_2: processing invalidations, no new range
 step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2; <waiting ...>
 step UnlockCompleted: ROLLBACK;
@@ -96,7 +96,7 @@ step Setup2:
 step AlterLag1: alter view continuous_view_1 set (timescaledb.refresh_lag = 10);
 LOG:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 15
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1;
-LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 35
+LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 30
 step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2;
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
 bkt            cnt            
@@ -114,7 +114,7 @@ lock_mattable
                
 step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
 step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1; <waiting ...>
-LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 50
+LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 45
 step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2; <waiting ...>
 step UnlockCompleted: ROLLBACK;
 step Refresh2: <... completed>
