@@ -217,16 +217,44 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 Datum
 drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 {
-	Oid hypertable_oid = PG_GETARG_OID(0);
+	Oid table_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
+	Cache *hcache;
+
+	Hypertable *hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, true, &hcache);
+	if (!hypertable)
+	{
+		char *view_name = get_rel_name(table_oid);
+		if (!view_name)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("OID %d does not refer to a hypertable or continuous aggregate",
+							table_oid)));
+		}
+		else
+		{
+			char *schema_name = get_namespace_name(get_rel_namespace(table_oid));
+			ContinuousAgg *ca = ts_continuous_agg_find_by_view_name(schema_name, view_name);
+			if (!ca)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("no hypertable or continuous aggregate by the name \"%s\" exists",
+								view_name)));
+			hypertable = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
+		}
+	}
+
+	Assert(hypertable != NULL);
 
 	/* Remove the job, then remove the policy */
-	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
-	BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_hypertable(ht_id);
+	BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable->fd.id);
+
+	ts_cache_release(hcache);
 
 	license_enforce_enterprise_enabled();
 	license_print_expiration_warning_if_needed();
-	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
+	ts_hypertable_permissions_check(table_oid, GetUserId());
 
 	if (policy == NULL)
 	{
@@ -238,7 +266,7 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 		{
 			ereport(NOTICE,
 					(errmsg("drop chunks policy does not exist on hypertable \"%s\", skipping",
-							get_rel_name(hypertable_oid))));
+							get_rel_name(table_oid))));
 			PG_RETURN_NULL();
 		}
 	}

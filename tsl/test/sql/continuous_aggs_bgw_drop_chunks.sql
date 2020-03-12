@@ -83,3 +83,9 @@ SELECT add_drop_chunks_policy( 'drop_chunks_view1', older_than=> 10, cascade_to_
 SELECT alter_job_schedule(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);
 SELECT count(c) from show_chunks('_timescaledb_internal._materialized_hypertable_2') as c ;
+SELECT remove_drop_chunks_policy('drop_chunks_view1');
+
+\set ON_ERROR_STOP 0
+SELECT remove_drop_chunks_policy('unknown');
+SELECT remove_drop_chunks_policy('1');
+\set ON_ERROR_STOP 1
