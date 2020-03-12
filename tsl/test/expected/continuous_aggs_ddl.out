@@ -20,25 +20,6 @@ select table_name from create_hypertable('conditions', 'timec');
  conditions
 (1 row)
 
--- check that GRANTS work correctly
-\c :TEST_DBNAME :ROLE_SUPERUSER
-create  view mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum( temperature ), min(location)
-from conditions
-group by time_bucket('1week', timec);
-GRANT select on mat_m1 to :ROLE_DEFAULT_PERM_USER;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-select count(*) from mat_m1;
-ERROR:  permission denied for view mat_m1
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-select count(*) from mat_m1;
- count 
--------
-     0
-(1 row)
-
-\set ON_ERROR_STOP 1
 -- schema tests
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA rename_schema;
@@ -49,7 +30,7 @@ SELECT create_hypertable('foo', 'time');
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
- (3,public,foo,t)
+ (2,public,foo,t)
 (1 row)
 
 CREATE VIEW rename_test WITH ( timescaledb.continuous)
@@ -60,18 +41,16 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
 ------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- public           | rename_test    | _timescaledb_internal | _partial_view_4
-(2 rows)
+ public           | rename_test    | _timescaledb_internal | _partial_view_3
+(1 row)
 
 ALTER VIEW rename_test SET SCHEMA rename_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
 ------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- rename_schema    | rename_test    | _timescaledb_internal | _partial_view_4
-(2 rows)
+ rename_schema    | rename_test    | _timescaledb_internal | _partial_view_3
+(1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -89,20 +68,18 @@ ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET SCHEMA public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- rename_schema    | rename_test    | public                | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ rename_schema    | rename_test    | public              | _partial_view_3
+(1 row)
 
 --alter direct view schema
 SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  direct_view_schema   | direct_view_name 
 ------------------+----------------+-----------------------+------------------
- public           | mat_m1         | _timescaledb_internal | _direct_view_2
- rename_schema    | rename_test    | _timescaledb_internal | _direct_view_4
-(2 rows)
+ rename_schema    | rename_test    | _timescaledb_internal | _direct_view_3
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
@@ -110,51 +87,46 @@ ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
-------------------+----------------+-----------------------+-------------------+-----------------------+------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
- rename_schema    | rename_test    | public                | _partial_view_4   | public                | _direct_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name 
+------------------+----------------+---------------------+-------------------+--------------------+------------------
+ rename_schema    | rename_test    | public              | _partial_view_3   | public             | _direct_view_3
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- new_name_schema  | rename_test    | public                | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ new_name_schema  | rename_test    | public              | _partial_view_3
+(1 row)
 
 ALTER VIEW :"PART_VIEW_NAME" SET SCHEMA new_name_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- new_name_schema  | rename_test    | new_name_schema       | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ new_name_schema  | rename_test    | new_name_schema     | _partial_view_3
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- foo_name_schema  | rename_test    | foo_name_schema       | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ foo_name_schema  | rename_test    | foo_name_schema     | _partial_view_3
+(1 row)
 
 ALTER VIEW foo_name_schema.rename_test SET SCHEMA public;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- public           | rename_test    | foo_name_schema       | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ public           | rename_test    | foo_name_schema     | _partial_view_3
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
@@ -162,20 +134,18 @@ ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 SET client_min_messages TO LOG;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | mat_m1         | _timescaledb_internal | _partial_view_2
- public           | rename_test    | rename_schema         | _partial_view_4
-(2 rows)
+ user_view_schema | user_view_name | partial_view_schema | partial_view_name 
+------------------+----------------+---------------------+-------------------
+ public           | rename_test    | rename_schema       | _partial_view_3
+(1 row)
 
 ALTER VIEW rename_test RENAME TO rename_c_aggregate;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name 
-------------------+--------------------+-----------------------+-------------------
- public           | mat_m1             | _timescaledb_internal | _partial_view_2
- public           | rename_c_aggregate | rename_schema         | _partial_view_4
-(2 rows)
+ user_view_schema |   user_view_name   | partial_view_schema | partial_view_name 
+------------------+--------------------+---------------------+-------------------
+ public           | rename_c_aggregate | rename_schema       | _partial_view_3
+(1 row)
 
 SELECT * FROM rename_c_aggregate;
  time_bucket | count 
@@ -186,26 +156,23 @@ ALTER VIEW rename_schema.:"PART_VIEW_NAME" RENAME TO partial_view;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
-------------------+--------------------+-----------------------+-------------------+-----------------------+------------------
- public           | mat_m1             | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
- public           | rename_c_aggregate | rename_schema         | partial_view      | public                | _direct_view_4
-(2 rows)
+ user_view_schema |   user_view_name   | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name 
+------------------+--------------------+---------------------+-------------------+--------------------+------------------
+ public           | rename_c_aggregate | rename_schema       | partial_view      | public             | _direct_view_3
+(1 row)
 
 --rename direct view
 ALTER VIEW :"DIR_VIEW_NAME" RENAME TO direct_view;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema |   user_view_name   |  partial_view_schema  | partial_view_name |  direct_view_schema   | direct_view_name 
-------------------+--------------------+-----------------------+-------------------+-----------------------+------------------
- public           | mat_m1             | _timescaledb_internal | _partial_view_2   | _timescaledb_internal | _direct_view_2
- public           | rename_c_aggregate | rename_schema         | partial_view      | public                | direct_view
-(2 rows)
+ user_view_schema |   user_view_name   | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name 
+------------------+--------------------+---------------------+-------------------+--------------------+------------------
+ public           | rename_c_aggregate | rename_schema       | partial_view      | public             | direct_view
+(1 row)
 
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 2 other objects
 DROP TABLE foo CASCADE;
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
@@ -260,9 +227,9 @@ SELECT drop_chunks(
     newer_than => -20,
     verbose => true,
     cascade_to_materializations=>true);
-INFO:  dropping chunk _timescaledb_internal._hyper_5_1_chunk
-INFO:  dropping chunk _timescaledb_internal._hyper_5_2_chunk
-INFO:  dropping chunk _timescaledb_internal._hyper_5_3_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_4_1_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_4_2_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_4_3_chunk
 ERROR:  cannot drop chunks on a continuous aggregate materialization table
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -364,7 +331,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_4_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_4_chunk
 CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_u_id
     FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
@@ -455,7 +422,7 @@ ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
 \set ON_ERROR_STOP 0
 -- test a variety of ALTER TABLE statements
 ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
-ERROR:  cannot rename column "chunk_id" of materialization table "_materialized_hypertable_8"
+ERROR:  cannot rename column "chunk_id" of materialization table "_materialized_hypertable_7"
 ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
 ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
@@ -523,7 +490,7 @@ SELECT create_hypertable('metrics','time');
 NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
- (9,public,metrics,t)
+ (8,public,metrics,t)
 (1 row)
 
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
@@ -541,10 +508,10 @@ SELECT
   avg(v1+v2) AS avg2
 FROM metrics
 GROUP BY 1;
-NOTICE:  adding index _materialized_hypertable_10_const_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(const, time)
-NOTICE:  adding index _materialized_hypertable_10_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(numeric, time)
-NOTICE:  adding index _materialized_hypertable_10_case_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(case, time)
-NOTICE:  adding index _materialized_hypertable_10_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(coalesce, time)
+NOTICE:  adding index _materialized_hypertable_9_const_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(const, time)
+NOTICE:  adding index _materialized_hypertable_9_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(numeric, time)
+NOTICE:  adding index _materialized_hypertable_9_case_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(case, time)
+NOTICE:  adding index _materialized_hypertable_9_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(coalesce, time)
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
 LOG:  materializing continuous aggregate public.cagg_expr: nothing to invalidate, new range up to Fri Jan 07 16:00:00 2000 PST
@@ -558,7 +525,6 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
  Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
 (5 rows)
 
-ALTER TABLE metrics set(timescaledb.compress);
 --
 -- cascade_to_materialization = false tests
 --
@@ -566,7 +532,7 @@ DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 NOTICE:  table "drop_chunks_table" does not exist, skipping
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_9_chunk
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_nid
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
@@ -616,7 +582,7 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to inv
 LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_13_chunk
+ _timescaledb_internal._hyper_10_13_chunk
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -671,8 +637,8 @@ NOTICE:  making sure all invalidations for public.drop_chunks_view have been pro
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_14_chunk
- _timescaledb_internal._hyper_12_15_chunk
+ _timescaledb_internal._hyper_10_14_chunk
+ _timescaledb_internal._hyper_10_15_chunk
 (2 rows)
 
 --new values on 25 now seen in view
@@ -700,9 +666,9 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 SELECT * FROM _timescaledb_catalog.chunk where dropped;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+--------------------+---------------------+---------
- 13 |            12 | _timescaledb_internal | _hyper_12_13_chunk |                     | t
- 14 |            12 | _timescaledb_internal | _hyper_12_14_chunk |                     | t
- 15 |            12 | _timescaledb_internal | _hyper_12_15_chunk |                     | t
+ 13 |            10 | _timescaledb_internal | _hyper_10_13_chunk |                     | t
+ 14 |            10 | _timescaledb_internal | _hyper_10_14_chunk |                     | t
+ 15 |            10 | _timescaledb_internal | _hyper_10_15_chunk |                     | t
 (3 rows)
 
 --still see data in the view
@@ -802,10 +768,10 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to inv
 LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_17_chunk
- _timescaledb_internal._hyper_12_13_chunk
- _timescaledb_internal._hyper_12_14_chunk
- _timescaledb_internal._hyper_12_15_chunk
+ _timescaledb_internal._hyper_10_17_chunk
+ _timescaledb_internal._hyper_10_13_chunk
+ _timescaledb_internal._hyper_10_14_chunk
+ _timescaledb_internal._hyper_10_15_chunk
 (4 rows)
 
 --see both 30 and 35 updated
@@ -853,7 +819,7 @@ NOTICE:  making sure all invalidations for public.drop_chunks_view have been pro
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_18_chunk
+ _timescaledb_internal._hyper_10_18_chunk
 (1 row)
 
 --the change in bucket 45 but not 50 is seen
@@ -910,7 +876,7 @@ SELECT set_chunk_time_interval('drop_chunks_table', 1000);
 SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
+ _timescaledb_internal._hyper_10_19_chunk | {"[50,60)"}
 (1 row)
 
 --recreate the dropped chunk
@@ -926,12 +892,12 @@ SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY ti
 SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_12_15_chunk | {"[20,30)"}
- _timescaledb_internal._hyper_12_19_chunk | {"[50,60)"}
+ _timescaledb_internal._hyper_10_15_chunk | {"[20,30)"}
+ _timescaledb_internal._hyper_10_19_chunk | {"[50,60)"}
 (2 rows)
 
 -- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
--- This checks if chunks from mat. hypertable are actually dropped 
+-- This checks if chunks from mat. hypertable are actually dropped
 -- and deletes data from chunks that cannot be dropped from that mat. hypertable.
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
         schema_name AS drop_chunks_mat_schema,
@@ -942,8 +908,8 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_19_chunk
- _timescaledb_internal._hyper_12_15_chunk
+ _timescaledb_internal._hyper_10_19_chunk
+ _timescaledb_internal._hyper_10_15_chunk
 (2 rows)
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -997,18 +963,18 @@ SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table')
 ORDER BY ranges;
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_12_13_chunk | {"[0,10)"}
- _timescaledb_internal._hyper_12_14_chunk | {"[10,20)"}
- _timescaledb_internal._hyper_12_20_chunk | {"[20,30)"}
- _timescaledb_internal._hyper_12_17_chunk | {"[30,40)"}
+ _timescaledb_internal._hyper_10_13_chunk | {"[0,10)"}
+ _timescaledb_internal._hyper_10_14_chunk | {"[10,20)"}
+ _timescaledb_internal._hyper_10_20_chunk | {"[20,30)"}
+ _timescaledb_internal._hyper_10_17_chunk | {"[30,40)"}
 (4 rows)
 
 SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
 ORDER BY ranges;
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_13_21_chunk | {"[0,20)"}
- _timescaledb_internal._hyper_13_22_chunk | {"[20,40)"}
+ _timescaledb_internal._hyper_11_21_chunk | {"[0,20)"}
+ _timescaledb_internal._hyper_11_22_chunk | {"[20,40)"}
 (2 rows)
 
 --1 chunk from the mat. hypertable will be dropped and the other will
@@ -1016,9 +982,9 @@ ORDER BY ranges;
 SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_13_chunk
- _timescaledb_internal._hyper_12_14_chunk
- _timescaledb_internal._hyper_12_20_chunk
+ _timescaledb_internal._hyper_10_13_chunk
+ _timescaledb_internal._hyper_10_14_chunk
+ _timescaledb_internal._hyper_10_20_chunk
 (3 rows)
 
 SELECT * from drop_chunks_view ORDER BY 1;
@@ -1038,7 +1004,7 @@ SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
 ORDER BY ranges;
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_13_22_chunk | {"[20,40)"}
+ _timescaledb_internal._hyper_11_22_chunk | {"[20,40)"}
 (1 row)
 
 -- TEST drop chunks from continuous aggregates by specifying view name
@@ -1046,10 +1012,10 @@ SELECT drop_chunks(
     table_name => 'drop_chunks_view',
     newer_than => -20,
     verbose => true);
-INFO:  dropping chunk _timescaledb_internal._hyper_13_22_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_11_22_chunk
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_13_22_chunk
+ _timescaledb_internal._hyper_11_22_chunk
 (1 row)
 
 --can also drop chunks by specifying materialized hypertable name
@@ -1060,7 +1026,7 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: processing inv
 SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen');
                chunk_table                |   ranges    
 ------------------------------------------+-------------
- _timescaledb_internal._hyper_13_24_chunk | {"[40,60)"}
+ _timescaledb_internal._hyper_11_24_chunk | {"[40,60)"}
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -1068,16 +1034,16 @@ SELECT drop_chunks(
     table_name => :'drop_chunks_mat_table_name',
     older_than => 60,
     verbose => true);
-ERROR:  "_materialized_hypertable_13" is not a hypertable or a continuous aggregate view
+ERROR:  "_materialized_hypertable_11" is not a hypertable or a continuous aggregate view
 \set ON_ERROR_STOP 1
 SELECT drop_chunks(
     schema_name => :'drop_chunks_mat_schema',
     table_name => :'drop_chunks_mat_table_name',
     older_than => 60,
     verbose => true);
-INFO:  dropping chunk _timescaledb_internal._hyper_13_24_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_11_24_chunk
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_13_24_chunk
+ _timescaledb_internal._hyper_11_24_chunk
 (1 row)
 
