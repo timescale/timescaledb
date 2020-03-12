@@ -931,3 +931,13 @@ SET timescaledb.current_timestamp_mock = '2001-05-11';
 insert into conditions values('2001-02-20', '4');
 REFRESH MATERIALIZED VIEW mat_test5;
 SELECT * FROM mat_test5;
+--verify that watermark is limited by max value and not by
+-- the current time (now value)--
+SET timescaledb.current_timestamp_mock = '2018-05-11';
+SELECT view_name, completed_threshold, invalidation_threshold 
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'mat_test5';
+REFRESH MATERIALIZED VIEW mat_test5;
+SELECT view_name, completed_threshold, invalidation_threshold 
+FROM timescaledb_information.continuous_aggregate_stats
+where view_name::text like 'mat_test5';
