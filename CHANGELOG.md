@@ -4,37 +4,57 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## latest
+## 1.6.1 (2020-03-18)
 
-**Major Features**
+This maintenance release contains bugfixes since the 1.6.0 release. We deem it medium
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address bugs in continuous
+aggregates, time_bucket_gapfill, partial index handling and drop_chunks.
+
+**For this release only**, you will need to restart the database after upgrade before
+restoring a backup.
 
 **Minor Features**
 * #1666 Support drop_chunks API for continuous aggregates
 * #1711 Change log level for continuous aggregate materialization messages
 
 **Bugfixes**
+* #1630 Print notice for COPY TO on hypertable
 * #1648 Drop chunks from materialized hypertable
-* #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
 * #1668 Cannot add dimension if hypertable has empty chunks
+* #1673 Fix crash when interrupting create_hypertable
 * #1674 Fix time_bucket_gapfill's interaction with GROUP BY
 * #1686 Fix order by queries on compressed hypertables that have char segment by column
 * #1687 Fix issue with disabling compression when foreign keys are present
+* #1688 Handle many BGW jobs better
+* #1698 Add logic to ignore dropped chunks in hypertable_relation_size
 * #1704 Fix bad plan for continuous aggregate materialization
+* #1709 Prevent starting background workers with NOLOGIN
 * #1713 Fix miscellaneous background worker issues
 * #1715 Fix issue with overly aggressive chunk exclusion in outer joins
+* #1719 Fix restoring/scheduler entrypoint to avoid BGW death
 * #1720 Add scheduler cache invalidations
 * #1727 Fix compressing INTERVAL columns
 * #1728 Handle Sort nodes in ConstraintAwareAppend
-* #1730 Fix partial index handling on chunks
-* #1740 Fix copy of continuous aggregate invalidation entries
+* #1730 Fix partial index handling on hypertables
+* #1739 Use release OpenSSL DLLs for debug builds on Windows
+* #1740 Fix invalidation entries from multiple caggs on same hypertable
+* #1743 Fix continuous aggregate materialization timezone handling
+* #1748 Fix remove_drop_chunks_policy for continuous aggregates
+* #1756 Fix handling of dropped chunks in compression background worker
 
 **Thanks**
 * @RJPhillips01 for reporting an issue with drop chunks.
 * @b4eEx for reporting an issue with disabling compression.
-* @dark048 for reporting an issue with order by on compressed hypertables
+* @darko408 for reporting an issue with order by on compressed hypertables
 * @mrechte for reporting an issue with compressing INTERVAL columns
 * @tstaehli for reporting an issue with ConstraintAwareAppend
 * @chadshowalter for reporting an issue with partial index on hypertables
+* @geoffreybennett for reporting an issue with create_hypertable when interrupting operations
+* @alxndrdude for reporting an issue with background workers during restore
+* @zcavaliero for reporting and fixing an issue with dropped columns in hypertable_relation_size
+* @ismailakpolat for reporting an issue with cagg materialization on hypertables with TIMESTAMP column
 
 ## 1.6.0 (2020-01-14)
 
