@@ -12,8 +12,6 @@ set(TEST_FILES
   cursor.sql
   ddl_alter_column.sql
   ddl_errors.sql
-  ddl_single.sql
-  ddl.sql
   delete.sql
   drop_schema.sql
   drop_owned.sql
@@ -27,9 +25,7 @@ set(TEST_FILES
   histogram_test.sql
   index.sql
   insert_single.sql
-  insert.sql
   lateral.sql
-  partitioning.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
@@ -77,12 +73,6 @@ set(SOLO_TESTS
   pg_dump_unprivileged
   telemetry
 )
-
-# only test custom type if we are in 64-bit architecture
-if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-  list(APPEND TEST_FILES
-    custom_type.sql)
-endif()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
@@ -140,8 +130,12 @@ set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
   alternate_users.sql.in
+  ddl.sql.in
+  ddl_single.sql.in
+  insert.sql.in
   insert_many.sql.in
   parallel.sql.in
+  partition.sql.in
   partitioning.sql.in
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
@@ -152,6 +146,12 @@ set(TEST_TEMPLATES
   sort_optimization.sql.in
   sql_query.sql.in
   )
+
+# only test custom type if we are in 64-bit architecture
+if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+  list(APPEND TEST_TEMPLATES
+    custom_type.sql.in)
+endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must

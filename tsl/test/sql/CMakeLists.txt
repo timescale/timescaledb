@@ -3,9 +3,7 @@ set(TEST_FILES
   continuous_aggs_watermark.sql
   edition.sql
   gapfill.sql
-  move.sql
   partialize_finalize.sql
-  reorder.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -26,7 +24,9 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   continuous_aggs_permissions.sql.in
   continuous_aggs_union_view.sql.in
+  move.sql.in
   plan_gapfill.sql.in
+  reorder.sql.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

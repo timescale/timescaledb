@@ -1,8 +1,13 @@
 /agg_bookends-*.sql
 /alternate_users-*.sql
 /append-*.sql
+/custom_type-*.sql
+/ddl-*.sql
+/ddl_single-*.sql
+/insert-*.sql
 /insert_many-*.sql
 /parallel-*.sql
+/partition-*.sql
 /partitioning-*.sql
 /plan_expand_hypertable-*.sql
 /plan_hashagg_optimized-*.sql
@@ -13,4 +18,3 @@
 /sql_query_results_unoptimized-*.sql
 /sql_query_results_x_diff-*.sql
 /sql_query-*.sql
-
