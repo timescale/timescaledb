@@ -233,6 +233,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				   compress_ht_chunk->table_id,
 				   colinfo_array,
 				   htcols_listlen);
+	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
+	 * cascading deleted data in FK-referenced tables, while blocking deleting data
+	 * directly on the hypertable or chunks.
+	 */
+	ts_chunk_drop_fks(cxt.srcht_chunk);
 	chunk_dml_blocker_trigger_add(cxt.srcht_chunk->table_id);
 	after_size = compute_chunk_size(compress_ht_chunk->table_id);
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
@@ -263,7 +268,9 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	if (compressed_hypertable == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
-	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, 0, true);
+	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid,
+											   uncompressed_hypertable->space->num_dimensions,
+											   true);
 	if (uncompressed_chunk == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -295,6 +302,8 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 
 	chunk_dml_trigger_drop(uncompressed_chunk->table_id);
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
+	/* Recreate FK constraints, since they were dropped during compression. */
+	ts_chunk_create_fks(uncompressed_chunk);
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);

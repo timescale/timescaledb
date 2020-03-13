@@ -57,6 +57,12 @@
 #include "scan_iterator.h"
 #include "compression_chunk_size.h"
 
+/* Strictly speaking there is no danger to include it always, but it helps to remove it with PG11_LT
+ * support. */
+#if PG11_LT
+#include "compat/fkeylist.h"
+#endif
+
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
@@ -2043,6 +2049,58 @@ ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_
 
 	chunk_scan_ctx_foreach_chunk_stub(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);
+}
+
+/*
+ * Drops all FK constraints on a given chunk.
+ * Currently it is used only for chunks, which have been compressed and
+ * contain no data.
+ */
+void
+ts_chunk_drop_fks(Chunk *const chunk)
+{
+	Relation rel;
+	List *fks;
+	ListCell *lc;
+
+	Assert(!chunk->fd.dropped);
+
+	rel = table_open(chunk->table_id, AccessShareLock);
+	fks = copy_fk_list_from_cache(RelationGetFKeyListCompat(rel));
+	table_close(rel, AccessShareLock);
+
+	foreach (lc, fks)
+	{
+		const ForeignKeyCacheInfoCompat *const fk = lfirst_node(ForeignKeyCacheInfoCompat, lc);
+		ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id,
+													  get_constraint_name(fk->conoid),
+													  true,
+													  true);
+	}
+}
+
+/*
+ * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable as a
+ * template. Currently it is used only during chunk decompression, since FK constraints are dropped
+ * during compression.
+ */
+void
+ts_chunk_create_fks(Chunk *const chunk)
+{
+	Relation rel;
+	List *fks;
+	ListCell *lc;
+
+	Assert(!chunk->fd.dropped);
+
+	rel = table_open(chunk->hypertable_relid, AccessShareLock);
+	fks = copy_fk_list_from_cache(RelationGetFKeyListCompat(rel));
+	table_close(rel, AccessShareLock);
+	foreach (lc, fks)
+	{
+		ForeignKeyCacheInfoCompat *fk = lfirst_node(ForeignKeyCacheInfoCompat, lc);
+		ts_chunk_constraint_create_on_chunk(chunk, fk->conoid);
+	}
 }
 
 static ScanTupleResult
