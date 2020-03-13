@@ -1,0 +1,96 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype AS
+'timestamptz_in'
+LANGUAGE internal IMMUTABLE STRICT;
+NOTICE:  type "customtype" is not yet defined
+CREATE OR REPLACE FUNCTION customtype_out(customtype) RETURNS cstring AS
+'timestamptz_out'
+LANGUAGE internal IMMUTABLE STRICT;
+NOTICE:  argument type customtype is only a shell
+CREATE OR REPLACE FUNCTION customtype_recv(internal) RETURNS customtype AS
+'timestamptz_recv'
+LANGUAGE internal IMMUTABLE STRICT;
+NOTICE:  return type customtype is only a shell
+CREATE OR REPLACE FUNCTION customtype_send(customtype) RETURNS bytea AS
+'timestamptz_send'
+LANGUAGE internal IMMUTABLE STRICT;
+NOTICE:  argument type customtype is only a shell
+CREATE TYPE customtype (
+ INPUT = customtype_in,
+ OUTPUT = customtype_out,
+ RECEIVE = customtype_recv,
+ SEND = customtype_send,
+ LIKE = TIMESTAMPTZ
+);
+CREATE CAST (customtype AS bigint)
+WITHOUT FUNCTION AS ASSIGNMENT;
+CREATE CAST (bigint AS customtype)
+WITHOUT FUNCTION AS IMPLICIT;
+CREATE CAST (customtype AS timestamptz)
+WITHOUT FUNCTION AS ASSIGNMENT;
+CREATE CAST (timestamptz AS customtype)
+WITHOUT FUNCTION AS ASSIGNMENT;
+CREATE OR REPLACE FUNCTION customtype_lt(customtype, customtype) RETURNS bool AS
+'timestamp_lt'
+LANGUAGE internal IMMUTABLE STRICT;
+CREATE OPERATOR < (
+	LEFTARG = customtype,
+	RIGHTARG = customtype,
+	PROCEDURE = customtype_lt,
+	COMMUTATOR = >,
+	NEGATOR = >=,
+	RESTRICT = scalarltsel,
+	JOIN = scalarltjoinsel
+);
+CREATE OR REPLACE FUNCTION customtype_ge(customtype, customtype) RETURNS bool AS
+'timestamp_ge'
+LANGUAGE internal IMMUTABLE STRICT;
+CREATE OPERATOR >= (
+	LEFTARG = customtype,
+	RIGHTARG = customtype,
+	PROCEDURE = customtype_ge,
+	COMMUTATOR = <=,
+	NEGATOR = <,
+	RESTRICT = scalargtsel,
+	JOIN = scalargtjoinsel
+);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE customtype_test(time_custom customtype, val int);
+SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
+NOTICE:  adding not-null constraint to column "time_custom"
+      create_hypertable       
+------------------------------
+ (1,public,customtype_test,t)
+(1 row)
+
+INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
+INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
+INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
+EXPLAIN (costs off) SELECT * FROM customtype_test;
+             QUERY PLAN             
+------------------------------------
+ Append
+   ->  Seq Scan on _hyper_1_1_chunk
+(2 rows)
+
+INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
+EXPLAIN (costs off) SELECT * FROM customtype_test;
+             QUERY PLAN             
+------------------------------------
+ Append
+   ->  Seq Scan on _hyper_1_1_chunk
+   ->  Seq Scan on _hyper_1_2_chunk
+(3 rows)
+
+SELECT * FROM customtype_test;
+         time_custom          | val 
+------------------------------+-----
+ Mon Jan 01 01:02:03 2001 PST |  10
+ Mon Jan 01 01:02:03 2001 PST |  10
+ Mon Jan 01 01:02:03 2001 PST |  10
+ Mon Jan 01 01:02:23 2001 PST |  11
+(4 rows)
+
