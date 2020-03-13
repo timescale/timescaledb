@@ -272,7 +272,7 @@ if (NOT CLANG_FORMAT)
   else ()
     message(STATUS "Using docker based clang-format")
     add_custom_target(format
-      COMMAND docker run --rm -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
+      COMMAND docker run --rm -it --user=`id -u`:`id -g` --volume=${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
     )
   endif()
 else()
