@@ -4,5 +4,13 @@ if (${PG_VERSION_MAJOR} LESS "12")
     ${CMAKE_CURRENT_SOURCE_DIR}/tupconvert.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tuptable.c
     )
-  target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
 endif ()
+
+if (${PG_VERSION_MAJOR} LESS "11")
+  set(SOURCES
+    ${SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/fkeylist.c
+    )
+endif ()
+
+target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})

@@ -200,10 +200,6 @@ select compress_chunk(:'CHUNK_NAME');
 
 SELECT  hypertable_name , total_chunks , number_compressed_chunks
 FROM timescaledb_information.compressed_hypertable_stats;
---delete from foreign table, should delete from hypertable too
-select device_id, d from table_constr order by device_id, d;
-delete from fortable where col = 1 or col = 10;
-select device_id, d from table_constr order by device_id, d;
 
 --github issue 1661
 --disable compression after enabling it on a table that has fk constraints

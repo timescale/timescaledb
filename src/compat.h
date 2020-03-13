@@ -959,4 +959,25 @@ list_qsort(const List *list, list_qsort_comparator cmp)
 
 #endif
 
+/*
+ * ForeignKeyCacheInfo doesn't contain the constraint Oid in early versions.
+ * This is a fix for PG10 and PG96 until support for them is gone.
+ */
+#if PG11_LT
+#define RelationGetFKeyListCompat(rel) ts_relation_get_fk_list(rel)
+#define T_ForeignKeyCacheInfoCompat T_ForeignKeyCacheInfo
+typedef struct ForeignKeyCacheInfoCompat
+{
+	ForeignKeyCacheInfo base;
+	Oid conoid;
+} ForeignKeyCacheInfoCompat;
+/* No need to copy FK list, since custom implementation doesn't use cache. */
+#define copy_fk_list_from_cache(l) l
+#else
+#define RelationGetFKeyListCompat(rel) RelationGetFKeyList(rel)
+#define ForeignKeyCacheInfoCompat ForeignKeyCacheInfo
+/* Copies FK list, since the cache can be invalidated. */
+#define copy_fk_list_from_cache(l) copyObject(l)
+#endif /* PG11_LT */
+
 #endif /* TIMESCALEDB_COMPAT_H */
