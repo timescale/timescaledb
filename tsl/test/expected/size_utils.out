@@ -1,0 +1,71 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE compressed(time timestamptz NOT NULL);
+SELECT create_hypertable('compressed','time');
+    create_hypertable    
+-------------------------
+ (1,public,compressed,t)
+(1 row)
+
+-- test that empty hypertable is still included in result
+SELECT * FROM hypertable_approximate_row_count('compressed');
+ schema_name | table_name | row_estimate 
+-------------+------------+--------------
+ public      | compressed |            0
+(1 row)
+
+-- create 5 chunks
+INSERT INTO compressed SELECT generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d'::interval);
+VACUUM compressed;
+-- row count should be 32
+SELECT * FROM hypertable_approximate_row_count('compressed');
+ schema_name | table_name | row_estimate 
+-------------+------------+--------------
+ public      | compressed |           32
+(1 row)
+
+SELECT * FROM hypertable_relation_size('compressed');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+      204800 |       81920 |             |      286720
+(1 row)
+
+SELECT * FROM hypertable_relation_size_pretty('compressed');
+ table_size | index_size | toast_size | total_size 
+------------+------------+------------+------------
+ 200 kB     | 80 kB      |            | 280 kB
+(1 row)
+
+-- compress first 2 chunks
+ALTER TABLE compressed SET (timescaledb.compress);
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
+WHERE ht.table_name like 'compressed' ORDER BY c.id limit 2;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+(2 rows)
+
+VACUUM compressed;
+-- row count should be 32
+SELECT * FROM hypertable_approximate_row_count('compressed');
+ schema_name | table_name | row_estimate 
+-------------+------------+--------------
+ public      | compressed |           32
+(1 row)
+
+SELECT * FROM hypertable_relation_size('compressed');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+      155648 |       65536 |             |      221184
+(1 row)
+
+SELECT * FROM hypertable_relation_size_pretty('compressed');
+ table_size | index_size | toast_size | total_size 
+------------+------------+------------+------------
+ 152 kB     | 64 kB      |            | 216 kB
+(1 row)
+

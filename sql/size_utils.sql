@@ -46,22 +46,37 @@ BEGIN
                FROM (
                SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes FROM (
                       SELECT
-                      sum(pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint as total_bytes,
-                      sum(pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint AS index_bytes,
-                      sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
+                      sum(
+                        pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)) +
+                        CASE WHEN c_comp.id IS NOT NULL
+                          THEN pg_total_relation_size(format('%%I.%%I',c_comp.schema_name, c_comp.table_name))
+                          ELSE 0
+                        END
+                      )::bigint as total_bytes,
+                      sum(
+                        pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)) +
+                        CASE WHEN c_comp.id IS NOT NULL
+                          THEN pg_indexes_size(format('%%I.%%I', c_comp.schema_name, c_comp.table_name))
+                          ELSE 0
+                        END
+                      )::bigint AS index_bytes,
+                      sum(
+                        pg_total_relation_size(reltoastrelid) +
+                        CASE WHEN c_comp.id IS NOT NULL
+                          THEN pg_total_relation_size(reltoastrelid)
+                          ELSE 0
+                        END
+                      )::bigint AS toast_bytes
                       FROM
-                      _timescaledb_catalog.hypertable h,
-                      _timescaledb_catalog.chunk c,
-                      pg_class pgc,
-                      pg_namespace pns
+                      _timescaledb_catalog.hypertable h
+                      INNER JOIN pg_class pgc ON pgc.relname = h.table_name AND pgc.relkind = 'r'
+                      INNER JOIN pg_namespace pns ON pns.oid = pgc.relnamespace AND pns.nspname = h.schema_name
+                      -- handle normal chunks
+                      INNER JOIN _timescaledb_catalog.chunk c ON c.hypertable_id = h.id AND c.dropped = false
+                      -- compressed chunks when present
+                      LEFT JOIN _timescaledb_catalog.chunk c_comp ON c_comp.id = c.compressed_chunk_id AND c_comp.dropped = false
                       WHERE h.schema_name = %L
-                      AND c.dropped = false
                       AND h.table_name = %L
-                      AND c.hypertable_id = h.id
-                      AND pgc.relname = h.table_name
-                      AND pns.oid = pgc.relnamespace
-                      AND pns.nspname = h.schema_name
-                      AND relkind = 'r'
                       ) sub1
                ) sub2;
         $$,
@@ -421,6 +436,21 @@ BEGIN
 END;
 $BODY$;
 
+-- helper function to get row count of compressed chunk
+-- used by hypertable_approximate_row_count
+CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_row_count(
+  schema_name NAME,
+  table_name NAME
+) RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+        row_count BIGINT;
+BEGIN
+        EXECUTE format('SELECT sum(_ts_meta_count) FROM %I.%I', schema_name, table_name) INTO row_count;
+        RETURN row_count;
+
+END;
+$BODY$;
 
 -- Convenience function to return approximate row count
 --
@@ -453,20 +483,24 @@ BEGIN
             WHERE c.OID = main_table;
         END IF;
 
--- Thanks to @fvannee on Github for providing the initial draft
--- of this query
         RETURN QUERY
         SELECT h.schema_name,
             h.table_name,
-            row_estimate.row_estimate
+            coalesce((
+              SELECT
+                sum(
+                  CASE WHEN c.compressed_chunk_id IS NULL
+                    THEN cl.reltuples
+                    ELSE _timescaledb_internal.compressed_chunk_row_count(cc.schema_name,cc.table_name)
+                  END
+                )::BIGINT
+              FROM _timescaledb_catalog.chunk c
+              JOIN pg_class cl ON cl.relname = c.table_name
+              JOIN pg_namespace n ON n.oid = cl.relnamespace AND n.nspname = c.schema_name
+              LEFT JOIN _timescaledb_catalog.chunk cc ON cc.id = c.compressed_chunk_id
+              WHERE c.hypertable_id = h.id
+            ), 0)::BIGINT AS row_estimate
         FROM _timescaledb_catalog.hypertable h
-        CROSS JOIN LATERAL (
-            SELECT sum(cl.reltuples)::BIGINT AS row_estimate
-            FROM _timescaledb_catalog.chunk c
-            JOIN pg_class cl ON cl.relname = c.table_name
-            WHERE c.hypertable_id = h.id
-            GROUP BY h.schema_name, h.table_name
-        ) row_estimate
         WHERE (main.table_name IS NULL OR h.table_name = main.table_name)
         AND (main.schema_name IS NULL OR h.schema_name = main.schema_name)
         ORDER BY h.schema_name, h.table_name;

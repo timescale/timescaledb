@@ -39,6 +39,10 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 #compression only for PG > 9
 if (${PG_VERSION_MAJOR} GREATER "9")
 
+  list(APPEND TEST_FILES
+    size_utils.sql
+  )
+
   list(APPEND TEST_FILES_DEBUG
     compress_table.sql
     compression.sql

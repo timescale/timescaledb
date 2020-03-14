@@ -412,20 +412,20 @@ table_name     | conditions
 table_owner    | default_perm_user
 num_dimensions | 1
 num_chunks     | 2
-table_size     | 16 kB
-index_size     | 48 kB
-toast_size     | 32 kB
-total_size     | 96 kB
+table_size     | 32 kB
+index_size     | 80 kB
+toast_size     | 48 kB
+total_size     | 160 kB
 -[ RECORD 2 ]--+------------------
 table_schema   | public
 table_name     | foo
 table_owner    | default_perm_user
 num_dimensions | 1
 num_chunks     | 4
-table_size     | 32 kB
-index_size     | 144 kB
+table_size     | 48 kB
+index_size     | 176 kB
 toast_size     | 8192 bytes
-total_size     | 184 kB
+total_size     | 232 kB
 
 \x
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
