@@ -69,6 +69,9 @@ select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_con
 select test_compress_chunks_policy(:compressjob_id);
 \set ON_ERROR_STOP 1
 
+-- We're done with the table, so drop it.
+DROP TABLE IF EXISTS conditions CASCADE;
+
 --TEST 7
 --compress chunks policy for integer based partition hypertable
 CREATE TABLE test_table_int(time bigint, val int);
@@ -102,3 +105,50 @@ SELECT add_compress_chunks_policy('test_table_nologin', 2::int);
 \set ON_ERROR_STOP 1
 RESET ROLE;
 REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE TABLE conditions(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+SELECT * FROM create_hypertable('conditions', 'time',
+                                chunk_time_interval => '1 day'::interval);
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+
+CREATE VIEW conditions_summary
+WITH (timescaledb.continuous,
+      timescaledb.refresh_interval='1 minute',
+      timescaledb.max_interval_per_job = '60 days') AS
+SELECT device,
+       time_bucket(INTERVAL '1 hour', "time") AS day,
+       AVG(temperature) AS avg_temperature,
+       MAX(temperature) AS max_temperature,
+       MIN(temperature) AS min_temperature
+FROM conditions
+GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
+
+REFRESH MATERIALIZED VIEW conditions_summary;
+
+ALTER TABLE conditions SET (timescaledb.compress);
+ALTER VIEW conditions_summary SET (
+      timescaledb.ignore_invalidation_older_than = '15 days'
+);
+
+SELECT COUNT(*) AS dropped_chunks_count
+  FROM drop_chunks(TIMESTAMPTZ '2018-12-15 00:00', 'conditions',
+                   cascade_to_materializations => FALSE);
+
+-- We need to have some chunks that are marked as dropped, otherwise
+-- we will not have a problem below.
+SELECT COUNT(*) AS dropped_chunks_count
+  FROM _timescaledb_catalog.chunk
+ WHERE dropped = TRUE;
+
+SELECT add_compress_chunks_policy AS job_id
+  FROM add_compress_chunks_policy('conditions', INTERVAL '1 day') \gset
+SELECT test_compress_chunks_policy(:job_id);

@@ -127,6 +127,9 @@ select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_con
 select test_compress_chunks_policy(:compressjob_id);
 ERROR:  job 1000 not found
 \set ON_ERROR_STOP 1
+-- We're done with the table, so drop it.
+DROP TABLE IF EXISTS conditions CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
 --TEST 7
 --compress chunks policy for integer based partition hypertable
 CREATE TABLE test_table_int(time bigint, val int);
@@ -206,3 +209,64 @@ ERROR:  permission denied to start compress_chunks background process as role "n
 \set ON_ERROR_STOP 1
 RESET ROLE;
 REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE conditions(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+SELECT * FROM create_hypertable('conditions', 'time',
+                                chunk_time_interval => '1 day'::interval);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             7 | public      | conditions | t
+(1 row)
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+CREATE VIEW conditions_summary
+WITH (timescaledb.continuous,
+      timescaledb.refresh_interval='1 minute',
+      timescaledb.max_interval_per_job = '60 days') AS
+SELECT device,
+       time_bucket(INTERVAL '1 hour', "time") AS day,
+       AVG(temperature) AS avg_temperature,
+       MAX(temperature) AS max_temperature,
+       MIN(temperature) AS min_temperature
+FROM conditions
+GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
+NOTICE:  adding index _materialized_hypertable_8_device_day_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, day)
+REFRESH MATERIALIZED VIEW conditions_summary;
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
+ALTER TABLE conditions SET (timescaledb.compress);
+ALTER VIEW conditions_summary SET (
+      timescaledb.ignore_invalidation_older_than = '15 days'
+);
+SELECT COUNT(*) AS dropped_chunks_count
+  FROM drop_chunks(TIMESTAMPTZ '2018-12-15 00:00', 'conditions',
+                   cascade_to_materializations => FALSE);
+NOTICE:  making sure all invalidations for public.conditions_summary have been processed prior to dropping chunks
+ dropped_chunks_count 
+----------------------
+                   14
+(1 row)
+
+-- We need to have some chunks that are marked as dropped, otherwise
+-- we will not have a problem below.
+SELECT COUNT(*) AS dropped_chunks_count
+  FROM _timescaledb_catalog.chunk
+ WHERE dropped = TRUE;
+ dropped_chunks_count 
+----------------------
+                   14
+(1 row)
+
+SELECT add_compress_chunks_policy AS job_id
+  FROM add_compress_chunks_policy('conditions', INTERVAL '1 day') \gset
+SELECT test_compress_chunks_policy(:job_id);
+ test_compress_chunks_policy 
+-----------------------------
+ 
+(1 row)
+
