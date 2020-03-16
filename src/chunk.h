@@ -147,7 +147,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 								  bool include_chunks_marked_as_dropped);
 
 extern bool TSDLLEXPORT ts_chunk_contains_compressed_data(Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_has_associated_compressed_chunk(int32 chunk_id);
+extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
