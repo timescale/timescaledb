@@ -2723,11 +2723,12 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-/* has chunk, specifieid by chunk_id, been compressed */
+/* Check if this chunk can be compressed, that it is not dropped and has not
+ * already been compressed. */
 bool
-ts_chunk_has_associated_compressed_chunk(int32 chunk_id)
+ts_chunk_can_be_compressed(int32 chunk_id)
 {
-	bool compressed = false;
+	bool can_be_compressed = false;
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	ts_scan_iterator_scan_key_init(&iterator,
@@ -2739,12 +2740,18 @@ ts_chunk_has_associated_compressed_chunk(int32 chunk_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-		heap_getattr(ti->tuple, Anum_chunk_compressed_chunk_id, ti->desc, &isnull);
-		compressed = !isnull; // isnull is false when compress chunk id is set
+		bool compressed_chunk_id_isnull, dropped_isnull;
+		Datum dropped;
+		heap_getattr(ti->tuple,
+					 Anum_chunk_compressed_chunk_id,
+					 ti->desc,
+					 &compressed_chunk_id_isnull);
+		dropped = heap_getattr(ti->tuple, Anum_chunk_dropped, ti->desc, &dropped_isnull);
+		Assert(!dropped_isnull);
+		can_be_compressed = compressed_chunk_id_isnull && !DatumGetBool(dropped);
 	}
 	ts_scan_iterator_close(&iterator);
-	return compressed;
+	return can_be_compressed;
 }
 
 Datum
