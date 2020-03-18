@@ -1,6 +1,5 @@
 set(TEST_FILES
   alter.sql
-  chunk_adaptive.sql
   chunk_utils.sql
   chunks.sql
   cluster.sql
@@ -133,6 +132,7 @@ set(TEST_TEMPLATES
   ddl.sql.in
   ddl_single.sql.in
   insert.sql.in
+  chunk_adaptive.sql.in
   insert_many.sql.in
   parallel.sql.in
   partition.sql.in

@@ -1,0 +1,591 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Valid chunk sizing function for testing
+CREATE OR REPLACE FUNCTION calculate_chunk_interval(
+        dimension_id INTEGER,
+        dimension_coord BIGINT,
+        chunk_target_size BIGINT
+)
+    RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+BEGIN
+    RETURN -1;
+END
+$BODY$;
+-- Chunk sizing function with bad signature
+CREATE OR REPLACE FUNCTION bad_calculate_chunk_interval(
+        dimension_id INTEGER
+)
+    RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+BEGIN
+    RETURN -1;
+END
+$BODY$;
+-- Set a fixed memory cache size to make tests determinstic
+-- (independent of available machine memory)
+SELECT * FROM test.set_memory_cache_size('2GB');
+ set_memory_cache_size 
+-----------------------
+            2147483648
+(1 row)
+
+-- test NULL handling
+\set ON_ERROR_STOP 0
+SELECT * FROM set_adaptive_chunking(NULL,NULL);
+ERROR:  invalid hypertable: cannot be NULL
+\set ON_ERROR_STOP 1
+CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
+\set ON_ERROR_STOP 0
+-- Bad signature of sizing func should fail
+SELECT create_hypertable('test_adaptive', 'time',
+                         chunk_target_size => '1MB',
+                         chunk_sizing_func => 'bad_calculate_chunk_interval');
+ERROR:  invalid function signature
+\set ON_ERROR_STOP 1
+-- Setting sizing func with correct signature should work
+SELECT create_hypertable('test_adaptive', 'time',
+                         chunk_target_size => '1MB',
+                         chunk_sizing_func => 'calculate_chunk_interval');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (1,public,test_adaptive,t)
+(1 row)
+
+DROP TABLE test_adaptive;
+CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
+-- Size but no explicit func should use default func
+SELECT create_hypertable('test_adaptive', 'time',
+                         chunk_target_size => '1MB',
+                         create_default_indexes => true);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (2,public,test_adaptive,t)
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |           1048576
+(1 row)
+
+-- Check that adaptive chunking sets a 1 day default chunk time
+-- interval => 86400000000 microseconds
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-------------------------+------------------
+  2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |     86400000000 |                         | 
+(1 row)
+
+-- Change the target size
+SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |           2097152
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |           2097152
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Setting NULL func should fail
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB', NULL);
+ERROR:  invalid chunk sizing function
+\set ON_ERROR_STOP 1
+-- Setting NULL size disables adaptive chunking
+SELECT * FROM set_adaptive_chunking('test_adaptive', NULL);
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |                 0
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+(1 row)
+
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |           1048576
+(1 row)
+
+-- Setting size to 'off' should also disable
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'off');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |                 0
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+(1 row)
+
+-- Setting 0 size should also disable
+SELECT * FROM set_adaptive_chunking('test_adaptive', '0MB');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |                 0
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+(1 row)
+
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |           1048576
+(1 row)
+
+-- No warning about small target size if > 10MB
+SELECT * FROM set_adaptive_chunking('test_adaptive', '11MB');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |          11534336
+(1 row)
+
+-- Setting size to 'estimate' should also estimate size
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |        1932735283
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |        1932735283
+(1 row)
+
+-- Use a lower memory setting to test that the calculated chunk_target_size is reduced
+SELECT * FROM test.set_memory_cache_size('512MB');
+ set_memory_cache_size 
+-----------------------
+             536870912
+(1 row)
+
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |         483183820
+(1 row)
+
+SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
+FROM _timescaledb_catalog.hypertable;
+  table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+---------------+--------------------------+--------------------------+-------------------
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         483183820
+(1 row)
+
+-- Reset memory settings
+SELECT * FROM test.set_memory_cache_size('2GB');
+ set_memory_cache_size 
+-----------------------
+            2147483648
+(1 row)
+
+-- Set a reasonable test value
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |           1048576
+(1 row)
+
+-- Show the interval length before and after adaptation
+SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | interval_length 
+----+---------------+-----------------
+  2 |             2 |     86400000000
+(1 row)
+
+-- Generate data to create chunks. We use the hash of the time value
+-- to get determinstic location IDs so that we always spread these
+-- values the same way across space partitions
+INSERT INTO test_adaptive
+SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
+                '2017-03-07T18:18:03+00'::timestamptz,
+                '2 minutes') as time;
+SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive');
+ chunk_id |               chunk_table               | partitioning_columns |  partitioning_column_types   | partitioning_hash_functions |                 ranges                  
+----------+-----------------------------------------+----------------------+------------------------------+-----------------------------+-----------------------------------------
+        1 | _timescaledb_internal._hyper_2_1_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473724800000000,1473811200000000)"}
+        2 | _timescaledb_internal._hyper_2_2_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473811200000000,1473897600000000)"}
+        3 | _timescaledb_internal._hyper_2_3_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473897600000000,1473984000000000)"}
+        4 | _timescaledb_internal._hyper_2_4_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473984000000000,1474063374220800)"}
+        5 | _timescaledb_internal._hyper_2_5_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474063374220800,1474193534342144)"}
+        6 | _timescaledb_internal._hyper_2_6_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474193534342144,1474323694463488)"}
+        7 | _timescaledb_internal._hyper_2_7_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474323694463488,1474453854584832)"}
+        8 | _timescaledb_internal._hyper_2_8_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474453854584832,1474541114901568)"}
+        9 | _timescaledb_internal._hyper_2_9_chunk  | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474541114901568,1474693695728855)"}
+       10 | _timescaledb_internal._hyper_2_10_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474693695728855,1475352969024252)"}
+       11 | _timescaledb_internal._hyper_2_11_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1475352969024252,1476440384231212)"}
+       12 | _timescaledb_internal._hyper_2_12_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1476440384231212,1477534854493800)"}
+       13 | _timescaledb_internal._hyper_2_13_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1477534854493800,1478257436248528)"}
+       14 | _timescaledb_internal._hyper_2_14_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1478257436248528,1479535100411232)"}
+       15 | _timescaledb_internal._hyper_2_15_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1479535100411232,1480812764573936)"}
+       16 | _timescaledb_internal._hyper_2_16_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1480812764573936,1482090428736640)"}
+       17 | _timescaledb_internal._hyper_2_17_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1482090428736640,1483368092899344)"}
+       18 | _timescaledb_internal._hyper_2_18_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1483368092899344,1484645757062048)"}
+       19 | _timescaledb_internal._hyper_2_19_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1484645757062048,1485923421224752)"}
+       20 | _timescaledb_internal._hyper_2_20_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1485923421224752,1487201085387456)"}
+       21 | _timescaledb_internal._hyper_2_21_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1487201085387456,1488478749550160)"}
+       22 | _timescaledb_internal._hyper_2_22_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1488478749550160,1489756413712864)"}
+(22 rows)
+
+-- Do same thing without an index on the time column. This affects
+-- both the calculation of fill-factor of the chunk and its size
+CREATE TABLE test_adaptive_no_index(time timestamptz, temp float, location int);
+-- Size but no explicit func should use default func
+-- No default indexes should warn and use heap scan for min and max
+SELECT create_hypertable('test_adaptive_no_index', 'time',
+                         chunk_target_size => '1MB',
+                         create_default_indexes => false);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_no_index"
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable          
+-------------------------------------
+ (3,public,test_adaptive_no_index,t)
+(1 row)
+
+SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | interval_length 
+----+---------------+-----------------
+  2 |             2 |   1277664162704
+  3 |             3 |     86400000000
+(2 rows)
+
+INSERT INTO test_adaptive_no_index
+SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
+                '2017-03-07T18:18:03+00'::timestamptz,
+                '2 minutes') as time;
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_23_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_23_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_24_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_23_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_24_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_25_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_24_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_25_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_26_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_25_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_26_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_27_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_26_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_27_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_28_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_27_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_28_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_29_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_28_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_29_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_30_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_29_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_30_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_31_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_30_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_31_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_32_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_31_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_32_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_33_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_32_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_33_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_34_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_33_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_34_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_35_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_34_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_35_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_36_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_35_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_36_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_37_chunk"
+SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive_no_index');
+ chunk_id |               chunk_table               | partitioning_columns |  partitioning_column_types   | partitioning_hash_functions |                 ranges                  
+----------+-----------------------------------------+----------------------+------------------------------+-----------------------------+-----------------------------------------
+       23 | _timescaledb_internal._hyper_3_23_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473724800000000,1473811200000000)"}
+       24 | _timescaledb_internal._hyper_3_24_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473811200000000,1473897600000000)"}
+       25 | _timescaledb_internal._hyper_3_25_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473897600000000,1473984000000000)"}
+       26 | _timescaledb_internal._hyper_3_26_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1473984000000000,1474190325310968)"}
+       27 | _timescaledb_internal._hyper_3_27_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474190325310968,1474204821359312)"}
+       28 | _timescaledb_internal._hyper_3_28_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474204821359312,1474471500957966)"}
+       29 | _timescaledb_internal._hyper_3_29_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474471500957966,1474540002599807)"}
+       30 | _timescaledb_internal._hyper_3_30_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474540002599807,1474851810593590)"}
+       31 | _timescaledb_internal._hyper_3_31_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1474851810593590,1475929922757320)"}
+       32 | _timescaledb_internal._hyper_3_32_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1475929922757320,1477924422652938)"}
+       33 | _timescaledb_internal._hyper_3_33_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1477924422652938,1479918922548556)"}
+       34 | _timescaledb_internal._hyper_3_34_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1479918922548556,1481824108188800)"}
+       35 | _timescaledb_internal._hyper_3_35_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1481824108188800,1484139458357845)"}
+       36 | _timescaledb_internal._hyper_3_36_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1484139458357845,1486454808526890)"}
+       37 | _timescaledb_internal._hyper_3_37_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1486454808526890,1488770158695935)"}
+       38 | _timescaledb_internal._hyper_3_38_chunk | {time}               | {"timestamp with time zone"} | {NULL}                      | {"[1488770158695935,1491085508864980)"}
+(16 rows)
+
+-- Test added to check that the correct index (i.e. time index) is being used
+-- to find the min and max. Previously a bug selected the first index listed,
+-- which in this case is location rather than time and therefore could return
+-- the wrong min and max if items at the start and end of the index did not have
+-- the correct min and max timestamps.
+--
+-- In this test, we create chunks with a lot of locations with only one reading
+-- that is at the beginning of the time frame, and then one location in the middle
+-- of the range that has two readings, one that is the same as the others and one
+-- that is larger. The algorithm should use these two readings for min & max; however,
+-- if it's broken (as it was before), it would choose just the reading that is common
+-- to all the locations.
+CREATE TABLE test_adaptive_correct_index(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive_correct_index', 'time',
+                         chunk_target_size => '100MB',
+                         chunk_time_interval => 86400000000,
+                         create_default_indexes => false);
+WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_correct_index"
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+            create_hypertable             
+------------------------------------------
+ (4,public,test_adaptive_correct_index,t)
+(1 row)
+
+CREATE INDEX ON test_adaptive_correct_index(location);
+CREATE INDEX ON test_adaptive_correct_index(time DESC);
+-- First chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-01T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-01T00:00:00+00'::timestamptz,
+                '2018-01-01T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-01T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+-- Second chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-02T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-02T00:00:00+00'::timestamptz,
+                '2018-01-02T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-02T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+-- Third chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-03T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-03T00:00:00+00'::timestamptz,
+                '2018-01-03T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-03T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+-- This should be the start of the fourth chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-04T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-04T00:00:00+00'::timestamptz,
+                '2018-01-04T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-04T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+-- If working correctly, this goes in the 4th chunk, otherwise its a separate 5th chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-05T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-05T00:00:00+00'::timestamptz,
+                '2018-01-05T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-05T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+-- This should show 4 chunks, rather than 5
+SELECT COUNT(*) FROM chunk_relation_size_pretty('test_adaptive_correct_index');
+ count 
+-------
+     4
+(1 row)
+
+-- The interval_length should no longer be 86400000000 for our hypertable, so 3rd column so be true.
+-- Note: the exact interval_length is non-deterministic, so we can't use its actual value for tests
+SELECT id, hypertable_id, interval_length > 86400000000 FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | ?column? 
+----+---------------+----------
+  2 |             2 | t
+  3 |             3 | t
+  4 |             4 | t
+(3 rows)
+
+-- Drop because it's size and estimated chunk_interval is non-deterministic so
+-- we don't want to make other tests flaky.
+DROP TABLE test_adaptive_correct_index;
+-- Test with space partitioning. This might affect the estimation
+-- since there are more chunks in the same time interval and space
+-- chunks might be unevenly filled.
+CREATE TABLE test_adaptive_space(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive_space', 'time', 'location', 2,
+                         chunk_target_size => '1MB',
+                         create_default_indexes => true);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable         
+----------------------------------
+ (5,public,test_adaptive_space,t)
+(1 row)
+
+SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | interval_length 
+----+---------------+-----------------
+  2 |             2 |   1277664162704
+  3 |             3 |   2315350169045
+  5 |             5 |     86400000000
+  6 |             5 |                
+(4 rows)
+
+INSERT INTO test_adaptive_space
+SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
+                '2017-03-07T18:18:03+00'::timestamptz,
+                '2 minutes') as time;
+SELECT * FROM chunk_relation_size('test_adaptive_space');
+ chunk_id |               chunk_table               | partitioning_columns |      partitioning_column_types       |           partitioning_hash_functions           |                                   ranges                                    | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+-----------------------------------------+----------------------+--------------------------------------+-------------------------------------------------+-----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
+       43 | _timescaledb_internal._hyper_5_43_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473724800000000,1473811200000000)","[-9223372036854775808,1073741823)"} |        8192 |       32768 |             |       40960
+       44 | _timescaledb_internal._hyper_5_44_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473724800000000,1473811200000000)","[1073741823,9223372036854775807)"}  |        8192 |       32768 |             |       40960
+       45 | _timescaledb_internal._hyper_5_45_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473811200000000,1473897600000000)","[-9223372036854775808,1073741823)"} |       49152 |       57344 |             |      106496
+       46 | _timescaledb_internal._hyper_5_46_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473811200000000,1473897600000000)","[1073741823,9223372036854775807)"}  |       49152 |       57344 |             |      106496
+       47 | _timescaledb_internal._hyper_5_47_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473897600000000,1473965271473760)","[1073741823,9223372036854775807)"}  |       40960 |       49152 |             |       90112
+       48 | _timescaledb_internal._hyper_5_48_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473897600000000,1473965271473760)","[-9223372036854775808,1073741823)"} |       40960 |       32768 |             |       73728
+       49 | _timescaledb_internal._hyper_5_49_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473965271473760,1474105249182352)","[1073741823,9223372036854775807)"}  |       57344 |       81920 |             |      139264
+       50 | _timescaledb_internal._hyper_5_50_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1473965271473760,1474105249182352)","[-9223372036854775808,1073741823)"} |       57344 |       81920 |             |      139264
+       51 | _timescaledb_internal._hyper_5_51_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474105249182352,1474245226890944)","[1073741823,9223372036854775807)"}  |       57344 |       81920 |             |      139264
+       52 | _timescaledb_internal._hyper_5_52_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474105249182352,1474245226890944)","[-9223372036854775808,1073741823)"} |       57344 |       81920 |             |      139264
+       53 | _timescaledb_internal._hyper_5_53_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474245226890944,1474256155676760)","[1073741823,9223372036854775807)"}  |        8192 |       32768 |             |       40960
+       54 | _timescaledb_internal._hyper_5_54_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474245226890944,1474256155676760)","[-9223372036854775808,1073741823)"} |        8192 |       32768 |             |       40960
+       55 | _timescaledb_internal._hyper_5_55_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474256155676760,1474422400168830)","[-9223372036854775808,1073741823)"} |       65536 |      106496 |             |      172032
+       56 | _timescaledb_internal._hyper_5_56_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474256155676760,1474422400168830)","[1073741823,9223372036854775807)"}  |       65536 |       98304 |             |      163840
+       57 | _timescaledb_internal._hyper_5_57_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474422400168830,1475451869071032)","[1073741823,9223372036854775807)"}  |      253952 |      360448 |             |      614400
+       58 | _timescaledb_internal._hyper_5_58_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1474422400168830,1475451869071032)","[-9223372036854775808,1073741823)"} |      253952 |      368640 |             |      622592
+       59 | _timescaledb_internal._hyper_5_59_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1475451869071032,1476171423738979)","[-9223372036854775808,1073741823)"} |      180224 |      303104 |             |      483328
+       60 | _timescaledb_internal._hyper_5_60_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1475451869071032,1476171423738979)","[1073741823,9223372036854775807)"}  |      188416 |      303104 |             |      491520
+       61 | _timescaledb_internal._hyper_5_61_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1476171423738979,1477562725740618)","[1073741823,9223372036854775807)"}  |      327680 |      540672 |             |      868352
+       62 | _timescaledb_internal._hyper_5_62_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1476171423738979,1477562725740618)","[-9223372036854775808,1073741823)"} |      327680 |      532480 |             |      860160
+       63 | _timescaledb_internal._hyper_5_63_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1477562725740618,1479069529541703)","[-9223372036854775808,1073741823)"} |      360448 |      581632 |             |      942080
+       64 | _timescaledb_internal._hyper_5_64_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1477562725740618,1479069529541703)","[1073741823,9223372036854775807)"}  |      352256 |      589824 |             |      942080
+       65 | _timescaledb_internal._hyper_5_65_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1479069529541703,1480729540237036)","[1073741823,9223372036854775807)"}  |      385024 |      598016 |             |      983040
+       66 | _timescaledb_internal._hyper_5_66_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1479069529541703,1480729540237036)","[-9223372036854775808,1073741823)"} |      393216 |      614400 |             |     1007616
+       67 | _timescaledb_internal._hyper_5_67_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1480729540237036,1482389550932369)","[-9223372036854775808,1073741823)"} |      385024 |      598016 |             |      983040
+       68 | _timescaledb_internal._hyper_5_68_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1480729540237036,1482389550932369)","[1073741823,9223372036854775807)"}  |      393216 |      598016 |             |      991232
+       69 | _timescaledb_internal._hyper_5_69_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1482389550932369,1484049561627702)","[1073741823,9223372036854775807)"}  |      393216 |      622592 |             |     1015808
+       70 | _timescaledb_internal._hyper_5_70_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1482389550932369,1484049561627702)","[-9223372036854775808,1073741823)"} |      385024 |      606208 |             |      991232
+       71 | _timescaledb_internal._hyper_5_71_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1484049561627702,1485709572323035)","[1073741823,9223372036854775807)"}  |      385024 |      614400 |             |      999424
+       72 | _timescaledb_internal._hyper_5_72_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1484049561627702,1485709572323035)","[-9223372036854775808,1073741823)"} |      393216 |      622592 |             |     1015808
+       73 | _timescaledb_internal._hyper_5_73_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1485709572323035,1487369583018368)","[-9223372036854775808,1073741823)"} |      393216 |      614400 |             |     1007616
+       74 | _timescaledb_internal._hyper_5_74_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1485709572323035,1487369583018368)","[1073741823,9223372036854775807)"}  |      385024 |      614400 |             |      999424
+       75 | _timescaledb_internal._hyper_5_75_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1487369583018368,1489029593713701)","[1073741823,9223372036854775807)"}  |      360448 |      581632 |             |      942080
+       76 | _timescaledb_internal._hyper_5_76_chunk | {time,location}      | {"timestamp with time zone",integer} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1487369583018368,1489029593713701)","[-9223372036854775808,1073741823)"} |      368640 |      598016 |             |      966656
+(34 rows)
+
+SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | interval_length 
+----+---------------+-----------------
+  2 |             2 |   1277664162704
+  3 |             3 |   2315350169045
+  6 |             5 |                
+  5 |             5 |   1660010695333
+(4 rows)
+
+-- A previous version stopped working as soon as hypertable_id stopped being
+-- equal to dimension_id (i.e., there was a hypertable with more than 1 dimension).
+-- This test comes after test_adaptive_space, which has 2 dimensions, and makes
+-- sure that it still works.
+CREATE TABLE test_adaptive_after_multiple_dims(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
+                         chunk_target_size => '100MB',
+                         create_default_indexes => true);
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+               create_hypertable                
+------------------------------------------------
+ (6,public,test_adaptive_after_multiple_dims,t)
+(1 row)
+
+INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::timestamptz, 0.0, 5);
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
+ERROR:  must be owner of hypertable "test_adaptive"
+\set ON_ERROR_STOP 1
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Now make sure renaming schema gets propagated to the func_schema
+DROP TABLE test_adaptive;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_chunk_func_schema;
+CREATE OR REPLACE FUNCTION my_chunk_func_schema.calculate_chunk_interval(
+        dimension_id INTEGER,
+        dimension_coord BIGINT,
+        chunk_target_size BIGINT
+)
+    RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+BEGIN
+    RETURN 2;
+END
+$BODY$;
+CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive', 'time',
+                         chunk_target_size => '1MB',
+                         chunk_sizing_func => 'my_chunk_func_schema.calculate_chunk_interval');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
+NOTICE:  adding not-null constraint to column "time"
+     create_hypertable      
+----------------------------
+ (7,public,test_adaptive,t)
+(1 row)
+
+ALTER SCHEMA my_chunk_func_schema RENAME TO new_chunk_func_schema;
+INSERT INTO test_adaptive VALUES (now(), 1.0, 1);
