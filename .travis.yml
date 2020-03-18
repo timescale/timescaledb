@@ -6,7 +6,7 @@ services:
   - docker
 notifications:
   slack:
-    if: (type = cron) AND (branch = master)
+    if: (type = cron) OR (type = pull_request)
     on_success: change
     on_failure: always
     template:
