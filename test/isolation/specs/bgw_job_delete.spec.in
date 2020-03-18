@@ -77,6 +77,7 @@ teardown {
 
 session "s3"
 setup { 
+SET client_min_messages TO 'error';
 CREATE OR REPLACE FUNCTION ts_test_bgw_job_delete_by_id(job_id INTEGER)
 RETURNS VOID
 AS '@TS_MODULE_PATHNAME@'

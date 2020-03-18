@@ -42,7 +42,7 @@ index_size
 step Ic: COMMIT;
 
 starting permutation: F CI DI Bc P Ic Sc
-step F: SET client_min_messages TO 'fatal';
+step F: SET client_min_messages TO 'error';
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step DI: DROP INDEX test_index; <waiting ...>
 step Bc: ROLLBACK;
