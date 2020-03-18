@@ -15,7 +15,7 @@ teardown {
 }
 
 session "CREATE INDEX"
-step "F" { SET client_min_messages TO 'fatal'; }
+step "F" { SET client_min_messages TO 'error'; }
 step "CI"	{ CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); }
 
 session "RELEASE BARRIER"
