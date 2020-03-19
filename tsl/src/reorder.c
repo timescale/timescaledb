@@ -504,20 +504,20 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	int natts;
 	Datum *values;
 	bool *isnull;
-	bool use_wal;
 	TransactionId OldestXmin;
 	TransactionId FreezeXid;
 	MultiXactId MultiXactCutoff;
-	RewriteState rwstate;
 	bool use_sort;
 	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
 	BlockNumber num_pages;
 	int elevel = verbose ? INFO : DEBUG2;
 	PGRUsage ru0;
 #if PG12_LT
+	RewriteState rwstate;
 	IndexScanDesc indexScan;
 	TableScanDesc heapScan;
 	Tuplesortstate *tuplesort;
+	bool use_wal;
 #endif
 
 	pg_rusage_init(&ru0);
@@ -562,11 +562,13 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	if (OldHeap->rd_rel->reltoastrelid)
 		LockRelationOid(OldHeap->rd_rel->reltoastrelid, ExclusiveLock);
 
+#if PG12_LT
 	/*
 	 * We need to log the copied data in WAL iff WAL archiving/streaming is
 	 * enabled AND it's a WAL-logged rel.
 	 */
 	use_wal = XLogIsNeeded() && RelationNeedsWAL(NewHeap);
+#endif
 
 	/* use_wal off requires smgr_targblock be initially invalid */
 	Assert(RelationGetTargetBlock(NewHeap) == InvalidBlockNumber);
@@ -638,8 +640,10 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	*pFreezeXid = FreezeXid;
 	*pCutoffMulti = MultiXactCutoff;
 
+#if PG12_LT
 	/* Initialize the rewrite operation */
 	rwstate = begin_heap_rewrite(OldHeap, NewHeap, OldestXmin, FreezeXid, MultiXactCutoff, use_wal);
+#endif
 
 	/*
 	 * We know how to use a sort to duplicate the ordering of a btree index,

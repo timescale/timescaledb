@@ -444,7 +444,8 @@ static Node *
 process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 {
 	ListCell *lc;
-	ListCell *prev = NULL;
+
+	ListCell *prev pg_attribute_unused() = NULL;
 	List *additional_quals = NIL;
 
 	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext(lc))
