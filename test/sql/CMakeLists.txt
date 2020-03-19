@@ -80,7 +80,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     c_unit_tests.sql
     loader.sql
     metadata.sql
-    multi_transaction_index.sql
     net.sql
     symbol_conflict.sql
     telemetry.sql)
@@ -146,6 +145,12 @@ set(TEST_TEMPLATES
   sort_optimization.sql.in
   sql_query.sql.in
   )
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_TEMPLATES
+    multi_transaction_index.sql.in
+  )
+endif()
 
 # only test custom type if we are in 64-bit architecture
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")

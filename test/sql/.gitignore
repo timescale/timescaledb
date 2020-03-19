@@ -1,11 +1,13 @@
 /agg_bookends-*.sql
 /alternate_users-*.sql
 /append-*.sql
+/chunk_adaptive-*.sql
 /custom_type-*.sql
 /ddl-*.sql
 /ddl_single-*.sql
 /insert-*.sql
 /insert_many-*.sql
+/multi_transaction_index-*.sql
 /parallel-*.sql
 /partition-*.sql
 /partitioning-*.sql

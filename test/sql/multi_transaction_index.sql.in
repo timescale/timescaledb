@@ -32,14 +32,14 @@ INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
 -- New index should have been recursed to chunks
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk') ORDER BY 1,2;
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
 ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
 
 -- Metadata and index should have changed name
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk') ORDER BY 1,2;
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
 DROP INDEX index_test_time_idx2;
 DROP INDEX index_test_time_device_idx;
