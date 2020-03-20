@@ -20,7 +20,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Thanks**
 
-## 1.6.1 (2020-03-16)
+## 1.6.1 (2020-03-18)
 
 This maintenance release contains bugfixes since the 1.6.0 release. We deem it medium
 priority for upgrading.
@@ -58,6 +58,7 @@ restoring a backup.
 * #1740 Fix invalidation entries from multiple caggs on same hypertable
 * #1743 Fix continuous aggregate materialization timezone handling
 * #1748 Fix remove_drop_chunks_policy for continuous aggregates
+* #1756 Fix handling of dropped chunks in compression background worker
 
 **Thanks**
 * @RJPhillips01 for reporting an issue with drop chunks.
