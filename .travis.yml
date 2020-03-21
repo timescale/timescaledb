@@ -283,31 +283,18 @@ jobs:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
-    # This tests the ability to upgrade to the latest version from versions without constraint support
+    # This tests the ability to upgrade to the latest version on pg 9.6
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       env: PG_VERSION=9.6.6
-      name: "Update tests (versions w/o constraints support) 9.6.6"
+      name: "Update tests PostgreSQL 9.6.6"
       before_install:
       install:
       after_failure:
       after_script:
       after_success:
       script:
-        - ${RETRY_PREFIX} bash -x ./scripts/test_updates_no_constraints.sh
-
-    # This tests the ability to upgrade to the latest version from versions with constraint support
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      env: PG_VERSION=9.6.6
-      name: "Update tests (versions w/ constraints support) 9.6.6"
-      before_install:
-      install:
-      after_failure:
-      after_script:
-      after_success:
-      script:
-        - ${RETRY_PREFIX} bash -x ./scripts/test_updates_with_constraints.sh
+        - ${RETRY_PREFIX} bash ./scripts/test_updates_pg96.sh
 
     # This tests the ability to upgrade to the latest version on pg 10
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
