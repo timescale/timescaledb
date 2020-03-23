@@ -322,3 +322,49 @@ REFRESH MATERIALIZED VIEW cagg_expr;
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
 ALTER TABLE metrics set(timescaledb.compress);
+
+-- test rescan in compress chunk dml blocker
+CREATE TABLE rescan_test(id integer NOT NULL, t timestamptz NOT NULL, val double precision, PRIMARY KEY(id, t));
+SELECT create_hypertable('rescan_test', 't', chunk_time_interval => interval '1 day');
+
+-- compression
+ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id');
+
+-- INSERT dummy data
+INSERT INTO rescan_test SELECT 1, time, random() FROM generate_series('2000-01-01'::timestamptz, '2000-01-05'::timestamptz, '1h'::interval) g(time);
+
+
+SELECT count(*) FROM rescan_test;
+
+-- compress first chunk
+SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
+and ht.table_name like 'rescan_test' ORDER BY ch1.id LIMIT 1;
+
+-- count should be equal to count before compression
+SELECT count(*) FROM rescan_test;
+
+-- single row update is fine
+UPDATE rescan_test SET val = val + 1 WHERE rescan_test.id = 1 AND rescan_test.t = '2000-01-03 00:00:00+00';
+
+-- multi row update via WHERE is fine
+UPDATE rescan_test SET val = val + 1 WHERE rescan_test.id = 1 AND rescan_test.t > '2000-01-03 00:00:00+00';
+
+-- single row update with FROM is allowed if no compressed chunks are hit
+UPDATE rescan_test SET val = tmp.val
+FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045)]::rescan_test[]) AS x) AS tmp
+WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t AND rescan_test.t >= '2000-01-03';
+
+-- single row update with FROM is blocked
+\set ON_ERROR_STOP 0
+UPDATE rescan_test SET val = tmp.val
+FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045)]::rescan_test[]) AS x) AS tmp
+WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
+
+-- bulk row update with FROM is blocked
+UPDATE rescan_test SET val = tmp.val
+FROM (SELECT x.id, x.t, x.val FROM unnest(array[(1, '2000-01-03 00:00:00+00', 2.045), (1, '2000-01-03 01:00:00+00', 8.045)]::rescan_test[]) AS x) AS tmp
+WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
+\set ON_ERROR_STOP 1
+
+
