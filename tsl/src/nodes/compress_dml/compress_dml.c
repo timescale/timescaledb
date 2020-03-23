@@ -30,6 +30,7 @@ static Node *compress_chunk_dml_state_create(CustomScan *scan);
 static void compress_chunk_dml_begin(CustomScanState *node, EState *estate, int eflags);
 static TupleTableSlot *compress_chunk_dml_exec(CustomScanState *node);
 static void compress_chunk_dml_end(CustomScanState *node);
+static void compress_chunk_dml_rescan(CustomScanState *node);
 
 static CustomPathMethods compress_chunk_dml_path_methods = {
 	.CustomName = "CompressChunkDml",
@@ -46,6 +47,7 @@ static CustomExecMethods compress_chunk_dml_state_methods = {
 	.BeginCustomScan = compress_chunk_dml_begin,
 	.EndCustomScan = compress_chunk_dml_end,
 	.ExecCustomScan = compress_chunk_dml_exec,
+	.ReScanCustomScan = compress_chunk_dml_rescan,
 };
 
 static void
@@ -54,6 +56,14 @@ compress_chunk_dml_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *subplan = linitial(cscan->custom_plans);
 	node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
+}
+
+/*
+ * nothing to reset for rescan in dml blocker
+ */
+static void
+compress_chunk_dml_rescan(CustomScanState *node)
+{
 }
 
 /* we cannot update/delete rows if we have a compressed chunk. so
