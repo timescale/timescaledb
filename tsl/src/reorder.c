@@ -193,7 +193,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 
 		ts_cache_release(hcache);
 		aclcheck_error(ACLCHECK_NOT_OWNER,
-#if PG96 || PG10
+#if PG11_LT
 					   ACL_KIND_CLASS,
 #else
 					   OBJECT_TABLE,

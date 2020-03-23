@@ -219,13 +219,13 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	int n_keys;
 	const ColumnCompressionInfo **keys;
 
-	/*We want to prevent other compressors from compressing this table,
+	/* We want to prevent other compressors from compressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our compression.
 	 * We may as well allow readers to keep reading the uncompressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
 	Relation in_rel = table_open(in_table, ExclusiveLock);
-	/* we are _just_ INSERTing into the out_table so in principle we could take
+	/* We are _just_ INSERTing into the out_table so in principle we could take
 	 * a RowExclusive lock, and let other operations read and write this table
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
@@ -265,12 +265,12 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	truncate_relation(in_table);
 
-	/* recreate all indexes on out rel, we already have an exvclusive lock on it
+	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
 	 * so the strong locks taken by reindex_relation shouldn't matter. */
 	reindex_relation(out_table, 0, 0);
 
-	RelationClose(out_rel);
-	RelationClose(in_rel);
+	table_close(out_rel, NoLock);
+	table_close(in_rel, NoLock);
 }
 
 static int16 *
@@ -1042,12 +1042,12 @@ decompress_chunk(Oid in_table, Oid out_table)
 		FreeBulkInsertState(decompressor.bistate);
 	}
 
-	/* recreate all indexes on out rel, we already have an exvclusive lock on it
+	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
 	 * so the strong locks taken by reindex_relation shouldn't matter. */
 	reindex_relation(out_table, 0, 0);
 
-	RelationClose(out_rel);
-	RelationClose(in_rel);
+	table_close(out_rel, NoLock);
+	table_close(in_rel, NoLock);
 }
 
 static PerCompressedColumn *

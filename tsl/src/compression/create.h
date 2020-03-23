@@ -10,7 +10,6 @@
 
 #include "with_clause_parser.h"
 #include "hypertable.h"
-#include "chunk.h"
 
 #define COMPRESSION_COLUMN_METADATA_PREFIX "_ts_meta_"
 #define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"
