@@ -446,8 +446,8 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 static void
 set_statistics_on_compressed_table(Oid compressed_table_id)
 {
-	Relation table_rel = relation_open(compressed_table_id, ShareUpdateExclusiveLock);
-	Relation attrelation = relation_open(AttributeRelationId, RowExclusiveLock);
+	Relation table_rel = table_open(compressed_table_id, ShareUpdateExclusiveLock);
+	Relation attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 	TupleDesc table_desc = RelationGetDescr(table_rel);
 	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	for (int i = 0; i < table_desc->natts; i++)
@@ -487,8 +487,8 @@ set_statistics_on_compressed_table(Oid compressed_table_id)
 		heap_freetuple(tuple);
 	}
 
-	RelationClose(attrelation);
-	RelationClose(table_rel);
+	table_close(attrelation, NoLock);
+	table_close(table_rel, NoLock);
 }
 
 #if !PG96 && !PG10

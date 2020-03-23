@@ -28,7 +28,7 @@
 #include "hypertable_cache.h"
 #include "partitioning.h"
 
-#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_inherits_fn.h>
 #else
 #include <catalog/pg_inherits.h>

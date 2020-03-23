@@ -131,7 +131,7 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 
 		if (attno == InvalidAttrNumber)
 			elog(ERROR, "index attribute %s not found in chunk", NameStr(idxattr->attname));
-#if PG96 || PG10
+#if PG11_LT
 		ii->ii_KeyAttrNumbers[i] = attno;
 #else
 		ii->ii_IndexAttrNumbers[i] = attno;
