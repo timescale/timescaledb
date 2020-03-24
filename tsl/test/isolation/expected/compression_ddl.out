@@ -50,6 +50,7 @@ step A1: BEGIN; ALTER TABLE ts_device_table SET ( fillfactor = 80); <waiting ...
 step C1: BEGIN; SELECT compress_chunk(q.chname) from (select ch.schema_name || '.' || ch.table_name as chname from _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch where ch.hypertable_id = ht.id and ht.table_name like 'ts_device_table' order by ch.id limit 1 ) q; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step A1: <... completed>
+isolationtester: canceling step C1 after 100 seconds
 step C1: <... completed>
 ERROR:  canceling statement due to user request
 step Cc: COMMIT;
