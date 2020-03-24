@@ -62,7 +62,7 @@ docker_exec() {
 
 docker rm -f timescaledb-san 2>/dev/null || true
 
-docker run -d --privileged --name timescaledb-san -v ${TIMESCALE_DIR}:/timescaledb ${REMOTE_ORG}/${REMOTE_NAME}:${REMOTE_TAG}
+docker run -d --privileged --name timescaledb-san --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TIMESCALE_DIR}:/timescaledb ${REMOTE_ORG}/${REMOTE_NAME}:${REMOTE_TAG}
 
 # Run these commands as root to copy the source into the
 # container. Make sure that all files in the copy is owned by user

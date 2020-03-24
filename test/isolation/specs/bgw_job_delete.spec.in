@@ -84,9 +84,11 @@ LANGUAGE C VOLATILE STRICT;
 
 SET lock_timeout = '50ms';
 SET  role default_perm_user;
+SET client_min_messages =  WARNING;
 }
 step "s3a" { select ts_test_bgw_job_delete_by_id(id) FROM _timescaledb_config.bgw_job; }
 teardown {
+    RESET client_min_messages;
     reset role;
 }
 

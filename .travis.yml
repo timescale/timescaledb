@@ -24,7 +24,7 @@ env:
     - CODECOV_FLAGS="-F cron"
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL regression tests
-  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
+  - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
 install:
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl && mkdir -p /build/debug /build/debug-nossl /postgres"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
@@ -47,7 +47,7 @@ script:
   # Now build with OpenSSL
   - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
   # Now run all tests
-  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='${IGNORES}' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Run the PG regression tests too
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 after_failure:
@@ -92,12 +92,12 @@ jobs:
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Regression 9.6.15 32 bit"
+      name: "Regression 9.6.17 32 bit"
       env:
-        - PG_VERSION=9.6.15
+        - PG_VERSION=9.6.17
         - RETRY_PREFIX=""
       before_install:
-        - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
+        - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
       script:
         # First build without OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
@@ -124,7 +124,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive ordered_append-10 parallel-10 transparent_decompression-10' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive ordered_append-10 parallel-10 transparent_decompression-10 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -142,7 +142,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive ordered_append-11 parallel-11 transparent_decompression-11' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive ordered_append-11 parallel-11 transparent_decompression-11 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     # This runs tests on ARM32 emulation
     - if: branch = arm_test
@@ -165,7 +165,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -189,7 +189,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-10'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-10 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -213,7 +213,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -222,54 +222,58 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 9.6.6"
-      env: PG_VERSION=9.6.6
+      env: PG_VERSION=9.6.6 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 9.6.15"
-      env: PG_VERSION=9.6.15
+      name: "Regression 9.6.17"
+      env: PG_VERSION=9.6.17
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 10.2"
-      env: PG_VERSION=10.2
+      env: PG_VERSION=10.2 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 10.10"
-      env: PG_VERSION=10.10
+      name: "Regression 10.12"
+      env: PG_VERSION=10.12
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Regression 11.0"
-      env: PG_VERSION=11.0
+      env: PG_VERSION=11.0 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 11.5"
-      env: PG_VERSION=11.5
+      name: "Regression 11.7"
+      env: PG_VERSION=11.7
 
     #get codecov info, we only run 11.0 on PRs and the rest in cron
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "CodeCov 11.0"
-      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F pr"
+      env: 
+        - PG_VERSION=11.0
+        - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'"
+        - CODECOV_FLAGS="-F pr"
+        - IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "CodeCov 9.6.15"
-      env: PG_VERSION=9.6.15 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 9.6.17"
+      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "CodeCov 11.5"
-      env: PG_VERSION=11.5 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 11.7"
+      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -277,8 +281,8 @@ jobs:
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "CodeCov 10.10"
-      env: PG_VERSION=10.10 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 10.12"
+      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -374,18 +378,18 @@ jobs:
     # Release mode regression tests
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Release regression tests 11.0"
-      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 11.7"
+      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Release regression tests 10.2"
-      env: PG_VERSION=10.2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 10.12"
+      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
-      name: "Release regression tests 9.6.6"
-      env: PG_VERSION=9.6.6 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 9.6.17"
+      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)

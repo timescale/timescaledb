@@ -13,6 +13,7 @@
 typedef.list
 /test/testcluster
 /test/log
+/test/temp_schedule
 /build
 **/GPATH
 **/GTAGS

@@ -4,14 +4,14 @@ set(TEST_TEMPLATES_MODULE
   reorder_vs_insert_other_chunk.spec.in
 )
 
-set(TEST_TEMPLATES
-  continuous_aggs_insert.spec.in
-  continuous_aggs_multi.spec.in
-)
-
 set(TEST_TEMPLATES_MODULE_DEBUG
   reorder_vs_insert.spec.in
   reorder_vs_select.spec.in
+)
+
+list(APPEND TEST_FILES
+  continuous_aggs_insert.spec
+  continuous_aggs_multi.spec
 )
 
 if (${PG_VERSION_MAJOR} GREATER "9")

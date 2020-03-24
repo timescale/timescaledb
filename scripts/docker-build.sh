@@ -51,7 +51,7 @@ create_postgres_build_image() {
 
     echo "Creating new PostgreSQL build image ${image}"
     # Run a Postgres container
-    docker run -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
+    docker run -d --name ${BUILD_CONTAINER_NAME} --env POSTGRES_HOST_AUTH_METHOD=trust -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
 
     # Install build dependencies
     docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb git coreutils dpkg-dev gcc libc-dev make cmake util-linux-dev diffutils openssl-dev && mkdir -p /build/debug"
