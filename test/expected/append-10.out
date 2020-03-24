@@ -113,7 +113,11 @@ SELECT create_hypertable('metrics_space','time','device_id',3);
  (6,public,metrics_space,t)
 (1 row)
 
-INSERT INTO metrics_space SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id FROM generate_series('2000-01-01'::date, '2000-01-14'::date, '5m'::interval) g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO metrics_space
+SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id
+FROM generate_series('2000-01-01'::timestamptz, '2000-01-14'::timestamptz, '5m'::interval) g1(time),
+  generate_series(1,10,1) g2(device_id)
+ORDER BY time, device_id;
 ANALYZE metrics_space;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -2134,7 +2138,11 @@ psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column
 (1 row)
 
 CREATE INDEX ON join_limit(time,device_id);
-INSERT INTO join_limit SELECT time, device_id FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time), generate_series(1,10,1) g2(device_id);
+INSERT INTO join_limit
+SELECT time, device_id
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time),
+  generate_series(1,10,1) g2(device_id)
+ORDER BY time, device_id;
 -- get 2nd chunk oid
 SELECT tableoid AS "CHUNK_OID" FROM join_limit WHERE time > '2000-01-07' ORDER BY time LIMIT 1
 \gset

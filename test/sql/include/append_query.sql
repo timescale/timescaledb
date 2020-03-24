@@ -314,7 +314,12 @@ RESET enable_hashagg;
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
 CREATE INDEX ON join_limit(time,device_id);
-INSERT INTO join_limit SELECT time, device_id FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time), generate_series(1,10,1) g2(device_id);
+
+INSERT INTO join_limit
+SELECT time, device_id
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time),
+  generate_series(1,10,1) g2(device_id)
+ORDER BY time, device_id;
 
 -- get 2nd chunk oid
 SELECT tableoid AS "CHUNK_OID" FROM join_limit WHERE time > '2000-01-07' ORDER BY time LIMIT 1
