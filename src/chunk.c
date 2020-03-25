@@ -1681,24 +1681,26 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, int16 num_constra
 									AccessShareLock,
 									mctx);
 
-	switch (num_found)
+	if (num_found == 0 || (num_found == 1 && chunk->fd.dropped))
 	{
-		case 0:
-			if (fail_if_not_found)
-				elog(ERROR, "chunk not found");
-			pfree(chunk);
-			chunk = NULL;
-			break;
-		case 1:
-			if (num_constraints > 0)
-			{
-				chunk->constraints =
-					ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints, mctx);
-				chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
-			}
-			break;
-		default:
-			elog(ERROR, "unexpected number of chunks found: %d", num_found);
+		if (fail_if_not_found)
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+		pfree(chunk);
+		chunk = NULL;
+	}
+	else if (num_found == 1)
+	{
+		Assert(!chunk->fd.dropped);
+		if (num_constraints > 0)
+		{
+			chunk->constraints =
+				ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints, mctx);
+			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
+		}
+	}
+	else
+	{
+		elog(ERROR, "expected a single chunk, found %d", num_found);
 	}
 
 	return chunk;
