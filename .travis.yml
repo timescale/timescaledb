@@ -251,8 +251,8 @@ jobs:
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "Regression 12.1"
-      env: PG_VERSION=12.1
+      name: "Regression 12.2"
+      env: PG_VERSION=12.2
 
     #get codecov info, we only run 11.0 on PRs and the rest in cron
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
