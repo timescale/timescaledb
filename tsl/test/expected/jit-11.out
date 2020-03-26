@@ -11,31 +11,23 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
 -- enable all jit optimizations
---
--- disable jit_tuple_deforming for PG11 as a temporary solution
--- until it fixed
---
 SET jit=on;
 SET jit_above_cost=0;
 SET jit_inline_above_cost=0;
 SET jit_optimize_above_cost=0;
-SELECT
-  CASE WHEN current_setting('server_version_num')::int < 120000
-    THEN 0 ELSE 1
-  END AS "USE_JIT_DEFORMING"
-\gset
-SET jit_tuple_deforming=:USE_JIT_DEFORMING;
+SET jit_tuple_deforming=on;
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-CREATE TABLE jit_test(time timestamp NOT NULL, temp float);
+CREATE TABLE jit_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_hypertable('jit_test', 'time');
    create_hypertable   
 -----------------------
  (1,public,jit_test,t)
 (1 row)
 
+ALTER TABLE jit_test DROP COLUMN device;
 CREATE TABLE jit_test_interval(id int NOT NULL, temp float);
 SELECT create_hypertable('jit_test_interval', 'id', chunk_time_interval => 10);
        create_hypertable        
@@ -66,7 +58,7 @@ SELECT
 FROM
   jit_test_contagg
 GROUP BY bucket, device_id;
-psql:include/jit_load.sql:28: NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
+psql:include/jit_load.sql:29: NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
 INSERT INTO jit_test_contagg
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
 INSERT INTO jit_test_contagg
@@ -83,30 +75,30 @@ REFRESH MATERIALIZED VIEW jit_device_summary;
 --
 :PREFIX
 INSERT INTO jit_test VALUES('2017-01-20T09:00:01', 22.5) RETURNING *;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
    Output: "time", temp
    ->  Insert on public.jit_test
          Output: "time", temp
          ->  Custom Scan (ChunkDispatch)
-               Output: 'Fri Jan 20 09:00:01 2017'::timestamp without time zone, '22.5'::double precision
+               Output: 'Fri Jan 20 09:00:01 2017'::timestamp without time zone, NULL::integer, '22.5'::double precision
                ->  Result
-                     Output: 'Fri Jan 20 09:00:01 2017'::timestamp without time zone, '22.5'::double precision
+                     Output: 'Fri Jan 20 09:00:01 2017'::timestamp without time zone, NULL::integer, '22.5'::double precision
 (8 rows)
 
 :PREFIX
 INSERT INTO jit_test VALUES ('2017-01-20T09:00:02', 2),
                             ('2017-01-20T09:00:03', 5),
                             ('2017-01-20T09:00:04', 10);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
    ->  Insert on public.jit_test
          ->  Custom Scan (ChunkDispatch)
-               Output: "*VALUES*".column1, "*VALUES*".column2
+               Output: "*VALUES*".column1, NULL::integer, "*VALUES*".column2
                ->  Values Scan on "*VALUES*"
-                     Output: "*VALUES*".column1, "*VALUES*".column2
+                     Output: "*VALUES*".column1, NULL::integer, "*VALUES*".column2
 (6 rows)
 
 :PREFIX
