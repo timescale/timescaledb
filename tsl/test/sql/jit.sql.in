@@ -13,20 +13,11 @@ SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized resul
 \gset
 
 -- enable all jit optimizations
---
--- disable jit_tuple_deforming for PG11 as a temporary solution
--- until it fixed
---
 SET jit=on;
 SET jit_above_cost=0;
 SET jit_inline_above_cost=0;
 SET jit_optimize_above_cost=0;
-SELECT
-  CASE WHEN current_setting('server_version_num')::int < 120000
-    THEN 0 ELSE 1
-  END AS "USE_JIT_DEFORMING"
-\gset
-SET jit_tuple_deforming=:USE_JIT_DEFORMING;
+SET jit_tuple_deforming=on;
 
 \ir :TEST_LOAD_NAME
 \set PREFIX 'EXPLAIN (VERBOSE, TIMING OFF, COSTS OFF, SUMMARY OFF)'
