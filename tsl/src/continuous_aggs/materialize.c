@@ -397,7 +397,7 @@ get_materialization_end_point_for_table(int32 raw_hypertable_id, int32 materiali
 	NameData time_column_name = time_column->fd.column_name;
 	Oid time_column_type = ts_dimension_get_partition_type(time_column);
 	int64 now_time = ts_get_now_internal(time_column);
-	int64 end_time, start_time, min_time, max_time;
+	int64 end_time, start_time, min_time, max_time = PG_INT64_MAX;
 	bool found_new_tuples = false;
 
 	start_time = old_completed_threshold;
