@@ -8,6 +8,7 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <commands/extension.h>
+#include <catalog/pg_collation.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
@@ -146,13 +147,15 @@ static void
 process_response(const char *json)
 {
 	VersionResult result;
-	bool is_uptodate =
-		DatumGetBool(DirectFunctionCall2(texteq,
-										 DirectFunctionCall2(json_object_field_text,
-															 CStringGetTextDatum(json),
-															 PointerGetDatum(cstring_to_text(
-																 TS_IS_UPTODATE_JSON_FIELD))),
-										 PointerGetDatum(cstring_to_text("true"))));
+	bool is_uptodate = DatumGetBool(
+		DirectFunctionCall2Coll(texteq,
+								C_COLLATION_OID,
+								DirectFunctionCall2Coll(json_object_field_text,
+														C_COLLATION_OID,
+														CStringGetTextDatum(json),
+														PointerGetDatum(cstring_to_text(
+															TS_IS_UPTODATE_JSON_FIELD))),
+								PointerGetDatum(cstring_to_text("true"))));
 
 	if (is_uptodate)
 		elog(NOTICE, "the \"%s\" extension is up-to-date", EXTENSION_NAME);
