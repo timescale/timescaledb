@@ -19,6 +19,7 @@
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
+#include <utils/elog.h>
 
 #include "job.h"
 #include "scanner.h"
