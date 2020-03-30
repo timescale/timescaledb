@@ -481,7 +481,7 @@ select view_name, completed_threshold, invalidation_threshold, job_status, last_
 view_name              | test_continuous_agg_view
 completed_threshold    | 6
 invalidation_threshold | 6
-job_status             | scheduled
+job_status             | Scheduled
 last_run_duration      | 
 
 \x off
