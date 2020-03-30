@@ -154,14 +154,17 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     cagg.job_id as job_id,
     bgw_job_stat.last_start as last_run_started_at,
     bgw_job_stat.last_successful_finish as last_successful_finish,
-    CASE when bgw_job_stat.last_run_success = 't' then 'Success'
-         when bgw_job_stat.last_run_success = 'f' then 'Failed'
-    END AS last_run_status,
-    case when bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' then 'running'
-       when bgw_job_stat.next_start is not null then 'scheduled'
-    end as job_status,
-    case when bgw_job_stat.last_finish > bgw_job_stat.last_start then (bgw_job_stat.last_finish - bgw_job_stat.last_start)
-    end as last_run_duration,
+    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL 
+         WHEN bgw_job_stat.last_finish IS NOT NULL THEN
+              CASE WHEN bgw_job_stat.last_run_success = 't' THEN 'Success'
+                   WHEN bgw_job_stat.last_run_success = 'f' THEN 'Failed'
+              END
+    END as last_run_status,
+    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN 'Running'
+       WHEN bgw_job_stat.next_start IS NOT NULL THEN 'Scheduled'
+    END as job_status,
+    CASE WHEN bgw_job_stat.last_finish > bgw_job_stat.last_start THEN (bgw_job_stat.last_finish - bgw_job_stat.last_start)
+    END as last_run_duration,
     bgw_job_stat.next_start as next_scheduled_run,
     bgw_job_stat.total_runs,
     bgw_job_stat.total_successes,
