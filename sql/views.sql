@@ -192,6 +192,7 @@ WITH mapq as
  FROM _timescaledb_catalog.compression_chunk_size map )
   SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
   format('%1$I.%2$I', srcch.schema_name, srcch.table_name)::regclass as chunk_name,
+  format('%1$I.%2$I', srcch.schema_name, srccch.table_name)::regclass as compressed_chunk_name,
   CASE WHEN srcch.compressed_chunk_id IS NULL THEN 'Uncompressed'::TEXT ELSE 'Compressed'::TEXT END as compression_status,
   mapq.uncompressed_heap_bytes,
   mapq.uncompressed_index_bytes,
@@ -203,6 +204,8 @@ WITH mapq as
   mapq.compressed_total_bytes
   FROM _timescaledb_catalog.hypertable as srcht JOIN _timescaledb_catalog.chunk as srcch
   ON srcht.id = srcch.hypertable_id and srcht.compressed_hypertable_id IS NOT NULL
+  JOIN _timescaledb_catalog.chunk AS srccch 
+  ON srcch.compressed_chunk_id = srccch.id AND srcht.compressed_hypertable_id IS NOT NULL
   LEFT JOIN mapq
   ON srcch.id = mapq.chunk_id ;
 
