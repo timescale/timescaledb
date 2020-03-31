@@ -28,7 +28,6 @@ set(TEST_FILES
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
-  query.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql
@@ -141,6 +140,7 @@ set(TEST_TEMPLATES
   plan_hashagg.sql.in
   # lateral plans are different across versions, explains run without analyze on 9.6
   plan_ordered_append.sql.in
+  query.sql.in
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
   sql_query.sql.in

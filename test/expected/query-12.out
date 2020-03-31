@@ -1,0 +1,428 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\set TEST_BASE_NAME query
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
+\gset
+\set PREFIX 'EXPLAIN (costs OFF)'
+\ir :TEST_LOAD_NAME
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE PUBLIC.hyper_1 (
+  time TIMESTAMP NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper_1    | t
+(1 row)
+
+INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_tz (
+  time TIMESTAMPTZ NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_tz" ON PUBLIC.hyper_1_tz (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_tz"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | hyper_1_tz | t
+(1 row)
+
+INSERT INTO hyper_1_tz SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_tz SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_int (
+  time int NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_int" ON PUBLIC.hyper_1_int (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>10000, create_default_indexes=>FALSE);
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+             3 | public      | hyper_1_int | t
+(1 row)
+
+INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_date (
+  time date NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_date" ON PUBLIC.hyper_1_date (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_date"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>86400000000, create_default_indexes=>FALSE);
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             4 | public      | hyper_1_date | t
+(1 row)
+
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+--below needed to create enough unique dates to trigger an index scan
+INSERT INTO hyper_1_date SELECT to_timestamp(ser*100)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.plain_table (
+  time TIMESTAMPTZ NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_plain_table" ON PUBLIC.plain_table (time DESC, series_0);
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+-- Table with a time partitioning function
+CREATE TABLE PUBLIC.hyper_timefunc (
+  time float8 NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+CREATE INDEX "time_plain_timefunc" ON PUBLIC.hyper_timefunc (to_timestamp(time) DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_timefunc"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false, time_partitioning_func => 'unix_to_timestamp');
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+             5 | public      | hyper_timefunc | t
+(1 row)
+
+INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+ANALYZE plain_table;
+ANALYZE hyper_timefunc;
+ANALYZE hyper_1;
+ANALYZE hyper_1_tz;
+ANALYZE hyper_1_int;
+ANALYZE hyper_1_date;
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+SHOW timescaledb.disable_optimizations;
+ timescaledb.disable_optimizations 
+-----------------------------------
+ off
+(1 row)
+
+--non-aggregates use MergeAppend in both optimized and non-optimized
+:PREFIX SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Limit
+   ->  Custom Scan (ChunkAppend) on hyper_1
+         Order: hyper_1."time" DESC
+         ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(4 rows)
+
+:PREFIX SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Limit
+   ->  Index Scan using _hyper_5_19_chunk_time_plain_timefunc on _hyper_5_19_chunk
+(2 rows)
+
+--Aggregates use MergeAppend only in optimized
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
+
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone))
+         ->  Result
+               ->  Merge Append
+                     Sort Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)) DESC
+                     ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
+                     ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
+                     ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
+                     ->  Index Scan using _hyper_4_9_chunk_time_plain_date on _hyper_4_9_chunk
+                     ->  Index Scan using _hyper_4_10_chunk_time_plain_date on _hyper_4_10_chunk
+                     ->  Index Scan using _hyper_4_11_chunk_time_plain_date on _hyper_4_11_chunk
+                     ->  Index Scan using _hyper_4_12_chunk_time_plain_date on _hyper_4_12_chunk
+                     ->  Index Scan using _hyper_4_13_chunk_time_plain_date on _hyper_4_13_chunk
+                     ->  Index Scan using _hyper_4_14_chunk_time_plain_date on _hyper_4_14_chunk
+                     ->  Index Scan using _hyper_4_15_chunk_time_plain_date on _hyper_4_15_chunk
+                     ->  Index Scan using _hyper_4_16_chunk_time_plain_date on _hyper_4_16_chunk
+                     ->  Index Scan using _hyper_4_17_chunk_time_plain_date on _hyper_4_17_chunk
+                     ->  Index Scan using _hyper_4_18_chunk_time_plain_date on _hyper_4_18_chunk
+(19 rows)
+
+--the minute and second results should be diff
+:PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
+
+:PREFIX SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('second'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('second'::text, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
+
+--test that when index on time used by constraint, still works correctly
+:PREFIX
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
+LIMIT 2;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, hyper_1."time")
+               ->  Custom Scan (ChunkAppend) on hyper_1
+                     Chunks excluded during startup: 0
+                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(9 rows)
+
+--test on table with time partitioning function. Currently not
+--optimized to use index for ordering since the index is an expression
+--on time (e.g., timefunc(time)), and we currently don't handle that
+--case.
+:PREFIX
+SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_timefunc
+WHERE to_timestamp(time) < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
+LIMIT 2;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, to_timestamp(_hyper_5_19_chunk."time"))) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, to_timestamp(_hyper_5_19_chunk."time"))
+               ->  Result
+                     ->  Index Scan using _hyper_5_19_chunk_time_plain_timefunc on _hyper_5_19_chunk
+                           Index Cond: (to_timestamp("time") < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(8 rows)
+
+BEGIN;
+  --test that still works with an expression index on data_trunc.
+  DROP INDEX "time_plain";
+  CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
+  ANALYZE hyper_1;
+  :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
+(6 rows)
+
+  --test that works with both indexes
+  CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
+  ANALYZE hyper_1;
+  :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
+(6 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric, 5)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: time_bucket('@ 1 min'::interval, hyper_1."time") DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval))
+         ->  Result
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(5 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) DESC
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(6 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), trunc(avg(series_2)::numeric,5)
+  FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_chunk."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval))
+         ->  Result
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+(5 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1_tz
+               Order: time_bucket('@ 1 min'::interval, hyper_1_tz."time") DESC
+               ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
+(6 rows)
+
+  :PREFIX SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, (_hyper_2_2_chunk."time")::timestamp without time zone))
+         ->  Result
+               ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
+(5 rows)
+
+  :PREFIX SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket(10, hyper_1_int."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1_int
+               Order: time_bucket(10, hyper_1_int."time") DESC
+               ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
+               ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+               ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+(8 rows)
+
+  :PREFIX SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
+  FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket(10, hyper_1_int."time", 2))
+         ->  Custom Scan (ChunkAppend) on hyper_1_int
+               Order: time_bucket(10, hyper_1_int."time", 2) DESC
+               ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
+               ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+               ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+(8 rows)
+
+ROLLBACK;
+--plain tables shouldnt be optimized by default
+:PREFIX
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM plain_table
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
+LIMIT 2;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, "time")) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, "time")
+               ->  Index Scan using time_plain_plain_table on plain_table
+                     Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(7 rows)
+
+--can turn on plain table optimizations
+BEGIN;
+    SET LOCAL timescaledb.optimize_non_hypertables = 'on';
+    :PREFIX
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+    FROM plain_table
+    WHERE time < to_timestamp(900)
+    GROUP BY t
+    ORDER BY t DESC
+    LIMIT 2;
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: date_trunc('minute'::text, "time")
+         ->  Index Scan using time_plain_plain_table on plain_table
+               Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(5 rows)
+
+ROLLBACK;
+--generate the results into two different files
+\set ECHO errors
+--- Unoptimized result
++++ Optimized result
+@@ -1,6 +1,6 @@
+  timescaledb.disable_optimizations 
+ -----------------------------------
+- on
++ off
+ (1 row)
+ 
+            time           | series_0 | series_1 |     series_2     
+ ?column? 
+----------
+ Done
+(1 row)
+
