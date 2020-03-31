@@ -120,6 +120,7 @@ if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
   list(APPEND TEST_FILES
     generated_columns.sql
     misc.sql
+    tableam.sql
   )
 endif()
 

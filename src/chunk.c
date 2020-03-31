@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_class.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/indexing.h>
@@ -11,6 +12,7 @@
 #include <catalog/toasting.h>
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
+#include <commands/defrem.h>
 #include <tcop/tcopprot.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
@@ -564,6 +566,30 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	NewRelationCreateToastTable(chunk_oid, toast_options);
 }
 
+#if PG12_GE
+/*
+ * Get the access method name for a relation.
+ */
+static char *
+get_am_name_for_rel(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return get_am_name(amoid);
+}
+#endif
+
 /*
  * Create a chunk's table.
  *
@@ -598,6 +624,9 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, char *tablespacename)
 			list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
 		.tablespacename = tablespacename,
 		.options = get_reloptions(ht->main_table_relid),
+#if PG12_GE
+		.accessMethod = get_am_name_for_rel(ht->main_table_relid),
+#endif
 	};
 	Oid uid, saved_uid;
 
