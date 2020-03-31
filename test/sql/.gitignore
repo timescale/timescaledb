@@ -15,6 +15,7 @@
 /plan_hashagg_optimized-*.sql
 /plan_hashagg-*.sql
 /plan_ordered_append-*.sql
+/query-*.sql
 /sort_optimization-*.sql
 /sql_query_results_optimized-*.sql
 /sql_query_results_unoptimized-*.sql
