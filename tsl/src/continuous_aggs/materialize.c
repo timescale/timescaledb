@@ -1,4 +1,3 @@
-
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -536,6 +535,10 @@ hypertable_get_min_and_max_time_value(SchemaAndName hypertable, Name time_column
 	Datum search_start_val =
 		internal_to_time_value_or_infinite(search_start, time_type, &search_start_is_infinite);
 
+	Assert(max_out != NULL);
+	Assert(min_out != NULL);
+	Assert(time_column != NULL);
+
 	if (search_start_is_infinite && search_start > 0)
 	{
 		/* the previous completed time was +infinity, there can be no new ranges */
@@ -605,7 +608,13 @@ hypertable_get_min_and_max_time_value(SchemaAndName hypertable, Name time_column
 		SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &fval_is_null);
 	last_time_value = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &lval_is_null);
 	Assert(fval_is_null == lval_is_null);
-	if (!lval_is_null)
+
+	if (lval_is_null)
+	{
+		*min_out = PG_INT64_MIN;
+		*max_out = PG_INT64_MAX;
+	}
+	else
 	{
 		*min_out = ts_time_value_to_internal(first_time_value, time_type);
 		*max_out = ts_time_value_to_internal(last_time_value, time_type);
