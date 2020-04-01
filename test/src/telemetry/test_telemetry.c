@@ -28,6 +28,7 @@ TS_FUNCTION_INFO_V1(ts_test_status_ssl);
 TS_FUNCTION_INFO_V1(ts_test_status_mock);
 TS_FUNCTION_INFO_V1(ts_test_telemetry_main_conn);
 TS_FUNCTION_INFO_V1(ts_test_telemetry);
+TS_FUNCTION_INFO_V1(ts_test_check_version_response);
 
 #ifdef TS_DEBUG
 static char *test_string;
@@ -156,6 +157,14 @@ ts_test_validate_server_version(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(cstring_to_text(result.versionstr));
 
 	PG_RETURN_NULL();
+}
+
+Datum
+ts_test_check_version_response(PG_FUNCTION_ARGS)
+{
+	text *response = PG_GETARG_TEXT_P(0);
+	ts_check_version_response(text_to_cstring(response));
+	PG_RETURN_VOID();
 }
 
 /* Try to get the telemetry function to handle errors. Never connect to the
