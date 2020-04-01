@@ -29,13 +29,22 @@ set(TEST_TEMPLATES
   reorder.sql.in
 )
 
+# Check if PostgreSQL was compiled with JIT support
+set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")
+if (EXISTS ${PG_CONFIG_H})
+  file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
+       REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
+  if (PG_USE_LLVM AND ${PG_VERSION_MAJOR} GREATER_EQUAL "11")
+    list(APPEND TEST_TEMPLATES jit.sql.in)
+  endif()
+endif()
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
     #current_timestamp_mock available only in debug mode
     continuous_aggs_query.sql.in
     )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
 
 #compression only for PG > 9
 if (${PG_VERSION_MAJOR} GREATER "9")
