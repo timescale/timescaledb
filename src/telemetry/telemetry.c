@@ -503,6 +503,7 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	HttpRequest *req;
 	HttpResponseState *rsp;
 	bool started = false;
+	const char *volatile json = NULL;
 
 	if (!ts_telemetry_on())
 		return true;
@@ -545,12 +546,26 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	 * Do the version-check. Response is the body of a well-formed HTTP
 	 * response, since otherwise the previous line will throw an error.
 	 */
+	PG_TRY();
 	{
-		const char *json = ts_http_response_state_body_start(rsp);
-		ereport(DEBUG1,
-				(errmsg("telemetry got HTTP response body '%s' from host '%s'", json, host)));
+		json = ts_http_response_state_body_start(rsp);
 		ts_check_version_response(json);
 	}
+	PG_CATCH();
+	{
+		/* If the response is malformed, ts_check_version_response() will
+		 * throw an error, so we capture the error here and print debugging
+		 * information before re-throwing the error. */
+		ereport(NOTICE,
+				(errmsg("malformed telemetry response body"),
+				 errdetail("host=%s, service=%s, path=%s: %s",
+						   host,
+						   service,
+						   path,
+						   json ? json : "<EMPTY>")));
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	ts_http_response_state_destroy(rsp);
 

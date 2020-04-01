@@ -280,7 +280,7 @@ SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_time
  
 (1 row)
 
-\set ON_ERROR_STOP 0
+----------------------------------------------------------------
 -- Test well-formed response and valid versions
 SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1", "is_up_to_date": true}');
 NOTICE:  the "timescaledb" extension is up-to-date
@@ -307,6 +307,7 @@ SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1-rc1"
  
 (1 row)
 
+----------------------------------------------------------------
 -- Test well-formed response but invalid versions
 SELECT test_check_version_response('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "is_up_to_date": false}');
 WARNING:  server did not return a valid TimescaleDB version: version string is too long
@@ -336,6 +337,18 @@ WARNING:  server did not return a valid TimescaleDB version: version string has 
  
 (1 row)
 
+----------------------------------------------------------------
+-- Test malformed responses
+\set ON_ERROR_STOP 0
+-- Empty response
+SELECT test_check_version_response('{}');
+ERROR:  malformed telemetry response body
+-- Field "is_up_to_date" missing
+SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1"}');
+ERROR:  malformed telemetry response body
+-- Field "current_timescaledb_version" is missing
+SELECT test_check_version_response('{"is_up_to_date": false}');
+ERROR:  malformed telemetry response body
 \set ON_ERROR_STOP 1
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
