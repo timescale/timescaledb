@@ -126,18 +126,32 @@ SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_time
 SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}');
 
 
-\set ON_ERROR_STOP 0
+----------------------------------------------------------------
 -- Test well-formed response and valid versions
 SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1", "is_up_to_date": true}');
 SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1", "is_up_to_date": false}');
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1", "is_up_to_date": false}');
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1-rc1", "is_up_to_date": false}');
 
+----------------------------------------------------------------
 -- Test well-formed response but invalid versions
 SELECT test_check_version_response('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "is_up_to_date": false}');
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1+rc1", "is_up_to_date": false}');
 SELECT test_check_version_response('{"current_timescaledb_version": "@10.1.1", "is_up_to_date": false}');
 SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1@", "is_up_to_date": false}');
+
+----------------------------------------------------------------
+-- Test malformed responses
+
+\set ON_ERROR_STOP 0
+-- Empty response
+SELECT test_check_version_response('{}');
+
+-- Field "is_up_to_date" missing
+SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1"}');
+
+-- Field "current_timescaledb_version" is missing
+SELECT test_check_version_response('{"is_up_to_date": false}');
 \set ON_ERROR_STOP 1
 
 SET timescaledb.telemetry_level=basic;
