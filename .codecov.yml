@@ -1,6 +1,0 @@
-ignore: "test/src"
-coverage:
-  status:
-    project:
-      default:
-        flags: pr

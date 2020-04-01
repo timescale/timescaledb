@@ -1,173 +1,33 @@
-version: 1.0.{build}
-image: Windows Server 2019
-services:
-  - postgresql101
-  - docker
-build_script:
-- ps: >-
-
-    # Create directories for tablespaces
-
-    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace1"
-
-    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace2"
-
-    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\log"
-
-    # Permissions for the tablespace dirs will be full access to everyone
-
-    $Acl1 = Get-Acl "C:\Users\$env:UserName\Documents\tablespace1"
-
-    $Ar1 = New-Object System.Security.AccessControl.FileSystemAccessRule("everyone","FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-
-    $Acl1.SetAccessRule($Ar1)
-
-    Set-Acl "C:\Users\$env:UserName\Documents\tablespace1" $Acl1
-
-
-    $Acl2 = Get-Acl "C:\Users\$env:UserName\Documents\tablespace2"
-
-    $Ar2 = New-Object System.Security.AccessControl.FileSystemAccessRule("everyone","FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-
-    $Acl2.SetAccessRule($Ar2)
-
-    Set-Acl "C:\Users\$env:UserName\Documents\tablespace2" $Acl2
-
-
-    $Acl3 = Get-Acl "C:\Users\$env:UserName\Documents\log"
-
-    $Ar3 = New-Object System.Security.AccessControl.FileSystemAccessRule("everyone","FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-
-    $Acl3.SetAccessRule($Ar3)
-
-    Set-Acl "C:\Users\$env:UserName\Documents\tablespace2" $Acl3
-
-    # open firewall for docker
-
-    New-NetFirewallRule -DisplayName "Allow postgres" -Direction Inbound -Action Allow -Protocol Any -LocalPort Any
-
-    # Set user and passworkd for psql
-
-    SET PGUSER=postgres
-
-    SET PGPASSWORD=Password12!
-
-    Write-Output "postgresql-x64-10 should start out running"
-
-    Get-Service -Name "postgresql-x64-10"
-
-    Write-Output "If the binary for postgres in not in 'C:\Program Files\postgresql\10' the rest of this script won't work"
-
-    reg query "HKLM\System\CurrentControlSet\Services\postgresql-x64-10" /v "ImagePath"
-
-    Stop-Service postgresql-x64-10
-
-    # postgresql-x64-10 should stop
-
-    Get-Service -Name "postgresql-x64-10"
-
-    # we preload timescale, and allow all netowrk connections to postgres
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "shared_preload_libraries = 'timescaledb'"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "log_directory = 'pg_log'"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "log_line_prefix = '%u [%p] %d '"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "max_worker_processes=16"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "autovacuum=false"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "random_page_cost=1.0"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.last_tuned_version='0.0.1'"
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb_telemetry.cloud='ci'"
-
-    # TODO removing the following line causes a stack overflow on appveyor
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.telemetry_level='off'"
-
-    # Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "log_min_messages='debug5'"
-
-
-    Set-Content "C:\Program Files\postgresql\10\data\pg_hba.conf" "host    all             all             ::1/128            trust"
-
-    Add-Content "C:\Program Files\postgresql\10\data\pg_hba.conf" "host    all             all             127.0.0.1/32            trust"
-
-    # build timescale
-
-     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\10" -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
-
-    cmake --build ./build --config Debug
-
-    cmake --build ./build --config Debug --target install
-
-    # postgres should restart
-
-    Start-Service postgresql-x64-10
-
-    Get-Service -Name "postgresql-x64-10"
-
-    # create pg user root b/c docker will need it
-
-    & "C:\Program Files\PostgreSQL\10\bin\psql.exe" -a -e -E -v "VERBOSITY=verbose" -c 'CREATE USER root WITH SUPERUSER IN ROLE postgres;' -U postgres
-
-    & "C:\Program Files\PostgreSQL\10\bin\psql.exe" -a -e -E -v "VERBOSITY=verbose" -c 'CREATE USER super_user WITH SUPERUSER IN ROLE postgres;' -U postgres
-
-    & "C:\Program Files\PostgreSQL\10\bin\psql.exe" -a -e -E -v "VERBOSITY=verbose" -c 'show log_directory' -U postgres
-
-    & "C:\Program Files\PostgreSQL\10\bin\psql.exe" -a -e -E -v "VERBOSITY=verbose" -c 'show log_destination;' -U postgres
-
-    & "C:\Program Files\PostgreSQL\10\bin\psql.exe" -a -e -E -v "VERBOSITY=verbose" -c 'show logging_collector;' -U postgres
-
-    docker-switch-linux
-
-    # docker run -d --name pgregress -v c:/projects/timescaledb:/timescale timescaledev/postgresdev:exec_backend-10-alpine
-
-    docker run -d --name pgregress timescaledev/postgresdev:exec_backend-10-alpine
-
-    docker exec -it pgregress /bin/bash -c "apk add cmake git diffutils"
-
-    # we clone the current commit in the docker instance to ensure the correct tests run
-    # (Ideally we'd use the same folder, but that's difficult to set up)
-
-    $commit = git rev-parse HEAD
-
-    docker exec -it pgregress /bin/bash -c "git clone  --depth 1 https://github.com/timescale/timescaledb.git /timescaledb && cd /timescaledb && git fetch -q origin $commit && git checkout -qf FETCH_HEAD"
-
-    docker exec -it pgregress /bin/bash -c "cd /timescaledb && ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF -DPG_REGRESS=/usr/local/bin/pg_regress -DTEST_PGHOST=docker.for.win.localhost"
+version: 0.{build}
+pull_requests:
+  do_not_increment_build_number: true
+
+# After a PR is opened, don't run separate appveyor builds for the branch - only builds for the PR.
+skip_branch_with_pr: true
+
+os: Windows Server 2012 R2
+
+# Custom clone folder (variables are not expanded here).
+clone_folder: c:\influxdb
+
+# Environment variables
+environment:
+  GOROOT: C:\go111
+  GOFLAGS: "-mod=readonly"
+
+# Scripts that run after cloning repository
+install:
+#  - choco install bzr # Needed to install go modules
+ - set PATH=%GOROOT%\bin;%GOPATH%\bin;C:\Program Files (x86)\Bazaar\;%PATH%
+ - echo %PATH%
+ - echo %GOPATH%
+ - cd C:\influxdb
+ - go version
+ - go env
+
+build: false
+deploy: false
 
 test_script:
-- ps: >-
-
-    Set-PSDebug -Trace 1
-
-    Get-Service -Name "postgresql-x64-10"
-
-    docker exec -it pgregress /bin/bash -c "psql -a -e -E -U postgres --host='docker.for.win.localhost' -v VERBOSITY=verbose -c'\dx;'"
-
-    #right now we only run timescale regression tests, others will be set up later
-
-    docker exec -e IGNORES="bgw_db_scheduler" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
-
-    $TESTS1 = $?
-
-    # TODO can we switch these to file swapping?
-
-    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.license_key = 'E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K'"
-
-    Restart-Service postgresql-x64-10
-
-    docker exec -e IGNORES="bgw_db_scheduler" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
-
-    if( -not $? -or -not $TESTS1 ) { exit 1 }
-
-on_failure:
-  - ps: >-
-      docker exec -it pgregress cat /timescaledb/build/test/regression.diffs /timescaledb/build/tsl/test/regression.diffs /timescaledb/build/test/pgtest/regressions.diffs
-
-      Get-Content -Path "C:\Program Files\postgresql\10\data\pg_log\*"
-
+  - echo "Appveyor needs to be re-enabled. See https://github.com/influxdata/influxdb/issues/10937"
+  # - go test -timeout 15m -v ./...
