@@ -1907,8 +1907,19 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 	{
 		case INT2OID:
 		case INT4OID:
+		{
+			/* since the boundary function returns int8 we need to cast to proper type here */
+			Oid cast_oid = ts_get_cast_func(INT8OID, type);
+
+			return makeFuncExpr(cast_oid,
+								type,
+								list_make1(boundary),
+								InvalidOid,
+								InvalidOid,
+								COERCE_IMPLICIT_CAST);
+		}
 		case INT8OID:
-			/* nothing to do for int types */
+			/* nothing to do for int8 */
 			return boundary;
 		case DATEOID:
 		case TIMESTAMPOID:
