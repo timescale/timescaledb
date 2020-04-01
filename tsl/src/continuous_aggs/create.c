@@ -1770,7 +1770,7 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
 
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
-	Query *direct_query = get_view_query(direct_view_rel);
+	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 
 	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
 
