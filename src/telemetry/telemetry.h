@@ -31,6 +31,7 @@ typedef struct VersionResult
 extern HttpRequest *ts_build_version_request(const char *host, const char *path);
 extern Connection *ts_telemetry_connect(const char *host, const char *service);
 extern bool ts_validate_server_version(const char *json, VersionResult *result);
+extern void ts_check_version_response(const char *json);
 
 /*
  *	This function is intended as the main function for a BGW.

@@ -143,8 +143,8 @@ ts_validate_server_version(const char *json, VersionResult *result)
  * called "current_timescaledb_version". Check this against the local
  * version, and notify the user if it is behind.
  */
-static void
-process_response(const char *json)
+void
+ts_check_version_response(const char *json)
 {
 	VersionResult result;
 	bool is_uptodate = DatumGetBool(
@@ -545,7 +545,12 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	 * Do the version-check. Response is the body of a well-formed HTTP
 	 * response, since otherwise the previous line will throw an error.
 	 */
-	process_response(ts_http_response_state_body_start(rsp));
+	{
+		const char *json = ts_http_response_state_body_start(rsp);
+		ereport(DEBUG1,
+				(errmsg("telemetry got HTTP response body '%s' from host '%s'", json, host)));
+		ts_check_version_response(json);
+	}
 
 	ts_http_response_state_destroy(rsp);
 

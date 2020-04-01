@@ -16,6 +16,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, 
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+CREATE OR REPLACE FUNCTION test_check_version_response(response text)
+       RETURNS VOID
+       AS :MODULE_PATHNAME, 'ts_test_check_version_response'
+       LANGUAGE C
+       IMMUTABLE STRICT PARALLEL SAFE;
+       
 INSERT INTO _timescaledb_catalog.metadata VALUES ('foo','bar',TRUE);
 INSERT INTO _timescaledb_catalog.metadata VALUES ('bar','baz',FALSE);
 
@@ -118,6 +124,22 @@ SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_time
 SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1.1+rc1"}');
 SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1.1.1"}');
 SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}');
+
+
+\set ON_ERROR_STOP 0
+-- Test well-formed response and valid versions
+SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1", "is_up_to_date": true}');
+SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1", "is_up_to_date": false}');
+SELECT test_check_version_response('{"current_timescaledb_version": "10.1", "is_up_to_date": false}');
+SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1-rc1", "is_up_to_date": false}');
+
+-- Test well-formed response but invalid versions
+SELECT test_check_version_response('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "is_up_to_date": false}');
+SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1+rc1", "is_up_to_date": false}');
+SELECT test_check_version_response('{"current_timescaledb_version": "@10.1.1", "is_up_to_date": false}');
+SELECT test_check_version_response('{"current_timescaledb_version": "10.1.1@", "is_up_to_date": false}');
+\set ON_ERROR_STOP 1
+
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
