@@ -2153,15 +2153,19 @@ DROP INDEX :INDEX_NAME;
          Merge Cond: (m2."time" = m1."time")
          Join Filter: (m1.device_id = m2.device_id)
          Rows Removed by Join Filter: 4
-         ->  Custom Scan (ChunkAppend) on join_limit m2 (actual rows=653 loops=1)
+         ->  Custom Scan (ChunkAppend) on join_limit m2 (actual rows=3 loops=1)
                Order: m2."time", m2.device_id
-               ->  Sort (actual rows=653 loops=1)
+               ->  Sort (actual rows=3 loops=1)
                      Sort Key: m2_1."time", m2_1.device_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_7_32_chunk m2_1 (actual rows=3360 loops=1)
+                     ->  Seq Scan on _hyper_7_32_chunk m2_1 (actual rows=2710 loops=1)
+                           Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 650
                ->  Index Only Scan using _hyper_7_33_chunk_join_limit_time_device_id_idx on _hyper_7_33_chunk m2_2 (never executed)
+                     Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Heap Fetches: 0
                ->  Index Only Scan using _hyper_7_34_chunk_join_limit_time_device_id_idx on _hyper_7_34_chunk m2_3 (never executed)
+                     Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Heap Fetches: 0
          ->  Materialize (actual rows=22 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=19 loops=1)
@@ -2174,7 +2178,7 @@ DROP INDEX :INDEX_NAME;
                            Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_4 (never executed)
                            Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(26 rows)
+(30 rows)
 
 DROP TABLE join_limit;
 --generate the results into two different files

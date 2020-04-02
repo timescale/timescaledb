@@ -1282,8 +1282,29 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 												 NULL);
 #endif
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+#if PG12_GE
+				/*
+				 * since hypertable expansion happens later in PG12 the propagated
+				 * constraints will not be pushed down to the actual scans but stay
+				 * as join filter. So we add them either as join filter or to
+				 * baserestrictinfo depending on whether they reference only
+				 * the currently processed relation or multiple relations.
+				 */
+				if (bms_num_members(relids) == 1 && bms_is_member(rel->relid, relids))
+				{
+					if (!list_member(rel->baserestrictinfo, restrictinfo))
+						rel->baserestrictinfo = lappend(rel->baserestrictinfo, restrictinfo);
+				}
+				else
+				{
+					root->parse->jointree->quals =
+						(Node *) lappend((List *) root->parse->jointree->quals, propagated);
+				}
+#else
 				root->parse->jointree->quals =
 					(Node *) lappend((List *) root->parse->jointree->quals, propagated);
+
+#endif
 			}
 		}
 	}
