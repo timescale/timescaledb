@@ -861,8 +861,20 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
 PREPARE plancache_test2 AS WITH q AS MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
 
-PREPARE plancache_test3 AS WITH q AS  MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+PREPARE plancache_test4 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+
+PREPARE plancache_test6 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test6;
+
+PREPARE plancache_test3 AS WITH q AS MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+
+PREPARE plancache_test5 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+
+PREPARE plancache_test7 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+EXPLAIN (COSTS OFF) EXECUTE plancache_test7;
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -870,7 +882,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -878,7 +892,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -886,7 +902,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
 
 --
 -- Views should follow policy for view owner.
