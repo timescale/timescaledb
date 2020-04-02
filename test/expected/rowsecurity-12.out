@@ -2566,7 +2566,49 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
-PREPARE plancache_test3 AS WITH q AS  MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+PREPARE plancache_test4 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on z1 z1_1
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Seq Scan on z2
+(15 rows)
+
+PREPARE plancache_test6 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
+EXPLAIN (COSTS OFF) EXECUTE plancache_test6;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on z1 z1_1
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Seq Scan on z2
+(15 rows)
+
+PREPARE plancache_test3 AS WITH q AS MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -2586,6 +2628,44 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                ->  Seq Scan on _hyper_9_51_chunk
                      Filter: (((a % 2) = 0) AND f_leak(b))
 (15 rows)
+
+PREPARE plancache_test5 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on z2
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on z1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on z1 z1_1
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_49_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_50_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_51_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+(13 rows)
+
+PREPARE plancache_test7 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
+EXPLAIN (COSTS OFF) EXECUTE plancache_test7;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on z2
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on z1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on z1 z1_1
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_49_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_50_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_51_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+(13 rows)
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2647,6 +2727,26 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on z1 z1_1
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Seq Scan on z2
+(15 rows)
+
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -2666,6 +2766,24 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                ->  Seq Scan on _hyper_9_51_chunk
                      Filter: (((a % 2) = 0) AND f_leak(b))
 (15 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on z2
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on z1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on z1 z1_1
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_49_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_50_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_51_chunk
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+(13 rows)
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2727,6 +2845,26 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on z1 z1_1
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Seq Scan on z2
+(15 rows)
+
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -2746,6 +2884,24 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                ->  Seq Scan on _hyper_9_51_chunk
                      Filter: (((a % 2) = 1) AND f_leak(b))
 (15 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on z2
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on z1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on z1 z1_1
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_49_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_50_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_51_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+(13 rows)
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2807,6 +2963,26 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
+EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Custom Scan (ChunkAppend) on z1
+           Chunks excluded during startup: 0
+           ->  Seq Scan on z1 z1_1
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_49_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_50_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+           ->  Seq Scan on _hyper_9_51_chunk
+                 Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Seq Scan on z2
+(15 rows)
+
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -2826,6 +3002,24 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                ->  Seq Scan on _hyper_9_51_chunk
                      Filter: (((a % 2) = 1) AND f_leak(b))
 (15 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on z2
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on z1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on z1 z1_1
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_49_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_50_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+               ->  Seq Scan on _hyper_9_51_chunk
+                     Filter: (((a % 2) = 1) AND f_leak(b))
+(13 rows)
 
 --
 -- Views should follow policy for view owner.
