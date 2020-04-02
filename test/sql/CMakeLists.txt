@@ -105,7 +105,6 @@ endif()
 if(${PG_VERSION_MAJOR} EQUAL "11")
   list(APPEND TEST_FILES
     rowsecurity-11.sql
-    vacuum_multi.sql
   )
 endif()
 
@@ -113,6 +112,7 @@ if (${PG_VERSION_MAJOR} GREATER_EQUAL "11")
   list(APPEND TEST_FILES
     join.sql
     partitionwise.sql
+    vacuum_multi.sql
   )
 endif()
 
