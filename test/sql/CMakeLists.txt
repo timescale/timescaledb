@@ -107,6 +107,11 @@ if(${PG_VERSION_MAJOR} EQUAL "11")
     rowsecurity-11.sql
   )
 endif()
+if(${PG_VERSION_MAJOR} EQUAL "12")
+  list(APPEND TEST_FILES
+    rowsecurity-12.sql
+  )
+endif()
 
 if (${PG_VERSION_MAJOR} GREATER_EQUAL "11")
   list(APPEND TEST_FILES
