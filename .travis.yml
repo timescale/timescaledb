@@ -106,7 +106,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='bgw_db_scheduler chunk_adaptive' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='bgw_db_scheduler chunk_adaptive-9.6' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -124,7 +124,7 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive ordered_append-10 parallel-10 transparent_decompression-10 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive-10 ordered_append-10 parallel-10 transparent_decompression-10 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -142,8 +142,26 @@ jobs:
         # Now build with OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
-        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive ordered_append-11 parallel-11 transparent_decompression-11 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive-11 ordered_append-11 parallel-11 transparent_decompression-11 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Regression 12.0 32 bit"
+      env:
+        - PG_VERSION=12.0
+        - RETRY_PREFIX=""
+      before_install:
+        - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
+      script:
+        # First build without OpenSSL
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
+        # Run only telemetry test to see that it works without OpenSSL
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+        # Now build with OpenSSL
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+        # Now run all tests
+        - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-12 bgw_db_scheduler chunk_adaptive-12 ordered_append-12 parallel-12 transparent_decompression-12 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  
     # This runs tests on ARM32 emulation
     - if: branch = arm_test
       stage: test
@@ -217,6 +235,30 @@ jobs:
       after_script:
         - docker rm -f docker_arm_emulator
 
+    - if: branch = arm_test
+      stage: test
+      name: "Regression 12.0 ARM processors"
+      env:
+        - PG_VERSION=12.0
+        - RETRY_PREFIX=""
+      before_install:
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+        - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
+        - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
+      install:
+        - docker exec docker_arm_emulator /bin/bash -c "mkdir /build && chown postgres:postgres /build"
+        - docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && CFLAGS='-Werror -O2' cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug && make"
+        - docker exec docker_arm_emulator /bin/bash -c "cd /build && make install"
+      before_script:
+      after_failure:
+        - docker exec -u postgres -it docker_arm_emulator find /build -name regression.diffs -exec cat {} +
+        - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
+      script:
+      # allow 50 mins to run
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-12 parallel-12 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
+      after_script:
+        - docker rm -f docker_arm_emulator
+  
     # to maximize code code coverage on PRs we run tests on earliest 9.6, latest 10 and earliest and latest 11
     # cron and prerelease runs regression tests on earliest and latest for each major version
     - if: (type = cron) OR (branch = prerelease_test)
@@ -364,7 +406,22 @@ jobs:
       script:
         - PG_MAJOR=11 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
 
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "ABI breakage smoketest 12.0"
+      before_install:
+      install:
+      after_failure:
+      after_script:
+      script:
+        - PG_MAJOR=12 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
+  
     # ApacheOnly regression tests
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "ApacheOnly regression tests 12.0"
+      env: PG_VERSION=12.0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "ApacheOnly regression tests 11.0"
@@ -381,6 +438,11 @@ jobs:
       env: PG_VERSION=9.6.6 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     # Release mode regression tests
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Release regression tests 12.2"
+      env: PG_VERSION=12.2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "Release regression tests 11.7"
