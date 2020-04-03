@@ -368,44 +368,42 @@ ORDER BY time ASC LIMIT 1;
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX SELECT first(time, time) FROM :TEST_TABLE;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Result (actual rows=1 loops=1)
-                 ->  Merge Append (actual rows=1 loops=1)
-                       Sort Key: _hyper_1_1_chunk."time"
-                       ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-(15 rows)
+           ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
+                 Order: metrics."time"
+                 ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 1
+                 ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 0
+                 ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 0
+(14 rows)
 
 :PREFIX SELECT last(time, time) FROM :TEST_TABLE;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Result (actual rows=1 loops=1)
-                 ->  Merge Append (actual rows=1 loops=1)
-                       Sort Key: _hyper_1_1_chunk."time" DESC
-                       ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-(15 rows)
+           ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
+                 Order: metrics."time" DESC
+                 ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 1
+                 ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 0
+                 ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
+                       Index Cond: ("time" IS NOT NULL)
+                       Heap Fetches: 0
+(14 rows)
 
 -- test query with time_bucket
 :PREFIX SELECT
@@ -540,24 +538,22 @@ ORDER BY time DESC limit 1;
 -- test CTE
 :PREFIX WITH i AS (SELECT time FROM :TEST_TABLE WHERE time < now() ORDER BY time DESC limit 100)
 SELECT * FROM i;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
- CTE Scan on i (actual rows=100 loops=1)
-   CTE i
-     ->  Limit (actual rows=100 loops=1)
-           ->  Custom Scan (ChunkAppend) on metrics (actual rows=100 loops=1)
-                 Order: metrics."time" DESC
-                 Chunks excluded during startup: 0
-                 ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=100 loops=1)
-                       Index Cond: ("time" < now())
-                       Heap Fetches: 100
-                 ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
-                       Index Cond: ("time" < now())
-                       Heap Fetches: 0
-                 ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
-                       Index Cond: ("time" < now())
-                       Heap Fetches: 0
-(15 rows)
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=100 loops=1)
+         Order: metrics."time" DESC
+         Chunks excluded during startup: 0
+         ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=100 loops=1)
+               Index Cond: ("time" < now())
+               Heap Fetches: 100
+         ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
+               Index Cond: ("time" < now())
+               Heap Fetches: 0
+         ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
+               Index Cond: ("time" < now())
+               Heap Fetches: 0
+(13 rows)
 
 -- test LATERAL with ordered append in the outer query
 :PREFIX SELECT time, pg_typeof(l) FROM :TEST_TABLE, LATERAL(SELECT * FROM (VALUES (1),(2)) v) l ORDER BY time DESC limit 2;
@@ -736,19 +732,19 @@ LEFT OUTER JOIN LATERAL(
 -- no chunk exclusion for CTE because cte query is not pulled up
 :PREFIX WITH cte AS (SELECT time FROM :TEST_TABLE ORDER BY time)
 SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
- CTE Scan on cte (actual rows=68370 loops=1)
-   Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-   CTE cte
-     ->  Custom Scan (ChunkAppend) on metrics (actual rows=68370 loops=1)
-           Order: metrics."time"
-           ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=17990 loops=1)
-                 Heap Fetches: 17990
-           ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=25190 loops=1)
-                 Heap Fetches: 25190
-           ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=25190 loops=1)
-                 Heap Fetches: 25190
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics (actual rows=68370 loops=1)
+   Order: metrics."time"
+   ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=17990 loops=1)
+         Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         Heap Fetches: 17990
+   ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=25190 loops=1)
+         Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         Heap Fetches: 25190
+   ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=25190 loops=1)
+         Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         Heap Fetches: 25190
 (11 rows)
 
 -- test JOIN
@@ -1943,12 +1939,13 @@ ORDER BY time ASC LIMIT 1;
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX SELECT first(time, time) FROM :TEST_TABLE;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Result (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
+                 Order: metrics_space."time"
                  ->  Merge Append (actual rows=1 loops=1)
                        Sort Key: _hyper_2_4_chunk."time"
                        ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
@@ -1960,25 +1957,29 @@ ORDER BY time ASC LIMIT 1;
                        ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
                              Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=1 loops=1)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_2_7_chunk."time"
+                       ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
+                             Heap Fetches: 0
+                       ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=1 loops=1)
+                             Heap Fetches: 0
+                       ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1 loops=1)
+                             Heap Fetches: 0
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_2_10_chunk."time"
+                       ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=1 loops=1)
+                             Heap Fetches: 0
+                       ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1 loops=1)
+                             Heap Fetches: 0
+                       ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-(33 rows)
+                             Heap Fetches: 0
+(38 rows)
 
 :PREFIX SELECT last(time, time) FROM :TEST_TABLE;
                                                                    QUERY PLAN                                                                   
@@ -1986,37 +1987,42 @@ ORDER BY time ASC LIMIT 1;
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
-           ->  Result (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
+                 Order: metrics_space."time" DESC
                  ->  Merge Append (actual rows=1 loops=1)
-                       Sort Key: _hyper_2_4_chunk."time" DESC
-                       ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
-                             Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1 loops=1)
+                       Sort Key: _hyper_2_12_chunk."time" DESC
+                       ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1 loops=1)
                              Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 1
                        ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=1 loops=1)
                              Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 1
-                       ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1 loops=1)
+                       ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1 loops=1)
                              Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 1
-(33 rows)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_2_9_chunk."time" DESC
+                       ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+                       ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+                       ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_2_6_chunk."time" DESC
+                       ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+                       ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+                       ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
+                             Index Cond: ("time" IS NOT NULL)
+                             Heap Fetches: 0
+(38 rows)
 
 -- test query with time_bucket
 :PREFIX SELECT
@@ -2258,47 +2264,45 @@ ORDER BY time DESC limit 1;
 -- test CTE
 :PREFIX WITH i AS (SELECT time FROM :TEST_TABLE WHERE time < now() ORDER BY time DESC limit 100)
 SELECT * FROM i;
-                                                                   QUERY PLAN                                                                    
--------------------------------------------------------------------------------------------------------------------------------------------------
- CTE Scan on i (actual rows=100 loops=1)
-   CTE i
-     ->  Limit (actual rows=100 loops=1)
-           ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
-                 Order: metrics_space."time" DESC
-                 ->  Merge Append (actual rows=100 loops=1)
-                       Sort Key: _hyper_2_12_chunk."time" DESC
-                       ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=21 loops=1)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 21
-                       ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=60 loops=1)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 60
-                       ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=21 loops=1)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 21
-                 ->  Merge Append (never executed)
-                       Sort Key: _hyper_2_9_chunk."time" DESC
-                       ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-                       ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-                       ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-                 ->  Merge Append (never executed)
-                       Sort Key: _hyper_2_6_chunk."time" DESC
-                       ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-                       ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-                       ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
-                             Index Cond: ("time" < now())
-                             Heap Fetches: 0
-(38 rows)
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
+         Order: metrics_space."time" DESC
+         ->  Merge Append (actual rows=100 loops=1)
+               Sort Key: _hyper_2_12_chunk."time" DESC
+               ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=21 loops=1)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 21
+               ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=60 loops=1)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 60
+               ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=21 loops=1)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 21
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_2_9_chunk."time" DESC
+               ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_2_6_chunk."time" DESC
+               ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+               ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
+                     Index Cond: ("time" < now())
+                     Heap Fetches: 0
+(36 rows)
 
 -- test LATERAL with ordered append in the outer query
 :PREFIX SELECT time, pg_typeof(l) FROM :TEST_TABLE, LATERAL(SELECT * FROM (VALUES (1),(2)) v) l ORDER BY time DESC limit 2;
@@ -2626,38 +2630,44 @@ LEFT OUTER JOIN LATERAL(
 -- no chunk exclusion for CTE because cte query is not pulled up
 :PREFIX WITH cte AS (SELECT time FROM :TEST_TABLE ORDER BY time)
 SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
- CTE Scan on cte (actual rows=68370 loops=1)
-   Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-   CTE cte
-     ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=68370 loops=1)
-           Order: metrics_space."time"
-           ->  Merge Append (actual rows=17990 loops=1)
-                 Sort Key: _hyper_2_4_chunk."time"
-                 ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=3598 loops=1)
-                       Heap Fetches: 3598
-                 ->  Index Only Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=10794 loops=1)
-                       Heap Fetches: 10794
-                 ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=3598 loops=1)
-                       Heap Fetches: 3598
-           ->  Merge Append (actual rows=25190 loops=1)
-                 Sort Key: _hyper_2_7_chunk."time"
-                 ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=5038 loops=1)
-                       Heap Fetches: 5038
-                 ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=15114 loops=1)
-                       Heap Fetches: 15114
-                 ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=5038 loops=1)
-                       Heap Fetches: 5038
-           ->  Merge Append (actual rows=25190 loops=1)
-                 Sort Key: _hyper_2_10_chunk."time"
-                 ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=5038 loops=1)
-                       Heap Fetches: 5038
-                 ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=15114 loops=1)
-                       Heap Fetches: 15114
-                 ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=5038 loops=1)
-                       Heap Fetches: 5038
-(29 rows)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space (actual rows=68370 loops=1)
+   Order: metrics_space."time"
+   ->  Merge Append (actual rows=17990 loops=1)
+         Sort Key: _hyper_2_4_chunk."time"
+         ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=3598 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 3598
+         ->  Index Only Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=10794 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 10794
+         ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=3598 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 3598
+   ->  Merge Append (actual rows=25190 loops=1)
+         Sort Key: _hyper_2_7_chunk."time"
+         ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=5038 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 5038
+         ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=15114 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 15114
+         ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=5038 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 5038
+   ->  Merge Append (actual rows=25190 loops=1)
+         Sort Key: _hyper_2_10_chunk."time"
+         ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=5038 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 5038
+         ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=15114 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 15114
+         ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=5038 loops=1)
+               Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Heap Fetches: 5038
+(35 rows)
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
@@ -3257,40 +3267,37 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 -- test NATURAL JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX SELECT o1.time FROM :TEST_TABLE o1 NATURAL INNER JOIN :TEST_TABLE o2 ORDER BY o1.time LIMIT 100;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: o1."time"
          Sort Method: quicksort 
-         ->  Merge Join (actual rows=0 loops=1)
-               Merge Cond: ((o1.device_id = o2.device_id) AND (o1."time" = o2."time"))
-               Join Filter: ((o1.v0 = o2.v0) AND (o1.v1 = o2.v1) AND (o1.v2 = o2.v2) AND (o1.v3 = o2.v3))
-               Rows Removed by Join Filter: 68370
-               ->  Merge Append (actual rows=68370 loops=1)
-                     Sort Key: o1.device_id, o1."time"
-                     ->  Index Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk o1 (actual rows=3598 loops=1)
-                     ->  Index Scan using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk o1_1 (actual rows=10794 loops=1)
-                     ->  Index Scan using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk o1_2 (actual rows=3598 loops=1)
-                     ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk o1_3 (actual rows=5038 loops=1)
-                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk o1_4 (actual rows=15114 loops=1)
-                     ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk o1_5 (actual rows=5038 loops=1)
-                     ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk o1_6 (actual rows=5038 loops=1)
-                     ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk o1_7 (actual rows=15114 loops=1)
-                     ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk o1_8 (actual rows=5038 loops=1)
-               ->  Materialize (actual rows=68370 loops=1)
-                     ->  Merge Append (actual rows=68370 loops=1)
-                           Sort Key: o2.device_id, o2."time"
-                           ->  Index Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk o2 (actual rows=3598 loops=1)
-                           ->  Index Scan using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk o2_1 (actual rows=10794 loops=1)
-                           ->  Index Scan using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk o2_2 (actual rows=3598 loops=1)
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk o2_3 (actual rows=5038 loops=1)
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk o2_4 (actual rows=15114 loops=1)
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk o2_5 (actual rows=5038 loops=1)
-                           ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk o2_6 (actual rows=5038 loops=1)
-                           ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk o2_7 (actual rows=15114 loops=1)
-                           ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk o2_8 (actual rows=5038 loops=1)
-(31 rows)
+         ->  Hash Join (actual rows=0 loops=1)
+               Hash Cond: ((o1."time" = o2."time") AND (o1.device_id = o2.device_id) AND (o1.v0 = o2.v0) AND (o1.v1 = o2.v1) AND (o1.v2 = o2.v2) AND (o1.v3 = o2.v3))
+               ->  Append (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_2_4_chunk o1 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_2_5_chunk o1_1 (never executed)
+                     ->  Seq Scan on _hyper_2_6_chunk o1_2 (never executed)
+                     ->  Seq Scan on _hyper_2_7_chunk o1_3 (never executed)
+                     ->  Seq Scan on _hyper_2_8_chunk o1_4 (never executed)
+                     ->  Seq Scan on _hyper_2_9_chunk o1_5 (never executed)
+                     ->  Seq Scan on _hyper_2_10_chunk o1_6 (never executed)
+                     ->  Seq Scan on _hyper_2_11_chunk o1_7 (never executed)
+                     ->  Seq Scan on _hyper_2_12_chunk o1_8 (never executed)
+               ->  Hash (actual rows=0 loops=1)
+                     Buckets: 131072  Batches: 1 
+                     ->  Append (actual rows=68370 loops=1)
+                           ->  Seq Scan on _hyper_2_4_chunk o2 (actual rows=3598 loops=1)
+                           ->  Seq Scan on _hyper_2_5_chunk o2_1 (actual rows=10794 loops=1)
+                           ->  Seq Scan on _hyper_2_6_chunk o2_2 (actual rows=3598 loops=1)
+                           ->  Seq Scan on _hyper_2_7_chunk o2_3 (actual rows=5038 loops=1)
+                           ->  Seq Scan on _hyper_2_8_chunk o2_4 (actual rows=15114 loops=1)
+                           ->  Seq Scan on _hyper_2_9_chunk o2_5 (actual rows=5038 loops=1)
+                           ->  Seq Scan on _hyper_2_10_chunk o2_6 (actual rows=5038 loops=1)
+                           ->  Seq Scan on _hyper_2_11_chunk o2_7 (actual rows=15114 loops=1)
+                           ->  Seq Scan on _hyper_2_12_chunk o2_8 (actual rows=5038 loops=1)
+(28 rows)
 
 -- test LEFT JOIN on time column
 -- should use 2 ChunkAppend
@@ -4417,26 +4424,24 @@ ORDER BY time DESC limit 1;
 -- test CTE
 :PREFIX WITH i AS (SELECT time FROM :TEST_TABLE WHERE time < now() ORDER BY time DESC limit 100)
 SELECT * FROM i;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
- CTE Scan on i (actual rows=100 loops=1)
-   CTE i
-     ->  Limit (actual rows=100 loops=1)
-           ->  Sort (actual rows=100 loops=1)
-                 Sort Key: metrics_compressed."time" DESC
-                 Sort Method: top-N heapsort 
-                 ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=68370 loops=1)
-                       Chunks excluded during startup: 0
-                       ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
-                             Filter: ("time" < now())
-                             ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
-                             Filter: ("time" < now())
-                             ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
-                             Filter: ("time" < now())
-                             ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
-(17 rows)
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Sort (actual rows=100 loops=1)
+         Sort Key: metrics_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=68370 loops=1)
+               Chunks excluded during startup: 0
+               ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
+                     Filter: ("time" < now())
+                     ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
+                     Filter: ("time" < now())
+                     ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
+                     Filter: ("time" < now())
+                     ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
+(15 rows)
 
 -- test LATERAL with ordered append in the outer query
 :PREFIX SELECT time, pg_typeof(l) FROM :TEST_TABLE, LATERAL(SELECT * FROM (VALUES (1),(2)) v) l ORDER BY time DESC limit 2;
@@ -4447,15 +4452,16 @@ SELECT * FROM i;
          Sort Key: _hyper_3_15_chunk."time" DESC
          Sort Method: top-N heapsort 
          ->  Nested Loop (actual rows=136740 loops=1)
-               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-               ->  Append (actual rows=68370 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=2)
-                           ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=2)
-                           ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=2)
-                           ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=2)
-(13 rows)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
+                           ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
+               ->  Materialize (actual rows=2 loops=68370)
+                     ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+(14 rows)
 
 -- test LATERAL with ordered append in the lateral query
 :PREFIX SELECT time, pg_typeof(v) FROM (VALUES (1),(2)) v, LATERAL(SELECT * FROM :TEST_TABLE ORDER BY time DESC limit 2) l;
@@ -4644,22 +4650,25 @@ LEFT OUTER JOIN LATERAL(
 -- no chunk exclusion for CTE because cte query is not pulled up
 :PREFIX WITH cte AS (SELECT time FROM :TEST_TABLE ORDER BY time)
 SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
- CTE Scan on cte (actual rows=68370 loops=1)
-   Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-   CTE cte
-     ->  Sort (actual rows=68370 loops=1)
-           Sort Key: _hyper_3_13_chunk."time"
-           Sort Method: quicksort 
-           ->  Append (actual rows=68370 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
-                       ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
-                       ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
-                       ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
-(13 rows)
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Sort (actual rows=68370 loops=1)
+   Sort Key: _hyper_3_13_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=68370 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk (actual rows=17990 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk (actual rows=25190 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk (actual rows=25190 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+(16 rows)
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
@@ -5177,8 +5186,8 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 -- test JOIN on device_id
 -- should not use ordered append for 2nd hypertable
 :PREFIX SELECT o1.time FROM :TEST_TABLE o1 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id WHERE o1.device_id = 1 ORDER BY o1.time LIMIT 100;
-                                                                                        QUERY PLAN                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=1 loops=1)
@@ -5192,17 +5201,18 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o1_3 (never executed)
                      ->  Index Scan Backward using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk (never executed)
                            Index Cond: (device_id = 1)
-         ->  Append (actual rows=100 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o2 (actual rows=100 loops=1)
-                     ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=1 loops=1)
-                           Index Cond: (device_id = 1)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o2_1 (never executed)
-                     ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (never executed)
-                           Index Cond: (device_id = 1)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o2_2 (never executed)
-                     ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (never executed)
-                           Index Cond: (device_id = 1)
-(23 rows)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Append (actual rows=100 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o2 (actual rows=100 loops=1)
+                           ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o2_1 (never executed)
+                           ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (never executed)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o2_2 (never executed)
+                           ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (never executed)
+                                 Index Cond: (device_id = 1)
+(24 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
@@ -5265,14 +5275,15 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                                  ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (actual rows=30 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o2_2 (actual rows=25190 loops=1)
                                  ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (actual rows=30 loops=1)
-         ->  Append (actual rows=65851 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o3 (actual rows=17990 loops=20)
-                     ->  Seq Scan on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_2 (actual rows=20 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o3_1 (actual rows=25190 loops=19)
-                     ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_2 (actual rows=30 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o3_2 (actual rows=25190 loops=19)
-                     ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_2 (actual rows=30 loops=19)
-(33 rows)
+         ->  Materialize (actual rows=65851 loops=20)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o3 (actual rows=17990 loops=1)
+                           ->  Seq Scan on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_2 (actual rows=20 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o3_1 (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_2 (actual rows=30 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o3_2 (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_2 (actual rows=30 loops=1)
+(34 rows)
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -6314,46 +6325,44 @@ ORDER BY time DESC limit 1;
 -- test CTE
 :PREFIX WITH i AS (SELECT time FROM :TEST_TABLE WHERE time < now() ORDER BY time DESC limit 100)
 SELECT * FROM i;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
- CTE Scan on i (actual rows=100 loops=1)
-   CTE i
-     ->  Limit (actual rows=100 loops=1)
-           ->  Sort (actual rows=100 loops=1)
-                 Sort Key: metrics_space_compressed."time" DESC
-                 Sort Method: top-N heapsort 
-                 ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=68370 loops=1)
-                       ->  Merge Append (actual rows=25190 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
-                       ->  Merge Append (actual rows=25190 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
-                       ->  Merge Append (actual rows=17990 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
-                             ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
-                                   Filter: ("time" < now())
-                                   ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-(37 rows)
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Limit (actual rows=100 loops=1)
+   ->  Sort (actual rows=100 loops=1)
+         Sort Key: metrics_space_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=68370 loops=1)
+               ->  Merge Append (actual rows=25190 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
+               ->  Merge Append (actual rows=25190 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+               ->  Merge Append (actual rows=17990 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
+                           Filter: ("time" < now())
+                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
+(35 rows)
 
 -- test LATERAL with ordered append in the outer query
 :PREFIX SELECT time, pg_typeof(l) FROM :TEST_TABLE, LATERAL(SELECT * FROM (VALUES (1),(2)) v) l ORDER BY time DESC limit 2;
@@ -6364,27 +6373,28 @@ SELECT * FROM i;
          Sort Key: _hyper_5_27_chunk."time" DESC
          Sort Method: top-N heapsort 
          ->  Nested Loop (actual rows=136740 loops=1)
-               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-               ->  Append (actual rows=68370 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=2)
-                           ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=2)
-                           ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=2)
-                           ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=2)
-                           ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=2)
-                           ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=2)
-                           ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=2)
-                           ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=2)
-                           ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=2)
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=2)
-(25 rows)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
+               ->  Materialize (actual rows=2 loops=68370)
+                     ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+(26 rows)
 
 -- test LATERAL with ordered append in the lateral query
 :PREFIX SELECT time, pg_typeof(v) FROM (VALUES (1),(2)) v, LATERAL(SELECT * FROM :TEST_TABLE ORDER BY time DESC limit 2) l;
@@ -6759,34 +6769,49 @@ LEFT OUTER JOIN LATERAL(
 -- no chunk exclusion for CTE because cte query is not pulled up
 :PREFIX WITH cte AS (SELECT time FROM :TEST_TABLE ORDER BY time)
 SELECT * FROM cte WHERE time < '2000-02-01'::timestamptz;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
- CTE Scan on cte (actual rows=68370 loops=1)
-   Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-   CTE cte
-     ->  Sort (actual rows=68370 loops=1)
-           Sort Key: _hyper_5_19_chunk."time"
-           Sort Method: quicksort 
-           ->  Append (actual rows=68370 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
-                       ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
-                       ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
-                       ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
-                       ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
-                       ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
-                       ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
-                       ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
-                       ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
-                 ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
-                       ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
-(25 rows)
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Sort (actual rows=68370 loops=1)
+   Sort Key: _hyper_5_19_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=68370 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk (actual rows=3598 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk (actual rows=10794 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk (actual rows=3598 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk (actual rows=5038 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk (actual rows=15114 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk (actual rows=5038 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk (actual rows=5038 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk (actual rows=15114 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk (actual rows=5038 loops=1)
+               Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+(40 rows)
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
@@ -7731,8 +7756,8 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 -- test JOIN on device_id
 -- should not use ordered append for 2nd hypertable
 :PREFIX SELECT o1.time FROM :TEST_TABLE o1 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id WHERE o1.device_id = 1 ORDER BY o1.time LIMIT 100;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=1 loops=1)
@@ -7753,17 +7778,18 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                            Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
                            ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
                                  Filter: (device_id = 1)
-         ->  Append (actual rows=100 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o2 (actual rows=100 loops=1)
-                     ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=1 loops=1)
-                           Filter: (device_id = 1)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o2_1 (never executed)
-                     ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (never executed)
-                           Filter: (device_id = 1)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o2_2 (never executed)
-                     ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (never executed)
-                           Filter: (device_id = 1)
-(30 rows)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Append (actual rows=100 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o2 (actual rows=100 loops=1)
+                           ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=1 loops=1)
+                                 Filter: (device_id = 1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o2_1 (never executed)
+                           ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (never executed)
+                                 Filter: (device_id = 1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o2_2 (never executed)
+                           ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (never executed)
+                                 Filter: (device_id = 1)
+(31 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
@@ -7874,26 +7900,27 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
                                  ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_1 (actual rows=18 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o2_8 (actual rows=5038 loops=1)
                                  ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (actual rows=6 loops=1)
-         ->  Append (actual rows=65851 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o3 (actual rows=3598 loops=20)
-                     ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_2 (actual rows=4 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o3_1 (actual rows=10794 loops=20)
-                     ->  Seq Scan on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_2 (actual rows=12 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk o3_2 (actual rows=3598 loops=20)
-                     ->  Seq Scan on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_2 (actual rows=4 loops=20)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o3_3 (actual rows=5038 loops=19)
-                     ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_2 (actual rows=6 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o3_4 (actual rows=15114 loops=19)
-                     ->  Seq Scan on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_2 (actual rows=18 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk o3_5 (actual rows=5038 loops=19)
-                     ->  Seq Scan on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_2 (actual rows=6 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o3_6 (actual rows=5038 loops=19)
-                     ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_2 (actual rows=6 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o3_7 (actual rows=15114 loops=19)
-                     ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_2 (actual rows=18 loops=19)
-               ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o3_8 (actual rows=5038 loops=19)
-                     ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_2 (actual rows=6 loops=19)
-(69 rows)
+         ->  Materialize (actual rows=65851 loops=20)
+               ->  Append (actual rows=68370 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o3 (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_2 (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o3_1 (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_2 (actual rows=12 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk o3_2 (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_2 (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o3_3 (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_2 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o3_4 (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_2 (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk o3_5 (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_2 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o3_6 (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_2 (actual rows=6 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o3_7 (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_2 (actual rows=18 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o3_8 (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_2 (actual rows=6 loops=1)
+(70 rows)
 
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result

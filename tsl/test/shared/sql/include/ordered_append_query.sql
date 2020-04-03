@@ -143,7 +143,7 @@ ORDER BY date_trunc('day', time) LIMIT 1;
 
 -- test query with ORDER BY date_trunc
 :PREFIX SELECT
-  date_trunc('day',time), device_id, v0
+  date_trunc('day',time)
 FROM :TEST_TABLE
 ORDER BY 1 LIMIT 1;
 
