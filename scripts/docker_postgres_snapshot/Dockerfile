@@ -35,6 +35,7 @@ RUN set -ex \
 		libedit-dev \
 		libxml2-dev \
 		libxslt-dev \
+		linux-headers \
 		make \
 #		openldap-dev \
 		openssl-dev \
