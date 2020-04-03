@@ -2,7 +2,8 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/planner.c
 )
 
-if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
+if ((${PG_VERSION_MAJOR} EQUAL "12") OR
+    (${PG_VERSION_MAJOR} GREATER "12"))
   set(SOURCES
       ${SOURCES}
       ${CMAKE_CURRENT_SOURCE_DIR}/allpaths.c

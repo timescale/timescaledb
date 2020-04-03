@@ -34,7 +34,7 @@ set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")
 if (EXISTS ${PG_CONFIG_H})
   file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
        REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
-  if (PG_USE_LLVM AND ${PG_VERSION_MAJOR} GREATER_EQUAL "11")
+  if (PG_USE_LLVM AND ((${PG_VERSION_MAJOR} EQUAL "11") OR (${PG_VERSION_MAJOR} GREATER "11")))
     list(APPEND TEST_TEMPLATES jit.sql.in)
   endif()
 endif()
