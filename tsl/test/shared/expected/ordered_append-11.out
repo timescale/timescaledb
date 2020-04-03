@@ -482,18 +482,21 @@ ORDER BY date_trunc('day', time) LIMIT 1;
 
 -- test query with ORDER BY date_trunc
 :PREFIX SELECT
-  date_trunc('day',time), device_id, v0
+  date_trunc('day',time)
 FROM :TEST_TABLE
 ORDER BY 1 LIMIT 1;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics."time")
-         ->  Index Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
-         ->  Index Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(6 rows)
+         ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               Heap Fetches: 1
+         ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
+               Heap Fetches: 0
+         ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
+               Heap Fetches: 0
+(9 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -2150,30 +2153,39 @@ ORDER BY date_trunc('day', time) LIMIT 1;
 
 -- test query with ORDER BY date_trunc
 :PREFIX SELECT
-  date_trunc('day',time), device_id, v0
+  date_trunc('day',time)
 FROM :TEST_TABLE
 ORDER BY 1 LIMIT 1;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics_space."time")
          ->  Merge Append (actual rows=1 loops=1)
                Sort Key: (date_trunc('day'::text, _hyper_2_4_chunk."time"))
-               ->  Index Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
+               ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
+               ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
+                     Heap Fetches: 1
          ->  Merge Append (never executed)
                Sort Key: (date_trunc('day'::text, _hyper_2_7_chunk."time"))
-               ->  Index Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
-               ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
-               ->  Index Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+               ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: (date_trunc('day'::text, _hyper_2_10_chunk."time"))
-               ->  Index Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
-               ->  Index Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
-               ->  Index Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(18 rows)
+               ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
+                     Heap Fetches: 0
+               ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
+                     Heap Fetches: 0
+(27 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -4336,7 +4348,7 @@ ORDER BY date_trunc('day', time) LIMIT 1;
 
 -- test query with ORDER BY date_trunc
 :PREFIX SELECT
-  date_trunc('day',time), device_id, v0
+  date_trunc('day',time)
 FROM :TEST_TABLE
 ORDER BY 1 LIMIT 1;
                                                QUERY PLAN                                               
@@ -6192,7 +6204,7 @@ ORDER BY date_trunc('day', time) LIMIT 1;
 
 -- test query with ORDER BY date_trunc
 :PREFIX SELECT
-  date_trunc('day',time), device_id, v0
+  date_trunc('day',time)
 FROM :TEST_TABLE
 ORDER BY 1 LIMIT 1;
                                                QUERY PLAN                                               
