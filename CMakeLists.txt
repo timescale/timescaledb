@@ -90,6 +90,17 @@ if (NOT CMAKE_C_COMPILER_ID IN_LIST SUPPORTED_COMPILERS)
    message(FATAL_ERROR "Unsupported compiler ${CMAKE_C_COMPILER_ID}. Supported compilers are: ${SUPPORTED_COMPILERS}")
 endif ()
 
+# Option to treat warnings as errors when compiling (default on)
+option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)" ON)
+
+if (WARNINGS_AS_ERRORS)
+  if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    add_compile_options(-Werror)
+  elseif (CMAKE_C_COMPILER_ID MATCHES "MSVC")
+    add_compile_options(/WX)
+  endif ()
+endif (WARNINGS_AS_ERRORS)
+
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These two flags generate too many errors currently, but we
   # probably want these optimizations enabled.
@@ -108,23 +119,18 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   if (CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
     add_compile_options(-Wimplicit-fallthrough)
   endif ()
-endif()
 
-# Check for supported platforms and compiler flags
-if (WIN32)
-  if (NOT CMAKE_CONFIGURATION_TYPES)
-    # Default to only include Release builds so MSBuild.exe 'just works'
-    set(CMAKE_CONFIGURATION_TYPES Release CACHE STRING "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored." FORCE)
-  endif ()
-elseif (UNIX)
   # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols by default
   check_c_compiler_flag(-fvisibility=hidden CC_SUPPORTS_VISIBILITY_HIDDEN)
 
   if (NOT CC_SUPPORTS_VISIBILITY_HIDDEN)
     message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER_ID} does not support -fvisibility=hidden")
   endif (NOT CC_SUPPORTS_VISIBILITY_HIDDEN)
-else ()
-  message(FATAL_ERROR "Unsupported platform")
+endif()
+
+# On Windows, default to only include Release builds so MSBuild.exe 'just works'
+if (WIN32 AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_CONFIGURATION_TYPES Release CACHE STRING "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored." FORCE)
 endif ()
 
 message(STATUS "Using compiler ${CMAKE_C_COMPILER_ID}")
