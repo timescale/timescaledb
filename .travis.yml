@@ -254,12 +254,12 @@ jobs:
       name: "Regression 12.2"
       env: PG_VERSION=12.2
 
-    #get codecov info, we only run 11.0 on PRs and the rest in cron
+    #get codecov info, we only run 12.0 on PRs and the rest in cron
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "CodeCov 11.0"
+      name: "CodeCov 12.0"
       env: 
-        - PG_VERSION=11.0
+        - PG_VERSION=12.0
         - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'"
         - CODECOV_FLAGS="-F pr"
         - IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
