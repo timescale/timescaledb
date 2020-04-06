@@ -4,6 +4,7 @@ set -e
 set -o pipefail
 
 SCRIPT_DIR=$(dirname $0)
+BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 DO_CLEANUP=true
 
 while getopts "d" opt;
@@ -41,11 +42,6 @@ docker_exec() {
     docker exec -it $1 /bin/bash -c "$2"
 }
 
-docker_run() {
-    docker run --env TIMESCALEDB_TELEMETRY=off -d --name $1 $2
-    wait_for_pg $1
-}
-
 wait_for_pg() {
     set +e
     for i in {1..10}; do
@@ -70,13 +66,15 @@ wait_for_pg() {
 docker rm -f timescaledb-memory 2>/dev/null || true
 IMAGE_NAME=memory_test TAG_NAME=latest bash ${SCRIPT_DIR}/docker-build.sh
 
-docker_run timescaledb-memory memory_test:latest
+# The odd contortion with the BASE_DIR is necessary since SCRIPT_DIR
+# is relative and --volume requires an absolute path.
+docker run --env TIMESCALEDB_TELEMETRY=off -d \
+       --volume ${BASE_DIR}/scripts:/mnt/scripts \
+       --name timescaledb-memory memory_test:latest
+wait_for_pg timescaledb-memory
 
-echo "Installing python3 and psutil"
+echo "**** Installing python3 and psutil ****"
 docker_exec timescaledb-memory "apk add --no-cache python3 && python3 -m ensurepip && pip3 install --upgrade pip && apk add --update build-base python3-dev py-psutil"
 
-echo "Copying necessary scripts from host to docker container"
-docker cp -a /tmp/tsdb-dev-tools timescaledb-memory:/tmp/tsdb-dev-tools
-
-echo "Testing"
-docker_exec timescaledb-memory "python3 /tmp/tsdb-dev-tools/test_memory_spikes.py & sleep 5 && psql -U postgres -d postgres -h localhost -v ECHO=all -X -f /tmp/tsdb-dev-tools/sql/out_of_order_random_direct.sql"
+echo "**** Testing ****"
+docker_exec timescaledb-memory "python3 /mnt/scripts/test_memory_spikes.py & sleep 5 && psql -U postgres -d postgres -h localhost -v ECHO=all -X -f /mnt/scripts/out_of_order_random_direct.sql"

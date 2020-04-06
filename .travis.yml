@@ -18,8 +18,6 @@ notifications:
       - secure: "n4gHRucKsrlYNLVmoTxhsSbH780+8c+OjUCbaSxzyf7QYpbiD5HdCYAwBwJw6VkWPHQ+gXXy75szzcBmCOILEqx+m8WBLet+K9Kw1g3EE0r7lXT+OLWi0JJXvWBv/QdMwefilg7mC8P/USEwUSZfK/iW7tERvQc38ajGonqTsS4QWSg9zAlZZ1ZQJAALd4S4z+BJ/skAQNV+hAI1DLb8jf3A+Ex4/uMs9oAmfGiKqQTwmHlL698XFD83bv0XdxJYskkL8Eqt+19d0HD7lTCvez0yES2PCRXUWsWd2mIwTzGPYyDAU+5MifUvV2CaGDDAhIpzTYoZ4rl2SJc4uu6Fztat4UQB1GGc+TCNo5V8L3IdmzGjI2NSk88QItvpSiiNvtS0mr5As9dO8pIwuWwc4SL0u5bYw7Cq+y2s85huhKrYFVkdEptxjGInHjmq0KsuqpHoFE3E2DPD0fR0KhOekFkzobXg1cPubWHOmzm/PhVaMz3tFAtg83V2f+qg3UtfjMMgI84J/SsUdqv9J1G9R2iGxi56WKSWHHyMeloY8Pz2HFJzV0fPJQM+D5pJFpxQkSXyOMR72qJjeg0IZTiCndX9AEswbGQ3d/dwmYgbfzAah+OP37ZTYyEOsqJTEKvWq8GuJZTuhdJhhvA38Axv9jACcoQtxTKdKskOAUH3TWA="
 env:
   global:
-    - secure: "TurskgAodG44RKCUPfoUb4JlT+UZwaPjUN73MS4+2ED2ayf46iUpcMODovDf7CPQRriMAvii/5xQ9UWTGYZejJy/Si3aE0fQeSKHIOPmuHqmmBkC3jgK9A5vOMpaAwljSNvIAMfwhIjVsq87nyvxHYWReDWl5SrdxTvh91RJvOiMRNdqwBbnj2j1cC30783ICGZUazrUyhDDnXispyBJYFxlHJmQJpfs6428dTRNJY/X8nVDXFwQkRjlIXarquTsrifCfzdq40Ykb8/1CS0295R8/kdKamQqXM0aS7iIkw3JFmZIz08OHKc7wcJuv6KSnCfNSftJqy2+nb1gkyIqkr3mrpYUa+2tKVwpA6OfET2S2kC5B3bOTcyBgihhnivAOS9zG8PTouLSUzqZzo+H893xdaMlX4kX3oOrOqzbj8YvTw6Dgw8PWERfnOngpKmKJFb8yboXPmGY7luSVxOplnPnYO0jaAXPU4ESsFYL3EBG5Zo4rVIuA5g7aJ0Ex+e5GQWiHDM1ubUo2vcuVVlurs/Aj8eSpNhqo0S5MjI05Jcz82X+9+asFcP+QV81UrueiXTlQ/7buAyMyVtKOgOhZwR4ImA1zzWkJjNNbZMJqeO9tPEgU7IxrqLhMgIpBB/pn0gzJZ8LN7C2oyznMYGzS5lrYaavojFUViv8vFyAQ24="
-    - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
     - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
     - CODECOV_FLAGS="-F cron"
 before_install:
@@ -470,7 +468,6 @@ jobs:
       env:
         - PG_VERSION=10.2
       before_script:
-        - git clone --progress --verbose https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
       script:
         - bash ./scripts/docker-run-memory-test.sh
 
