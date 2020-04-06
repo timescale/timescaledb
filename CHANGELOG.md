@@ -13,6 +13,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
+* #1801 Include parallel leader in plan execution
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now
@@ -20,6 +21,8 @@ accidentally triggering the load of a previous DB version.**
 * Gapfill functionality no longer warns about expired license
 
 **Thanks**
+
+* @t0k4rt for reporting an issue with parallel chunk append plans
 
 ## 1.6.1 (2020-03-18)
 
