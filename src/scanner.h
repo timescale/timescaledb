@@ -18,7 +18,8 @@
 typedef struct TupleInfo
 {
 	Relation scanrel;
-	/* TODO in PG12+ we should not materialize a HeapTuple unless needed */
+	/* In PG12+, to avoid unnecessary materialization, we should use a TupleTableSlot (with type
+	 * pulled dynamically from the index) rather than a HeapTuple */
 	HeapTuple tuple;
 	TupleDesc desc;
 #if PG12_GE

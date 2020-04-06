@@ -308,6 +308,5 @@ ts_extension_is_loaded(void)
 char *
 ts_extension_get_so_name()
 {
-	/* TODO: after merge check whether this is the right place */
 	return EXTENSION_NAME "-" TIMESCALEDB_VERSION_MOD;
 }

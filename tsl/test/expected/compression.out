@@ -196,7 +196,7 @@ insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
---TEST2c dml directly on the chunk NOTE update/deletes don't get blocked (TODO)
+--TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
 update _timescaledb_internal._hyper_1_2_chunk

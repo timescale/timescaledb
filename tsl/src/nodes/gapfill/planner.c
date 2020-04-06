@@ -441,7 +441,7 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		group_rel->cheapest_startup_path = NULL;
 		group_rel->cheapest_unique_path = NULL;
 
-		/* TODO parameterized paths */
+		/* Parameterized paths pathlist is currently deleted instead of being processed */
 		list_free(group_rel->ppilist);
 		group_rel->ppilist = NULL;
 

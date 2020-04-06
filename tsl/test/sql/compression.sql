@@ -83,7 +83,7 @@ insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
 
---TEST2c dml directly on the chunk NOTE update/deletes don't get blocked (TODO)
+--TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;

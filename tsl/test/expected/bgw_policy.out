@@ -709,8 +709,7 @@ select remove_drop_chunks_policy('part_time_now_func');
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- todo:: this currently fails:
--- alter function dummy_now rename to dummy_now_renamed;
+alter function dummy_now() rename to dummy_now_renamed;
 alter schema public rename to new_public;
 select * from  _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | integer_now_func_schema | integer_now_func 

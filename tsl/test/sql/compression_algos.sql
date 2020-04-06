@@ -90,9 +90,6 @@ DROP TABLE base_ints;
 -- INT Compression --
 ------------------------
 
---kinda silly test for now since compressed as bigint anyway
---TODO add proper int support
---TODO add proper smallint support and tests
 CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::int FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
 SELECT
   $$

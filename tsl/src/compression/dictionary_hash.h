@@ -95,8 +95,10 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 			 "invalid type for dictionary compression, type must have both a hash function and "
 			 "equality function");
 
-	/* TODO get collation from table? we need to think about backcompat,
-	 * and different collations should only affect compression ratios anyaway
+	/* May be more correct to get collation defined on the column, which may be different than the
+	 * collation defined on the type (what we're currently using). We need to think about
+	 * backwards compatibility, and different collations. Should only affect compression ratios
+	 * anyway.
 	 */
 	meta->eq_info = HEAP_FCINFO(2);
 	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, collation, NULL, NULL);

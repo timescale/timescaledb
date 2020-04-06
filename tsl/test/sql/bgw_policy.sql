@@ -341,8 +341,7 @@ select test_drop_chunks(:drop_chunks_job_id);
 select * from part_time_now_func;
 select remove_drop_chunks_policy('part_time_now_func');
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- todo:: this currently fails:
--- alter function dummy_now rename to dummy_now_renamed;
+alter function dummy_now() rename to dummy_now_renamed;
 alter schema public rename to new_public;
 select * from  _timescaledb_catalog.dimension;
 alter schema new_public rename to public;

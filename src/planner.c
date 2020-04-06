@@ -570,10 +570,11 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 			Assert(ht != NULL && in_rel != NULL);
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel);
 
-			/* TODO move this back into ts_plan_expand_hypertable_chunks */
 			in_rte->inh = true;
 			reenabled_inheritance = true;
-			/* FIXME redo set_rel_consider_parallel */
+			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid here
+			 * (due to adding more tables to the set of tables under consideration here). This is
+			 * especially true if dealing with foreign data wrappers. */
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still

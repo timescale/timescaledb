@@ -65,7 +65,7 @@ BEGIN
         END IF;
         return array_to_string(parts, 'AND');
     ELSE
-        --TODO: only works with time for now
+        -- only works with time for now
         IF _timescaledb_internal.time_literal_sql(dimension_slice_row.range_start, dimtype) =
            _timescaledb_internal.time_literal_sql(dimension_slice_row.range_end, dimtype) THEN
             RAISE 'time-based constraints have the same start and end values for column "%": %',

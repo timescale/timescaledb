@@ -35,7 +35,7 @@ session "B"
 setup		{ BEGIN; LOCK TABLE waiter; }
 step "Bc"   { ROLLBACK; }
 
-# TODO this fails in an unexpected manner, but isn't critical since the barrier should not be used in real code
+# This fails in an unexpected manner, but isn't critical since this barrier is only ever used in tests, and shouldn't exist in real code
 #permutation "S1" "R1" "S2" "Bc" "Rc" "Sc"
 
 #upgrade deadlocks should favor reorder

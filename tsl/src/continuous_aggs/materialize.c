@@ -1031,9 +1031,7 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 	materialization_table_name.schema = &materialization_table->fd.schema_name;
 	materialization_table_name.name = &materialization_table->fd.table_name;
 
-	/* lock the table's we will be inserting to now, to prevent deadlocks later on */
-	// TODO lock the materialization table, the and the completed_threshold with RowExclusive locks
-	// TODO decide lock ordering
+	/* to prevent deadlocks later on, lock the tables we will be inserting to now */
 
 	update_materializations(partial_view,
 							materialization_table_name,

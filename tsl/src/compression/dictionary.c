@@ -74,8 +74,6 @@ struct DictionaryDecompressionIterator
 /// Compressor ///
 //////////////////
 
-// FIXME store (index + 1), and use 0 to mean NULL
-
 typedef struct DictionaryCompressor
 {
 	dictionary_hash *dictionary_items;
@@ -494,7 +492,6 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 			.is_done = true,
 		};
 
-	// FIXME 0 should be a sentinel representing null
 	Assert(result.val < iter->compressed->num_distinct);
 	return (DecompressResult){
 		.val = iter->values[result.val],

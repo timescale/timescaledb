@@ -129,7 +129,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
          Index Cond: (_hyper_2_5_chunk.object_id = 1)
 (4 rows)
 
---TODO: handle this later?
+--Need to verify space partitions are currently pruned in this query
 --EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 \echo "The following shows non-aggregated queries with time desc using merge append"
 "The following shows non-aggregated queries with time desc using merge append"
@@ -231,7 +231,8 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
                            Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
 (20 rows)
 
---TODO: time transform doesn't work
+--The query should still use the index on timeCustom, even though the GROUP BY/ORDER BY is on the transformed time 't'. 
+--However, current query plans show that it does not.
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------

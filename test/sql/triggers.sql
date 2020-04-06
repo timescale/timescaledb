@@ -278,8 +278,7 @@ SELECT * FROM vehicles;
 SELECT * FROM color;
 
 -- switch back to default user to run some dropping tests
---TODO: currently default user is postgres, who is a superuser, potentially we should change that?
-\c :TEST_DBNAME :ROLE_SUPERUSER; 
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER; 
 
 \set ON_ERROR_STOP 0
 -- test that disable trigger is disallowed 

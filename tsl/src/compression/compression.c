@@ -230,9 +230,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
 	 */
-	Relation out_rel = table_open(out_table, ExclusiveLock);
-	// TODO error if out_rel is non-empty
-	// TODO typecheck the output types
+	Relation out_rel = relation_open(out_table, ExclusiveLock);
 	int16 *in_column_offsets = compress_chunk_populate_keys(in_table,
 															column_compression_info,
 															num_compression_infos,
@@ -365,9 +363,10 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	{
 		if (HeapTupleIsValid(tuple))
 		{
-			// TODO is this the most efficient way to do this?
-			//     (since we use begin_heap() the tuplestore expects tupleslots,
-			//      so ISTM that the options are this or maybe putdatum())
+			/*    This may not be the most efficient way to do things.
+			 *     Since we use begin_heap() the tuplestore expects tupleslots,
+			 *      so ISTM that the options are this or maybe putdatum().
+			 */
 #if PG12_LT
 			ExecStoreTuple(tuple, heap_tuple_slot, InvalidBuffer, false);
 #else
@@ -401,7 +400,8 @@ compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionI
 		elog(ERROR, "table %d does not have column \"%s\"", table, NameStr(column->attname));
 
 	att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	// TODO other valdation checks?
+	/* Other valdation checks beyond just existence of a valid comparison operator could be useful
+	 */
 
 	*att_nums = att_tup->attnum;
 	*collation = att_tup->attcollation;
@@ -633,7 +633,8 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 		Assert(column->compressor == NULL);
 
 		MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
-		// TODO we should just use array access here; everything is guaranteed to be fetched
+		/* Performance Improvment: We should just use array access here; everything is guaranteed to
+		   be fetched */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		segment_info_update(column->segment_info, val, is_null);
 		MemoryContextSwitchTo(row_compressor->per_row_ctx);
@@ -678,8 +679,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		if (compressor == NULL)
 			continue;
 
-		// TODO since we call getallatts at the beginning, slot_getattr is useless
-		//     overhead here, and we should just access the array directly
+		/* Performance Improvement: Since we call getallatts at the beginning, slot_getattr is
+		 * useless overhead here, and we should just access the array directly.
+		 */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
 		{
@@ -978,8 +980,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * We may as well allow readers to keep reading the compressed data while
 	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation in_rel = table_open(in_table, ExclusiveLock);
-	// TODO error if out_rel is non-empty
+	Relation in_rel = relation_open(in_table, ExclusiveLock);
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
@@ -1166,7 +1167,6 @@ row_decompressor_decompress_row(RowDecompressor *row_decompressor)
 		 */
 		if (!is_done || !wrote_data)
 		{
-			// FIXME getting invalid bool here
 			HeapTuple decompressed_tuple = heap_form_tuple(row_decompressor->out_desc,
 														   row_decompressor->decompressed_datums,
 														   row_decompressor->decompressed_is_nulls);
@@ -1218,7 +1218,7 @@ per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *deco
 	decompressed = per_compressed_col->iterator->try_next(per_compressed_col->iterator);
 	if (decompressed.is_done)
 	{
-		// TODO we want a way to free the decompression iterator's data
+		/* We want a way to free the decompression iterator's data to avoid OOM issues */
 		per_compressed_col->iterator = NULL;
 		decompressed_is_nulls[decompressed_column_offset] = true;
 		return true;

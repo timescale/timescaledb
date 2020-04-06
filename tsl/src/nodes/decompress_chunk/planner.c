@@ -382,26 +382,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 	else if (IsA(compressed_path, BitmapHeapPath))
 	{
-		// TODO we should remove quals that are redunant with the Bitmap scan
-		/* from create_bitmap_scan_plan */
-		// BitmapHeapPath *bpath = castNode(BitmapHeapPath, compressed_path);
-		// ListCell *l;
-		// foreach(l, clauses)
-		// {
-		// 	RestrictInfo *rinfo = lfirst_node(RestrictInfo, l);
-		// 	Node       *clause = (Node *) rinfo->clause;
-
-		// 	if (rinfo->pseudoconstant)
-		// 		continue;           /* we may drop pseudoconstants here */
-		// 	if (list_member(indexquals, clause))
-		// 		continue;           /* simple duplicate */
-		// 	if (rinfo->parent_ec && list_member_ptr(indexECs, rinfo->parent_ec))
-		// 		continue;           /* derived from same EquivalenceClass */
-		// 	if (!contain_mutable_functions(clause) &&
-		// 		predicate_implied_by(list_make1(clause), indexquals, false))
-		// 		continue;           /* provably implied by indexquals */
-		// 	qpqual = lappend(qpqual, rinfo);
-		// }
+		/* To increase performance, we should remove quals that are redundant with the Bitmap scan
+		 * Code from create_bitmap_scan_plan does something similar, and could be used as a starting
+		 * point.
+		 */
 		cscan->scan.plan.qual = get_actual_clauses(clauses);
 	}
 	else

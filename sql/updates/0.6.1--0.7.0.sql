@@ -120,7 +120,7 @@ BEGIN
 
         return array_to_string(parts, 'AND');
     ELSE
-        --TODO: only works with time for now
+        -- only works with time for now
         IF _timescaledb_internal.time_literal_sql(dimension_slice_row.range_start, dimension_row.column_type) =
            _timescaledb_internal.time_literal_sql(dimension_slice_row.range_end, dimension_row.column_type) THEN
             RAISE 'Time based constraints have the same start and end values for column "%": %',

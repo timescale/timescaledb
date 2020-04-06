@@ -35,7 +35,6 @@
 #define VEC_TYPE VEC_MAKE_NAME(vec)
 
 /* function declarations */
-// TODO add INSERT for inserting into the middle of a vec
 #define VEC_INIT VEC_MAKE_NAME(vec_init)
 #define VEC_CREATE VEC_MAKE_NAME(vec_create)
 #define VEC_FREE_DATA VEC_MAKE_NAME(vec_free_data)
@@ -107,7 +106,7 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 	uint64 num_elements;
 	uint64 num_bytes;
 
-	// TODO handle overflow, huge allocations, if desired
+	/* this doesn't handle integer overflow or >4GB allocations */
 	if (num_new_elements == 0 || vec->num_elements + num_new_elements <= vec->max_elements)
 		return;
 
