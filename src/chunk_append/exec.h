@@ -61,6 +61,7 @@ typedef struct ChunkAppendState
 	int runtime_number_exclusions;
 
 	LWLock *lock;
+	ParallelContext *pcxt;
 	ParallelChunkAppendState *pstate;
 	void (*choose_next_subplan)(struct ChunkAppendState *);
 
