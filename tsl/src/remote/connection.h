@@ -64,6 +64,8 @@ extern unsigned int remote_connection_get_prep_stmt_number(void);
 extern bool remote_connection_configure(TSConnection *conn);
 extern bool remote_connection_check_extension(TSConnection *conn, const char **owner_name,
 											  Oid *owner_oid);
+extern void remote_validate_extension_version(TSConnection *conn, const char *data_node_version);
+
 extern bool remote_connection_cancel_query(TSConnection *conn);
 extern PGconn *remote_connection_get_pg_conn(TSConnection *conn);
 extern bool remote_connection_is_processing(TSConnection *conn);

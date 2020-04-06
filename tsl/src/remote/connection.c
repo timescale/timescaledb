@@ -837,6 +837,30 @@ remote_result_query_ok(PGresult *res)
 	return remote_result_ok(res, PGRES_TUPLES_OK);
 }
 
+/**
+ * Validate extension version.
+ */
+void
+remote_validate_extension_version(TSConnection *conn, const char *data_node_version)
+{
+	bool old_version;
+
+	if (!dist_util_is_compatible_version(data_node_version, TIMESCALEDB_VERSION, &old_version))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("remote PostgreSQL instance has an incompatible timescaledb extension "
+						"version"),
+				 errdetail_internal("Access node version: %s, remote version: %s.",
+									TIMESCALEDB_VERSION_MOD,
+									data_node_version)));
+	if (old_version)
+		ereport(WARNING,
+				(errmsg("remote PostgreSQL instance has an outdated timescaledb extension version"),
+				 errdetail_internal("Access node version: %s, remote version: %s.",
+									TIMESCALEDB_VERSION_MOD,
+									data_node_version)));
+}
+
 /*
  * Check timescaledb extension version on a data node.
  *
@@ -852,8 +876,6 @@ bool
 remote_connection_check_extension(TSConnection *conn, const char **owner_name, Oid *owner_oid)
 {
 	PGresult *res;
-	const char *data_node_version;
-	bool old_version;
 
 	res = remote_connection_execf(conn,
 								  "SELECT usename, extowner, extversion FROM pg_extension JOIN "
@@ -879,24 +901,9 @@ remote_connection_check_extension(TSConnection *conn, const char **owner_name, O
 			break;
 	}
 
-	/* check extension version on data node and make sure that it is
+	/* validate extension version on data node and make sure that it is
 	 * compatible */
-	data_node_version = PQgetvalue(res, 0, 2);
-	if (!dist_util_is_compatible_version(data_node_version, TIMESCALEDB_VERSION, &old_version))
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("data node \"%s\" has an incompatible timescaledb extension version",
-						NameStr(conn->node_name)),
-				 errdetail_internal("Access node version: %s, data node version: %s.",
-									TIMESCALEDB_VERSION_MOD,
-									data_node_version)));
-	if (old_version)
-		ereport(WARNING,
-				(errmsg("data node \"%s\" has an outdated timescaledb extension version",
-						NameStr(conn->node_name)),
-				 errdetail_internal("Access node version: %s, data node version: %s.",
-									TIMESCALEDB_VERSION_MOD,
-									data_node_version)));
+	remote_validate_extension_version(conn, PQgetvalue(res, 0, 2));
 
 	/* extract owner */
 	if (owner_name != NULL)
