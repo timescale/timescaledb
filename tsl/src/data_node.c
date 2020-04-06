@@ -573,6 +573,37 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 }
 
 /**
+ * Validate that extension is available and with the correct version.
+ *
+ * If the extension is not available on the data node, we will get strange
+ * errors when we try to use functions, so we check that the extension is
+ * available before attempting anything else.
+ *
+ * Will abort with error if there is an issue, otherwise do nothing.
+ */
+static void
+data_node_validate_extension_availability(TSConnection *conn)
+{
+	PGresult *res = remote_connection_execf(conn,
+											"SELECT default_version, installed_version FROM "
+											"pg_available_extensions WHERE name = %s",
+											quote_literal_cstr(EXTENSION_NAME));
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	if (PQntuples(res) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("TimescaleDB extension not available on remote PostgreSQL instance"),
+				 errhint("Install the TimescaleDB extension on the remote PostgresSQL instance.")));
+
+	/* Here we validate the available version, not the installed version */
+	remote_validate_extension_version(conn, PQgetvalue(res, 0, 0));
+}
+
+/**
  * Get the configured server port for the server as an integer.
  *
  * Returns:
@@ -658,17 +689,21 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		/* Make the foreign server visible in current transaction. */
 		CommandCounterIncrement();
 
-		/* Ensure that there is a database if we are bootstrapping. This is
+		/* If bootstrapping, we check the extension availability here and
+		 * abort if the extension is not available. We should not start
+		 * creating databases and other cruft on the datanode unless we know
+		 * that the extension is installed.
+		 *
+		 * We ensure that there is a database if we are bootstrapping. This is
 		 * done using a separate connection since the database that is going
 		 * to be used for the data node does not exist yet, so we cannot
 		 * connect to it. */
-
 		if (bootstrap)
 		{
-			conn = connect_for_bootstrapping(node_name, host, port, username);
+			TSConnection *conn = connect_for_bootstrapping(node_name, host, port, username);
+			data_node_validate_extension_availability(conn);
 			database_created = data_node_bootstrap_database(conn, &database);
 			remote_connection_close(conn);
-			conn = NULL; /* A precaution */
 		}
 
 		/* Connect to the database we are bootstrapping and either install the

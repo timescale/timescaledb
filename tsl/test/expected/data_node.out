@@ -1277,7 +1277,7 @@ CREATE EXTENSION timescaledb VERSION '0.0.0';
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
                             bootstrap => false);
-ERROR:  data node "data_node_1" has an incompatible timescaledb extension version
+ERROR:  remote PostgreSQL instance has an incompatible timescaledb extension version
 \set ON_ERROR_STOP 1
 RESET ROLE;
 DROP DATABASE data_node_1;
