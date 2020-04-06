@@ -403,7 +403,6 @@ jobs:
       env:
         - PG_VERSION=10.2
       before_script:
-        - git clone --progress --verbose https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
       script:
         - bash ./scripts/docker-run-memory-test.sh
 
