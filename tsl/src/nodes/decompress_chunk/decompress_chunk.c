@@ -381,9 +381,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		DecompressChunkPath *path;
 
 		/*
-		 * filter out all paths that try to JOIN the compressed chunk on the
+		 * Filter out all paths that try to JOIN the compressed chunk on the
 		 * hypertable or the uncompressed chunk
-		 * TODO ideally we wouldn't create these paths in the first place...
+		 * Ideally, we wouldn't create these paths in the first place.
 		 */
 		if (child_path->param_info != NULL &&
 			(bms_is_member(chunk_rel->relid, child_path->param_info->ppi_req_outer) ||

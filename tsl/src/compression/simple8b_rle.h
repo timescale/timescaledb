@@ -356,8 +356,6 @@ simple8brle_compressor_num_selectors(Simple8bRleCompressor *compressor)
 	return bit_array_num_bits(&compressor->selectors) / SIMPLE8B_BITS_PER_SELECTOR;
 }
 
-// TODO replace with simple8b_rle_compressor_finish_into(Simple8bRleCompressor *compressor,
-// simple8b_rle compressed)
 static Simple8bRleSerialized *
 simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 {
@@ -827,7 +825,7 @@ simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks)
 		   (num_blocks % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT != 0 ? 1 : 0);
 }
 
-// FIXME replace with count leading ones as in float.c
+/* Replacing this with count leading ones as in float.c would increase performance */
 static inline uint32
 simple8brle_bits_for_value(uint64 v)
 {

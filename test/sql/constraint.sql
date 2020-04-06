@@ -372,7 +372,7 @@ TRUNCATE hyper_fk;
 --FOREIGN KEY references into a hypertable are currently broken.
 --The referencing table will never find the corresponding row in the hypertable
 --since it will only search the parent. Thus any insert will result in an ERROR
---TODO: block such foreign keys or fix. (Hard to block on create table so punting for now)
+--Block such foreign keys or fix. (Hard to block on create table so punting for now)
 CREATE TABLE hyper_for_ref (
   time BIGINT NOT NULL PRIMARY KEY,
   device_id TEXT NOT NULL,

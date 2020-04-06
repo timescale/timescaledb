@@ -80,7 +80,9 @@ FROM _timescaledb_catalog.hypertable ht
 \gset
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- TODO this should change once we have a canonical way to create indexes on compressed tables
+-- Index created using query saved in variable used because there was 
+-- no standard way to create an index on a compressed table.
+-- Once a standard way exists, modify this test to use that method.
 CREATE INDEX c_index ON :METRICS_COMPRESSED(device_id);
 CREATE INDEX c_space_index ON :METRICS_SPACE_COMPRESSED(device_id);
 

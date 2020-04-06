@@ -298,7 +298,8 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
 												  InvalidOid);
-	// TODO fix this after change in C interface
+	/* Ideally would like to change/expand the API so setting the column name manually is
+	 * unnecessary, but not high priority */
 	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
 	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
@@ -965,9 +966,9 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	aggref->aggstar = false;
 	aggref->aggvariadic = false;
 	aggref->aggkind = AGGKIND_NORMAL;
-	aggref->aggsplit = AGGSPLIT_SIMPLE; // TODO make sure plannerdoes not change this ???
-	aggref->location = -1;				/*unknown */
-										/* construct the arguments */
+	aggref->aggsplit = AGGSPLIT_SIMPLE;
+	aggref->location = -1;
+	/* construct the arguments */
 	agggregate_signature = DatumGetCString(DirectFunctionCall1(regprocedureout, inp->aggfnoid));
 	aggregate_signature_const = makeConst(TEXTOID,
 										  -1,

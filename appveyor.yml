@@ -90,7 +90,7 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb_telemetry.cloud='ci'"
 
-    # TODO removing the following line causes a stack overflow on appveyor
+    # NOTE: Removing the following line causes a stack overflow on appveyor
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.telemetry_level='off'"
 
@@ -159,7 +159,8 @@ test_script:
 
     $TESTS1 = $?
 
-    # TODO can we switch these to file swapping?
+    # Normally we use different config files for apache and enterprise tests, but Windows was having problems with that
+    # Thus, just append the license key to the regular config file instead
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license_key = 'E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K'"
 

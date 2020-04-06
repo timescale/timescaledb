@@ -251,7 +251,6 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	 * transaction) to already have that mark set
 	 */
 	ts_chunk_index_mark_clustered(cim.chunkoid, cim.indexoid);
-	/* TODO allow users to set verbosity? */
 	timescale_reorder_rel(cim.chunkoid,
 						  cim.indexoid,
 						  verbose,

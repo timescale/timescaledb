@@ -1101,7 +1101,7 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 						 stmt->options
 #if PG12_GE
 						 ,
-						 stmt->concurrent /* TODO test */
+						 stmt->concurrent /* should test for deadlocks */
 #endif
 			);
 			break;
@@ -2739,7 +2739,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ColumnDefault:
 		case AT_SetNotNull:
 #if PG12_GE
-		case AT_CheckNotNull: /*TODO test*/
+		case AT_CheckNotNull:
 #endif
 		case AT_DropNotNull:
 		case AT_AddOf:

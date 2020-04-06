@@ -276,12 +276,12 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_destroy);
 Datum
 ts_bgw_params_destroy(PG_FUNCTION_ARGS)
 {
-	/* no way to unpin in 9.6 and can fail in EXEC_BACKEND cases so forget it, should only affect
-	 * tests anyway */
-
 	/*
-	 * Removing for now because the EXEC_BACKEND compile-time flag is not correctly passed down.
-	 * TODO: Fix once we fix this compile-script issue (Or make work on EXEC_BACKEND boxes)
+	 * Removing shared memory segment unpin for now because:
+	 * 1) This can fail in EXEC_BACKEND cases.
+	 * 2) There's no way to unpin in PG9.6.
+	 * 3) The EXEC_BACKEND compile-time flag is not correctly passed down.
+	 * 4) This should only affect tests, not actual DB functionality.
 	 * #if PG10 && !defined(EXEC_BACKEND)
 	 *	dsm_unpin_segment(params_get_dsm_handle());
 	 * #endif

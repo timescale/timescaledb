@@ -208,7 +208,7 @@ SH_SCOPE void SH_STAT(SH_TYPE *tb);
 #ifndef SIMPLEHASH_H
 #define SIMPLEHASH_H
 
-/* FIXME: can we move these to a central location? */
+/* Ideally would like to move these to a central location? */
 
 /* calculate ceil(log base 2) of num */
 static inline uint64
@@ -624,11 +624,6 @@ restart:
 
 			/* shift forward, starting at last occupied element */
 
-			/*
-			 * TODO: This could be optimized to be one memcpy in may cases,
-			 * excepting wrapping around at the end of ->data. Hasn't shown up
-			 * in profiles so far though.
-			 */
 			moveelem = emptyelem;
 			while (moveelem != curelem)
 			{
@@ -696,13 +691,6 @@ SH_LOOKUP(SH_TYPE *tb, SH_KEY_TYPE key)
 
 		if (SH_COMPARE_KEYS(tb, hash, key, entry))
 			return entry;
-
-		/*
-		 * TODO: we could stop search based on distance. If the current
-		 * buckets's distance-from-optimal is smaller than what we've skipped
-		 * already, the entry doesn't exist. Probably only do so if
-		 * SH_STORE_HASH is defined, to avoid re-computing hashes?
-		 */
 
 		curelem = SH_NEXT(tb, curelem, startelem);
 	}
@@ -772,8 +760,6 @@ SH_DELETE(SH_TYPE *tb, SH_KEY_TYPE key)
 
 			return true;
 		}
-
-		/* TODO: return false; if distance too big */
 
 		curelem = SH_NEXT(tb, curelem, startelem);
 	}

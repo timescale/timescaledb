@@ -409,10 +409,10 @@ gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val)
 		 */
 		int leading_zeros = xor != 0 ? 63 - pg_leftmost_one_pos64(xor) : 63;
 		int trailing_zeros = xor != 0 ? pg_rightmost_one_pos64(xor) : 1;
-		/*   TODO this can easily get stuck with a bad value for trailing_zeroes
-		 *   we use a new trailing_zeroes if th delta is too large, but the
-		 *   threshold was picked in a completely unprincipled manner.
-		 *   Needs benchmarking
+		/*   This can easily get stuck with a bad value for trailing_zeroes, leading to a bad
+		 * compressed size. We use a new trailing_zeroes if the delta is too large, but the
+		 *   threshold (12) was picked in a completely unprincipled manner.
+		 *   Needs benchmarking to determine an ideal threshold.
 		 */
 		bool reuse_bitsizes = has_values && leading_zeros >= compressor->prev_leading_zeroes &&
 							  trailing_zeros >= compressor->prev_trailing_zeros &&
@@ -667,7 +667,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 	{
 		Simple8bRleDecompressResult null =
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
-		// FIXME we probably don't need to return a tail of non-null bits
+		/* Could slightly improve performance here by not returning a tail of non-null bits */
 		if (null.is_done)
 			return (DecompressResultInternal){
 				.is_done = true,

@@ -20,7 +20,6 @@ CREATE TYPE _timescaledb_catalog.ts_interval AS (
     integer_interval        BIGINT
     );
 
--- q -- todo:: this is probably necessary if we keep the validation constraint in the table definition.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.valid_ts_interval(invl _timescaledb_catalog.ts_interval)
 RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_valid_ts_interval' LANGUAGE C VOLATILE STRICT;
 

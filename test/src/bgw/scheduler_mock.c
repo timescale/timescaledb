@@ -160,7 +160,7 @@ static BackgroundWorkerHandle *
 start_test_scheduler(char *params)
 {
 	/*
-	 * TODO this is where we would increment the number of bgw used, if we
+	 * This is where we would increment the number of bgw used, if we
 	 * decide to do so
 	 */
 	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main",

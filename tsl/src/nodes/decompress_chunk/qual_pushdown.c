@@ -1,5 +1,4 @@
-/*
- * This file and its contents are licensed under the Timescale License.
+/* * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
@@ -230,7 +229,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	else
 		return NULL;
 
-	/* todo think through the strict case */
+	/* May be able to allow non-strict operations as well.
+	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
+	 * block strict operations
+	 */
 	if (!OidIsValid(op_oid) || !op_strict(op_oid))
 		return NULL;
 

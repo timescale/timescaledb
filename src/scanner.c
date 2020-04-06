@@ -94,7 +94,11 @@ index_scanner_getnext(InternalScannerCtx *ctx)
 #if PG12_LT
 	ctx->tinfo.tuple = index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
 	success = HeapTupleIsValid(ctx->tinfo.tuple);
-#else /* TODO we should not materialize a HeapTuple unless needed */
+#else
+	/* We should use the slot type here instead of the HeapTuple to avoid unneeded materialization.
+	 * This would require changing consumers of this function's output to use a TupleTableSlot
+	 * instead of a HeapTuple and dynamically determining the slot type from the index, instead of
+	 * just assuming HeapTuple */
 	success = index_getnext_slot(ctx->scan.index_scan, ctx->sctx->scandirection, ctx->tinfo.slot);
 	if (success)
 		ctx->tinfo.tuple = ExecFetchSlotHeapTuple(ctx->tinfo.slot, false, NULL);
@@ -173,7 +177,9 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 	ictx->tinfo.scanrel = ictx->tablerel;
 	ictx->tinfo.desc = tuple_desc;
 	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
-#if PG12_GE /* TODO we should not materialize a HeapTuple unless needed */
+#if PG12_GE /* As an optimization, we should dynamically determine the slot type from the index    \
+			   here and not force a BufferHeapTuple to avoid allocating memory if it's not a       \
+			   BufferHeapTuple and to support custom index slot types */
 	ictx->tinfo.slot = MakeSingleTupleTableSlot(tuple_desc, &TTSOpsBufferHeapTuple);
 #endif
 

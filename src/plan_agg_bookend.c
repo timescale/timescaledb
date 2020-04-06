@@ -679,14 +679,16 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 				Assert(rte->inh);
 				rte->inh = false;
 				/* query planner gets confused when entries in the
-				 * append_rel_list refer to entreis in the relarray that
-				 * don't exist. Since we need to rexpand hypertables in the
+				 * append_rel_list refer to entries in the relarray that
+				 * don't exist. Since we need to expand hypertables in the
 				 * subquery, all of the chunk entries will be invalid in
-				 * this manner, so we remove them from the list
+				 * this manner, so we remove them from the list.
 				 */
-				/* TODO this can be made non-quadratic by storing all the
-				 *      relids in a bitset, then iterating over the
-				 *      append_rel_list once
+				/*  Performance Enhancement: This can be made non-quadratic by:
+				 *  1) Loop once over all RTEs, storing the relid of any RTE that is a hypertable in
+				 * a bitset and setting its 'inh' flag to false 2) Loop over the append_rel_list,
+				 * removing any AppendRelInfo that has a parent relid which is in the previously
+				 * created bitset (i.e., is a hypertable)
 				 */
 				while (next != NULL)
 				{

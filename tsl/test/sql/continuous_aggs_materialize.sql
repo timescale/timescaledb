@@ -367,18 +367,14 @@ SELECT create_hypertable('continuous_agg_extreme', 'time', chunk_time_interval=>
 CREATE OR REPLACE FUNCTION integer_now_continuous_agg_extreme() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_extreme $$;
 SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_agg_extreme');
 
--- TODO we should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
+-- We should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
 CREATE VIEW extreme_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
         GROUP BY 1;
---TODO this should be created as part of CREATE VIEW
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='continuous_agg_extreme' \gset
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON continuous_agg_extreme
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.continuous_agg_invalidation_trigger(:raw_table_id);
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id=:raw_table_id \gset
 
 -- EMPTY table should be a nop
