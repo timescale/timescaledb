@@ -16,10 +16,15 @@ notifications:
       - "Build details: %{build_url}"
     rooms:
       - secure: "n4gHRucKsrlYNLVmoTxhsSbH780+8c+OjUCbaSxzyf7QYpbiD5HdCYAwBwJw6VkWPHQ+gXXy75szzcBmCOILEqx+m8WBLet+K9Kw1g3EE0r7lXT+OLWi0JJXvWBv/QdMwefilg7mC8P/USEwUSZfK/iW7tERvQc38ajGonqTsS4QWSg9zAlZZ1ZQJAALd4S4z+BJ/skAQNV+hAI1DLb8jf3A+Ex4/uMs9oAmfGiKqQTwmHlL698XFD83bv0XdxJYskkL8Eqt+19d0HD7lTCvez0yES2PCRXUWsWd2mIwTzGPYyDAU+5MifUvV2CaGDDAhIpzTYoZ4rl2SJc4uu6Fztat4UQB1GGc+TCNo5V8L3IdmzGjI2NSk88QItvpSiiNvtS0mr5As9dO8pIwuWwc4SL0u5bYw7Cq+y2s85huhKrYFVkdEptxjGInHjmq0KsuqpHoFE3E2DPD0fR0KhOekFkzobXg1cPubWHOmzm/PhVaMz3tFAtg83V2f+qg3UtfjMMgI84J/SsUdqv9J1G9R2iGxi56WKSWHHyMeloY8Pz2HFJzV0fPJQM+D5pJFpxQkSXyOMR72qJjeg0IZTiCndX9AEswbGQ3d/dwmYgbfzAah+OP37ZTYyEOsqJTEKvWq8GuJZTuhdJhhvA38Axv9jACcoQtxTKdKskOAUH3TWA="
+stages:
+  - test
+  - coverity12
+  - coverity11
 env:
   global:
     - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
     - CODECOV_FLAGS="-F cron"
+    - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL regression tests
   - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
@@ -485,21 +490,43 @@ jobs:
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
-    # Coverity test
+    # Coverity tests
+
     - if: (branch = prerelease_test) OR (branch = coverity_scan)
-      stage: test
-      name: "Coverity"
+      stage: coverity11
+      name: "Coverity PG 11"
       env:
-        - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
       before_install:
         - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
-        - sudo apt-get install -y postgresql-9.6 postgresql-client-9.6 postgresql-contrib-9.6 postgresql-server-dev-9.6 cmake
+        - sudo apt-get install -y postgresql-11 postgresql-client-11 postgresql-contrib-11 postgresql-server-dev-11 cmake
       install:
       after_success:
       after_script:
       script: echo "Success"
       addons:
-        postgresql: "9.6"
+        postgresql: "11"
+        coverity_scan:
+          project:
+            name: "timescale/timescaledb"
+            description: "TimescaledDB an open-source time-series DB"
+          notification_email: ci@timescale.com
+          build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && cd build"
+          build_command: "make"
+          branch_pattern: coverity_scan|prerelease_test
+
+    - if: (branch = prerelease_test) OR (branch = coverity_scan)
+      stage: coverity12
+      name: "Coverity PG 12"
+      env:
+      before_install:
+        - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+        - sudo apt-get install -y postgresql-12 postgresql-client-12 postgresql-contrib-12 postgresql-server-dev-12 cmake
+      install:
+      after_success:
+      after_script:
+      script: echo "Success"
+      addons:
+        postgresql: "12"
         coverity_scan:
           project:
             name: "timescale/timescaledb"
