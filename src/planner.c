@@ -547,14 +547,14 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 			RelOptInfo *in_rel = root->simple_rel_array[i];
 			Hypertable *ht = get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
 
-			Assert(ht != NULL);
+			Assert(ht != NULL && in_rel != NULL);
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel);
 
 			/* TODO move this back into ts_plan_expand_hypertable_chunks */
 			in_rte->inh = true;
 			reenabled_inheritance = true;
 			/* FIXME redo set_rel_consider_parallel */
-			if (in_rel != NULL && in_rel->reloptkind == RELOPT_BASEREL)
+			if (in_rel->reloptkind == RELOPT_BASEREL)
 				ts_set_rel_size(root, in_rel, i, in_rte);
 
 			/* if we're activating inheritance during a hypertable's pathlist
