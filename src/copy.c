@@ -369,53 +369,40 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 
 		if (!skip_tuple)
 		{
-			bool has_instead_insert_row_trig = false;
-			/*
-			 * If there is an INSTEAD OF INSERT ROW trigger, let it handle the
-			 * tuple.  Otherwise, proceed with inserting the tuple into the
-			 * table or foreign table.
+			/* Note that PostgreSQL's copy path would check INSTEAD OF
+			 * INSERT/UPDATE/DELETE triggers here, but such triggers can only
+			 * exist on views and chunks cannot be views.
 			 */
-			if (has_instead_insert_row_trig)
-			{
-				ExecIRInsertTriggers(estate, resultRelInfo, myslot);
-			}
-			else
-			{
-				List *recheckIndexes = NIL;
+			List *recheckIndexes = NIL;
 
 #if PG12_GE
-				/* Compute stored generated columns */
-				if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
-					resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
-					ExecComputeStoredGenerated(estate, myslot);
+			/* Compute stored generated columns */
+			if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
+				resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+				ExecComputeStoredGenerated(estate, myslot);
 #endif
-				/*
-				 * If the target is a plain table, check the constraints of
-				 * the tuple.
-				 */
-				if (resultRelInfo->ri_FdwRoutine == NULL &&
-					resultRelInfo->ri_RelationDesc->rd_att->constr)
-					ExecConstraints(resultRelInfo, myslot, estate);
+			/*
+			 * If the target is a plain table, check the constraints of
+			 * the tuple.
+			 */
+			if (resultRelInfo->ri_FdwRoutine == NULL &&
+				resultRelInfo->ri_RelationDesc->rd_att->constr)
+				ExecConstraints(resultRelInfo, myslot, estate);
 
-				/* OK, store the tuple and create index entries for it */
-				table_tuple_insert(resultRelInfo->ri_RelationDesc,
-								   myslot,
-								   mycid,
-								   ti_options,
-								   bistate);
+			/* OK, store the tuple and create index entries for it */
+			table_tuple_insert(resultRelInfo->ri_RelationDesc, myslot, mycid, ti_options, bistate);
 
-				if (resultRelInfo->ri_NumIndices > 0)
-					recheckIndexes = ExecInsertIndexTuplesCompat(myslot, estate, false, NULL, NIL);
+			if (resultRelInfo->ri_NumIndices > 0)
+				recheckIndexes = ExecInsertIndexTuplesCompat(myslot, estate, false, NULL, NIL);
 
-				/* AFTER ROW INSERT Triggers */
-				ExecARInsertTriggersCompat(estate,
-										   resultRelInfo,
-										   myslot,
-										   recheckIndexes,
-										   NULL /* transition capture */);
+			/* AFTER ROW INSERT Triggers */
+			ExecARInsertTriggersCompat(estate,
+									   resultRelInfo,
+									   myslot,
+									   recheckIndexes,
+									   NULL /* transition capture */);
 
-				list_free(recheckIndexes);
-			}
+			list_free(recheckIndexes);
 
 			/*
 			 * We count only tuples not suppressed by a BEFORE INSERT trigger;
