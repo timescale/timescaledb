@@ -18,7 +18,6 @@
 #include <commands/explain.h>
 
 #include "export.h"
-#include "import/planner.h"
 
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
 #define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))

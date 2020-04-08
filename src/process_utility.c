@@ -3187,6 +3187,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	Assert(IsA(cmd->def, List));
 	inpdef = (List *) cmd->def;
 	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+
 	if (compress_options)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

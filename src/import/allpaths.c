@@ -325,7 +325,7 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 void
 ts_set_dummy_rel_pathlist(RelOptInfo *rel)
 {
-	return set_dummy_rel_pathlist(rel);
+	set_dummy_rel_pathlist(rel);
 }
 
 /* copied from allpaths.c */
