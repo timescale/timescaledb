@@ -729,9 +729,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 		CHECK_FOR_INTERRUPTS();
 
-		Assert((heapScan != NULL && indexScan == NULL) || (indexScan != NULL && heapScan == NULL));
 		if (indexScan != NULL)
 		{
+			Assert(heapScan == NULL);
 			tuple = index_getnext(indexScan, ForwardScanDirection);
 			if (tuple == NULL)
 				break;
@@ -742,8 +742,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 			buf = indexScan->xs_cbuf;
 		}
-		if (heapScan != NULL)
+		else
 		{
+			Assert(heapScan != NULL);
 			tuple = heap_getnext(heapScan, ForwardScanDirection);
 			if (tuple == NULL)
 				break;
