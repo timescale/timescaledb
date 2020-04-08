@@ -22,8 +22,7 @@
  * state that replaces the plan node as the plan moves from planning to
  * execution.
  */
-static Node *
-create_chunk_dispatch_state(CustomScan *cscan)
+ts_attribute_nonnull((1)) static Node *create_chunk_dispatch_state(CustomScan *cscan)
 {
 	return (Node *) ts_chunk_dispatch_state_create(linitial_oid(cscan->custom_private),
 												   linitial(cscan->custom_plans));
@@ -86,7 +85,7 @@ static CustomPathMethods chunk_dispatch_path_methods = {
 	.PlanCustomPath = chunk_dispatch_plan_create,
 };
 
-Path *
+Path *TS_RETURNS_NONNULL
 ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti,
 							  Oid hypertable_relid)
 {

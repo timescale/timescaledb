@@ -20,8 +20,8 @@
 #include "dimension.h"
 #include "hypertable.h"
 
-static void
-chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
+ts_attribute_nonnull((1, 2)) static void chunk_dispatch_begin(CustomScanState *node, EState *estate,
+															  int eflags)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	Hypertable *ht;
@@ -35,8 +35,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = list_make1(ps);
 }
 
-static TupleTableSlot *
-chunk_dispatch_exec(CustomScanState *node)
+ts_attribute_nonnull((1)) static TupleTableSlot *chunk_dispatch_exec(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	TupleTableSlot *slot;
@@ -141,8 +140,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	return slot;
 }
 
-static void
-chunk_dispatch_end(CustomScanState *node)
+ts_attribute_nonnull((1)) static void chunk_dispatch_end(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	PlanState *substate = linitial(node->custom_ps);
@@ -152,8 +150,7 @@ chunk_dispatch_end(CustomScanState *node)
 	ts_cache_release(state->hypertable_cache);
 }
 
-static void
-chunk_dispatch_rescan(CustomScanState *node)
+ts_attribute_nonnull((1)) static void chunk_dispatch_rescan(CustomScanState *node)
 {
 	PlanState *substate = linitial(node->custom_ps);
 

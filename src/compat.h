@@ -616,6 +616,15 @@ extern int oid_cmp(const void *p1, const void *p2);
 #endif
 #endif
 
+/* function attributes */
+#ifdef __GNUC__
+#define ts_attribute_nonnull(ATTR) __attribute__((nonnull ATTR))
+#define TS_RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#define ts_attribute_nonnull(ATTR)
+#define TS_RETURNS_NONNULL
+#endif
+
 /* backport pg_add_s64_overflow/pg_sub_s64_overflow */
 #if PG11_LT
 static inline bool

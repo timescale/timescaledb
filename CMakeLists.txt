@@ -88,14 +88,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These two flags generate too many errors currently, but we
   # probably want these optimizations enabled.
 
-  # TODO: -fdelete-null-pointer-checks -Wnull-dereference
-
   # This flag avoid some subtle bugs related to standard conversions,
   # but currently does not compile because we are using too many
   # implicit conversions that potentially lose precision.
 
   # TODO: -Wconversions
-  add_compile_options(-Wempty-body -Wvla)
+  add_compile_options(
+    -Wempty-body -Wvla
+    -Wnonnull -fdelete-null-pointer-checks -Wnull-dereference)
   if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "7")
     add_compile_options(-Wimplicit-fallthrough)
   endif()
