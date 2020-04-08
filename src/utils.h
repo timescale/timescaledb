@@ -12,6 +12,11 @@
 #include <utils/datetime.h>
 
 #include "compat.h"
+#if PG12_GE
+#include <nodes/pathnodes.h>
+#else
+#include <nodes/relation.h>
+#endif
 
 #if PG11_GE
 #include <common/int.h>

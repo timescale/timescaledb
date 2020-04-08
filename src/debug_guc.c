@@ -4,14 +4,21 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
-#include "debug_guc.h"
-
 #include <utils/builtins.h>
 #include <utils/guc.h>
+#include <fmgr.h>
+
+#include "compat.h"
+#if PG12_GE
+#include <nodes/pathnodes.h>
+#else
+#include <nodes/relation.h>
+#endif
 #if PG10_GE
 #include <utils/varlena.h>
 #endif
+
+#include "debug_guc.h"
 
 TSDLLEXPORT DebugOptimizerFlags ts_debug_optimizer_flags;
 

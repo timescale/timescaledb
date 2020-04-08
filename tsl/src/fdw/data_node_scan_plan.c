@@ -24,6 +24,7 @@
 #include <hypertable_cache.h>
 #include <planner.h>
 #include <import/allpaths.h>
+#include <import/planner.h>
 #include <func_cache.h>
 #include <dimension.h>
 #include <compat.h>
