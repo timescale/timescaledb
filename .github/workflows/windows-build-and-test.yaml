@@ -1,0 +1,56 @@
+# GitHub Actions configuration for TimescaleDB
+name: Windows
+on:
+  push:
+    branches:
+      - prerelease_test
+  pull_request:
+jobs:
+  build:
+    name: PG${{ matrix.pg }} [${{ matrix.build_type }}]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        pg: [ 9, 10, 11, 12 ]
+        os: [ windows-2019 ]
+        build_type: [ Debug, Release ]
+    env:
+      # PostgreSQL configuration
+      PGPORT: 6543
+      PGDATA: pgdata
+    steps:
+    - name: Checkout TimescaleDB source
+      uses: actions/checkout@v2
+      # Use a cache for the PostgreSQL installation to speed things up
+      # and avoid unnecessary package downloads. Since we only save
+      # the directory containing the binaries, the runs with a cache
+      # hit won't have PostgreSQL installed with a running service
+      # since the installer never runs. We therefore install with
+      # --extract-only and launch our own test instance, which is
+      # probably better anyway since it gives us more control.
+    - name: Cache PostgreSQL installation
+      uses: actions/cache@v1
+      id: cache-postgresql
+      with:
+        path: ~\PostgreSQL\${{ matrix.pg }}
+        key: ${{ runner.os }}-build-pg${{ matrix.pg }}
+    - name: Install PostgreSQL ${{ matrix.pg }}
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: choco install postgresql${{ matrix.pg }} -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+    - name: Configure [${{ matrix.build_type }}]
+      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DREGRESS_CHECKS=OFF -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}"
+      # Build step: could potentially speed things up with --parallel
+      # <num_cpu> or "-- -m:<num_cpu>", but MSBuild doesn't seem to be
+      # able to realize interdependencies between targets, which leads
+      # to linker failures when a target finished before another one
+      # it depends on.
+    - name: Build [${{ matrix.build_type }}]
+      run: cmake --build ${{ matrix.build_type }} --config ${{ matrix.build_type }}
+    - name: Install [${{ matrix.build_type }}]
+      run: cmake --install ${{ matrix.build_type }} --config ${{ matrix.build_type }}
+    - name: Create DB
+      run: ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust
+    - name: Start PostgreSQL
+      run: ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "-cshared_preload_libraries=timescaledb"
+    - name: Test CREATE EXTENSION
+      run: ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
