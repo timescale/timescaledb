@@ -382,7 +382,8 @@ SELECT 1;
 --mock-4 has mismatched versions, so the .so load should be fatal
 SELECT format($$\! utils/test_fatal_command.sh %1$s "CREATE EXTENSION timescaledb VERSION 'mock-4'"$$, :'TEST_DBNAME_2') as command_to_run \gset
 :command_to_run
-FATAL:  extension "timescaledb" version mismatch: shared library version mock-4-mismatch; SQL version mock-4
+FATAL:  extension "timescaledb" version mismatch: shared library version mock-4-mismatch; client version mock-4
+DETAIL:  A client submitted a SQL request to TimescaleDB using different version of the extension. This is likely to happen after TimescaleDB extension was updated, which requires all clients to reconnet to the database. This error forces the client to reconnect.
 server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
@@ -469,7 +470,8 @@ WARNING:  mock post_analyze_hook "mock-6"
 :command_to_run
 WARNING:  mock init "mock-6"
 WARNING:  mock post_analyze_hook "mock-6"
-FATAL:  extension "timescaledb" version mismatch: shared library version mock-5; SQL version mock-6
+FATAL:  extension "timescaledb" version mismatch: shared library version mock-5; client version mock-6
+DETAIL:  A client submitted a SQL request to TimescaleDB using different version of the extension. This is likely to happen after TimescaleDB extension was updated, which requires all clients to reconnet to the database. This error forces the client to reconnect.
 server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.

@@ -74,11 +74,18 @@ ts_extension_check_version(const char *so_version)
 		 */
 		ereport(FATAL,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("extension \"%s\" version mismatch: shared library version %s; SQL version "
+				 errmsg("extension \"%s\" version mismatch: shared library version %s; client "
+						"version "
 						"%s",
 						EXTENSION_NAME,
 						so_version,
-						sql_version)));
+						sql_version),
+				 errdetail("A client submitted a SQL request to TimescaleDB using different "
+						   "version of the extension. "
+						   "This is likely to happen after TimescaleDB extension was updated, "
+						   "which requires all clients "
+						   "to reconnet to the database. This error forces the client to reconnect "
+						   "and obtain correct extension version.")));
 	}
 
 	if (!process_shared_preload_libraries_in_progress && !extension_loader_present())
