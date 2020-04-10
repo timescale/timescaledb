@@ -338,10 +338,26 @@ chunk_store_entry_free(void *cse)
 	MemoryContextDelete(((ChunkStoreEntry *) cse)->mcxt);
 }
 
+static bool
+hypertable_is_compressed_or_materialization(Hypertable *ht)
+{
+	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+	return (ht->fd.compressed || status == HypertableIsMaterialization);
+}
+
+static ScanFilterResult
+hypertable_filter_exclude_compressed_and_materialization(TupleInfo *ti, void *data)
+{
+	Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
+
+	return hypertable_is_compressed_or_materialization(ht) ? SCAN_EXCLUDE : SCAN_INCLUDE;
+}
+
 static int
 hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
 							   tuple_found_func on_tuple_found, void *scandata, int limit,
-							   LOCKMODE lock, bool tuplock, MemoryContext mctx)
+							   LOCKMODE lock, bool tuplock, MemoryContext mctx,
+							   tuple_filter_func filter)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
@@ -353,6 +369,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 		.limit = limit,
 		.tuple_found = on_tuple_found,
 		.lockmode = lock,
+        .filter = filter,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = mctx,
 		.tuplock = {
@@ -378,9 +395,8 @@ ts_number_of_user_hypertables()
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
-		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-		if (!ht->fd.compressed && status != HypertableIsMaterialization)
+		if (!hypertable_is_compressed_or_materialization(ht))
 			count++;
 	}
 	return count;
@@ -428,7 +444,8 @@ ts_hypertable_get_all(void)
 								   -1,
 								   RowExclusiveLock,
 								   false,
-								   CurrentMemoryContext);
+								   CurrentMemoryContext,
+								   hypertable_filter_exclude_compressed_and_materialization);
 
 	return result;
 }
@@ -500,7 +517,8 @@ ts_hypertable_update(Hypertable *ht)
 										  1,
 										  RowExclusiveLock,
 										  false,
-										  CurrentMemoryContext);
+										  CurrentMemoryContext,
+										  NULL);
 }
 
 int
@@ -534,7 +552,8 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 										  1,
 										  lockmode,
 										  tuplock,
-										  mctx);
+										  mctx,
+										  NULL);
 }
 
 TSDLLEXPORT ObjectAddress
@@ -685,7 +704,8 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  0,
 										  RowExclusiveLock,
 										  false,
-										  CurrentMemoryContext);
+										  CurrentMemoryContext,
+										  NULL);
 }
 
 void
@@ -745,7 +765,8 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 										  0,
 										  RowExclusiveLock,
 										  false,
-										  CurrentMemoryContext);
+										  CurrentMemoryContext,
+										  NULL);
 }
 
 static ScanTupleResult
@@ -955,7 +976,8 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 								   1,
 								   AccessShareLock,
 								   false,
-								   CurrentMemoryContext);
+								   CurrentMemoryContext,
+								   NULL);
 	return ht;
 }
 
@@ -2040,7 +2062,8 @@ ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext m
 								   -1,
 								   AccessShareLock,
 								   false,
-								   mctx);
+								   mctx,
+								   NULL);
 
 	return data.ht_oids;
 }

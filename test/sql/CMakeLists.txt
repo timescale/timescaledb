@@ -54,6 +54,7 @@ if(NOT APACHE_ONLY)
 if (${PG_VERSION_MAJOR} GREATER "9")
   list(APPEND TEST_FILES
     telemetry_compression.sql
+    chunk_utils_compression.sql
   )
 endif ()
 endif()
