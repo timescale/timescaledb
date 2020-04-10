@@ -601,3 +601,4 @@ INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-02-10', 100, 'hello');
 SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT drop_chunks( older_than=> '1 day'::interval);
+
