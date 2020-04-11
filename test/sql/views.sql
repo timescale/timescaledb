@@ -47,3 +47,14 @@ SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
 
+-- create hypertable with 2 chunks
+CREATE TABLE ht5(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('ht5','time');
+INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
+INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
+
+-- compressed_chunk_stats should not show dropped chunks
+ALTER TABLE ht5 SET (timescaledb.compress);
+SELECT compress_chunk(i) FROM show_chunks('ht5') i;
+SELECT drop_chunks(table_name => 'ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
+SELECT * FROM timescaledb_information.compressed_chunk_stats;

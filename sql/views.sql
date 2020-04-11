@@ -206,7 +206,7 @@ WITH mapq as
   mapq.compressed_toast_bytes,
   mapq.compressed_total_bytes
   FROM _timescaledb_catalog.hypertable as srcht JOIN _timescaledb_catalog.chunk as srcch
-  ON srcht.id = srcch.hypertable_id and srcht.compressed_hypertable_id IS NOT NULL
+  ON srcht.id = srcch.hypertable_id and srcht.compressed_hypertable_id IS NOT NULL and srcch.dropped = false
   LEFT JOIN mapq
   ON srcch.id = mapq.chunk_id ;
 
