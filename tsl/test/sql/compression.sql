@@ -374,31 +374,31 @@ WHERE rescan_test.id = tmp.id AND rescan_test.t = tmp.t;
 
 CREATE TABLE meta (device_id INT PRIMARY KEY);
 CREATE TABLE hyper(
-    time INT NOT NULL, 
+    time INT NOT NULL,
     device_id INT REFERENCES meta(device_id) ON DELETE CASCADE ON UPDATE CASCADE,
     val INT);
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
 ALTER TABLE hyper SET (
-    timescaledb.compress, 
+    timescaledb.compress,
     timescaledb.compress_orderby = 'time',
     timescaledb.compress_segmentby = 'device_id');
 INSERT INTO meta VALUES (1), (2), (3), (4), (5);
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2);
 
 SELECT ch1.table_name AS "CHUNK_NAME", ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
-WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper' 
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 ORDER BY ch1.id LIMIT 1 \gset
 
 SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_type
-FROM information_schema.table_constraints 
+FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
 
 SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_type
-FROM information_schema.table_constraints 
+FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
 
@@ -415,6 +415,20 @@ SELECT * FROM hyper ORDER BY time, device_id;
 SELECT decompress_chunk(:'CHUNK_FULL_NAME');
 
 SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_type
-FROM information_schema.table_constraints 
+FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
+
+-- create hypertable with 2 chunks
+CREATE TABLE ht5(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('ht5','time');
+INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
+INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
+
+-- compressed_chunk_stats should not show dropped chunks
+ALTER TABLE ht5 SET (timescaledb.compress);
+SELECT compress_chunk(i) FROM show_chunks('ht5') i;
+SELECT drop_chunks(table_name => 'ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
+SELECT chunk_name
+FROM timescaledb_information.compressed_chunk_stats
+WHERE hypertable_name = 'ht5'::regclass;

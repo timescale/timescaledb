@@ -46,4 +46,3 @@ SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER 
 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
-
