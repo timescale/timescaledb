@@ -114,6 +114,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
           ELSE cagg.ignore_invalidation_older_than::TEXT
         END
     END AS ignore_invalidation_older_than,
+    cagg.materialized_only,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition
   FROM  _timescaledb_catalog.continuous_agg cagg,
