@@ -74,6 +74,7 @@ refresh_lag                    | @ 2 hours
 refresh_interval               | @ 2 hours
 max_interval_per_job           | @ 60 days
 ignore_invalidation_older_than | 
+materialized_only              | t
 materialization_hypertable     | _timescaledb_internal._materialized_hypertable_2
 view_definition                |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
                                |     device_readings.device_id,                                                                              +

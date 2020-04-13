@@ -218,11 +218,11 @@ static Query *build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *
 
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
-create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
-						 char *partial_schema, char *partial_view, int64 bucket_width,
-						 int64 refresh_lag, int64 max_interval_per_job,
-						 int64 ignore_invalidation_older_than, int32 job_id, char *direct_schema,
-						 char *direct_view)
+create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
+						  char *partial_schema, char *partial_view, int64 bucket_width,
+						  int64 refresh_lag, int64 max_interval_per_job,
+						  int64 ignore_invalidation_older_than, bool materialized_only,
+						  int32 job_id, char *direct_schema, char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -263,6 +263,8 @@ create_cagg_catlog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char
 		Int64GetDatum(max_interval_per_job);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] =
 		Int64GetDatum(ignore_invalidation_older_than);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
+		BoolGetDatum(materialized_only);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -1619,6 +1621,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 														  origquery_ht->bucket_width);
 	int64 ignore_invalidation_older_than =
 		get_ignore_invalidation_older_than(origquery_ht->htpartcoltype, with_clause_options);
+	bool materialized_only =
+		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 
 	/* assign the column_name aliases in CREATE VIEW to the query. No other modifications to
 	 * panquery */
@@ -1656,7 +1660,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	final_selquery =
 		finalizequery_get_select_query(&finalqinfo, mattblinfo.matcollist, &mataddress);
 
-	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
+	if (!materialized_only)
 		final_selquery = build_union_query(origquery_ht, &mattblinfo, final_selquery, panquery);
 
 	create_view_for_query(final_selquery, stmt->view);
@@ -1684,19 +1688,20 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
-	create_cagg_catlog_entry(materialize_hypertable_id,
-							 origquery_ht->htid,
-							 get_namespace_name(nspid), /*schema name for user view */
-							 stmt->view->relname,
-							 part_rel->schemaname,
-							 part_rel->relname,
-							 origquery_ht->bucket_width,
-							 refresh_lag,
-							 max_interval_per_job,
-							 ignore_invalidation_older_than,
-							 job_id,
-							 dum_rel->schemaname,
-							 dum_rel->relname);
+	create_cagg_catalog_entry(materialize_hypertable_id,
+							  origquery_ht->htid,
+							  get_namespace_name(nspid), /*schema name for user view */
+							  stmt->view->relname,
+							  part_rel->schemaname,
+							  part_rel->relname,
+							  origquery_ht->bucket_width,
+							  refresh_lag,
+							  max_interval_per_job,
+							  ignore_invalidation_older_than,
+							  materialized_only,
+							  job_id,
+							  dum_rel->schemaname,
+							  dum_rel->relname);
 
 	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
 	ret = snprintf(trigarg, NAMEDATALEN, "%d", origquery_ht->htid);

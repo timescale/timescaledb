@@ -155,6 +155,41 @@ update_refresh_lag(ContinuousAgg *agg, int64 new_lag)
 }
 
 static void
+update_materialized_only(ContinuousAgg *agg, bool materialized_only)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_PKEY);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_pkey_mat_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(agg->data.mat_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool nulls[Natts_continuous_agg];
+		Datum values[Natts_continuous_agg];
+		bool repl[Natts_continuous_agg] = { false };
+		HeapTuple new;
+
+		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
+			BoolGetDatum(materialized_only);
+
+		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+
+		ts_catalog_update(ti->scanrel, new);
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+static void
 update_max_interval_per_job(ContinuousAgg *agg, int64 new_max)
 {
 	ScanIterator iterator =
@@ -235,9 +270,12 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		bool materialized_only =
+			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 		Assert(mat_ht != NULL);
 
 		cagg_update_view_definition(agg, mat_ht, with_clause_options);
+		update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
 

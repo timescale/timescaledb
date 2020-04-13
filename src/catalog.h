@@ -834,6 +834,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_max_interval_per_job,
 	Anum_continuous_agg_ignore_invalidation_older_than,
+	Anum_continuous_agg_materialize_only,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 

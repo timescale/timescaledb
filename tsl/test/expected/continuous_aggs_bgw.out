@@ -63,8 +63,8 @@ SELECT * FROM timescaledb_information.policy_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | direct_view_schema | direct_view_name | max_interval_per_job | ignore_invalidation_older_than 
--------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+--------------------+------------------+----------------------+--------------------------------
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | direct_view_schema | direct_view_name | max_interval_per_job | ignore_invalidation_older_than | materialized_only 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+--------------------+------------------+----------------------+--------------------------------+-------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

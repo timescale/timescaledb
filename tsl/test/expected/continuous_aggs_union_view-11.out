@@ -36,6 +36,12 @@ AS
   SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
 ALTER TABLE metrics DROP COLUMN f2;
 -- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -61,6 +67,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- downgrade view to non-union view
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=true);
 -- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -78,6 +90,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- upgrade view to union view again
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=false);
 -- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -103,6 +121,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- try upgrade view to union view that is already union view
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=false);
 -- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -137,6 +161,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- downgrade view to non-union view
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=true);
 -- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -161,6 +191,12 @@ CREATE VIEW metrics_summary
 AS
   SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
 -- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -178,6 +214,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- upgrade view to union view
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=false);
 -- this should be union view
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | f
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -203,6 +245,12 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -- downgrade view to non-union view
 ALTER VIEW metrics_summary SET (timescaledb.materialized_only=true);
 -- this should be view without union
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
 SELECT pg_get_viewdef('metrics_summary',true);
                                                                                           pg_get_viewdef                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -225,6 +273,13 @@ CREATE VIEW metrics_summary
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
   SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
+-- should be marked as materialized_only in catalog
+SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
+ user_view_name  | materialized_only 
+-----------------+-------------------
+ metrics_summary | t
+(1 row)
+
 -- query should not have results since cagg is materialized only and no refresh has happened yet
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
  time_bucket | avg 
