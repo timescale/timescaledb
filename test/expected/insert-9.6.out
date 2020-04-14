@@ -550,3 +550,39 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
                                  Index Cond: ("time" > '-infinity'::date)
 (9 rows)
 
+-- test INSERT with cached plans / plpgsql functions
+-- https://github.com/timescale/timescaledb/issues/1809
+CREATE TABLE status_table(a int, b int, last_ts timestamptz, UNIQUE(a,b));
+CREATE TABLE metrics(time timestamptz NOT NULL, value float);
+CREATE TABLE metrics2(time timestamptz NOT NULL, value float);
+SELECT (create_hypertable(t,'time')).table_name FROM (VALUES ('metrics'),('metrics2')) v(t);
+ table_name 
+------------
+ metrics
+ metrics2
+(2 rows)
+
+INSERT INTO metrics VALUES ('2000-01-01',random()), ('2000-02-01',random()), ('2000-03-01',random());
+CREATE OR REPLACE FUNCTION insert_test() RETURNS VOID LANGUAGE plpgsql AS
+$$
+  DECLARE
+    r RECORD;
+  BEGIN
+    FOR r IN
+      SELECT * FROM metrics
+    LOOP
+      WITH foo AS (
+        INSERT INTO metrics2 SELECT * FROM metrics RETURNING *
+      )
+      INSERT INTO status_table (a,b, last_ts)
+        VALUES (1,1, now())
+        ON CONFLICT (a,b) DO UPDATE SET last_ts=(SELECT max(time) FROM metrics);
+    END LOOP;
+  END;
+$$;
+SELECT insert_test(), insert_test(), insert_test();
+ insert_test | insert_test | insert_test 
+-------------+-------------+-------------
+             |             | 
+(1 row)
+
