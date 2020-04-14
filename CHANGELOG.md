@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Major Features**
 * #1685 Add real-time support to continuous aggregates
+* #1456 Add support for PostgreSQL 12
 
 **Minor Features**
 
