@@ -7,14 +7,19 @@ accidentally triggering the load of a previous DB version.**
 ## 1.7.0 (unreleased)
 
 **Major Features**
-* #1685 Add real-time support to continuous aggregates
 * #1456 Add support for PostgreSQL 12
+* #1685 Add support for real-time aggregates
 
 **Minor Features**
 
 **Bugfixes**
 * #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
+* #1750 Handle undefined ignore_invalidation_older_than
+* #1757 Restrict watermark to max for continuous aggregates
+* #1769 Add rescan function to CompressChunkDml CustomScan node
+* #1785 Fix last_run_success value in continuous_aggregate_stats view
 * #1801 Include parallel leader in plan execution
+* #1808 Fix ts_hypertable_get_all for compressed tables
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now
@@ -24,6 +29,8 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 
 * @t0k4rt for reporting an issue with parallel chunk append plans
+* @alxndrdude for reporting an issue when trying to insert into compressed chunks
+* @Olernov for reporting and fixing an issue with show_chunks and drop_chunks for compressed hypertables
 
 ## 1.6.1 (2020-03-18)
 
