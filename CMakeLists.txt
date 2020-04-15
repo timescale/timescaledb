@@ -200,9 +200,7 @@ endif ()
 
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
-if ((${PG_VERSION} VERSION_LESS "9.6")
-    OR (${PG_VERSION} VERSION_EQUAL "13")
-    OR (${PG_VERSION} VERSION_GREATER "13"))
+if ((${PG_VERSION} VERSION_LESS "9.6") OR (${PG_VERSION_MAJOR} GREATER "12"))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10, 11 or 12")
 endif ()
 
