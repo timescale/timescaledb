@@ -965,7 +965,6 @@ list_qsort(const List *list, list_qsort_comparator cmp)
  */
 #if PG11_LT
 #define RelationGetFKeyListCompat(rel) ts_relation_get_fk_list(rel)
-#define T_ForeignKeyCacheInfoCompat T_ForeignKeyCacheInfo
 typedef struct ForeignKeyCacheInfoCompat
 {
 	ForeignKeyCacheInfo base;

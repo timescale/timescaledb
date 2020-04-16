@@ -46,7 +46,7 @@ ts_relation_get_fk_list(Relation relation)
 		if (constraint->contype != CONSTRAINT_FOREIGN)
 			continue;
 		info = (ForeignKeyCacheInfoCompat *) newNode(sizeof(ForeignKeyCacheInfoCompat),
-													 T_ForeignKeyCacheInfoCompat);
+													 T_ForeignKeyCacheInfo);
 		info->conoid = HeapTupleGetOid(htup);
 		result = lappend(result, info);
 	}
