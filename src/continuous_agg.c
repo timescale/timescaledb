@@ -523,7 +523,8 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	/* lock catalogs */
 	LockRelationOid(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
-	raw_hypertable_has_other_caggs = number_of_continuous_aggs_attached(raw_hypertable->fd.id) > 1;
+	raw_hypertable_has_other_caggs =
+		raw_hypertable_exists && number_of_continuous_aggs_attached(raw_hypertable->fd.id) > 1;
 	if (!raw_hypertable_has_other_caggs)
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
 						RowExclusiveLock);
