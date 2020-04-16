@@ -284,6 +284,20 @@ else()
   )
 endif ()
 
+find_program(RUN_CLANG_TIDY run-clang-tidy DOC "The path to run-clang-tidy")
+
+if(RUN_CLANG_TIDY)
+  message(STATUS "Found clang-tidy at ${RUN_CLANG_TIDY}")
+  if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    add_custom_target(clang-tidy COMMAND ${RUN_CLANG_TIDY} -quiet)
+  else()
+    message(WARNING "You need to add -DCMAKE_EXPORT_COMPILE_COMMANDS=ON to use clang-tidy")
+    add_custom_target(clang-tidy
+      COMMAND ${CMAKE_COMMAND} -E echo "clang-tidy found but -DCMAKE_EXPORT_COMPILE_COMMAND was not set")
+  endif()
+else()
+  message(WARNING "Did not find clang-tidy, not defining clang-tidy target.")
+endif()
 
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry" ON)
