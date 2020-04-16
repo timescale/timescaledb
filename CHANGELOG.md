@@ -4,13 +4,31 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 1.7.0 (unreleased)
+## 1.7.0 (2020-04-16)
+
+This release adds major new features and bugfixes since the 1.6.1 release.
+We deem it moderate priority for upgrading.
+
+This release adds the long-awaited support for PostgreSQL 12 to TimescaleDB.
+
+This release also adds a new default behavior when querying continuous
+aggregates that we call real-time aggregation. A query on a continuous
+aggregate will now combine materialized data with recent data that has
+yet to be materialized.
+
+Note that only newly created continuous aggregates will have this
+real-time query behavior, although it can be enabled on existing
+continuous aggregates with a configuration setting as follows:
+
+ALTER VIEW continuous_view_name SET (timescaledb.materialized_only=false);
+
+This release also moves several data management lifecycle features
+to the Community version of TimescaleDB (from Enterprise), including
+data reordering and data retention policies.
 
 **Major Features**
 * #1456 Add support for PostgreSQL 12
-* #1685 Add support for real-time aggregates
-
-**Minor Features**
+* #1685 Add support for real-time aggregation on continuous aggregates
 
 **Bugfixes**
 * #1665 Add ignore_invalidation_older_than to timescaledb_information.continuous_aggregates view
@@ -20,6 +38,7 @@ accidentally triggering the load of a previous DB version.**
 * #1785 Fix last_run_success value in continuous_aggregate_stats view
 * #1801 Include parallel leader in plan execution
 * #1808 Fix ts_hypertable_get_all for compressed tables
+* #1828 Ignore dropped chunks in compressed_chunk_stats
 
 **Licensing changes**
 * Reorder and policies around reorder and drop chunks are now
@@ -31,6 +50,8 @@ accidentally triggering the load of a previous DB version.**
 * @t0k4rt for reporting an issue with parallel chunk append plans
 * @alxndrdude for reporting an issue when trying to insert into compressed chunks
 * @Olernov for reporting and fixing an issue with show_chunks and drop_chunks for compressed hypertables
+* @mjb512 for reporting an issue with INSERTs in CTEs in cached plans
+* @dmarsh19 for reporting and fixing an issue with dropped chunks in compressed_chunk_stats
 
 ## 1.6.1 (2020-03-18)
 
