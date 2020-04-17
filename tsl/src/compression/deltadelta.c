@@ -310,7 +310,8 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_DELTADELTA;
 	compressed->last_value = last_value;
 	compressed->last_delta = last_delta;
-	compressed->has_nulls = nulls_size != 0 ? 1 : 0;
+	// If `nulls` is NULL or the number of nulls is zero, there are no nulls
+	compressed->has_nulls = (nulls && nulls_size > 0);
 
 	compressed_data = (char *) &compressed->delta_deltas;
 	compressed_data =
