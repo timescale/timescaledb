@@ -670,20 +670,40 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 
 /*
  * Insert slices into the catalog.
+ *
+ * If only_non_existing is true, then only slices that don't already exists in
+ * the catalog will be inserted. Otherwise, all slices will be inserted and a
+ * unique exception will be raised if a slice already exists.
+ *
+ * Returns the number of slices inserted.
  */
-void
-ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
+int
+ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices, bool only_non_existing)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
-	Size i;
+	Size i, n = 0;
 
 	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
 
 	for (i = 0; i < num_slices; i++)
-		dimension_slice_insert_relation(rel, slices[i]);
+	{
+		if (only_non_existing)
+		{
+			slices[i]->fd.id = 0;
+			slices[i] = ts_dimension_slice_scan_for_existing(slices[i]);
+		}
+
+		if (!only_non_existing || slices[i]->fd.id == 0)
+		{
+			dimension_slice_insert_relation(rel, slices[i]);
+			n++;
+		}
+	}
 
 	table_close(rel, RowExclusiveLock);
+
+	return n;
 }
 
 static ScanTupleResult

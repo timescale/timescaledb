@@ -156,7 +156,7 @@ ts_hypertable_cache_invalidate_callback(void)
 }
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
-TSDLLEXPORT Hypertable *
+Hypertable *
 ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const unsigned int flags)
 {
 	if (!OidIsValid(relid))
