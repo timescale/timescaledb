@@ -200,9 +200,14 @@ endif ()
 
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
-if ((${PG_VERSION} VERSION_LESS "9.6") OR (${PG_VERSION_MAJOR} GREATER "12"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10, 11 or 12")
-endif ()
+# Ensure that PostgreSQL version is supported and consistent
+# with src/compat.h version check
+if ((${PG_VERSION_MAJOR} LESS "9") OR
+    (${PG_VERSION_MAJOR} EQUAL "9" AND ${PG_VERSION} VERSION_LESS "9.6.3") OR
+    (${PG_VERSION_MAJOR} EQUAL "10" AND ${PG_VERSION} VERSION_LESS "10.2") OR
+    (${PG_VERSION_MAJOR} GREATER "12"))
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6.3+, 10.2+, 11 or 12")
+endif()
 
 # Get PostgreSQL configuration from pg_config
 get_pg_config(PG_INCLUDEDIR --includedir)
