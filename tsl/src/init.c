@@ -39,6 +39,7 @@
 #include "compression/segment_meta.h"
 #include "server.h"
 #include "fdw/timescaledb_fdw.h"
+#include "chunk_api.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -119,6 +120,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.add_server = server_add,
 	.delete_server = server_delete,
+	.show_chunk = chunk_show,
+	.create_chunk = chunk_create,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 };

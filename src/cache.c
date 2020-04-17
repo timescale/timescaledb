@@ -86,7 +86,7 @@ ts_cache_invalidate(Cache *cache)
  * Each call to cache_pin MUST BE paired with a call to cache_release.
  *
  */
-extern Cache *
+Cache *
 ts_cache_pin(Cache *cache)
 {
 	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);
@@ -137,7 +137,7 @@ cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
 	return refcount;
 }
 
-extern TSDLLEXPORT int
+int
 ts_cache_release(Cache *cache)
 {
 	return cache_release_subtxn(cache, GetCurrentSubTransactionId());

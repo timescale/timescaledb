@@ -1027,16 +1027,17 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 		if (!create_if_not_exists)
 			return NULL;
 
-		chunk = ts_chunk_create(h,
-								point,
-								NameStr(h->fd.associated_schema_name),
-								NameStr(h->fd.associated_table_prefix));
+		chunk = ts_chunk_create_from_point(h,
+										   point,
+										   NameStr(h->fd.associated_schema_name),
+										   NameStr(h->fd.associated_table_prefix));
 	}
 
 	Assert(chunk != NULL);
 
 	/* Also add the chunk to the hypertable's chunk store */
 	cse = hypertable_chunk_store_add(h, chunk);
+
 	return chunk;
 }
 

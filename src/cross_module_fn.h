@@ -103,6 +103,8 @@ typedef struct CrossModuleFunctions
 
 	PGFunction add_server;
 	PGFunction delete_server;
+	PGFunction create_chunk;
+	PGFunction show_chunk;
 	PGFunction timescaledb_fdw_handler;
 	PGFunction timescaledb_fdw_validator;
 } CrossModuleFunctions;

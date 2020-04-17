@@ -10,11 +10,13 @@
 #include <access/htup.h>
 #include <access/tupdesc.h>
 #include <utils/hsearch.h>
+#include <foreign/foreign.h>
 
 #include "export.h"
 #include "catalog.h"
 #include "chunk_constraint.h"
 #include "hypertable.h"
+#include "export.h"
 
 #define INVALID_CHUNK_ID 0
 
@@ -98,7 +100,9 @@ typedef enum CascadeToMaterializationOption
 	CASCADE_TO_MATERIALIZATION_TRUE = 1
 } CascadeToMaterializationOption;
 
-extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
+extern Chunk *ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema,
+										 const char *prefix);
+
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
 extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
@@ -146,7 +150,9 @@ extern TSDLLEXPORT Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
 								  MemoryContext mctx, uint64 *num_chunks_returned);
-
+extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
+															   const char *schema,
+															   const char *prefix, bool *created);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);

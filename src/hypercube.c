@@ -3,6 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include <postgres.h>
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+
+#include "export.h"
 #include "hypercube.h"
 #include "dimension_vector.h"
 
@@ -70,6 +75,21 @@ ts_hypercube_copy(Hypercube *hc)
 		copy->slices[i] = ts_dimension_slice_copy(hc->slices[i]);
 
 	return copy;
+}
+
+bool
+ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2)
+{
+	int i;
+
+	if (hc1->num_slices != hc2->num_slices)
+		return false;
+
+	for (i = 0; i < hc1->num_slices; i++)
+		if (ts_dimension_slice_cmp(hc1->slices[i], hc2->slices[i]) != 0)
+			return false;
+
+	return true;
 }
 
 static int

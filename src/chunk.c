@@ -70,6 +70,8 @@ TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_dml_blocker);
+TS_FUNCTION_INFO_V1(ts_chunk_show);
+TS_FUNCTION_INFO_V1(ts_chunk_create);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -210,6 +212,12 @@ ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 	table_close(rel, lock);
 }
 
+typedef struct CollisionInfo
+{
+	Hypercube *cube;
+	ChunkStub *colliding_chunk;
+} CollisionInfo;
+
 /*-
  * Align a chunk's hypercube in 'aligned' dimensions.
  *
@@ -268,7 +276,8 @@ ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 static ChunkResult
 do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
-	Hypercube *cube = scanctx->data;
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
 	Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
@@ -372,7 +381,8 @@ calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
 static ChunkResult
 do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
-	Hypercube *cube = scanctx->data;
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
 	Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
@@ -408,6 +418,52 @@ do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 	Assert(!ts_hypercubes_collide(cube, stub->cube));
 
 	return res;
+}
+
+static ChunkResult
+check_for_collisions(ChunkScanCtx *scanctx, ChunkStub *stub)
+{
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
+	Hyperspace *space = scanctx->space;
+
+	/* Check if this chunk collides with our hypercube */
+	if (stub->cube->num_slices == space->num_dimensions && ts_hypercubes_collide(cube, stub->cube))
+	{
+		info->colliding_chunk = stub;
+		return CHUNK_DONE;
+	}
+
+	return CHUNK_IGNORED;
+}
+
+/*
+ * Check if a (tentative) chunk collides with existing chunks.
+ *
+ * Return the colliding chunk. Note that the chunk is a stub and not a full
+ * chunk.
+ */
+static ChunkStub *
+chunk_collides(Hyperspace *hs, Hypercube *hc)
+{
+	ChunkScanCtx scanctx;
+	CollisionInfo info = {
+		.cube = hc,
+		.colliding_chunk = NULL,
+	};
+
+	chunk_scan_ctx_init(&scanctx, hs, NULL);
+
+	/* Scan for all chunks that collide with the hypercube of the new chunk */
+	chunk_collision_scan(&scanctx, hc);
+	scanctx.data = &info;
+
+	/* Find chunks that collide */
+	chunk_scan_ctx_foreach_chunk_stub(&scanctx, check_for_collisions, 0);
+
+	chunk_scan_ctx_destroy(&scanctx);
+
+	return info.colliding_chunk;
 }
 
 /*-
@@ -459,12 +515,16 @@ static void
 chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 {
 	ChunkScanCtx scanctx;
+	CollisionInfo info = {
+		.cube = cube,
+		.colliding_chunk = NULL,
+	};
 
 	chunk_scan_ctx_init(&scanctx, hs, p);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, cube);
-	scanctx.data = cube;
+	scanctx.data = &info;
 
 	/* Cut the hypercube in any aligned dimensions */
 	chunk_scan_ctx_foreach_chunk_stub(&scanctx, do_dimension_alignment, 0);
@@ -704,25 +764,13 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 }
 
 static Chunk *
-chunk_create_metadata_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *schema,
+								 const char *prefix)
 {
 	Hyperspace *hs = ht->space;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
-	Hypercube *cube;
 	Chunk *chunk;
-
-	/*
-	 * If the user has enabled adaptive chunking, call the function to
-	 * calculate and set the new chunk time interval.
-	 */
-	calculate_and_set_new_chunk_interval(ht, p);
-
-	/* Calculate the hypercube for a new chunk that covers the tuple's point */
-	cube = ts_hypercube_calculate_from_point(hs, p);
-
-	/* Resolve collisions with other chunks by cutting the new hypercube */
-	chunk_collision_resolve(hs, cube, p);
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -739,7 +787,7 @@ chunk_create_metadata_after_lock(Hypertable *ht, Point *p, const char *schema, c
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* Insert any new dimension slices */
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices, true);
 
 	/* Add metadata for dimensional and inheritable constraints */
 	ts_chunk_add_constraints(chunk);
@@ -788,8 +836,82 @@ init_scan_by_chunk_id(ScanIterator *iterator, int32 chunk_id)
 								   Int32GetDatum(chunk_id));
 }
 
+static Chunk *
+chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const char *schema,
+									   const char *prefix)
+{
+	Chunk *chunk;
+
+	chunk = chunk_create_metadata_after_lock(ht, cube, schema, prefix);
+	Assert(chunk != NULL);
+	chunk_create_table_after_lock(chunk, ht);
+
+	return chunk;
+}
+
+static Chunk *
+chunk_create_from_point_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+{
+	Hyperspace *hs = ht->space;
+	Hypercube *cube;
+
+	/*
+	 * If the user has enabled adaptive chunking, call the function to
+	 * calculate and set the new chunk time interval.
+	 */
+	calculate_and_set_new_chunk_interval(ht, p);
+
+	/* Calculate the hypercube for a new chunk that covers the tuple's point */
+	cube = ts_hypercube_calculate_from_point(hs, p);
+
+	/* Resolve collisions with other chunks by cutting the new hypercube */
+	chunk_collision_resolve(hs, cube, p);
+
+	return chunk_create_from_hypercube_after_lock(ht, cube, schema, prefix);
+}
+
 Chunk *
-ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema,
+									 const char *prefix, bool *created)
+{
+	ChunkStub *stub;
+	Chunk *chunk = NULL;
+
+	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+
+	stub = chunk_collides(ht->space, hc);
+
+	if (NULL == stub)
+	{
+		chunk = chunk_create_from_hypercube_after_lock(ht, hc, schema, prefix);
+
+		if (NULL != created)
+			*created = true;
+	}
+	else
+	{
+		/* We can only use an existing chunk if it has identical dimensional
+		 * constraints. Otherwise, throw an error */
+		if (!ts_hypercube_equal(stub->cube, hc))
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_CHUNK_COLLISION),
+					 errmsg("chunk creation failed due to collision")));
+
+		/* chunk_collides only returned a stub, so we need to lookup the full
+		 * chunk. */
+		chunk = ts_chunk_get_by_id(stub->id, true);
+
+		if (NULL != created)
+			*created = false;
+	}
+
+	ASSERT_IS_VALID_CHUNK(chunk);
+
+	return chunk;
+}
+
+Chunk *
+ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Chunk *chunk;
 
@@ -805,10 +927,7 @@ ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix
 	chunk = chunk_find(ht, p, true);
 
 	if (NULL == chunk)
-	{
-		chunk = chunk_create_metadata_after_lock(ht, p, schema, prefix);
-		chunk_create_table_after_lock(chunk, ht);
-	}
+		chunk = chunk_create_from_point_after_lock(ht, p, schema, prefix);
 
 	ASSERT_IS_VALID_CHUNK(chunk);
 
@@ -3240,4 +3359,16 @@ ts_chunk_dml_blocker(PG_FUNCTION_ARGS)
 			 errhint("Make sure the chunk is not compressed.")));
 
 	PG_RETURN_NULL();
+}
+
+Datum
+ts_chunk_show(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->show_chunk(fcinfo);
+}
+
+Datum
+ts_chunk_create(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->create_chunk(fcinfo);
 }

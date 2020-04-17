@@ -4,6 +4,7 @@ set(TEST_FILES
   edition.sql
   gapfill.sql
   partialize_finalize.sql
+  chunk_api.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -82,10 +83,6 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 
 endif()
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
 # be in the same directory. These files are updated when the template
@@ -101,9 +98,13 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
 endforeach(TEMPLATE_FILE)
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
-  list(APPEND TEST_FILES
+  list(APPEND TEST_FILES_DEBUG
     remote_connection.sql)
 endif ()
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 list(SORT TEST_FILES)
 file(REMOVE ${TEST_SCHEDULE})

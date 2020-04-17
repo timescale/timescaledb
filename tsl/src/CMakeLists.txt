@@ -1,4 +1,5 @@
 set(SOURCES
+  chunk_api.c
   init.c
   license.c
   reorder.c
