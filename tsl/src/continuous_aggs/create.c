@@ -1975,7 +1975,7 @@ build_boundary_call(int32 ht_id, Oid type)
 					   argtyp,
 					   false);
 	List *func_args =
-		list_make1(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(ht_id), false, true));
+		list_make1(makeConst(OIDOID, -1, InvalidOid, 4, Int32GetDatum(ht_id), false, true));
 
 	boundary = makeFuncExpr(boundary_func_oid,
 							INT8OID,

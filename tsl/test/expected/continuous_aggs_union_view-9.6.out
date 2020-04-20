@@ -48,13 +48,13 @@ SELECT pg_get_viewdef('metrics_summary',true);
   SELECT _materialized_hypertable_2.time_bucket,                                                                                                                                                  +
      _timescaledb_internal.finalize_agg('avg(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_2_2, NULL::double precision) AS avg+
     FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                                         +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                    +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)             +
    GROUP BY _materialized_hypertable_2.time_bucket                                                                                                                                                +
  UNION ALL                                                                                                                                                                                        +
   SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                                         +
      avg(metrics.value) AS avg                                                                                                                                                                    +
     FROM metrics                                                                                                                                                                                  +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                                           +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)                                    +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -102,13 +102,13 @@ SELECT pg_get_viewdef('metrics_summary',true);
   SELECT _materialized_hypertable_2.time_bucket,                                                                                                                                                  +
      _timescaledb_internal.finalize_agg('avg(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_2_2, NULL::double precision) AS avg+
     FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                                         +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                    +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)             +
    GROUP BY _materialized_hypertable_2.time_bucket                                                                                                                                                +
  UNION ALL                                                                                                                                                                                        +
   SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                                         +
      avg(metrics.value) AS avg                                                                                                                                                                    +
     FROM metrics                                                                                                                                                                                  +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                                           +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)                                    +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -133,13 +133,13 @@ SELECT pg_get_viewdef('metrics_summary',true);
   SELECT _materialized_hypertable_2.time_bucket,                                                                                                                                                  +
      _timescaledb_internal.finalize_agg('avg(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_2.agg_2_2, NULL::double precision) AS avg+
     FROM _timescaledb_internal._materialized_hypertable_2                                                                                                                                         +
-   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                    +
+   WHERE _materialized_hypertable_2.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)             +
    GROUP BY _materialized_hypertable_2.time_bucket                                                                                                                                                +
  UNION ALL                                                                                                                                                                                        +
   SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                                         +
      avg(metrics.value) AS avg                                                                                                                                                                    +
     FROM metrics                                                                                                                                                                                  +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                                           +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)                                    +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -226,13 +226,13 @@ SELECT pg_get_viewdef('metrics_summary',true);
   SELECT _materialized_hypertable_3.time_bucket,                                                                                                                                                  +
      _timescaledb_internal.finalize_agg('avg(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_3.agg_2_2, NULL::double precision) AS avg+
     FROM _timescaledb_internal._materialized_hypertable_3                                                                                                                                         +
-   WHERE _materialized_hypertable_3.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                    +
+   WHERE _materialized_hypertable_3.time_bucket < COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)             +
    GROUP BY _materialized_hypertable_3.time_bucket                                                                                                                                                +
  UNION ALL                                                                                                                                                                                        +
   SELECT time_bucket('@ 1 day'::interval, metrics."time") AS time_bucket,                                                                                                                         +
      avg(metrics.value) AS avg                                                                                                                                                                    +
     FROM metrics                                                                                                                                                                                  +
-   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(1)), '-infinity'::timestamp with time zone)                                           +
+   WHERE metrics."time" >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark('1'::oid)), '-infinity'::timestamp with time zone)                                    +
    GROUP BY (time_bucket('@ 1 day'::interval, metrics."time"));
 (1 row)
 
@@ -366,8 +366,8 @@ SELECT _timescaledb_internal.cagg_watermark(5);
 
 -- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
 :PREFIX SELECT * FROM boundary_view;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  HashAggregate
          Group Key: time_bucket
@@ -378,13 +378,13 @@ SELECT _timescaledb_internal.cagg_watermark(5);
          ->  Custom Scan (ChunkAppend) on boundary_test
                Chunks excluded during startup: 0
                ->  Index Scan Backward using _hyper_5_5_chunk_boundary_test_time_idx on _hyper_5_5_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
                ->  Index Scan Backward using _hyper_5_6_chunk_boundary_test_time_idx on _hyper_5_6_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
                ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
                ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
 (17 rows)
 
 -- result should have 4 rows
@@ -407,23 +407,23 @@ SELECT _timescaledb_internal.cagg_watermark(5);
 
 -- both sides of the UNION should return 2 rows
 :PREFIX SELECT * FROM boundary_view;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  HashAggregate
          Group Key: _materialized_hypertable_6.time_bucket
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6
                Chunks excluded during startup: 0
                ->  Index Scan Backward using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk
-                     Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
    ->  HashAggregate
          Group Key: (time_bucket(10, boundary_test."time"))
          ->  Custom Scan (ChunkAppend) on boundary_test
                Chunks excluded during startup: 2
                ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
                ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk
-                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark(5))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= COALESCE((_timescaledb_internal.cagg_watermark('5'::oid))::integer, '-2147483648'::integer))
 (15 rows)
 
 -- result should have 4 rows
