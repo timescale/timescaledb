@@ -11,6 +11,8 @@
 
 #include "conn_internal.h"
 #include "conn_plain.h"
+#include "compat.h"
+#include "port.h"
 
 #define DEFAULT_TIMEOUT_MSEC 3000
 #define MAX_PORT 65535
@@ -24,6 +26,24 @@ set_error(int err)
 	errno = err;
 #endif
 }
+
+static int
+get_error(void)
+{
+#ifdef WIN32
+	return WSAGetLastError();
+#else
+	return errno;
+#endif
+}
+
+/* We cannot define `pg_strerror` here because there is a #define in PG12 that
+ * sets `strerror` to `pg_strerror`. Instead, we handle the missing case for
+ * pre-PG12 on Windows by setting `strerror` to the windows version of the
+ * function and use `strerror` below. */
+#if PG12_LT && defined(WIN32)
+#define strerror(ERRNO) pgwin32_socket_strerror((ERRNO))
+#endif
 
 /*  Create socket and connect */
 int
@@ -227,14 +247,8 @@ ts_plain_errmsg(Connection *conn)
 {
 	const char *errmsg = "no connection error";
 
-#ifdef WIN32
 	if (IS_SOCKET_ERROR(conn->err))
-		errmsg = pgwin32_socket_strerror(WSAGetLastError());
-#else
-	if (IS_SOCKET_ERROR(conn->err))
-		errmsg = strerror(errno);
-#endif
-
+		errmsg = strerror(get_error());
 	conn->err = 0;
 
 	return errmsg;
