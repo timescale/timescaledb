@@ -316,7 +316,8 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 	else
 	{
 		/* restore the original next_start to maintain priority (it is unset during mark_start) */
-		ts_bgw_job_stat_set_next_start(&sjob->job, sjob->next_start);
+		if (sjob->next_start != DT_NOBEGIN)
+			ts_bgw_job_stat_set_next_start(&sjob->job, sjob->next_start);
 		mark_job_as_ended(sjob, JOB_FAILURE_TO_START);
 	}
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
