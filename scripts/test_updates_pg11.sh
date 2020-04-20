@@ -32,3 +32,12 @@ EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
+
+TAGS="1.7.0-pg11"
+TEST_VERSION="v6-pg11"
+
+TAGS=$TAGS TEST_VERSION=$TEST_VERSION bash ${SCRIPT_DIR}/test_updates.sh
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+  exit $EXIT_CODE
+fi
