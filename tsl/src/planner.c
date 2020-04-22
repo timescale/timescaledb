@@ -39,7 +39,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		rel->reloptkind == RELOPT_OTHER_MEMBER_REL && TS_HYPERTABLE_HAS_COMPRESSION(ht) &&
 		rel->fdw_private != NULL && ((TimescaleDBPrivate *) rel->fdw_private)->compressed)
 	{
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
 
 		if (chunk->fd.compressed_chunk_id > 0)
 			ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
@@ -52,7 +52,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 	{
 		ListCell *lc;
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, true);
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
 		if (chunk->fd.compressed_chunk_id > 0)
 		{
 			foreach (lc, rel->pathlist)

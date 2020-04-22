@@ -110,7 +110,7 @@ extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern Tablespace *ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
-extern char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
+extern const char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id,
 															   Oid tablespace_oid, int16 offset);
 extern bool ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);

@@ -404,7 +404,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 				 * reliably identify chunk BASERELs. We should, however, be able
 				 * to identify these in the query preprocessing and cache them
 				 * there if we need to speed this up. */
-				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, 0, false);
+				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
 
 				if (NULL != chunk)
 				{
@@ -814,7 +814,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			if (ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION(ht))
 			{
 				RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
-				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, 0, true);
+				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true);
 
 				if (chunk->fd.compressed_chunk_id > 0)
 				{

@@ -360,7 +360,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 							   tuple_filter_func filter)
 {
 	Catalog *catalog = ts_catalog_get();
-	ScannerCtx	scanctx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = catalog_get_index(catalog, HYPERTABLE, indexid),
 		.nkeys = num_scankeys,
@@ -372,11 +372,6 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 		.filter = filter,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = mctx,
-		.tuplock = {
-			.waitpolicy = LockWaitBlock,
-			.lockmode = LockTupleExclusive,
-			.enabled = tuplock,
-		},
 	};
 
 	return ts_scanner_scan(&scanctx);
@@ -1013,6 +1008,7 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 {
 	Chunk *chunk;
 	ChunkStoreEntry *cse = ts_subspace_store_get(h->chunk_cache, point);
+
 	if (cse != NULL)
 	{
 		Assert(NULL != cse->chunk);
@@ -1024,7 +1020,7 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 	 * allocates a lot of transient data. We don't want this allocated on
 	 * the cache's memory context.
 	 */
-	chunk = ts_chunk_find(h->space, point, false);
+	chunk = ts_chunk_find(h, point);
 
 	if (NULL == chunk)
 	{
@@ -1115,7 +1111,7 @@ ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 	return &tspcs->tablespaces[i % tspcs->num_tablespaces];
 }
 
-char *
+const char *
 ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk)
 {
 	Tablespace *tspc = ts_hypertable_select_tablespace(ht, chunk);

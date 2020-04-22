@@ -184,7 +184,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
 	/* refetch the srcchunk with all attributes filled in */
-	srcchunk = ts_chunk_get_by_relid(chunk_relid, srcht->space->num_dimensions, true);
+	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
 	cxt->srcht = srcht;
 	cxt->compress_ht = compress_ht;
 	cxt->srcht_chunk = srcchunk;
@@ -268,9 +268,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	if (compressed_hypertable == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
-	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid,
-											   uncompressed_hypertable->space->num_dimensions,
-											   true);
+	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
 	if (uncompressed_chunk == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -288,7 +286,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		return false;
 	}
 
-	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, 0, true);
+	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
@@ -315,7 +313,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 bool
 tsl_compress_chunk_wrapper(Oid chunk_relid, bool if_not_compressed)
 {
-	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
+	Chunk *srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
 	if (srcchunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		ereport((if_not_compressed ? NOTICE : ERROR),
@@ -343,7 +341,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, 0, true);
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
 
