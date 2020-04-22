@@ -138,6 +138,21 @@ SELECT * FROM trigger_test ORDER BY time;
    25 |  0.602348630782217
 (15 rows)
 
+-- Test that if we copy from stdin to a hypertable and violate a null
+-- constraint, it does not crash and generate an appropriate error
+-- message.
+CREATE TABLE test(a INT NOT NULL, b TIMESTAMPTZ);
+SELECT create_hypertable('test', 'b');
+NOTICE:  adding not-null constraint to column "b"
+ create_hypertable 
+-------------------
+ (5,public,test,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
+ERROR:  null value in column "a" violates not-null constraint
+\set ON_ERROR_STOP 1
 ----------------------------------------------------------------
 -- Testing COPY TO.
 ----------------------------------------------------------------

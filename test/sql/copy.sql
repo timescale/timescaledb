@@ -85,6 +85,17 @@ FOR EACH ROW EXECUTE PROCEDURE gt_10();
 \copy trigger_test from data/copy_data.csv with csv header ;
 SELECT * FROM trigger_test ORDER BY time;
 
+-- Test that if we copy from stdin to a hypertable and violate a null
+-- constraint, it does not crash and generate an appropriate error
+-- message.
+CREATE TABLE test(a INT NOT NULL, b TIMESTAMPTZ);
+SELECT create_hypertable('test', 'b');
+\set ON_ERROR_STOP 0
+COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
+N,'2020-01-01'
+\.
+\set ON_ERROR_STOP 1
+
 ----------------------------------------------------------------
 -- Testing COPY TO.
 ----------------------------------------------------------------
@@ -99,3 +110,4 @@ COPY hyper TO STDOUT DELIMITER ',';
 -- COPY TO using a query should display all the tuples and not show a
 -- notice.
 COPY (SELECT * FROM hyper) TO STDOUT DELIMITER ',';
+

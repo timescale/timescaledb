@@ -147,6 +147,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	ExprState *qualexpr;
 #endif
 
+	Assert(range_table);
+
 	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
 		if (ccstate->rel->rd_rel->relkind == RELKIND_VIEW)
@@ -223,12 +225,16 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	 * We need a ResultRelInfo so we can use the regular executor's
 	 * index-entry-making machinery.  (There used to be a huge amount of code
 	 * here that basically duplicated execUtils.c ...)
+	 *
+	 * WARNING. The dummy rangetable index is decremented by 1 (unchecked)
+	 * inside `ExecConstraints` so unless you want to have a overflow, keep it
+	 * above zero. See `rt_fetch` in parsetree.h.
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
+
 	InitResultRelInfoCompat(resultRelInfo,
 							ccstate->rel,
-							0, /* dummy rangetable index - original was 1
-								* which isn't dummy-nuf */
+							/* RangeTableIndex */ 1,
 							0);
 
 	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT);
@@ -387,7 +393,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			 */
 			if (resultRelInfo->ri_FdwRoutine == NULL &&
 				resultRelInfo->ri_RelationDesc->rd_att->constr)
+			{
+				Assert(resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
 				ExecConstraints(resultRelInfo, myslot, estate);
+			}
 
 			/* OK, store the tuple and create index entries for it */
 			table_tuple_insert(resultRelInfo->ri_RelationDesc, myslot, mycid, ti_options, bistate);
@@ -554,28 +563,26 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 }
 
 static void
-copy_security_check(Relation rel, List *attnums)
+copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 {
-	List *range_table = NIL;
 	ListCell *cur;
-	RangeTblEntry *rte;
 	char *xactReadOnly;
-
-	rte = makeNode(RangeTblEntry);
-	rte->rtekind = RTE_RELATION;
-	rte->relid = RelationGetRelid(rel);
-	rte->relkind = rel->rd_rel->relkind;
+#if PG12_GE
+	RangeTblEntry *rte =
+		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
+	addRTEtoQuery(pstate, rte, false, true, true);
+#else
+	RangeTblEntry *rte = addRangeTableEntryForRelation(pstate, rel, NULL, false, false);
+#endif
 	rte->requiredPerms = ACL_INSERT;
-	range_table = list_make1(rte);
 
 	foreach (cur, attnums)
 	{
 		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
-
 		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
 	}
 
-	ExecCheckRTPerms(range_table, true);
+	ExecCheckRTPerms(pstate->p_rtable, true);
 
 	/*
 	 * Permission check for row security policies.
@@ -614,9 +621,9 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	CopyState cstate;
 	bool pipe = (stmt->filename == NULL);
 	Relation rel;
-	List *range_table = NIL;
 	List *attnums = NIL;
 	Node *where_clause = NULL;
+	ParseState *pstate;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
@@ -642,66 +649,50 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	/*
 	 * We never actually write to the main table, but we need RowExclusiveLock
-	 * to ensure no one else is
+	 * to ensure no one else is. Because of the check above, we know that
+	 * `stmt->relation` is defined, so we are guaranteed to have a relation
+	 * available.
 	 */
 	rel = table_openrv(stmt->relation, RowExclusiveLock);
 
 	attnums = timescaledb_CopyGetAttnums(RelationGetDescr(rel), rel, stmt->attlist);
 
-	copy_security_check(rel, attnums);
+	pstate = make_parsestate(NULL);
+	pstate->p_sourcetext = queryString;
+	copy_constraints_and_check(pstate, rel, attnums);
 
 #if PG96
 	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program, stmt->attlist, stmt->options);
 #else
-	{
-		ParseState *pstate = make_parsestate(NULL);
-
-		pstate->p_sourcetext = queryString;
-		cstate = BeginCopyFrom(pstate,
-							   rel,
-							   stmt->filename,
-							   stmt->is_program,
-							   NULL,
-							   stmt->attlist,
-							   stmt->options);
-#if PG12_GE
-		if (stmt->relation && stmt->whereClause)
-		{
-			LOCKMODE lockmode = stmt->is_from ? RowExclusiveLock : AccessShareLock;
-			RangeTblEntry *rte;
-
-			Assert(!stmt->query);
-
-			/* Open and lock the relation, using the appropriate lock type. */
-			rel = table_openrv(stmt->relation, lockmode);
-
-			rte = addRangeTableEntryForRelation(pstate, rel, lockmode, NULL, false, false);
-			rte->requiredPerms = (stmt->is_from ? ACL_INSERT : ACL_SELECT);
-
-			/* Add rte to column namespace  */
-			addRTEtoQuery(pstate, rte, false, true, true);
-
-			where_clause = transformExpr(pstate, stmt->whereClause, EXPR_KIND_COPY_WHERE);
-
-			where_clause = coerce_to_boolean(pstate, where_clause, "WHERE");
-			assign_expr_collations(pstate, where_clause);
-
-			where_clause = eval_const_expressions(NULL, where_clause);
-
-			where_clause = (Node *) canonicalize_qual((Expr *) where_clause, false);
-			where_clause = (Node *) make_ands_implicit((Expr *) where_clause);
-
-			table_close(rel, lockmode);
-		}
+	cstate = BeginCopyFrom(pstate,
+						   rel,
+						   stmt->filename,
+						   stmt->is_program,
+						   NULL,
+						   stmt->attlist,
+						   stmt->options);
 #endif
-		free_parsestate(pstate);
+
+#if PG12_GE
+	if (stmt->whereClause)
+	{
+		where_clause = transformExpr(pstate, stmt->whereClause, EXPR_KIND_COPY_WHERE);
+
+		where_clause = coerce_to_boolean(pstate, where_clause, "WHERE");
+		assign_expr_collations(pstate, where_clause);
+
+		where_clause = eval_const_expressions(NULL, where_clause);
+
+		where_clause = (Node *) canonicalize_qual((Expr *) where_clause, false);
+		where_clause = (Node *) make_ands_implicit((Expr *) where_clause);
 	}
 #endif
+
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
 	ccstate->where_clause = where_clause;
-	*processed = copyfrom(ccstate, range_table, ht);
+	*processed = copyfrom(ccstate, pstate->p_rtable, ht);
 	EndCopyFrom(cstate);
-
+	free_parsestate(pstate);
 	table_close(rel, NoLock);
 }
 
@@ -735,9 +726,10 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	Relation rel;
 	CopyChunkState *ccstate;
 	TableScanDesc scandesc;
+	ParseState *pstate = make_parsestate(NULL);
 	Snapshot snapshot;
 	List *attnums = NIL;
-	List *range_table = NIL;
+
 	RangeVar rv = {
 		.schemaname = NameStr(ht->fd.schema_name),
 		.relname = NameStr(ht->fd.table_name),
@@ -760,15 +752,14 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	for (i = 0; i < rel->rd_att->natts; i++)
 	{
 		Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
-
 		attnums = lappend_int(attnums, attr->attnum);
 	}
 
-	copy_security_check(rel, attnums);
+	copy_constraints_and_check(pstate, rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
 	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
-	copyfrom(ccstate, range_table, ht);
+	copyfrom(ccstate, pstate->p_rtable, ht);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
 	table_close(rel, lockmode);
