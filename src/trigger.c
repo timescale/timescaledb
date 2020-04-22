@@ -129,18 +129,18 @@ create_trigger_handler(Trigger *trigger, void *arg)
  * chunk.
  */
 void
-ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
+ts_trigger_create_all_on_chunk(Chunk *chunk)
 {
 	int sec_ctx;
 	Oid saved_uid;
-	Oid owner = ts_rel_get_owner(ht->main_table_relid);
+	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
 	if (saved_uid != owner)
 		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	for_each_trigger(ht->main_table_relid, create_trigger_handler, chunk);
+	for_each_trigger(chunk->hypertable_relid, create_trigger_handler, chunk);
 
 	if (saved_uid != owner)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);

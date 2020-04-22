@@ -79,9 +79,9 @@ typedef struct ChunkScanCtx
  * false. Used to find a stub matching a point in an N-dimensional
  * hyperspace. */
 static inline bool
-chunk_stub_is_complete(ChunkStub *chunk, Hyperspace *space)
+chunk_stub_is_complete(ChunkStub *stub, Hyperspace *space)
 {
-	return space->num_dimensions == chunk->constraints->num_dimension_constraints;
+	return space->num_dimensions == stub->constraints->num_dimension_constraints;
 }
 
 /* The hash table entry for the ChunkScanCtx */
@@ -101,7 +101,7 @@ typedef enum CascadeToMaterializationOption
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
-extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p, bool include_chunks_marked_as_dropped);
+extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
@@ -109,23 +109,23 @@ extern TSDLLEXPORT int ts_chunk_add_constraints(Chunk *chunk);
 
 extern Chunk *ts_chunk_copy(Chunk *chunk);
 extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
-													   const char *table_name,
-													   int16 num_constraints, MemoryContext mctx,
+													   const char *table_name, MemoryContext mctx,
 													   bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock);
 
-extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht, char *tablespacename);
-extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints,
-											 bool fail_if_not_found);
-extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints,
-												bool fail_if_not_found);
+extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht,
+											 const char *tablespacename);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
+extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
+extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_exists_relid(Oid relid);
 
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
-extern TSDLLEXPORT void ts_chunk_drop_fks(Chunk *chunk);
-extern TSDLLEXPORT void ts_chunk_create_fks(Chunk *chunk);
+extern TSDLLEXPORT void ts_chunk_drop_fks(Chunk *const chunk);
+extern TSDLLEXPORT void ts_chunk_create_fks(Chunk *const chunk);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
@@ -145,16 +145,15 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 extern TSDLLEXPORT Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
-								  MemoryContext mctx, uint64 *num_chunks_returned,
-								  bool include_chunks_marked_as_dropped);
+								  MemoryContext mctx, uint64 *num_chunks_returned);
 
-extern bool TSDLLEXPORT ts_chunk_contains_compressed_data(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
+extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 
-#define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
+#define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
 											 table_name,                                           \
-											 num_constraints,                                      \
 											 CurrentMemoryContext,                                 \
 											 fail_if_not_found)
 

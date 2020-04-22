@@ -443,9 +443,7 @@ ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
 static inline Oid
 chunk_index_get_schemaid(Form_chunk_index chunk_index, bool missing_ok)
 {
-	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, 0, true);
-
-	return get_namespace_oid(NameStr(chunk->fd.schema_name), missing_ok);
+	return ts_chunk_get_schema_id(chunk_index->chunk_id, missing_ok);
 }
 
 #define chunk_index_tuple_get_schema(tuple)                                                        \
@@ -527,7 +525,7 @@ static ChunkIndexMapping *
 chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
-	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, 0, true);
+	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
 	Oid nspoid_chunk = get_rel_namespace(chunk->table_id);
 	Oid nspoid_hyper = get_rel_namespace(chunk->hypertable_relid);
 
@@ -622,7 +620,7 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 
 	if (namestrcmp(&chunk_index->index_name, cid->index_name) == 0)
 	{
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, 0, false);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, false);
 
 		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
 			return SCAN_INCLUDE;
@@ -642,10 +640,9 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 }
 
 int
-ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
+ts_chunk_index_delete(int32 chunk_id, const char *indexname, bool drop_index)
 {
 	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(chunk_indexrelid);
 	ChunkIndexDeleteData data = {
 		.drop_index = drop_index,
 	};
@@ -654,7 +651,7 @@ ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
+				Int32GetDatum(chunk_id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber,
@@ -808,7 +805,7 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		 * If the renaming is for a hypertable index, we also rename all
 		 * corresponding chunk indexes
 		 */
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, 0, true);
+		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
 		Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
 		const char *chunk_index_name =
 			chunk_index_choose_name(NameStr(chunk->fd.table_name), info->newname, chunk_schemaoid);
@@ -991,7 +988,7 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 	src_chunk_rel = table_open(src_chunkrelid, AccessShareLock);
 	dest_chunk_rel = table_open(dest_chunkrelid, ShareLock);
 
-	src_chunk = ts_chunk_get_by_relid(src_chunkrelid, 0, true);
+	src_chunk = ts_chunk_get_by_relid(src_chunkrelid, true);
 
 	hypertable_rel = table_open(src_chunk->hypertable_relid, AccessShareLock);
 
@@ -1034,7 +1031,7 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 
 	chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
 
-	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
+	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, true);
 	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
 
 	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
@@ -1078,7 +1075,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	index_rel = index_open(chunk_index_oid_old, ShareLock);
 
 	/* check permissions */
-	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, 0, true);
+	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, true);
 	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid_old, &cim);
 	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
 

@@ -471,7 +471,7 @@ set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 	foreach (lc, arbiter_indexes)
 	{
 		Oid hypertable_index = lfirst_oid(lc);
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), 0, true);
+		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), true);
 		ChunkIndexMapping cim;
 
 		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)

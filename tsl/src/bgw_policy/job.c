@@ -140,7 +140,7 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 	 * function should translate this to the Oid of the index on the specific
 	 * chunk.
 	 */
-	chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+	chunk = ts_chunk_get_by_id(chunk_id, false);
 	elog(LOG, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
 	reorder(chunk->table_id,
 			get_relname_relid(NameStr(args->fd.hypertable_index_name),
@@ -326,7 +326,7 @@ execute_compress_chunks_policy(BgwJob *job)
 	}
 	else
 	{
-		chunk = ts_chunk_get_by_id(chunkid, 0, true);
+		chunk = ts_chunk_get_by_id(chunkid, true);
 		tsl_compress_chunk_wrapper(chunk->table_id, false);
 		elog(LOG,
 			 "completed compressing chunk %s.%s",
