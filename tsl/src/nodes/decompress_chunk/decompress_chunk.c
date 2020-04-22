@@ -880,7 +880,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 {
 	ListCell *lc;
 	Index compressed_index = root->simple_rel_array_size;
-	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, 0, true);
+	Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Oid compressed_relid = compressed_chunk->table_id;
 	RelOptInfo *compressed_rel;
 

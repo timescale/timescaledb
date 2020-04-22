@@ -171,7 +171,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("must provide a valid chunk to cluster")));
 
-	chunk = ts_chunk_get_by_relid(chunk_id, 0, false);
+	chunk = ts_chunk_get_by_relid(chunk_id, false);
+
 	if (NULL == chunk)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

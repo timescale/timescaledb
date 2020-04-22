@@ -758,7 +758,7 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 		if (!isnull)
 		{
 			int32 chunk_id = DatumGetInt32(elem);
-			Chunk *chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+			Chunk *chunk = ts_chunk_get_by_id(chunk_id, false);
 
 			if (chunk == NULL)
 				ereport(ERROR, (errmsg("chunk id %d not found", chunk_id)));

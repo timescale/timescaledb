@@ -1,4 +1,3 @@
-
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -169,7 +168,7 @@ static inline void
 cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_id,
 							Relation chunk_relation)
 {
-	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_id, 0, false);
+	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_id, false);
 	if (modified_tuple_chunk == NULL)
 		elog(ERROR, "continuous agg trigger function must be called on hypertable chunks only");
 

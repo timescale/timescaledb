@@ -572,6 +572,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	CatalogSecurityContext sec_ctx;
 	Chunk *compress_chunk;
 	int namelen;
+	const char *tablespace;
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -614,10 +615,8 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
 	 * for now.
 	 */
-	compress_chunk->table_id =
-		ts_chunk_create_table(compress_chunk,
-							  compress_ht,
-							  get_tablespace_name(get_rel_tablespace(src_chunk->table_id)));
+	tablespace = get_tablespace_name(get_rel_tablespace(src_chunk->table_id));
+	compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht, tablespace);
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compressed chunk table");
@@ -629,7 +628,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 								compress_chunk->hypertable_relid,
 								compress_chunk->fd.hypertable_id);
 
-	ts_trigger_create_all_on_chunk(compress_ht, compress_chunk);
+	ts_trigger_create_all_on_chunk(compress_chunk);
 
 	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
 							  compress_chunk->hypertable_relid,
