@@ -417,14 +417,30 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 		case RELOPT_OTHER_MEMBER_REL:
 			rte = planner_rt_fetch(rel->relid, root);
 			parent_rte = get_parent_rte(root, rel->relid);
-			ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
 
-			if (NULL != ht)
+			/*
+			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
+			 * be a hypertable here if it was pulled up from a subquery
+			 * as happens with UNION ALL for example. So we have to
+			 * check for that to properly detect that pattern.
+			 */
+			if (parent_rte->rtekind == RTE_SUBQUERY)
 			{
-				if (parent_rte->relid == rte->relid)
-					reltype = TS_REL_HYPERTABLE_CHILD;
-				else
-					reltype = TS_REL_CHUNK_CHILD;
+				ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+				if (ht != NULL)
+					reltype = TS_REL_HYPERTABLE;
+			}
+			else
+			{
+				ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
+
+				if (NULL != ht)
+				{
+					if (parent_rte->relid == rte->relid)
+						reltype = TS_REL_HYPERTABLE_CHILD;
+					else
+						reltype = TS_REL_CHUNK_CHILD;
+				}
 			}
 			break;
 		default:
@@ -554,7 +570,14 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 			in_rte->inh = true;
 			reenabled_inheritance = true;
 			/* FIXME redo set_rel_consider_parallel */
-			if (in_rel->reloptkind == RELOPT_BASEREL)
+
+			/*
+			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
+			 * be a hypertable here if it was pulled up from a subquery
+			 * as happens with UNION ALL for example.
+			 */
+			if (in_rel->reloptkind == RELOPT_BASEREL ||
+				in_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 				ts_set_rel_size(root, in_rel, i, in_rte);
 
 			/* if we're activating inheritance during a hypertable's pathlist
