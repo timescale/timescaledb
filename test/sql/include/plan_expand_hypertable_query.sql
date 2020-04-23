@@ -296,3 +296,10 @@ INSERT INTO outer_join_2 VALUES(1,'a');
 
 DROP TABLE outer_join_1;
 DROP TABLE outer_join_2;
+
+-- test UNION between regular table and hypertable
+SELECT time FROM regular_timestamptz UNION SELECT time FROM metrics_timestamptz ORDER BY 1;
+
+-- test UNION ALL between regular table and hypertable
+SELECT time FROM regular_timestamptz UNION ALL SELECT time FROM metrics_timestamptz ORDER BY 1;
+
