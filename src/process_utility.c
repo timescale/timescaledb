@@ -1707,14 +1707,11 @@ static void
 process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	const char chunk_relkind = get_rel_relkind(chunk_relid);
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
 	Chunk *chunk;
 
-	/* Foreign chunks do not support indexes */
-	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
-		return;
+	Assert(!hypertable_is_distributed(ht));
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
@@ -1952,8 +1949,16 @@ process_index_start(ProcessUtilityArgs *args)
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
+														   info.extended_options.multitransaction,
+														   hypertable_is_distributed(ht));
 	info.obj.objectId = root_table_index.objectId;
+
+	/* CREATE INDEX on the chunks, unless this is a distributed hypertable */
+	if (hypertable_is_distributed(ht))
+	{
+		ts_cache_release(hcache);
+		return true;
+	}
 
 	/* collect information required for per chunk index creation */
 	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
@@ -1969,8 +1974,6 @@ process_index_start(ProcessUtilityArgs *args)
 	index_close(main_table_index_relation, NoLock);
 	table_close(main_table_relation, NoLock);
 
-	/* CREATE INDEX on the chunks */
-
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
@@ -1981,11 +1984,12 @@ process_index_start(ProcessUtilityArgs *args)
 		 * multi-transaction case, we do this once per chunk.
 		 */
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-		/* Recurse to each chunk and create a corresponding index */
+		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(hcache);
+
 		return true;
 	}
 
