@@ -275,7 +275,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
  */
 extern ObjectAddress
 ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
-									bool is_multitransaction)
+									bool is_multitransaction, bool is_distributed)
 {
 	Oid relid;
 	LOCKMODE lockmode;
@@ -305,10 +305,14 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	 * chunks, so we must acquire locks early to avoid deadlocks.
 	 *
 	 * We also take the opportunity to verify that all
-	 * partitions are something we can put an index on, to
+	 * chunks are something we can put an index on, to
 	 * avoid building some indexes only to fail later.
+	 *
+	 * Note that on distributed hypertables we only create the index on the root
+	 * table, i.e., we do not recurse to chunks. Therefore, there is no need to
+	 * take locks on the chunks here.
 	 */
-	if (!is_multitransaction)
+	if (!is_multitransaction && !is_distributed)
 	{
 		ListCell *lc;
 		List *inheritors = NIL;

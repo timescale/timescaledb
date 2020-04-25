@@ -18,7 +18,8 @@ extern void ts_indexing_verify_index(Hyperspace *hs, IndexStmt *stmt);
 extern void ts_indexing_verify_indexes(Hypertable *ht);
 extern void ts_indexing_create_default_indexes(Hypertable *ht);
 extern ObjectAddress ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
-														 bool is_multitransaction);
+														 bool is_multitransaction,
+														 bool is_distributed);
 extern TSDLLEXPORT Oid ts_indexing_find_clustered_index(Oid table_relid);
 
 extern void ts_indexing_mark_as_valid(Oid index_id);
