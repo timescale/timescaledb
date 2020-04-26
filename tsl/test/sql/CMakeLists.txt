@@ -58,7 +58,7 @@ if (${PG_VERSION_MAJOR} GREATER "9")
     compression_hypertable.sql
     compression_segment_meta.sql
     compression_bgw.sql
-    compress_bgw_drop_chunks.sql
+    compress_bgw_reorder_drop_chunks.sql
     transparent_decompression_queries.sql
   )
 
