@@ -732,6 +732,8 @@ typedef struct ChunkStatInfo
 	int32 job_id;
 } ChunkStatInfo;
 
+/* Check that a a) job has not already been executed for the chunk and b) chunk is not compressed
+ * (a compressed chunk should not be reordered).*/
 static ScanTupleResult
 dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
 {
@@ -744,13 +746,16 @@ dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
 
 	foreach (lc, chunk_ids)
 	{
-		BgwPolicyChunkStats *chunk_stat =
-			ts_bgw_policy_chunk_stats_find(info->job_id, lfirst_int(lc));
+		/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
+		 * (should not reorder a compressed chunk) */
+		int chunk_id = lfirst_int(lc);
+		BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(info->job_id, chunk_id);
 
-		if (chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0)
+		if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
+			ts_chunk_can_be_compressed(chunk_id))
 		{
 			/* Save the chunk_id */
-			info->chunk_id = lfirst_int(lc);
+			info->chunk_id = chunk_id;
 			return SCAN_DONE;
 		}
 	}
@@ -759,10 +764,9 @@ dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
 }
 
 int
-ts_dimension_slice_oldest_chunk_without_executed_job(int32 job_id, int32 dimension_id,
-													 StrategyNumber start_strategy,
-													 int64 start_value, StrategyNumber end_strategy,
-													 int64 end_value)
+ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_id,
+												  StrategyNumber start_strategy, int64 start_value,
+												  StrategyNumber end_strategy, int64 end_value)
 {
 	ChunkStatInfo info = {
 		.job_id = job_id,

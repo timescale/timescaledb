@@ -96,3 +96,75 @@ FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'test_drop_chunks_table';
+
+------------------------------
+-- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks 
+-- (see issue https://github.com/timescale/timescaledb/issues/1810).
+-- More tests for reorder policy can be found at bgw_reorder_drop_chunks.sql
+------------------------------
+
+CREATE TABLE test_reorder_chunks_table(time int not null, chunk_id int);
+CREATE INDEX test_reorder_chunks_table_time_idx ON test_reorder_chunks_table(time);
+SELECT create_hypertable('test_reorder_chunks_table', 'time', chunk_time_interval => 1);
+
+-- These inserts should create 6 different chunks
+INSERT INTO test_reorder_chunks_table VALUES (1, 1);
+INSERT INTO test_reorder_chunks_table VALUES (2, 2);
+INSERT INTO test_reorder_chunks_table VALUES (3, 3);
+INSERT INTO test_reorder_chunks_table VALUES (4, 4);
+INSERT INTO test_reorder_chunks_table VALUES (5, 5);
+INSERT INTO test_reorder_chunks_table VALUES (6, 6);
+
+-- Enable compression
+ALTER TABLE test_reorder_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+
+-- Compress 2 chunks:
+SELECT compress_chunk(show_chunks('test_reorder_chunks_table', newer_than => 2, older_than => 4));
+
+-- make sure we have total of 6 chunks:
+SELECT count(*) as count_chunks_uncompressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'test_reorder_chunks_table';
+
+-- and 2 compressed ones:
+SELECT count(*) as count_chunks_compressed
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
+WHERE uncomp_hyper.table_name like 'test_reorder_chunks_table';
+
+-- enable reorder policy
+SELECT add_reorder_policy('test_reorder_chunks_table', 'test_reorder_chunks_table_time_idx') AS reorder_job_id \gset
+
+-- nothing is clustered yet
+SELECT indexrelid::regclass, indisclustered
+    FROM pg_index
+    WHERE indisclustered = true ORDER BY 1;
+
+-- run first time
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:reorder_job_id;
+
+-- first chunk reordered
+SELECT indexrelid::regclass, indisclustered
+    FROM pg_index
+    WHERE indisclustered = true ORDER BY 1;
+
+-- second call to scheduler
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:reorder_job_id;
+
+-- two chunks clustered, skips the compressed chunks
+SELECT indexrelid::regclass, indisclustered
+    FROM pg_index
+    WHERE indisclustered = true ORDER BY 1;
+
+
+
