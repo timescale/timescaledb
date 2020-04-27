@@ -2697,6 +2697,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support logical replication")));
+			break;
 		case AT_EnableRule:
 		case AT_EnableAlwaysRule:
 		case AT_EnableReplicaRule:
@@ -2975,13 +2976,11 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	inpdef = (List *) cmd->def;
 	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
 	if (compress_options)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression options cannot be reset")));
-	}
-	else
-		return false;
+
+	return false;
 }
 
 static bool
