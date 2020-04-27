@@ -13,6 +13,56 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
+\ir include/views.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- This file contains views for testing and are not part of the public
+-- API.
+CREATE SCHEMA IF NOT EXISTS test_info;
+GRANT USAGE ON SCHEMA test_info TO PUBLIC;
+CREATE VIEW test_info.chunks_base AS
+SELECT format('%1$I.%2$I', ch.schema_name, ch.table_name)::regclass AS chunk_oid
+     , format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass AS hypertable_oid
+     , sl.range_start
+     , sl.range_end
+     , di.column_type
+  FROM _timescaledb_catalog.chunk ch
+  JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+  JOIN _timescaledb_catalog.chunk_constraint cc ON chunk_id = ch.id
+  JOIN _timescaledb_catalog.dimension_slice sl ON cc.dimension_slice_id = sl.id
+  JOIN _timescaledb_catalog.dimension di ON sl.dimension_id = di.id;
+-- View to provide some information about chunks
+-- chunk_id     Chunk ID
+-- hypertable   Hypertable that the chunk belongs to
+-- time_range   Time constraint range for chunk
+CREATE VIEW test_info.chunks_tstz AS
+  SELECT chunk_oid, hypertable_oid,
+         tstzrange(CASE
+		   WHEN range_start = -9223372036854775808 THEN NULL
+		   ELSE TIMESTAMPTZ 'epoch' + range_start * INTERVAL '1 microsecond'
+		   END,
+		   CASE WHEN range_end = 9223372036854775807 THEN NULL
+		   ELSE TIMESTAMPTZ 'epoch' + range_end * INTERVAL '1 microsecond'
+		   END) AS time_range
+    FROM test_info.chunks_base
+   WHERE column_type = 'TIMESTAMPTZ'::regtype;
+-- View to provide some information about chunks
+-- chunk_oid      Chunk ID
+-- hypertable_oid Hypertable that the chunk belongs to
+-- time_range     Time constraint range for chunk
+CREATE VIEW test_info.chunks_ts AS
+  SELECT chunk_oid, hypertable_oid,
+         tsrange(CASE
+		 WHEN range_start = -9223372036854775808 THEN NULL
+		 ELSE TIMESTAMP 'epoch' + range_start * INTERVAL '1 microsecond'
+		 END,
+		 CASE WHEN range_end = 9223372036854775807 THEN NULL
+		 ELSE TIMESTAMP 'epoch' + range_end * INTERVAL '1 microsecond'
+		 END) AS time_range
+    FROM test_info.chunks_base
+   WHERE column_type = 'TIMESTAMP'::regtype;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA test_info TO PUBLIC;
 GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE SCHEMA "ChunkSchema";
@@ -295,7 +345,7 @@ SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'));
+ FROM show_chunks('disttable')) ORDER BY relname;
         relname        | reltuples | relpages | relallvisible 
 -----------------------+-----------+----------+---------------
  _dist_hyper_2_3_chunk |         0 |        0 |             0
@@ -424,10 +474,58 @@ ORDER BY 1,2,3;
  _timescaledb_internal | _dist_hyper_2_5_chunk | time    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
 (12 rows)
 
+RESET ROLE;
+-- Test drop_chunks functions
+CREATE TABLE conditions(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+SELECT * FROM create_hypertable('conditions', 'time',
+       chunk_time_interval => INTERVAL '1 day');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | conditions | t
+(1 row)
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series(TIMESTAMPTZ '2018-01-01 05:00:00Z',
+                     TIMESTAMPTZ '2018-04-01 05:00:00Z', '20 hours') AS time;
+SELECT COUNT(*) FROM test_info.chunks_tstz WHERE hypertable_oid = 'conditions'::regclass;
+ count 
+-------
+    91
+(1 row)
+
+-- Checking that we do not have any duplicates. If so, the query below
+-- will fail with strange errors.
+SELECT chunk_oid, COUNT(*)
+  FROM test_info.chunks_tstz
+ WHERE time_range << TIMESTAMPTZ '2018-02-01 05:00:00Z'
+ GROUP BY chunk_oid HAVING COUNT(*) > 1;
+ chunk_oid | count 
+-----------+-------
+(0 rows)
+
+SELECT COUNT(drop_chunk(chunk_oid))
+  FROM test_info.chunks_tstz
+ WHERE hypertable_oid = 'conditions'::regclass
+   AND time_range << TIMESTAMPTZ '2018-02-01 05:00:00Z' ;
+ count 
+-------
+    31
+(1 row)
+
+SELECT COUNT(*) FROM test_info.chunks_tstz WHERE hypertable_oid = 'conditions'::regclass;
+ count 
+-------
+    60
+(1 row)
+
 -- Check underlying pg_statistics table (looking at all columns except
 -- starelid, which changes depending on how many tests are run before
 -- this)
-RESET ROLE;
 SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
 FROM pg_statistic st, show_chunks('disttable') ch

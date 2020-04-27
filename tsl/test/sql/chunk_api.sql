@@ -4,6 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/remote_exec.sql
+\ir include/views.sql
 GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -149,7 +150,7 @@ SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'));
+ FROM show_chunks('disttable')) ORDER BY relname;
 SELECT * FROM pg_stats WHERE tablename IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
@@ -198,10 +199,41 @@ SELECT * FROM pg_stats WHERE tablename IN
  FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
 
+RESET ROLE;
+
+-- Test drop_chunks functions
+CREATE TABLE conditions(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+SELECT * FROM create_hypertable('conditions', 'time',
+       chunk_time_interval => INTERVAL '1 day');
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series(TIMESTAMPTZ '2018-01-01 05:00:00Z',
+                     TIMESTAMPTZ '2018-04-01 05:00:00Z', '20 hours') AS time;
+
+SELECT COUNT(*) FROM test_info.chunks_tstz WHERE hypertable_oid = 'conditions'::regclass;
+
+-- Checking that we do not have any duplicates. If so, the query below
+-- will fail with strange errors.
+SELECT chunk_oid, COUNT(*)
+  FROM test_info.chunks_tstz
+ WHERE time_range << TIMESTAMPTZ '2018-02-01 05:00:00Z'
+ GROUP BY chunk_oid HAVING COUNT(*) > 1;
+
+SELECT COUNT(drop_chunk(chunk_oid))
+  FROM test_info.chunks_tstz
+ WHERE hypertable_oid = 'conditions'::regclass
+   AND time_range << TIMESTAMPTZ '2018-02-01 05:00:00Z' ;
+
+SELECT COUNT(*) FROM test_info.chunks_tstz WHERE hypertable_oid = 'conditions'::regclass;
+
 -- Check underlying pg_statistics table (looking at all columns except
 -- starelid, which changes depending on how many tests are run before
 -- this)
-RESET ROLE;
 SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
 stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
 FROM pg_statistic st, show_chunks('disttable') ch

@@ -51,6 +51,7 @@ set(SOURCE_FILES
   restoring.sql
   timescaledb_fdw.sql
   remote_txn.sql
+  operators.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

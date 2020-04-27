@@ -65,6 +65,7 @@
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_pg_chunk_drop);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_dml_blocker);
@@ -3237,6 +3238,18 @@ lock_referenced_tables(Oid table_relid)
 /* Continuous agg materialization hypertables can be dropped
  * only if a user explicitly specifies the table name
  */
+Datum
+ts_pg_chunk_drop(PG_FUNCTION_ARGS)
+{
+	const int32 chunk_id = PG_GETARG_OID(0);
+	Chunk *const chunk = ts_chunk_get_by_relid(chunk_id, true);
+	char *chunk_name;
+
+	ts_chunk_drop(chunk, DROP_RESTRICT, DEBUG1);
+	chunk_name = psprintf("%s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
+	PG_RETURN_TEXT_P(chunk_name);
+}
+
 List *
 ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type,

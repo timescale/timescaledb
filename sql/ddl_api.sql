@@ -116,6 +116,11 @@ CREATE OR REPLACE FUNCTION show_chunks(
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 
+-- Drop an individual chunk by chunk identifier
+CREATE OR REPLACE FUNCTION drop_chunk(chunk_id REGCLASS)
+RETURNS TEXT AS '@MODULE_PATHNAME@', 'ts_pg_chunk_drop'
+LANGUAGE C VOLATILE;
+
 -- Add a dimension (of partitioning) to a hypertable
 --
 -- main_table - OID of the table to add a dimension to

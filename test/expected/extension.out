@@ -23,6 +23,7 @@ ORDER BY proname;
  alter_job_schedule
  attach_data_node
  attach_tablespace
+ before_ts_rng
  block_new_chunks
  chunk_relation_size
  chunk_relation_size_pretty
@@ -36,6 +37,7 @@ ORDER BY proname;
  detach_tablespace
  detach_tablespaces
  distributed_exec
+ drop_chunk
  drop_chunks
  first
  get_telemetry_report
@@ -67,5 +69,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(53 rows)
+(55 rows)
 
