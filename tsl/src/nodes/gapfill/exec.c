@@ -487,6 +487,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 					"clause",
 					boundary == GAPFILL_START ? "start" : "finish"),
 			 errhint("You can either pass start and finish as arguments or in the WHERE clause")));
+	pg_unreachable();
 }
 
 static Const *

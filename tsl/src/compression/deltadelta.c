@@ -239,6 +239,8 @@ delta_delta_compressor_for_type(Oid element_type)
 		default:
 			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
 	}
+
+	pg_unreachable();
 }
 
 Datum
@@ -509,6 +511,8 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 		default:
 			elog(ERROR, "invalid type requested from deltadelta decompression %d", element_type);
 	}
+
+	pg_unreachable();
 }
 
 static DecompressResultInternal

@@ -369,7 +369,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 		.limit = limit,
 		.tuple_found = on_tuple_found,
 		.lockmode = lock,
-        .filter = filter,
+		.filter = filter,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = mctx,
 		.tuplock = {
@@ -823,20 +823,26 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 					 errmsg("hypertable \"%s\" has already been updated by another transaction",
 							get_rel_name(table_relid)),
 					 errhint("Retry the operation again")));
+			pg_unreachable();
+			return false;
 		case TM_BeingModified:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("hypertable \"%s\" is being updated by another transaction",
 							get_rel_name(table_relid)),
 					 errhint("Retry the operation again")));
+			pg_unreachable();
+			return false;
 		case TM_WouldBlock:
 			/* Locking would block. Let caller decide what to do */
 			return false;
 		case TM_Invisible:
 			elog(ERROR, "attempted to lock invisible tuple");
+			pg_unreachable();
 			return false;
 		default:
 			elog(ERROR, "unexpected tuple lock status");
+			pg_unreachable();
 			return false;
 	}
 }

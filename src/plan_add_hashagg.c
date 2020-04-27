@@ -18,6 +18,7 @@
 #include "compat-msvc-exit.h"
 
 #include "plan_add_hashagg.h"
+#include "import/planner.h"
 #include "utils.h"
 #include "guc.h"
 #include "estimate.h"

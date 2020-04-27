@@ -499,7 +499,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	Relation relRelation;
 	HeapTuple reltup;
 	Form_pg_class relform;
-	TupleDesc oldTupDesc;
+	TupleDesc PG_USED_FOR_ASSERTS_ONLY oldTupDesc;
 	TupleDesc newTupDesc;
 	int natts;
 	Datum *values;

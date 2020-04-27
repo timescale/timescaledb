@@ -150,6 +150,7 @@ ts_bgw_job_owner(BgwJob *job)
 			break;
 	}
 	elog(ERROR, "unknown job type \"%s\" in finding owner", NameStr(job->fd.job_type));
+	pg_unreachable();
 }
 
 BackgroundWorkerHandle *
