@@ -571,6 +571,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *compress_chunk;
+	int namelen;
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -583,13 +584,20 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
 	compress_chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
-	snprintf(compress_chunk->fd.table_name.data,
-			 NAMEDATALEN,
-			 "compress%s_%d_chunk",
-			 NameStr(compress_ht->fd.associated_table_prefix),
-			 compress_chunk->fd.id);
 
-	;
+	/* Fail if we overflow the name limit */
+	namelen = snprintf(NameStr(compress_chunk->fd.table_name),
+					   NAMEDATALEN,
+					   "compress%s_%d_chunk",
+					   NameStr(compress_ht->fd.associated_table_prefix),
+					   compress_chunk->fd.id);
+
+	if (namelen >= NAMEDATALEN)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid name \"%s\" for compressed chunk",
+						NameStr(compress_chunk->fd.table_name)),
+				 errdetail("The associated table prefix is too long.")));
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);

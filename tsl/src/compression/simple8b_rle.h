@@ -786,6 +786,8 @@ simple8brle_block_get_element(Simple8bRleBlock block, uint32 position_in_value)
 		compressed_value &= simple8brle_selector_get_bitmask(block.selector);
 		return compressed_value;
 	}
+
+	pg_unreachable();
 }
 
 /***************************

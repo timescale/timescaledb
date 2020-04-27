@@ -6,14 +6,16 @@ set(_install_checks)
 # Testing support
 find_program(PG_REGRESS pg_regress
   HINTS
+  "${PG_BINDIR}"
   "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
 
 find_program(PG_ISOLATION_REGRESS
   NAMES pg_isolation_regress
   HINTS
-  ${BINDIR}
+  ${PG_BINDIR}
   ${PG_PKGLIBDIR}/pgxs/src/test/isolation
-  ${PG_SOURCE_DIR}/src/test/isolation)
+  ${PG_SOURCE_DIR}/src/test/isolation
+  ${BINDIR})
 
 include(test-defs.cmake)
 
