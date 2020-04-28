@@ -4,6 +4,17 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## To be released
+
+**Major Features**
+
+**Bugfixes**
+* #1850 Fix scheduler failure due to bad next_start_time for jobs
+* #1861 Fix qual pushodwn for compressed hypertables where quals have casts
+
+**Thanks**
+* @frostwind for reporting issue with casts in where clauses on compressed hypertables
+
 ## 1.7.0 (2020-04-16)
 
 This release adds major new features and bugfixes since the 1.6.1 release.

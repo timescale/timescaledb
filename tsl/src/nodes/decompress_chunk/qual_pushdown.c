@@ -200,6 +200,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	TypeCacheEntry *tce;
 	int strategy;
 	FormData_hypertable_compression *compression_info;
+	Oid expr_type_id;
 
 	if (list_length(expr_args) != 2)
 		return NULL;
@@ -248,7 +249,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 
 	if (expr == NULL)
 		return NULL;
-
+	expr_type_id = exprType((Node *) expr);
 	switch (strategy)
 	{
 		case BTEqualStrategyNumber:
@@ -256,11 +257,11 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			/* var = expr implies min < expr and max > expr */
 			Oid opno_le = get_opfamily_member(tce->btree_opf,
 											  tce->type_id,
-											  tce->type_id,
+											  expr_type_id,
 											  BTLessEqualStrategyNumber);
 			Oid opno_ge = get_opfamily_member(tce->btree_opf,
 											  tce->type_id,
-											  tce->type_id,
+											  expr_type_id,
 											  BTGreaterEqualStrategyNumber);
 
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
@@ -289,7 +290,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			/* var < expr  implies min < expr */
 			{
 				Oid opno =
-					get_opfamily_member(tce->btree_opf, tce->type_id, tce->type_id, strategy);
+					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
 
 				if (!OidIsValid(opno))
 					return NULL;
@@ -311,7 +312,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			/* var > expr  implies max > expr */
 			{
 				Oid opno =
-					get_opfamily_member(tce->btree_opf, tce->type_id, tce->type_id, strategy);
+					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
 
 				if (!OidIsValid(opno))
 					return NULL;
