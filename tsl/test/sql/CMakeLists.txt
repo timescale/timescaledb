@@ -64,6 +64,7 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 
   list(APPEND TEST_TEMPLATES
     compression_permissions.sql.in
+    compression_qualpushdown.sql.in
   )
   if (CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_TEMPLATES
