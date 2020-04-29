@@ -11,11 +11,13 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #1850 Fix scheduler failure due to bad next_start_time for jobs
 * #1861 Fix qual pushodwn for compressed hypertables where quals have casts
+* #1868 Add support for WHERE, HAVING clauses with real time aggregates
 * #1875 Fix hypertable detection in subqueries
 
 **Thanks**
 * @frostwind for reporting issue with casts in where clauses on compressed hypertables
 * @fvannee for reporting an issue with hypertable detection in inlined SQL functions
+* @hgiasac for reporting missing where clause with real time aggregates
 
 ## 1.7.0 (2020-04-16)
 
