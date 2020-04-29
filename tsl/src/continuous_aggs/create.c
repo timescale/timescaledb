@@ -1500,7 +1500,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
-	result = makeWholeRowVar(rte, list_length(inp->final_userquery->rtable), 0, true);
+	result = makeWholeRowVar(rte, 1, 0, true);
 	result->location = 0;
 	markVarForSelectPriv(NULL, result, rte);
 	/* 2. Fixup targetlist with the correct rel information */
@@ -1596,6 +1596,25 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  * Notes: ViewStmt->query is the raw parse tree
  * panquery is the output of running parse_anlayze( ViewStmt->query)
  *               so don't recreate invalidation trigger.
+
+ * Since 1.7, we support real time aggregation.
+ * If real time aggregation is off i.e. materialized only, the mcagg vew is as described in Step 2.
+ * If it is turned on
+ * we build a union query that selects from the internal mat view and the raw hypertable
+ *     (see build_union_query for details)
+ * CREATE VIEW mcagg
+ * as
+ * SELECT * from
+ *        ( SELECT a, finalize(col1) + finalize(col2) from ts_internal_mcagg_view
+ *                 ---> query from Step 2 with additional where clause
+ *          WHERE timecol < materialization threshold
+ *          group by <internal-columns> , a , timebucket(a);
+ *          UNION ALL
+ *          SELECT a, min(b)+max(d) from foo ---> original view stmt
+ *                              ----> with additional where clause
+ *          WHERE timecol >= materialization threshold
+ *          GROUP BY a, time_bucket(a)
+ *        )
  */
 static void
 cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
@@ -1779,14 +1798,6 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 	Query *user_query = get_view_query(user_view_rel);
 	relation_close(user_view_rel, AccessShareLock);
 
-	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
-
-	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
-	Query *direct_query = copyObject(get_view_query(direct_view_rel));
-
-	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
-
-	relation_close(direct_view_rel, AccessShareLock);
 	FinalizeQueryInfo fqi;
 	MatTableColumnInfo mattblinfo;
 	ObjectAddress mataddress = {
@@ -1794,20 +1805,26 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 		.objectId = mat_ht->main_table_relid,
 	};
 
+	Oid direct_view_oid = relation_oid(agg->data.direct_view_schema, agg->data.direct_view_name);
+	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
+	Query *direct_query = copyObject(get_view_query(direct_view_rel));
+	List *rtable = direct_query->rtable;
+	/* When a view is created (StoreViewQuery), 2 dummy rtable entries corresponding to "old" and
+	 * "new" are prepended to the rtable list. We remove these and adjust the varnos to recreate
+	 * the original user supplied direct query
+	 */
+	Assert(list_length(rtable) == 3);
+	rtable = list_delete_first(rtable);
+	direct_query->rtable = list_delete_first(rtable);
+	OffsetVarNodes((Node *) direct_query, -2, 0);
+	relation_close(direct_view_rel, AccessShareLock);
+	Assert(list_length(direct_query->rtable) == 1);
+	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
+
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(direct_query->groupClause));
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
 	Query *view_query = finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress);
-
-	/* adjust varnos in targetlist */
-	Assert(list_length(view_query->rtable) > 1);
-	foreach (lc1, view_query->targetList)
-	{
-		ChangeVarNodes((Node *) lfirst_node(TargetEntry, lc1),
-					   1,
-					   list_length(view_query->rtable),
-					   0);
-	}
 
 	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
 		view_query = build_union_query(&timebucket_exprinfo, &mattblinfo, view_query, direct_query);
@@ -2038,6 +2055,14 @@ make_subquery_rte(Query *subquery, const char *aliasname)
  *
  * q1 is the query on the materialization hypertable with the finalize call
  * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ * returns a query as
+ * SELECT * from (  SELECT * from q1 where <coale_qual>
+ *                  UNION ALL
+ *                  SELECT * from q2 where existing_qual and <coale_qual>
+ * where coale_qual is: time < ----> (or >= )
+ * COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark( <htid>)),
+ * '-infinity'::timestamp with time zone)
+ * see build_union_quals for COALESCE clause
  */
 static Query *
 build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Query *q1, Query *q2)
@@ -2049,6 +2074,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Qu
 	List *tlist = NIL;
 	int varno;
 	AttrNumber attno;
+	Node *q2_quals = NULL;
 
 	Assert(list_length(q1->targetList) == list_length(q2->targetList));
 
@@ -2064,11 +2090,12 @@ build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Qu
 	attno =
 		get_attnum(tbinfo->htoid, get_attname_compat(tbinfo->htoid, tbinfo->htpartcolno, false));
 	varno = list_length(q2->rtable);
-	q2->jointree->quals = build_union_query_quals(tbinfo->htid,
-												  tbinfo->htpartcoltype,
-												  get_negator(tce->lt_opr),
-												  varno,
-												  attno);
+	q2_quals = build_union_query_quals(tbinfo->htid,
+									   tbinfo->htpartcoltype,
+									   get_negator(tce->lt_opr),
+									   varno,
+									   attno);
+	q2->jointree->quals = make_and_qual(q2->jointree->quals, q2_quals);
 
 	Query *query = makeNode(Query);
 	SetOperationStmt *setop = makeNode(SetOperationStmt);

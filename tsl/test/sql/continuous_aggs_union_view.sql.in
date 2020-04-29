@@ -183,3 +183,105 @@ SELECT _timescaledb_internal.cagg_watermark(5);
 -- result should have 4 rows
 SELECT * FROM boundary_view ORDER BY time_bucket;
 
+---- TEST union view with WHERE, GROUP BY and HAVING clause ----
+create table ht_intdata (a integer, b integer, c integer);
+select table_name FROM create_hypertable('ht_intdata', 'a', chunk_time_interval=> 10);
+
+INSERT into ht_intdata values( 3 , 16 , 20);
+INSERT into ht_intdata values( 1 , 10 , 20);
+INSERT into ht_intdata values( 1 , 11 , 20);
+INSERT into ht_intdata values( 1 , 12 , 20);
+INSERT into ht_intdata values( 1 , 13 , 20);
+INSERT into ht_intdata values( 1 , 14 , 20);
+INSERT into ht_intdata values( 2 , 14 , 20);
+INSERT into ht_intdata values( 2 , 15 , 20);
+INSERT into ht_intdata values( 2 , 16 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 20 , 26 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+
+CREATE OR REPLACE FUNCTION integer_now_ht_intdata() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM ht_intdata $$;
+SELECT set_integer_now_func('ht_intdata', 'integer_now_ht_intdata');
+
+
+CREATE OR REPLACE VIEW mat_m1( a, countb, sumbc, spreadcb, avgc )
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 10)
+AS
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50;
+
+REFRESH MATERIALIZED VIEW mat_m1;
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+
+--results from real time cont.agg and direct query should match
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+
+SELECT * FROM mat_m1 ORDER BY 1;
+
+--verify that materialized only doesn't have rows with a> 20
+ALTER VIEW mat_m1 SET(timescaledb.materialized_only = true);
+SELECT * FROM mat_m1 ORDER BY 1;
+
+--again revert the view to include real time aggregates
+ALTER VIEW mat_m1 SET(timescaledb.materialized_only = false);
+INSERT into ht_intdata values( 31 , 15 , 30);
+INSERT into ht_intdata values( 31 , 14 , 70);
+--cagg was not refreshed, should include all rows
+SELECT * FROM mat_m1 ORDER BY 1;
+REFRESH MATERIALIZED VIEW mat_m1;
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+SELECT * FROM mat_m1 ORDER BY 1;
+--the selects against mat_m1 before and after refresh should match this query
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+
+DROP VIEW mat_m1 cascade;
+
+--- TEST union view with multiple WHERE and HAVING clauses
+CREATE VIEW mat_m1
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 10,
+      timescaledb.max_interval_per_job = 100)
+AS
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12 ;
+
+INSERT into ht_intdata values( 42 , 15 , 80);
+INSERT into ht_intdata values( 42 , 15 , 18);
+INSERT into ht_intdata values( 41 , 18 , 21);
+
+REFRESH MATERIALIZED VIEW mat_m1;
+
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+
+--view and direct query should return same results
+SELECT * from mat_m1 ORDER BY 1;
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12
+ORDER by 1; 
+
+-- plan output
+:PREFIX SELECT * FROM mat_m1 ORDER BY 1;

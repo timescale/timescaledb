@@ -436,3 +436,196 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
           40 | 400
 (4 rows)
 
+---- TEST union view with WHERE, GROUP BY and HAVING clause ----
+create table ht_intdata (a integer, b integer, c integer);
+select table_name FROM create_hypertable('ht_intdata', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ ht_intdata
+(1 row)
+
+INSERT into ht_intdata values( 3 , 16 , 20);
+INSERT into ht_intdata values( 1 , 10 , 20);
+INSERT into ht_intdata values( 1 , 11 , 20);
+INSERT into ht_intdata values( 1 , 12 , 20);
+INSERT into ht_intdata values( 1 , 13 , 20);
+INSERT into ht_intdata values( 1 , 14 , 20);
+INSERT into ht_intdata values( 2 , 14 , 20);
+INSERT into ht_intdata values( 2 , 15 , 20);
+INSERT into ht_intdata values( 2 , 16 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 20 , 26 , 20);
+INSERT into ht_intdata values( 20 , 16 , 20);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+INSERT into ht_intdata values( 21 , 15 , 30);
+CREATE OR REPLACE FUNCTION integer_now_ht_intdata() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM ht_intdata $$;
+SELECT set_integer_now_func('ht_intdata', 'integer_now_ht_intdata');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE OR REPLACE VIEW mat_m1( a, countb, sumbc, spreadcb, avgc )
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 10)
+AS
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50;
+REFRESH MATERIALIZED VIEW mat_m1;
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+ view_name | completed_threshold 
+-----------+---------------------
+ mat_m1    | 11
+(1 row)
+
+--results from real time cont.agg and direct query should match
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+ time_bucket | count | sum | ?column? | avg 
+-------------+-------+-----+----------+-----
+           1 |     5 | 160 |       10 |  20
+          21 |     3 | 135 |       15 |  30
+(2 rows)
+
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+(2 rows)
+
+--verify that materialized only doesn't have rows with a> 20
+ALTER VIEW mat_m1 SET(timescaledb.materialized_only = true);
+SELECT * FROM mat_m1 ORDER BY 1;
+ a | countb | sumbc | spreadcb | avgc 
+---+--------+-------+----------+------
+ 1 |      5 |   160 |       10 |   20
+(1 row)
+
+--again revert the view to include real time aggregates
+ALTER VIEW mat_m1 SET(timescaledb.materialized_only = false);
+INSERT into ht_intdata values( 31 , 15 , 30);
+INSERT into ht_intdata values( 31 , 14 , 70);
+--cagg was not refreshed, should include all rows
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+ 31 |      2 |   129 |       56 |   50
+(3 rows)
+
+REFRESH MATERIALIZED VIEW mat_m1;
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+ view_name | completed_threshold 
+-----------+---------------------
+ mat_m1    | 21
+(1 row)
+
+SELECT * FROM mat_m1 ORDER BY 1;
+ a  | countb | sumbc | spreadcb | avgc 
+----+--------+-------+----------+------
+  1 |      5 |   160 |       10 |   20
+ 21 |      3 |   135 |       15 |   30
+ 31 |      2 |   129 |       56 |   50
+(3 rows)
+
+--the selects against mat_m1 before and after refresh should match this query
+SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
+FROM ht_intdata
+WHERE b < 16
+GROUP BY time_bucket(1, a)
+HAVING sum(c) > 50
+ORDER BY 1;
+ time_bucket | count | sum | ?column? | avg 
+-------------+-------+-----+----------+-----
+           1 |     5 | 160 |       10 |  20
+          21 |     3 | 135 |       15 |  30
+          31 |     2 | 129 |       56 |  50
+(3 rows)
+
+DROP VIEW mat_m1 cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_12_chunk
+--- TEST union view with multiple WHERE and HAVING clauses
+CREATE VIEW mat_m1
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 10,
+      timescaledb.max_interval_per_job = 100)
+AS
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12 ;
+INSERT into ht_intdata values( 42 , 15 , 80);
+INSERT into ht_intdata values( 42 , 15 , 18);
+INSERT into ht_intdata values( 41 , 18 , 21);
+REFRESH MATERIALIZED VIEW mat_m1;
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m1';
+ view_name | completed_threshold 
+-----------+---------------------
+ mat_m1    | 30
+(1 row)
+
+--view and direct query should return same results
+SELECT * from mat_m1 ORDER BY 1;
+ time_bucket | sum 
+-------------+-----
+          20 | 135
+          30 | 129
+          40 |  95
+(3 rows)
+
+SELECT time_bucket(5, a), sum(b+c)
+FROM ht_intdata
+WHERE b < 16 and c > 20
+GROUP BY time_bucket(5, a)
+HAVING sum(c) > 50 and avg(b)::int > 12
+ORDER by 1; 
+ time_bucket | sum 
+-------------+-----
+          20 | 135
+          30 | 129
+          40 |  95
+(3 rows)
+
+-- plan output
+:PREFIX SELECT * FROM mat_m1 ORDER BY 1;
+                                                                                                                                                                            QUERY PLAN                                                                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append (actual rows=3 loops=1)
+   Sort Key: _hyper_9_15_chunk.time_bucket
+   ->  GroupAggregate (actual rows=1 loops=1)
+         Group Key: _hyper_9_15_chunk.time_bucket
+         Filter: ((_timescaledb_internal.finalize_agg('sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _hyper_9_15_chunk.agg_0_3, NULL::bigint) > 50) AND ((_timescaledb_internal.finalize_agg('avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _hyper_9_15_chunk.agg_0_4, NULL::numeric))::integer > 12))
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_9_15_chunk.time_bucket
+               ->  Index Scan Backward using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
+                     Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark('7'::oid))::integer, '-2147483648'::integer))
+   ->  GroupAggregate (actual rows=2 loops=1)
+         Group Key: (time_bucket(5, ht_intdata.a))
+         Filter: ((sum(ht_intdata.c) > 50) AND ((avg(ht_intdata.b))::integer > 12))
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
+               Hypertable: ht_intdata
+               Chunks left after exclusion: 2
+               ->  Merge Append (actual rows=3 loops=1)
+                     Sort Key: (time_bucket(5, _hyper_7_13_chunk.a))
+                     ->  Index Scan Backward using _hyper_7_13_chunk_ht_intdata_a_idx on _hyper_7_13_chunk (actual rows=2 loops=1)
+                           Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark('7'::oid))::integer, '-2147483648'::integer))
+                           Filter: ((b < 16) AND (c > 20))
+                     ->  Index Scan Backward using _hyper_7_14_chunk_ht_intdata_a_idx on _hyper_7_14_chunk (actual rows=1 loops=1)
+                           Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark('7'::oid))::integer, '-2147483648'::integer))
+                           Filter: ((b < 16) AND (c > 20))
+                           Rows Removed by Filter: 2
+(24 rows)
+
