@@ -81,7 +81,7 @@ $BODY$
     _timescaledb_catalog.continuous_agg cagg
     LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold completed ON completed.materialization_id = cagg.mat_hypertable_id
   WHERE
-    cagg.raw_hypertable_id = $1;
+    cagg.mat_hypertable_id = $1;
 
 $BODY$ STABLE STRICT;
 

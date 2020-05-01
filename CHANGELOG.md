@@ -5,6 +5,7 @@
 accidentally triggering the load of a previous DB version.**
 
 ## To be released
+We deem it high priority for users with multiple continuous aggregates to update to this release.
 
 **Major Features**
 
@@ -13,6 +14,7 @@ accidentally triggering the load of a previous DB version.**
 * #1861 Fix qual pushdown for compressed hypertables where quals have casts
 * #1864 Fix issue with subplan selection in parallel ChunkAppend
 * #1868 Add support for WHERE, HAVING clauses with real time aggregates
+* #1869 Fix real time aggregate support for multiple continuous aggregates
 * #1875 Fix hypertable detection in subqueries
 
 **Thanks**

@@ -55,6 +55,15 @@ set(PRE_UPDATE_FILES
   updates/pre-update.sql
 )
 
+# The POST_UPDATE_FILES should be executed as the last part of
+# the update script. 
+# sets state for executing POST_UPDATE_FILES during ALTER EXTENSION
+set(UNSET_UPDATE_STRING  "set timescaledb.update_script_stage = ''\; " )
+set(POST_UPDATE_STRING  "set timescaledb.update_script_stage = 'post'\; " )
+set(POST_UPDATE_FILES
+  updates/post-update.sql
+)
+
 # These files represent the modifications that happen in each version,
 # excluding new objects or updates to functions. We use them to build
 # a path (update script) from every historical version to the current
@@ -127,6 +136,7 @@ endfunction()
 # Create versioned files (replacing MODULE_PATHNAME) in the build
 # directory of all our source files
 version_files("${PRE_UPDATE_FILES}" PRE_UPDATE_FILES_VERSIONED)
+version_files("${POST_UPDATE_FILES}" POST_UPDATE_FILES_VERSIONED)
 version_files("${PRE_INSTALL_SOURCE_FILES}" PRE_INSTALL_SOURCE_FILES_VERSIONED)
 version_files("${IMMUTABLE_API_SOURCE_FILES}" IMMUTABLE_API_SOURCE_FILES_VERSIONED)
 version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
@@ -191,10 +201,18 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
     message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
   endif ()
 
+  set(SCRATCH_FILE "scratch_file")
+  set(SCRATCH_FILE2 "scratch_file2")
   set(START_VERSION ${CMAKE_MATCH_1})
   set(END_VERSION ${CMAKE_MATCH_2})
   set(PRE_FILES ${PRE_UPDATE_FILES_VERSIONED})
-
+  set(POST_FILES_PROCESSED ${POST_UPDATE_FILES_VERSIONED}.processed)
+  file(WRITE  ${SCRATCH_FILE} ${POST_UPDATE_STRING})
+  file(WRITE  ${SCRATCH_FILE2} ${UNSET_UPDATE_STRING})
+  cat_files(
+  "${SCRATCH_FILE};${POST_UPDATE_FILES_VERSIONED};${SCRATCH_FILE2}"
+  ${POST_FILES_PROCESSED}
+)
   # Check for version-specific update code with fixes
   if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/updates/${START_VERSION}.sql)
     version_files("updates/${START_VERSION}.sql" ORIGIN_MOD_FILE)
@@ -212,9 +230,9 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   set(UPDATE_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/timescaledb--${START_VERSION}--${PROJECT_VERSION_MOD}.sql)
   list(APPEND UPDATE_SCRIPTS ${UPDATE_SCRIPT})
   if (CURR_MOD_FILES)
-    cat_files("${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+    cat_files("${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}" ${UPDATE_SCRIPT})
   else ()
-    cat_files("${PRE_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+    cat_files("${PRE_FILES};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}" ${UPDATE_SCRIPT})
   endif ()
 endforeach(transition_mod_file)
 
