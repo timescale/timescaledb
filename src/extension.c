@@ -30,6 +30,8 @@
 #include "extension_utils.c"
 #include "compat.h"
 
+#define TS_UPDATE_SCRIPT_CONFIG_VAR "timescaledb.update_script_stage"
+#define POST_UPDATE "post"
 static Oid extension_proxy_oid = InvalidOid;
 
 /*
@@ -281,6 +283,21 @@ ts_extension_is_loaded(void)
 			 * that, for example, the catalog does not go looking for things
 			 * that aren't yet there.
 			 */
+			if (extstate == EXTENSION_STATE_TRANSITIONING)
+			{
+				/* when we are updating the extension, we execute
+				 * scripts in post_update.sql after setting up the
+				 * the dependencies. At this stage, TS
+				 * specific functionality is permitted as we now have
+				 * all catalogs and functions in place
+				 */
+				const char *update_script_stage =
+					GetConfigOption(TS_UPDATE_SCRIPT_CONFIG_VAR, true, false);
+				if (update_script_stage &&
+					(strncmp(update_script_stage, POST_UPDATE, strlen(POST_UPDATE)) == 0) &&
+					(strlen(POST_UPDATE) == strlen(update_script_stage)))
+					return true;
+			}
 			return false;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);
