@@ -18,14 +18,14 @@ INSERT INTO continuous_agg_test VALUES
 -- TEST for multiple continuous aggs 
 --- invalidations are picked up by both caggs
 CREATE VIEW cagg_1( timed, cnt ) 
-WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2')
+WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.materialized_only=true )
 AS
     SELECT time_bucket( 2, timeval), COUNT(col1) 
     FROM continuous_agg_test
     GROUP BY 1;
 
 CREATE VIEW cagg_2( timed, grp, maxval) 
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2' )
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.materialized_only=true   )
 AS
     SELECT time_bucket(2, timeval), col1, max(col2) 
     FROM continuous_agg_test
@@ -41,7 +41,8 @@ SELECT time_bucket(2, timeval), COUNT(col1) as value
 FROM continuous_agg_test
 GROUP BY 1 order by 1;
 
--- check that cagg_2 not materialized 
+-- check that cagg_2 not materialized
+select view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats; 
 select * from cagg_2 order by 1,2;
 
 refresh materialized view cagg_2;
@@ -103,13 +104,13 @@ INSERT INTO continuous_agg_test VALUES
     (15, -4, 22), (16, -4, 23);
 
 CREATE VIEW cagg_1( timed, cnt ) 
-WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2')
+WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.materialized_only = true)
 AS
     SELECT time_bucket( 2, timeval), COUNT(col1) 
     FROM continuous_agg_test
     GROUP BY 1;
 CREATE VIEW cagg_2( timed, maxval) 
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2' )
+WITH ( timescaledb.continuous , timescaledb.refresh_lag = '2', timescaledb.materialized_only = true)
 AS
     SELECT time_bucket(2, timeval), max(col2) 
     FROM continuous_agg_test
@@ -147,7 +148,7 @@ select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_
 DROP VIEW cagg_1 cascade;
 DROP VIEW cagg_2 cascade;
 
---test the ignore_invalidation_older_than setting
+--TEST6 test the ignore_invalidation_older_than setting
 CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test_ignore_invalidation_older_than', 'timeval', chunk_time_interval=> 2);
 CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM continuous_agg_test_ignore_invalidation_older_than $$;
@@ -158,21 +159,21 @@ INSERT INTO continuous_agg_test_ignore_invalidation_older_than VALUES
 (10, - 4, 1), (11, - 3, 5), (12, -3, 7);
 
 CREATE VIEW cagg_iia1( timed, cnt )
-        WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 5 )
+        WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 5 , timescaledb.materialized_only=true)
 AS
 SELECT time_bucket( 2, timeval), COUNT(col1)
 FROM continuous_agg_test_ignore_invalidation_older_than
 GROUP BY 1;
 
 CREATE VIEW cagg_iia2( timed, maxval)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 10)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 10, timescaledb.materialized_only=true)
 AS
 SELECT time_bucket(2, timeval), max(col2)
 FROM continuous_agg_test_ignore_invalidation_older_than
 GROUP BY 1;
 
 CREATE VIEW cagg_iia3( timed, maxval)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 0)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 0, timescaledb.materialized_only=true)
 AS
 SELECT time_bucket(2, timeval), max(col2)
 FROM continuous_agg_test_ignore_invalidation_older_than
@@ -248,3 +249,64 @@ refresh materialized view cagg_iia3;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 
 select * from cagg_iia3 order by 1;
+
+----TEST7 multiple continuous aggregates with real time aggregates test----
+create table foo (a integer, b integer, c integer);
+select table_name FROM create_hypertable('foo', 'a', chunk_time_interval=> 10);
+
+INSERT into foo values( 1 , 10 , 20);
+INSERT into foo values( 1 , 11 , 20);
+INSERT into foo values( 1 , 12 , 20);
+INSERT into foo values( 1 , 13 , 20);
+INSERT into foo values( 1 , 14 , 20);
+INSERT into foo values( 5 , 14 , 20);
+INSERT into foo values( 5 , 15 , 20);
+INSERT into foo values( 5 , 16 , 20);
+INSERT into foo values( 20 , 16 , 20);
+INSERT into foo values( 20 , 26 , 20);
+INSERT into foo values( 20 , 16 , 20);
+INSERT into foo values( 21 , 15 , 30);
+INSERT into foo values( 21 , 15 , 30);
+INSERT into foo values( 21 , 15 , 30);
+INSERT into foo values( 45 , 14 , 70);
+
+CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM foo $$;
+SELECT set_integer_now_func('foo', 'integer_now_foo');
+
+CREATE OR REPLACE VIEW mat_m1( a, countb)
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 10, timescaledb.max_interval_per_job=100)
+AS
+SELECT time_bucket(10, a), count(*)
+FROM foo
+GROUP BY time_bucket(10, a);
+
+CREATE OR REPLACE VIEW mat_m2( a, countb)
+WITH (timescaledb.continuous, timescaledb.refresh_lag = 0, timescaledb.max_interval_per_job=100)
+AS
+SELECT time_bucket(5, a), count(*)
+FROM foo
+GROUP BY time_bucket(5, a);
+
+select view_name, materialized_only from timescaledb_information.continuous_aggregates
+WHERE view_name::text like 'mat_m%'
+order by view_name;
+
+REFRESH MATERIALIZED VIEW mat_m1;
+REFRESH MATERIALIZED VIEW mat_m2;
+
+SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text like 'mat_m%'
+ORDER BY 1;
+
+-- the results from the view should match the direct query 
+SELECT * from mat_m1 order by 1;
+SELECT time_bucket(5, a), count(*)
+FROM foo
+GROUP BY time_bucket(5, a)
+ORDER BY 1;
+
+SELECT * from mat_m2 order by 1;
+SELECT time_bucket(10, a), count(*)
+FROM foo
+GROUP BY time_bucket(10, a)
+ORDER BY 1;

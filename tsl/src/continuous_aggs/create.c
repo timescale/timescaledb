@@ -221,7 +221,7 @@ static Const *cagg_boundary_make_lower_bound(Oid type);
 static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 static Oid relation_oid(NameData schema, NameData name);
 static Query *build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo,
-								Query *q1, Query *q2);
+								Query *q1, Query *q2, int materialize_htid);
 
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
@@ -1687,7 +1687,11 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 		finalizequery_get_select_query(&finalqinfo, mattblinfo.matcollist, &mataddress);
 
 	if (!materialized_only)
-		final_selquery = build_union_query(origquery_ht, &mattblinfo, final_selquery, panquery);
+		final_selquery = build_union_query(origquery_ht,
+										   &mattblinfo,
+										   final_selquery,
+										   panquery,
+										   materialize_hypertable_id);
 
 	create_view_for_query(final_selquery, stmt->view);
 
@@ -1827,7 +1831,11 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 	Query *view_query = finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress);
 
 	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
-		view_query = build_union_query(&timebucket_exprinfo, &mattblinfo, view_query, direct_query);
+		view_query = build_union_query(&timebucket_exprinfo,
+									   &mattblinfo,
+									   view_query,
+									   direct_query,
+									   mat_ht->fd.id);
 
 	/*
 	 * adjust names in the targetlist of the updated view to match the view definition
@@ -2065,7 +2073,8 @@ make_subquery_rte(Query *subquery, const char *aliasname)
  * see build_union_quals for COALESCE clause
  */
 static Query *
-build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Query *q1, Query *q2)
+build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Query *q1, Query *q2,
+				  int materialize_htid)
 {
 	ListCell *lc1, *lc2;
 	List *col_types = NIL;
@@ -2086,11 +2095,11 @@ build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Qu
 	varno = list_length(q1->rtable);
 	attno = mattblinfo->matpartcolno + 1;
 	q1->jointree->quals =
-		build_union_query_quals(tbinfo->htid, tbinfo->htpartcoltype, tce->lt_opr, varno, attno);
+		build_union_query_quals(materialize_htid, tbinfo->htpartcoltype, tce->lt_opr, varno, attno);
 	attno =
 		get_attnum(tbinfo->htoid, get_attname_compat(tbinfo->htoid, tbinfo->htpartcolno, false));
 	varno = list_length(q2->rtable);
-	q2_quals = build_union_query_quals(tbinfo->htid,
+	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
 									   get_negator(tce->lt_opr),
 									   varno,

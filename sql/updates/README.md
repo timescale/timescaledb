@@ -45,6 +45,15 @@ to consider.
    an update file is the only way to ensure that upgrading users get
    the new function.
 
+Notes on post_update.sql
+   We use a special config var (timescaledb.update_script_stage )
+to notify that dependencies have been setup and now timescaledb 
+specific queries can be enabled. This is useful if we want to, 
+for example, modify objects that need timescaledb specific syntax as
+part of the extension update).
+The scripts in post_update.sql are executed as part of the `ALTER
+EXTENSION` stmt.
+
 Note that modfiles that contain no changes need not exist as a
 file. Transition modfiles must, however, be listed in the
 `CMakeLists.txt` file in the parent directory for an update script to

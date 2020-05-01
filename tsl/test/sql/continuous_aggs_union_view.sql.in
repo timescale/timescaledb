@@ -164,7 +164,7 @@ AS
 INSERT INTO boundary_test SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
 
 -- watermark should be NULL
-SELECT _timescaledb_internal.cagg_watermark(5);
+SELECT _timescaledb_internal.cagg_watermark(6);
 
 -- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
 :PREFIX SELECT * FROM boundary_view;
@@ -175,7 +175,7 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
 REFRESH MATERIALIZED VIEW boundary_view;
 
 -- watermark should be 30
-SELECT _timescaledb_internal.cagg_watermark(5);
+SELECT _timescaledb_internal.cagg_watermark(6);
 
 -- both sides of the UNION should return 2 rows
 :PREFIX SELECT * FROM boundary_view;
