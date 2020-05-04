@@ -49,7 +49,7 @@
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "server_dispatch.h"
-#include "remote/distributed_copy.h"
+#include "remote/dist_copy.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC

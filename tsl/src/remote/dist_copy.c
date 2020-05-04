@@ -14,7 +14,7 @@
 #include <libpq-fe.h>
 
 #include "compat.h"
-#include "distributed_copy.h"
+#include "dist_copy.h"
 #include "copy.h"
 #include "chunk_dispatch.h"
 #include "dimension.h"
