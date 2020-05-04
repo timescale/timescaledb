@@ -82,7 +82,7 @@ endif()
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
-    ddl_distributed.sql
+    dist_ddl.sql
     timescaledb_fdw.sql
   )
   list(APPEND TEST_FILES_DEBUG
