@@ -1,0 +1,26 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
+-- test hypertable classification when hypertable is not in cache
+-- https://github.com/timescale/timescaledb/issues/1832
+
+\set PREFIX 'EXPLAIN (costs off)'
+
+CREATE TABLE test (a int, time timestamptz NOT NULL);
+SELECT create_hypertable('public.test', 'time');
+INSERT INTO test SELECT i, current_date-10-i from generate_series(1,20) i;
+
+CREATE OR REPLACE FUNCTION test_f(_ts timestamptz)
+RETURNS SETOF test LANGUAGE SQL STABLE PARALLEL SAFE
+AS $f$
+   SELECT DISTINCT ON (a) * FROM test WHERE time >= _ts ORDER BY a, time DESC
+$f$;
+
+:PREFIX SELECT * FROM test_f(now());
+
+-- create new session
+\c
+
+-- plan output should be identical to previous session
+:PREFIX SELECT * FROM test_f(now());

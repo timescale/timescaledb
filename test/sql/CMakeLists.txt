@@ -27,6 +27,7 @@ set(TEST_FILES
   lateral.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
+  plan_hypertable_cache.sql
   plain.sql
   reindex.sql
   relocate_extension.sql
