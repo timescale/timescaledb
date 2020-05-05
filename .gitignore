@@ -22,3 +22,6 @@ typedef.list
 /.vs
 /compile_commands.json
 /.DS_Store
+
+/CMakeSettings.json
+/out/*
