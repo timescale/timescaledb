@@ -392,7 +392,11 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 	{
 		case RELOPT_BASEREL:
 			rte = planner_rt_fetch(rel->relid, root);
-			ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+			/*
+			 * to correctly classify relations in subqueries we cannot call get_hypertable
+			 * with CACHE_FLAG_NOCREATE flag because the rel might not be in cache yet
+			 */
+			ht = get_hypertable(rte->relid, rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
 			if (NULL != ht)
 				reltype = TS_REL_HYPERTABLE;
