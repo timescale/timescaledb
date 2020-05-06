@@ -796,6 +796,33 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	switch (classify_relation(root, rel, &ht))
 	{
 		case TS_REL_HYPERTABLE:
+		{
+#if PG12_GE
+			/* This only works for PG12 because for earlier versions the inheritance
+			 * expansion happens too early during the planning phase
+			 */
+			RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+			Query *query = root->parse;
+			/* Mark hypertable RTEs we'd like to expand ourselves.
+			 * Hypertables inside inlineable functions don't get marked during the query
+			 * preprocessing step. Therefore we do an extra try here. However, we need to
+			 * be careful for UPDATE/DELETE as Postgres (in at least version 12) plans them
+			 * in a complicated way (see planner.c:inheritance_planner). First, it runs the
+			 * UPDATE/DELETE through the planner as a simulated SELECT. It uses the results
+			 * of this fake planning to adapt its own UPDATE/DELETE plan. Then it's planned
+			 * a second time as a real UPDATE/DELETE, but with requiredPerms set to 0, as it
+			 * assumes permission checking has been done already during the first planner call.
+			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
+			 * conditions here that are checked during preprocess_query, as well as the
+			 * condition that rte->requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 */
+			if (!ts_guc_disable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
+				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
+				query->rowMarks == NIL && (rte->requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+			{
+				rte_mark_for_expansion(rte);
+			}
+#endif
 			ts_create_private_reloptinfo(rel);
 #if PG12_GE
 			/* in earlier versions this is done during expand_hypertable_inheritance() below */
@@ -810,6 +837,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			}
 #endif
 			break;
+		}
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
 		{
