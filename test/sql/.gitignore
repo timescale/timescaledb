@@ -14,6 +14,7 @@
 /plan_expand_hypertable-*.sql
 /plan_hashagg_optimized-*.sql
 /plan_hashagg-*.sql
+/plan_hypertable_cache-*.sql
 /plan_ordered_append-*.sql
 /query-*.sql
 /sort_optimization-*.sql

@@ -27,7 +27,6 @@ set(TEST_FILES
   lateral.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
-  plan_hypertable_cache.sql
   plain.sql
   reindex.sql
   relocate_extension.sql
@@ -129,6 +128,7 @@ if ((${PG_VERSION_MAJOR} EQUAL "12") OR
   list(APPEND TEST_FILES
     generated_columns.sql
     misc.sql
+    plan_hypertable_inline.sql
     tableam.sql
   )
 endif()
@@ -150,6 +150,7 @@ set(TEST_TEMPLATES
   plan_hashagg.sql.in
   # lateral plans are different across versions, explains run without analyze on 9.6
   plan_ordered_append.sql.in
+  plan_hypertable_cache.sql.in
   query.sql.in
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
