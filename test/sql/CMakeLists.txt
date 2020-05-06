@@ -34,7 +34,6 @@ set(TEST_FILES
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
-  plan_hypertable_cache.sql
   plan_ordered_append.sql
   reindex.sql
   relocate_extension.sql
@@ -107,6 +106,7 @@ if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
   list(APPEND TEST_FILES
     generated_columns.sql
     misc.sql
+    plan_hypertable_inline.sql
     tableam.sql
   )
 endif()
@@ -123,6 +123,7 @@ set(TEST_TEMPLATES
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
+  plan_hypertable_cache.sql.in
   query.sql.in
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
