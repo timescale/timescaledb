@@ -17,13 +17,6 @@ $BODY$
           d.interval_length IS NOT NULL
 $BODY$;
 
--- Make sure drop_chunks when there are no tables succeeds
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than => INTERVAL \'1 hour\')::NAME'
-\set QUERY2 'SELECT drop_chunks(INTERVAL \'1 hour\', verbose => true)::NAME'
-\set ECHO errors
-\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
-\set ECHO all
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test3(time bigint, temp float8, device_id text);
@@ -96,28 +89,33 @@ SELECT * FROM show_chunks('drop_chunk_test2');
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
 
 \set ON_ERROR_STOP 0
-SELECT drop_chunks();
-SELECT drop_chunks(2);
-SELECT drop_chunks(NULL::interval);
-SELECT drop_chunks(NULL::int);
-SELECT drop_chunks('haha', 'drop_chunk_test3');
-SELECT show_chunks('drop_chunk_test3', 'haha');
+SELECT drop_chunks('drop_chunk_test1');
+SELECT drop_chunks('drop_chunk_test1', older_than => 2);
+SELECT drop_chunks('drop_chunk_test1', older_than => NULL::interval);
+SELECT drop_chunks('drop_chunk_test1', older_than => NULL::int);
+SELECT show_chunks('drop_chunk_test1', 'haha');
 
 DROP VIEW dependent_view;
 
 -- should error because wrong time type
-SELECT drop_chunks(now(), 'drop_chunk_test3');
+SELECT drop_chunks('drop_chunk_test1', older_than => now());
 SELECT show_chunks('drop_chunk_test3', now());
 
 -- should error because of wrong relative order of time constraints
 SELECT show_chunks('drop_chunk_test1', older_than=>3, newer_than=>4);
+
+-- Should error because NULL was used for the table name.
+SELECT drop_chunks(NULL, older_than => 3);
+-- should error because there is no relation with that OID.
+SELECT drop_chunks(3533, older_than => 3);
 
 \set ON_ERROR_STOP 1
 
 --should always work regardless of time column types of hypertables
 SELECT show_chunks();
 
--- should work vecause so far all tables have time column type of bigint
+-- should work because so far all tables have time column type of
+-- bigint
 SELECT show_chunks(newer_than => 2);
 
 -- show created constraints and dimension slices for each chunk
@@ -144,12 +142,11 @@ ORDER BY c.id;
 -- Only one dimension slice deleted
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than => 2)::TEXT'
-\set QUERY2 'SELECT drop_chunks(older_than => 2)::TEXT'
-\set ECHO errors
-\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
-\set ECHO all
+-- We drop all chunks older than timestamp 2 in all hypertable. This
+-- is added only to avoid making the diff for this commit larger than
+-- necessary and make reviews easier.
+SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older_than => 2)
+  FROM _timescaledb_catalog.hypertable;
 
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -174,7 +171,7 @@ SELECT * FROM show_chunks('drop_chunk_test2');
 \dt "_timescaledb_internal"._hyper*
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than => 3)::NAME'
-\set QUERY2 'SELECT drop_chunks(3, \'drop_chunk_test1\')::NAME'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunk_test1\', older_than => 3)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -197,7 +194,7 @@ SELECT * FROM show_chunks('drop_chunk_test2');
 -- 2,147,483,647 is the largest int so this tests that BIGINTs work
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test3\', older_than => 2147483648)::NAME'
-\set QUERY2 'SELECT drop_chunks(2147483648, \'drop_chunk_test3\')::NAME'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunk_test3\', older_than => 2147483648)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -214,7 +211,7 @@ ORDER BY c.id;
 \dt "_timescaledb_internal"._hyper*
 \set ON_ERROR_STOP 0
 -- should error because no hypertable
-SELECT drop_chunks(5, 'drop_chunk_test4');
+SELECT drop_chunks('drop_chunk_test4', older_than => 5);
 SELECT show_chunks('drop_chunk_test4');
 SELECT show_chunks('drop_chunk_test4', 5);
 \set ON_ERROR_STOP 1
@@ -234,8 +231,8 @@ ORDER BY c.id;
 
 -- newer_than tests
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable=>\'drop_chunk_test1\', newer_than=>5)::NAME'
-\set QUERY2 'SELECT drop_chunks(table_name=>\'drop_chunk_test1\', newer_than=>5, verbose => true)::NAME'
+\set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', newer_than=>5)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunk_test1\', newer_than=>5, verbose => true)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -254,8 +251,8 @@ SELECT show_chunks('drop_chunk_test1');
 \dt "_timescaledb_internal"._hyper*
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable=>\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
-\set QUERY2 'SELECT drop_chunks(table_name=>\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
+\set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -272,12 +269,6 @@ ORDER BY c.id;
 -- the call of show_chunks should give same set of chunks as above
 SELECT show_chunks('drop_chunk_test1');
 
--- testing drop_chunks when only schema is specified.
-\set ON_ERROR_STOP 0
-SELECT drop_chunks(schema_name=>'public');
-SELECT drop_chunks(null::bigint, schema_name=>'public');
-\set ON_ERROR_STOP 1
-
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
@@ -287,21 +278,8 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public'
 ORDER BY c.id;
 
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than=>5, newer_than=>4)::NAME'
-\set QUERY2 'SELECT drop_chunks(5, schema_name=>\'public\', newer_than=>4)::NAME'
-\set ECHO errors
-\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
-\set ECHO all
-
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c
-INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
-INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
-INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public'
-ORDER BY c.id;
+SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older_than => 5, newer_than => 4)
+  FROM _timescaledb_catalog.hypertable WHERE schema_name = 'public';
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
@@ -322,20 +300,20 @@ BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
     SELECT show_chunks('drop_chunk_test_ts', now()::timestamp-interval '1 minute');
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(newer_than => interval \'1 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(newer_than => interval \'1 minute\', table_name => \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'6 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(older_than => interval \'6 minute\', table_name => \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => interval \'6 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', older_than => interval \'6 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(interval \'1 minute\', \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -346,7 +324,7 @@ BEGIN;
     SELECT show_chunks(hypertable => 'drop_chunk_test_tstz', older_than => now() - interval '1 minute');
 
     \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable => \'drop_chunk_test_tstz\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(interval \'1 minute\', \'drop_chunk_test_tstz\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -355,8 +333,8 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(newer_than => interval \'6 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(newer_than => interval \'6 minute\', table_name => \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -365,14 +343,14 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(interval \'1 minute\', \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', older_than => interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable => \'drop_chunk_test_tstz\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(interval \'1 minute\', \'drop_chunk_test_tstz\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_tstz\', older_than => interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', older_than => interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -381,14 +359,14 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(older_than => now()::timestamp-interval \'1 minute\', hypertable => \'drop_chunk_test_ts\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(now()::timestamp-interval \'1 minute\', \'drop_chunk_test_ts\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => now()::timestamp-interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', older_than => now()::timestamp-interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
-    \set QUERY1 'SELECT show_chunks(older_than => now()-interval \'1 minute\', hypertable => \'drop_chunk_test_tstz\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(now()-interval \'1 minute\', \'drop_chunk_test_tstz\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_tstz\', older_than => now()-interval \'1 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', older_than => now()-interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -399,13 +377,11 @@ ROLLBACK;
 SELECT show_chunks();
 
 \set ON_ERROR_STOP 0
-SELECT show_chunks(older_than=>4);
-SELECT drop_chunks(4);
 SELECT drop_chunks(interval '1 minute');
-SELECT drop_chunks(interval '1 minute', 'drop_chunk_test3');
-SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_ts');
-SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_tstz');
-SELECT drop_chunks(5, schema_name=>'public', newer_than=>4);
+SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
+SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
+SELECT drop_chunks('drop_chunk_test_tstz', now()::timestamp-interval '1 minute');
+SELECT drop_chunks('drop_chunk_test3', verbose => true);
 \set ON_ERROR_STOP 1
 
 \dt "_timescaledb_internal"._hyper*
@@ -418,8 +394,8 @@ INSERT INTO PUBLIC.drop_chunk_test_date VALUES(now()-INTERVAL '2 day', 1.0, 'dev
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 day\', hypertable => \'drop_chunk_test_date\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(interval \'1 day\', \'drop_chunk_test_date\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_date\', older_than => interval \'1 day\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_date\', older_than => interval \'1 day\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -428,8 +404,8 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(older_than => (now()-interval \'1 day\')::date, hypertable => \'drop_chunk_test_date\')::NAME'
-    \set QUERY2 'SELECT drop_chunks((now()-interval \'1 day\')::date, \'drop_chunk_test_date\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_date\', older_than => (now()-interval \'1 day\')::date)::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_date\', older_than => (now()-interval \'1 day\')::date)::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
@@ -478,8 +454,8 @@ SELECT show_chunks(hypertable => 'test_weird_type', older_than=>'2019/06/06 4:00
 SELECT show_chunks(hypertable => 'test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than => \'2019/06/06 5:00+0\'::TIMESTAMPTZ, hypertable => \'test_weird_type\')::NAME'
-\set QUERY2 'SELECT drop_chunks(\'2019/06/06 5:00+0\'::TIMESTAMPTZ, \'test_weird_type\')::NAME'
+\set QUERY1 'SELECT show_chunks(\'test_weird_type\', older_than => \'2019/06/06 5:00+0\'::TIMESTAMPTZ)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'test_weird_type\', older_than => \'2019/06/06 5:00+0\'::TIMESTAMPTZ)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -488,8 +464,8 @@ SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 4:00+0'::TIMESTAMP
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than => \'2019/06/06 6:00+0\'::TIMESTAMPTZ, hypertable => \'test_weird_type\')::NAME'
-\set QUERY2 'SELECT drop_chunks(\'2019/06/06 6:00+0\'::TIMESTAMPTZ, \'test_weird_type\')::NAME'
+\set QUERY1 'SELECT show_chunks(\'test_weird_type\', older_than => \'2019/06/06 6:00+0\'::TIMESTAMPTZ)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'test_weird_type\', older_than => \'2019/06/06 6:00+0\'::TIMESTAMPTZ)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -514,8 +490,8 @@ SELECT show_chunks('test_weird_type_i', older_than=>5);
 SELECT show_chunks('test_weird_type_i', older_than=>10);
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than=>5, hypertable => \'test_weird_type_i\')::NAME'
-\set QUERY2 'SELECT drop_chunks(5, \'test_weird_type_i\')::NAME'
+\set QUERY1 'SELECT show_chunks(\'test_weird_type_i\', older_than=>5)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'test_weird_type_i\', older_than => 5)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -524,8 +500,8 @@ SELECT show_chunks('test_weird_type_i', older_than=>5);
 SELECT show_chunks('test_weird_type_i', older_than=>10);
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(older_than=>10, hypertable => \'test_weird_type_i\')::NAME'
-\set QUERY2 'SELECT drop_chunks(10, \'test_weird_type_i\')::NAME'
+\set QUERY1 'SELECT show_chunks(\'test_weird_type_i\', older_than=>10)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'test_weird_type_i\', older_than => 10)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -552,20 +528,19 @@ ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(table_name=>'drop_chunk_test1', older_than=>4, newer_than=>3);
-SELECT drop_chunks(2, verbose => true);
+SELECT drop_chunks('drop_chunk_test1', older_than=>4, newer_than=>3);
 
 --works with modified owner tables
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable=>\'drop_chunk_test2\', older_than=>4, newer_than=>3)::NAME'
-\set QUERY2 'SELECT drop_chunks(table_name=>\'drop_chunk_test2\', older_than=>4, newer_than=>3)::NAME'
+\set QUERY1 'SELECT show_chunks(\'drop_chunk_test2\', older_than=>4, newer_than=>3)::NAME'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunk_test2\', older_than=>4, newer_than=>3)::NAME'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
 
 \set VERBOSITY default
 --this fails because there are dependent objects
-SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100);
+SELECT drop_chunks('drop_chunk_test3', older_than=>100);
 \set VERBOSITY terse
 
 \c  :TEST_DBNAME :ROLE_SUPERUSER
@@ -597,14 +572,7 @@ INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
 set search_path to try_schema, test1, test2, test3, public;
 SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
 SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
-SELECT drop_chunks(table_name=>'drop_chunk_test_date', older_than=> '1 day'::interval);
-
---drop_chunks without schema_name and table_name
-INSERT INTO public.drop_chunk_test_date VALUES( '2020-02-11', 100, 'hello');
-INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-02-10', 100, 'hello');
-SELECT show_chunks(hypertable=>'public.drop_chunk_test_date', older_than=>'1 day'::interval);
-SELECT show_chunks(hypertable=>'try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
-SELECT drop_chunks(older_than=> '1 day'::interval);
+SELECT drop_chunks('drop_chunk_test_date', older_than=> '1 day'::interval);
 
 -- test drop chunks across two tables within the same schema
 CREATE TABLE test1.hyper1 (time bigint, temp float);
@@ -616,7 +584,6 @@ SELECT create_hypertable('test1.hyper2', 'time', chunk_time_interval => 10);
 INSERT INTO test1.hyper1 VALUES (10, 0.5);
 INSERT INTO test1.hyper2 VALUES (10, 0.7);
 
-SELECT drop_chunks(schema_name=>'test1', older_than => 100);
 SELECT show_chunks('test1.hyper1');
 SELECT show_chunks('test1.hyper2');
 
@@ -635,6 +602,6 @@ SELECT show_chunks('test3.hyperx');
 
 -- This will only drop from one of the tables since the one that is
 -- first in the search path will hide the other one.
-SELECT drop_chunks(table_name=>'hyperx', older_than => 100);
+SELECT drop_chunks('hyperx', older_than => 100);
 SELECT show_chunks('test2.hyperx');
 SELECT show_chunks('test3.hyperx');

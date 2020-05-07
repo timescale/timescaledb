@@ -2815,8 +2815,7 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
  
 (1 row)
 
--- test passing older_than and schema name
-SELECT * FROM drop_chunks(older_than => '2018-01-01'::timestamptz, table_name => 'disttable_drop_chunks', schema_name => 'public');
+SELECT * FROM drop_chunks('disttable_drop_chunks', older_than => '2018-01-01'::timestamptz);
                   drop_chunks                  
 -----------------------------------------------
  _timescaledb_internal._dist_hyper_10_27_chunk
@@ -2885,7 +2884,7 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
 (1 row)
 
 -- test passing newer_than as interval
-SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks');
+SELECT * FROM drop_chunks('disttable_drop_chunks', newer_than => interval '10 years');
                   drop_chunks                  
 -----------------------------------------------
  _timescaledb_internal._dist_hyper_10_30_chunk
@@ -2918,7 +2917,7 @@ SELECT * FROM "weird nAme\\#^.";
 (3 rows)
 
 -- drop chunks using bigint as time
-SELECT * FROM drop_chunks(older_than => 1000, table_name => 'weird nAme\\#^.');
+SELECT * FROM drop_chunks('"weird nAme\\#^."', older_than => 1000);
                   drop_chunks                  
 -----------------------------------------------
  _timescaledb_internal._dist_hyper_11_33_chunk

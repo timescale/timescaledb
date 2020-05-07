@@ -7,9 +7,9 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_tabledef(tbl REGCLASS) RETURNS TEXT
 AS :TSL_MODULE_PATHNAME, 'ts_test_get_tabledef' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(older_than "any" = NULL,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL,
+CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(
+    table_name REGCLASS,
+    older_than "any" = NULL,
     newer_than "any" = NULL,
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL) RETURNS TEXT

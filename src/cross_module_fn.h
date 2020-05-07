@@ -80,8 +80,7 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_drop_chunks_by_chunk_id)(int32 raw_hypertable_id, Chunk **chunks,
 												   Size num_chunks, Datum older_than_datum,
 												   Datum newer_than_datum, Oid older_than_type,
-												   Oid newer_than_type, int32 log_level,
-												   bool user_supplied_table_name);
+												   Oid newer_than_type, int32 log_level);
 	PGFunction continuous_agg_trigfn;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);

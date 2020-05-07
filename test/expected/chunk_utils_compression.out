@@ -114,7 +114,10 @@ SELECT show_chunks();
 (9 rows)
 
 -- drop all hypertables' old chunks
-SELECT drop_chunks(older_than=>'1 day'::interval);
+SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
+  FROM _timescaledb_catalog.hypertable
+ WHERE schema_name = current_schema()
+ORDER BY table_name DESC;
               drop_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

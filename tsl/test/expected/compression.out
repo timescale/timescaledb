@@ -1072,7 +1072,7 @@ SELECT compress_chunk(i) FROM show_chunks('ht5') i;
  _timescaledb_internal._hyper_20_46_chunk
 (2 rows)
 
-SELECT drop_chunks(table_name => 'ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
+SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_20_46_chunk

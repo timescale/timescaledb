@@ -23,8 +23,7 @@ void
 ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks_ptr,
 										  Size num_chunks, Datum older_than_datum,
 										  Datum newer_than_datum, Oid older_than_type,
-										  Oid newer_than_type, int32 log_level,
-										  bool user_supplied_table_name)
+										  Oid newer_than_type, int32 log_level)
 {
 	ListCell *lc;
 	Oid arg_type = INT4OID;
@@ -45,14 +44,13 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 		ContinuousAgg *agg = lfirst(lc);
 		Hypertable *mat_table = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
 
-		ts_chunk_do_drop_chunks(mat_table->main_table_relid,
+		ts_chunk_do_drop_chunks(mat_table,
 								older_than_datum,
 								newer_than_datum,
 								older_than_type,
 								newer_than_type,
 								CASCADE_TO_MATERIALIZATION_FALSE,
 								log_level,
-								user_supplied_table_name,
 								NULL);
 
 		/* we might still have materialization chunks that have data that refer

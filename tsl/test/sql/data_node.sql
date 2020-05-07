@@ -225,7 +225,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Dropping a chunk should also clean up data node mappings
-SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
+SELECT * FROM drop_chunks('disttable', older_than => '2019-05-22 17:18'::timestamptz);
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT foreign_table_name, foreign_server_name
@@ -542,7 +542,7 @@ SELECT * FROM detach_data_node('server_2', 'disttable', force => true);
 \set ON_ERROR_STOP 1
 
 -- drop all chunks
-SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
+SELECT * FROM drop_chunks('disttable', older_than => '2200-01-01 00:00'::timestamptz);
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;

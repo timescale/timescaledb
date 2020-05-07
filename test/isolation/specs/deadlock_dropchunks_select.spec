@@ -17,7 +17,7 @@ teardown
 
 session "s1"
 setup	{ BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms'; }
-step "s1a"	{ SELECT count (*) FROM drop_chunks( '2018-12-25 00:00'::timestamptz, 'dt'); }
+step "s1a"	{ SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamptz); }
 step "s1b"	{ COMMIT; }
 
 session "s2"

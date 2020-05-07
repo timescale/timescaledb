@@ -164,7 +164,7 @@ INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = 
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'test1';
 
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-10'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-10'::TIMESTAMPTZ);
 
 --should decrease #chunks both compressed and decompressed
 SELECT count(*) as count_chunks_uncompressed
@@ -237,12 +237,12 @@ CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 --errors due to dependent objects
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-28'::TIMESTAMPTZ);
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
 DROP VIEW dependent_1;
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-28'::TIMESTAMPTZ);
 
 --should decrease #chunks both compressed and decompressed
 SELECT count(*) as count_chunks_uncompressed
