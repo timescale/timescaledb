@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <funcapi.h>
+
 #include <utils/timestamp.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
@@ -15,6 +16,7 @@
 #include <hypertable_cache.h>
 #include <utils/snapmgr.h>
 #include <nodes/primnodes.h>
+#include <nodes/pg_list.h>
 #include <continuous_agg.h>
 
 #include "bgw/timer.h"
@@ -210,6 +212,7 @@ execute_drop_chunks_policy(int32 job_id)
 	Datum older_than;
 	Datum older_than_type;
 	int num_dropped;
+	List *dc_temp;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -233,14 +236,15 @@ execute_drop_chunks_policy(int32 job_id)
 	older_than = ts_interval_subtract_from_now(&args->older_than, open_dim);
 	older_than_type = ts_dimension_get_partition_type(open_dim);
 
-	/* Invoke drop chunks via fmgr so that the call can be deparsed and sent
-	 * also to remote data nodes. */
-	num_dropped = chunk_invoke_drop_chunks(&hypertable->fd.schema_name,
-										   &hypertable->fd.table_name,
-										   older_than,
-										   older_than_type,
-										   args->cascade_to_materializations);
-
+	dc_temp = ts_chunk_do_drop_chunks(hypertable,
+									  older_than,
+									  InvalidOid,
+									  older_than_type,
+									  InvalidOid,
+									  args->cascade_to_materializations,
+									  DEBUG2,
+									  NULL);
+	num_dropped = list_length(dc_temp);
 	ts_cache_release(hcache);
 
 	elog(LOG, "job %d completed dropping %d chunks", job_id, num_dropped);

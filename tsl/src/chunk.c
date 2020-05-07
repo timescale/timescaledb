@@ -178,7 +178,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 
 /* Should match definition in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
-#define DROP_CHUNKS_NARGS 6
+#define DROP_CHUNKS_NARGS 5
 
 /*
  * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
@@ -190,7 +190,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
  * Returns the number of dropped chunks.
  */
 int
-chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Datum older_than_type,
+chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type,
 						 bool cascade_to_materializations)
 {
 	EState *estate;
@@ -202,6 +202,13 @@ chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Da
 	SetExprState *state;
 	Oid restype;
 	Const *argarr[DROP_CHUNKS_NARGS] = {
+		makeConst(REGCLASSOID,
+				  -1,
+				  InvalidOid,
+				  sizeof(relid),
+				  ObjectIdGetDatum(relid),
+				  false,
+				  false),
 		makeConst(older_than_type,
 				  -1,
 				  InvalidOid,
@@ -209,32 +216,15 @@ chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Da
 				  older_than,
 				  false,
 				  get_typbyval(older_than_type)),
-		makeConst(NAMEOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(NameData),
-				  NameGetDatum(table_name),
-				  false,
-				  false),
-		makeConst(NAMEOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(NameData),
-				  NameGetDatum(schema_name),
-				  false,
-				  false),
 		makeNullConst(INT8OID, -1, InvalidOid),
 		castNode(Const, makeBoolConst(false, true)),
 		castNode(Const, makeBoolConst(cascade_to_materializations, false))
 	};
 
-	funclist = FuncnameGetCandidates(list_make2(makeString(ts_extension_schema_name()),
-												makeString(DROP_CHUNKS_FUNCNAME)),
-									 DROP_CHUNKS_NARGS,
-									 NIL,
-									 false,
-									 false,
-									 false);
+	char *const schema_name = ts_extension_schema_name();
+	char *const function_name = DROP_CHUNKS_FUNCNAME;
+	List *fqn = list_make2(makeString(schema_name), makeString(function_name));
+	funclist = FuncnameGetCandidates(fqn, DROP_CHUNKS_NARGS, NIL, false, false, false);
 
 	if (funclist->next != NULL)
 		elog(ERROR, "could not find drop_chunks function");

@@ -237,7 +237,7 @@ WHERE uncomp_hyper.table_name like 'test1';
                       26
 (1 row)
 
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-10'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-10'::TIMESTAMPTZ);
               drop_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
@@ -330,14 +330,14 @@ CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 --errors due to dependent objects
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-28'::TIMESTAMPTZ);
 ERROR:  cannot drop table _timescaledb_internal.compress_hyper_2_37_chunk because other objects depend on it
 DETAIL:  view dependent_1 depends on table _timescaledb_internal.compress_hyper_2_37_chunk
 HINT:  Use DROP ... to drop the dependent objects.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 DROP VIEW dependent_1;
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+SELECT drop_chunks('test1', older_than => '2018-03-28'::TIMESTAMPTZ);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_1_10_chunk

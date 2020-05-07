@@ -413,7 +413,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 (6 rows)
 
 -- Dropping a chunk should also clean up data node mappings
-SELECT * FROM drop_chunks(older_than => '2019-05-22 17:18'::timestamptz);
+SELECT * FROM drop_chunks('disttable', older_than => '2019-05-22 17:18'::timestamptz);
                  drop_chunks                 
 ---------------------------------------------
  _timescaledb_internal._dist_hyper_3_2_chunk
@@ -1109,7 +1109,7 @@ SELECT * FROM detach_data_node('server_2', 'disttable', force => true);
 ERROR:  server "server_2" does not exist
 \set ON_ERROR_STOP 1
 -- drop all chunks
-SELECT * FROM drop_chunks(table_name => 'disttable', older_than => '2200-01-01 00:00'::timestamptz);
+SELECT * FROM drop_chunks('disttable', older_than => '2200-01-01 00:00'::timestamptz);
                  drop_chunks                  
 ----------------------------------------------
  _timescaledb_internal._dist_hyper_5_5_chunk

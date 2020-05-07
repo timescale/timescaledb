@@ -173,13 +173,12 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- cannot drop directly from the materialization table without specifying
 -- cont. aggregate view name explicitly
-\set ON_ERROR_STOP 0
 
-SELECT drop_chunks(
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(:'drop_chunks_mat_table',
     newer_than => -20,
     verbose => true,
     cascade_to_materializations=>true);
-
 \set ON_ERROR_STOP 1
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -190,17 +189,13 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 -- cannot drop from the raw table without specifying cascade_to_materializations
 
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 10);
+SELECT drop_chunks('drop_chunks_table', older_than => 10);
 \set ON_ERROR_STOP 1
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
-
-\set ON_ERROR_STOP 0
-SELECT drop_chunks(older_than => 200);
-\set ON_ERROR_STOP 1
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
@@ -208,8 +203,8 @@ SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable => \'drop_chunks_table\', older_than => 13)::REGCLASS::TEXT'
-\set QUERY2 'SELECT drop_chunks(table_name => \'drop_chunks_table\', older_than => 13, cascade_to_materializations => true)::TEXT'
+\set QUERY1 'SELECT show_chunks(\'drop_chunks_table\', older_than => 13)::REGCLASS::TEXT'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunks_table\', older_than => 13, cascade_to_materializations => true)::TEXT'
 \set ECHO errors
 \ir :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -255,8 +250,8 @@ SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable => \'drop_chunks_table_u\', older_than => 13)::REGCLASS::TEXT'
-\set QUERY2 'SELECT drop_chunks(table_name => \'drop_chunks_table_u\', older_than => 13, cascade_to_materializations => true)::TEXT'
+\set QUERY1 'SELECT show_chunks(\'drop_chunks_table_u\', older_than => 13)::REGCLASS::TEXT'
+\set QUERY2 'SELECT drop_chunks(\'drop_chunks_table_u\', older_than => 13, cascade_to_materializations => true)::TEXT'
 \set ECHO errors
 \ir :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -384,31 +379,31 @@ AS SELECT time_bucket('5', time), max(data)
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 13, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => 13, cascade_to_materializations => false);
 
 ALTER VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
 
 -- 9 is too small (less than timescaledb.ignore_invalidation_older_than)
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-8), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-8), cascade_to_materializations => false);
 -- 10 works but we don't have the completion threshold far enough along
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 \set ON_ERROR_STOP 1
 
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 \set ON_ERROR_STOP 0
 --still too far behind
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 \set ON_ERROR_STOP 1
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 --now, this works
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 
 \set ON_ERROR_STOP 0
 --must have older_than set and no newer than
-SELECT drop_chunks(table_name => 'drop_chunks_table', cascade_to_materializations => false);
-SELECT drop_chunks(table_name => 'drop_chunks_table', newer_than=>10, cascade_to_materializations => false);
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => 20, newer_than=>10, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', newer_than=>10, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => 20, newer_than=>10, cascade_to_materializations => false);
 \set ON_ERROR_STOP 1
 
 --test materialization of invalidation before drop
@@ -430,7 +425,7 @@ INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(35, 39) AS i;
 --the invalidation on 25 not yet seen
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --dropping tables will cause the invalidation to be processed
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 --new values on 25 now seen in view
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --earliest datapoint now in table
@@ -457,7 +452,7 @@ INSERT INTO drop_chunks_table SELECT i, 300+i FROM generate_series(31, 39) AS i;
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(40, 49) AS i;
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --should see multiple rounds of invalidation in the log messages
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 --see both 30 and 35 updated
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
@@ -470,7 +465,7 @@ INSERT INTO drop_chunks_table VALUES (46, 400), (51, 500);
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(56,59) AS i;
 --neither invalidation is seen
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
 --the change in bucket 45 but not 50 is seen
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
@@ -497,7 +492,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
     WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
         AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
 
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
+SELECT drop_chunks('drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
 
@@ -516,30 +511,25 @@ SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
 ORDER BY ranges;
 --1 chunk from the mat. hypertable will be dropped and the other will
 --need deletes when the chunks from the raw hypertable are dropped.
-SELECT drop_chunks(table_name => 'drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
+SELECT drop_chunks('drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
 SELECT * from drop_chunks_view ORDER BY 1;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
 SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
 ORDER BY ranges;
 
 -- TEST drop chunks from continuous aggregates by specifying view name
-SELECT drop_chunks(
-    table_name => 'drop_chunks_view',
+SELECT drop_chunks('drop_chunks_view',
     newer_than => -20,
     verbose => true);
 
---can also drop chunks by specifying materialized hypertable name
+-- Test that we cannot drop chunks when specifying materialized
+-- hypertable
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen');
+SELECT chunk_table, ranges
+  FROM chunk_relation_size(:'drop_chunks_mat_tablen');
 \set ON_ERROR_STOP 0
-SELECT drop_chunks(
-    table_name => :'drop_chunks_mat_table_name',
-    older_than => 60,
-    verbose => true);
+\set VERBOSITY default
+SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
-SELECT drop_chunks(
-    schema_name => :'drop_chunks_mat_schema',
-    table_name => :'drop_chunks_mat_table_name',
-    older_than => 60,
-    verbose => true);

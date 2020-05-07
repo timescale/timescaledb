@@ -830,8 +830,7 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
 
--- test passing older_than and schema name
-SELECT * FROM drop_chunks(older_than => '2018-01-01'::timestamptz, table_name => 'disttable_drop_chunks', schema_name => 'public');
+SELECT * FROM drop_chunks('disttable_drop_chunks', older_than => '2018-01-01'::timestamptz);
 
 SELECT * FROM disttable_drop_chunks;
 
@@ -844,7 +843,7 @@ FROM show_chunks('disttable_drop_chunks');
 $$);
 
 -- test passing newer_than as interval
-SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks');
+SELECT * FROM drop_chunks('disttable_drop_chunks', newer_than => interval '10 years');
 SELECT * FROM disttable_drop_chunks;
 
 CREATE TABLE "weird nAme\\#^."(time bigint, device int CHECK (device > 0), color int, PRIMARY KEY (time,device));
@@ -857,7 +856,7 @@ INSERT INTO "weird nAme\\#^." VALUES
 
 SELECT * FROM "weird nAme\\#^.";
 -- drop chunks using bigint as time
-SELECT * FROM drop_chunks(older_than => 1000, table_name => 'weird nAme\\#^.');
+SELECT * FROM drop_chunks('"weird nAme\\#^."', older_than => 1000);
 SELECT * FROM "weird nAme\\#^.";
 
 -----------------------------------------------------------------------------------------

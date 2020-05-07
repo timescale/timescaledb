@@ -3210,14 +3210,38 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 	ts_cache_release(hcache);
 }
 
+static void
+lock_referenced_tables(Oid table_relid)
+{
+	List *fk_relids = NIL;
+	ListCell *lf;
+	List *cachedfkeys = NIL;
+	Relation table_rel = table_open(table_relid, AccessShareLock);
+
+	/* this list is from the relcache and can disappear with a cache flush, so
+	 * no further catalog access till we save the fk relids */
+	cachedfkeys = RelationGetFKeyList(table_rel);
+	foreach (lf, cachedfkeys)
+	{
+		ForeignKeyCacheInfo *cachedfk = lfirst_node(ForeignKeyCacheInfo, lf);
+
+		/* conrelid should always be that of the table we're considering */
+		Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
+		fk_relids = lappend_oid(fk_relids, cachedfk->confrelid);
+	}
+	table_close(table_rel, AccessShareLock);
+	foreach (lf, fk_relids)
+		LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
+}
+
 /* Continuous agg materialization hypertables can be dropped
  * only if a user explicitly specifies the table name
  */
 List *
-ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
+ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than_datum,
 						Oid older_than_type, Oid newer_than_type,
 						CascadeToMaterializationOption cascades_to_materializations,
-						int32 log_level, bool user_supplied_table_name, List **affected_data_nodes)
+						int32 log_level, List **affected_data_nodes)
 
 {
 	uint64 i = 0;
@@ -3225,28 +3249,29 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	Chunk *chunks;
 	List *dropped_chunk_names = NIL;
 	const char *schema_name, *table_name;
-	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
+	const int32 hypertable_id = ht->fd.id;
 	bool has_continuous_aggs;
 	List *data_nodes = NIL;
 
-	Assert(OidIsValid(table_relid));
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
-	ts_hypertable_permissions_check(table_relid, GetUserId());
+	/* We have a FK between hypertable H and PAR. Hypertable H has number of
+	 * chunks C1, C2, etc. When we execute "drop table C", PG acquires locks
+	 * on C and PAR. If we have a query as "select * from hypertable", this
+	 * acquires a lock on C and PAR as well. But the order of the locks is not
+	 * the same and results in deadlocks. - github issue #865 We hope to
+	 * alleviate the problem by acquiring a lock on PAR before executing the
+	 * drop table stmt. This is not fool-proof as we could have multiple
+	 * fkrelids and the order of lock acquisition for these could differ as
+	 * well. Do not unlock - let the transaction semantics take care of it. */
+	lock_referenced_tables(ht->main_table_relid);
 
 	switch (ts_continuous_agg_hypertable_status(hypertable_id))
 	{
 		case HypertableIsMaterialization:
-			if (user_supplied_table_name == false)
-			{
-				elog(ERROR, "cannot drop chunks on a continuous aggregate materialization table");
-			}
 			has_continuous_aggs = false;
 			break;
 		case HypertableIsMaterializationAndRaw:
-			if (user_supplied_table_name == false)
-			{
-				elog(ERROR, "cannot drop chunks on a continuous aggregate materialization table");
-			}
 			has_continuous_aggs = true;
 			break;
 		case HypertableIsRawTable:
@@ -3265,7 +3290,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			break;
 	}
 
-	chunks = ts_chunk_get_chunks_in_time_range(table_relid,
+	chunks = ts_chunk_get_chunks_in_time_range(ht->main_table_relid,
 											   older_than_datum,
 											   newer_than_datum,
 											   older_than_type,
@@ -3275,7 +3300,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 											   &num_chunks);
 
 	if (has_continuous_aggs)
-		ts_chunk_drop_process_materialization(table_relid,
+		ts_chunk_drop_process_materialization(ht->main_table_relid,
 											  cascades_to_materializations,
 											  older_than_datum,
 											  older_than_type,
@@ -3320,8 +3345,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 																newer_than_datum,
 																older_than_type,
 																newer_than_type,
-																log_level,
-																user_supplied_table_name);
+																log_level);
 	}
 
 	if (affected_data_nodes)
@@ -3375,31 +3399,75 @@ list_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_DONE(funcctx);
 }
 
-static void
-drop_remote_chunks(FunctionCallInfo fcinfo, const Name schema_name, const Name table_name,
-				   List *data_node_oids)
+/*
+ * Find either the hypertable or the materialized hypertable, if the relid is
+ * a continuous aggregate, for the relid.
+ *
+ * Will error if relid is not a hypertable or view (or cannot be found) or if
+ * it is a materialized hypertable.
+ */
+static Hypertable *
+find_hypertable_for_drop_by_relid(Cache *hcache, Oid relid)
 {
-	/* Wildcard drops not supported on distributed hypertables */
-	if (schema_name == NULL && table_name == NULL)
+	const char *rel_name;
+	Hypertable *ht;
+
+	rel_name = get_rel_name(relid);
+	if (!rel_name)
 		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot use wildcard to drop chunks on distributed hypertables"),
-				 errhint("Drop chunks on each distributed hypertable individually.")));
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("OID %u does not refer to a table or view", relid)));
 
-	/* The schema name must be present when dropping remote chunks because the
-	 * search path on the connection is always set to pg_catalog. Thus, the
-	 * data node will not be able to resolve the same hypertables without the
-	 * schema. */
-	if (schema_name == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("schema required when dropping chunks on distributed hypertables")));
+	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+	if (ht)
+	{
+		const ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+		switch (status)
+		{
+			case HypertableIsMaterialization:
+			case HypertableIsMaterializationAndRaw:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot drop chunks on a continuous aggregate materialization "
+								"hypertable"),
+						 errhint("Call drop_chunks on the continuous aggregate instead."),
+						 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
+				break;
 
-	/* Make sure the schema is set in case it was not given on the command line */
-	FC_ARG(fcinfo, 2) = NameGetDatum(schema_name);
-	FC_NULL(fcinfo, 2) = false;
+			default:
+				break;
+		}
+	}
+	else
+	{
+		/* Using the name to look up the continuous aggregate, but we should
+		 * refactor the code to use the relid directly. */
+		const char *const schema_name = get_namespace_name(get_rel_namespace(relid));
+		ContinuousAgg *const cagg = ts_continuous_agg_find_userview_name(schema_name, rel_name);
 
-	ts_cm_functions->func_call_on_data_nodes(fcinfo, data_node_oids);
+		Assert(schema_name && rel_name);
+
+		if (!cagg)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("\"%s.%s\" is not a hypertable or a continuous aggregate view",
+							schema_name,
+							rel_name),
+					 errhint("It is only possible to drop chunks from a hypertable or continuous "
+							 "aggregate view")));
+		ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+		if (!ht)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("no materialized table for continuous aggregate view"),
+					 errdetail("Continuous aggregate \"%s.%s\" had a materialized hypertable "
+							   "with id %d but it was not found in the hypertable catalog.",
+							   schema_name,
+							   rel_name,
+							   cagg->data.mat_hypertable_id)));
+	}
+
+	return ht;
 }
 
 Datum
@@ -3407,16 +3475,17 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
 	MemoryContext oldcontext;
 	FuncCallContext *funcctx;
-	ListCell *lc;
-	List *ht_oids, *dc_names = NIL;
-	Name table_name, schema_name;
+	Hypertable *ht;
+	List *dc_temp = NIL;
+	List *dc_names = NIL;
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Datum older_than_datum, newer_than_datum;
 	Oid older_than_type, newer_than_type;
 	bool verbose;
 	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
-	bool user_supplied_table_name = true;
 	List *data_node_oids = NIL;
+	Cache *hcache;
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
@@ -3425,155 +3494,81 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (!SRF_IS_FIRSTCALL())
 		return list_return_srf(fcinfo);
 
-	if (PG_ARGISNULL(0) && PG_ARGISNULL(3))
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable or continuous aggregate"),
+				 errdetail(
+					 "Expected either a hypertable or a continuous aggregate but got NULL.")));
+
+	if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("older_than and newer_than timestamps provided to drop_chunks cannot both "
 						"be NULL")));
 
-	table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	older_than_datum = PG_GETARG_DATUM(0);
-	newer_than_datum = PG_GETARG_DATUM(3);
+	older_than_datum = PG_GETARG_DATUM(1);
+	newer_than_datum = PG_GETARG_DATUM(2);
 
 	/* Making types InvalidOid makes the logic simpler later */
-	older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
-	newer_than_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
-	verbose = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
+	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	cascades_to_materializations =
-		(PG_ARGISNULL(5) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
-						   (PG_GETARG_BOOL(5) ? CASCADE_TO_MATERIALIZATION_TRUE :
+		(PG_ARGISNULL(4) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
+						   (PG_GETARG_BOOL(4) ? CASCADE_TO_MATERIALIZATION_TRUE :
 												CASCADE_TO_MATERIALIZATION_FALSE));
 	elevel = verbose ? INFO : DEBUG2;
 
-	ht_oids = ts_hypertable_get_all_by_name(schema_name, table_name, CurrentMemoryContext);
-
-	if (table_name != NULL)
-	{
-		if (ht_oids == NIL)
-		{
-			ContinuousAgg *ca = NULL;
-			ca = ts_continuous_agg_find_userview_name(schema_name ? NameStr(*schema_name) : NULL,
-													  NameStr(*table_name));
-			if (ca == NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-						 errmsg("\"%s\" is not a hypertable or a continuous aggregate view",
-								NameStr(*table_name)),
-						 errhint("It is only possible to drop chunks from a hypertable or "
-								 "continuous aggregate view")));
-			else
-			{
-				int32 matid = ca->data.mat_hypertable_id;
-				Hypertable *mat_ht = ts_hypertable_get_by_id(matid);
-				ht_oids = lappend_oid(ht_oids, mat_ht->main_table_relid);
-			}
-		}
-	}
-	else
-		user_supplied_table_name = false;
+	/* Find either the hypertable or view, or error out if the relid is
+	 * neither.
+	 *
+	 * We should improve the printout since it can either be a proper relid
+	 * that does not refer to a hypertable or a continuous aggregate, or a
+	 * relid that does not refer to anything at all. */
+	hcache = ts_hypertable_cache_pin();
+	ht = find_hypertable_for_drop_by_relid(hcache, relid);
+	Assert(ht != NULL);
 
 	/* Initial multi function call setup */
 	funcctx = SRF_FIRSTCALL_INIT();
 
-	/* We need the table schema when dropping remote chunks because the search
-	 * path on the connection is always set to pg_catalog. Thus we can only
-	 * use the schema if it is already set or there is only one
-	 * hypertable. The presence of a schema is enforced in
-	 * ts_chunk_do_drop_chunks. */
-	if (NULL == schema_name && list_length(ht_oids) == 1)
+	/* Drop chunks and store their names for return */
+	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+	PG_TRY();
 	{
-		Oid nspid = get_rel_namespace(linitial_oid(ht_oids));
-		schema_name =
-			DatumGetName(DirectFunctionCall1(namein, CStringGetDatum(get_namespace_name(nspid))));
+		dc_temp = ts_chunk_do_drop_chunks(ht,
+										  older_than_datum,
+										  newer_than_datum,
+										  older_than_type,
+										  newer_than_type,
+										  cascades_to_materializations,
+										  elevel,
+										  &data_node_oids);
 	}
-
-	/* Drop chunks and build list of dropped chunks */
-	foreach (lc, ht_oids)
+	PG_CATCH();
 	{
-		Oid table_relid = lfirst_oid(lc);
-		List *fk_relids = NIL;
-		List *dc_temp = NIL;
-		ListCell *lf;
-
-		ts_hypertable_permissions_check(table_relid, GetUserId());
-
-		/* get foreign key tables associated with the hypertable */
-		{
-			List *cachedfkeys = NIL;
-			ListCell *lf;
-			Relation table_rel;
-
-			table_rel = table_open(table_relid, AccessShareLock);
-
-			/*
-			 * this list is from the relcache and can disappear with a cache
-			 * flush, so no further catalog access till we save the fk relids
-			 */
-			cachedfkeys = RelationGetFKeyList(table_rel);
-			foreach (lf, cachedfkeys)
-			{
-				ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lf);
-
-				/*
-				 * conrelid should always be that of the table we're
-				 * considering
-				 */
-				Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
-				fk_relids = lappend_oid(fk_relids, cachedfk->confrelid);
-			}
-			table_close(table_rel, AccessShareLock);
-		}
-
-		/*
-		 * We have a FK between hypertable H and PAR. Hypertable H has number
-		 * of chunks C1, C2, etc. When we execute "drop table C", PG acquires
-		 * locks on C and PAR. If we have a query as "select * from
-		 * hypertable", this acquires a lock on C and PAR as well. But the
-		 * order of the locks is not the same and results in deadlocks. -
-		 * github issue 865 We hope to alleviate the problem by acquiring a
-		 * lock on PAR before executing the drop table stmt. This is not
-		 * fool-proof as we could have multiple fkrelids and the order of lock
-		 * acquisition for these could differ as well. Do not unlock - let the
-		 * transaction semantics take care of it.
-		 */
-		foreach (lf, fk_relids)
-		{
-			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
-		}
-
-		/* Drop chunks and store their names for return */
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-		PG_TRY();
-		{
-			dc_temp = ts_chunk_do_drop_chunks(table_relid,
-											  older_than_datum,
-											  newer_than_datum,
-											  older_than_type,
-											  newer_than_type,
-											  cascades_to_materializations,
-											  elevel,
-											  user_supplied_table_name,
-											  &data_node_oids);
-		}
-		PG_CATCH();
-		{
-			ErrorData *edata;
-			MemoryContextSwitchTo(oldcontext);
-			edata = CopyErrorData();
-			FlushErrorState();
-			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
-			ReThrowError(edata);
-		}
-		PG_END_TRY();
-		dc_names = list_concat(dc_names, dc_temp);
-
+		/* An error is raised if there are dependent objects, but the original
+		 * message is not very helpful in suggesting that you should use
+		 * CASCADE (we don't support it), so we replace the hint with a more
+		 * accurate hint for our situation. */
+		ErrorData *edata;
 		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+		edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+		ts_cache_release(hcache);
+		ReThrowError(edata);
 	}
+	PG_END_TRY();
+	ts_cache_release(hcache);
+	dc_names = list_concat(dc_names, dc_temp);
+
+	MemoryContextSwitchTo(oldcontext);
 
 	if (data_node_oids != NIL)
-		drop_remote_chunks(fcinfo, schema_name, table_name, data_node_oids);
+		ts_cm_functions->func_call_on_data_nodes(fcinfo, data_node_oids);
 
 	/* store data for multi function call */
 	funcctx->max_calls = list_length(dc_names);

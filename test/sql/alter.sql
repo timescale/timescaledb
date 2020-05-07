@@ -168,7 +168,7 @@ DROP TABLESPACE tablespace1;
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'hyper_in_space\', 22)::NAME'
-\set QUERY2 'SELECT drop_chunks(22, \'hyper_in_space\')::NAME'
+\set QUERY2 'SELECT drop_chunks(\'hyper_in_space\', 22)::NAME'
 \set ECHO errors
 \ir :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all

@@ -38,5 +38,8 @@ SELECT show_chunks(hypertable=>'public.table_to_compress', older_than=>'1 day'::
 SELECT show_chunks(hypertable=>'public.table_to_compress', newer_than=>'1 day'::interval);
 SELECT show_chunks(); 
 -- drop all hypertables' old chunks
-SELECT drop_chunks(older_than=>'1 day'::interval);
+SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
+  FROM _timescaledb_catalog.hypertable
+ WHERE schema_name = current_schema()
+ORDER BY table_name DESC;
 SELECT show_chunks(); 

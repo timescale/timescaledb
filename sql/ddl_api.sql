@@ -89,13 +89,11 @@ CREATE OR REPLACE FUNCTION  set_number_partitions(
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_num_slices' LANGUAGE C VOLATILE;
 
--- Drop chunks older than the given timestamp. If a hypertable name is given,
--- drop only chunks associated with this table. Any of the first three arguments
--- can be NULL meaning "all values".
+-- Drop chunks older than the given timestamp for the specific
+-- hypertable or continuous aggregate.
 CREATE OR REPLACE FUNCTION drop_chunks(
+    hypertable_or_cagg  REGCLASS,
     older_than "any" = NULL,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL,
     newer_than "any" = NULL,
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL

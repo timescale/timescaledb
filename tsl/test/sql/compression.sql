@@ -428,7 +428,7 @@ INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
 -- compressed_chunk_stats should not show dropped chunks
 ALTER TABLE ht5 SET (timescaledb.compress);
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
-SELECT drop_chunks(table_name => 'ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
+SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
 SELECT chunk_name
 FROM timescaledb_information.compressed_chunk_stats
 WHERE hypertable_name = 'ht5'::regclass;
