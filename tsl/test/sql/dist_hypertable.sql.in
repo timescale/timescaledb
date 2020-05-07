@@ -843,8 +843,8 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
 
--- test passing newer_than as interval and cascade
-SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks', cascade => true);
+-- test passing newer_than as interval
+SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks');
 SELECT * FROM disttable_drop_chunks;
 
 CREATE TABLE "weird nAme\\#^."(time bigint, device int CHECK (device > 0), color int, PRIMARY KEY (time,device));

@@ -21,9 +21,13 @@ INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedul
 (1, 'Telemetry Reporter', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h')
 ON CONFLICT (id) DO NOTHING;
 
-CREATE OR REPLACE FUNCTION add_drop_chunks_policy(hypertable REGCLASS, older_than "any", cascade BOOL = FALSE, if_not_exists BOOL = false, cascade_to_materializations BOOL = false)
-RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_add_drop_chunks_policy'
+CREATE OR REPLACE FUNCTION add_drop_chunks_policy(
+       hypertable REGCLASS,
+       older_than "any",
+       if_not_exists BOOL = false,
+       cascade_to_materializations BOOL = false
+)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_add_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER

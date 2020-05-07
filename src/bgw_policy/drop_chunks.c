@@ -49,10 +49,6 @@ bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 	(*policy)->older_than = *ts_interval_from_tuple(
 		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
 
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
-	(*policy)->cascade =
-		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)]);
-
 	if (nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)])
 		(*policy)->cascade_to_materializations = CASCADE_TO_MATERIALIZATION_UNKNOWN;
 	else
@@ -160,8 +156,6 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)] =
 		HeapTupleGetDatum(ht_older_than);
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade)] =
-		BoolGetDatum(policy->cascade);
 	if (policy->cascade_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
 	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =

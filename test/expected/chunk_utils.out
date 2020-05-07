@@ -213,6 +213,7 @@ SELECT drop_chunks('haha', 'drop_chunk_test3');
 ERROR:  time constraint arguments of "drop_chunks" should have one of acceptable time column types: SMALLINT, INT, BIGINT, TIMESTAMP, TIMESTAMPTZ, DATE
 SELECT show_chunks('drop_chunk_test3', 'haha');
 ERROR:  time constraint arguments of "show_chunks" should have one of acceptable time column types: SMALLINT, INT, BIGINT, TIMESTAMP, TIMESTAMPTZ, DATE
+DROP VIEW dependent_view;
 -- should error because wrong time type
 SELECT drop_chunks(now(), 'drop_chunk_test3');
 ERROR:  time constraint arguments of "drop_chunks" should have same type as time column of the hypertable
@@ -423,9 +424,8 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(older_than => 2)::TEXT'
-\set QUERY2 'SELECT drop_chunks(2, CASCADE=>true)::TEXT'
+\set QUERY2 'SELECT drop_chunks(older_than => 2)::TEXT'
 \set ECHO errors
-psql:include/query_result_test_equal.sql:14: NOTICE:  drop cascades to view dependent_view
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       2 |                       2
@@ -1358,12 +1358,13 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 WHERE h.schema_name = 'public' AND h.table_name = 'drop_chunk_test3'
 ORDER BY c.id \gset
 create view dependent_view as SELECT * FROM :"chunk_schema".:"chunk_table";
+create view dependent_view2 as SELECT * FROM :"chunk_schema".:"chunk_table";
 ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(table_name=>'drop_chunk_test1', older_than=>4, newer_than=>3);
 ERROR:  must be owner of hypertable "drop_chunk_test1"
-SELECT drop_chunks(2, CASCADE=>true, verbose => true);
+SELECT drop_chunks(2, verbose => true);
 ERROR:  must be owner of hypertable "drop_chunk_test1"
 --works with modified owner tables
 -- show_chunks and drop_chunks output should be the same
@@ -1375,21 +1376,18 @@ ERROR:  must be owner of hypertable "drop_chunk_test1"
               0 |                       1 |                       1
 (1 row)
 
---this fails because there is a dependent object
+\set VERBOSITY default
+--this fails because there are dependent objects
 SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100);
 ERROR:  cannot drop table _timescaledb_internal._hyper_3_34_chunk because other objects depend on it
---this will succeed even though there is a depenent object I don't have permission
---to drop. This matches PostgreSQL semantics.
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable=>\'drop_chunk_test3\', older_than=>100)::NAME'
-\set QUERY2 'SELECT drop_chunks(table_name=>\'drop_chunk_test3\', older_than=>100, cascade=>true)::NAME'
-\set ECHO errors
-psql:include/query_result_test_equal.sql:14: NOTICE:  drop cascades to view dependent_view
- Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
-----------------+-------------------------+-------------------------
-              0 |                       1 |                       1
-(1 row)
-
+DETAIL:  view dependent_view depends on table _timescaledb_internal._hyper_3_34_chunk
+view dependent_view2 depends on table _timescaledb_internal._hyper_3_34_chunk
+HINT:  Use DROP ... to drop the dependent objects.
+\set VERBOSITY terse
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+DROP VIEW dependent_view;
+DROP VIEW dependent_view2;
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 1
 --drop chunks from hypertable with same name in different schema
 -- order of schema in search_path matters --

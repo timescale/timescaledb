@@ -65,35 +65,27 @@ select add_drop_chunks_policy(INTERVAL '3 hours');
 select add_drop_chunks_policy('test_table', INTERVAL 'haha');
 select add_drop_chunks_policy('test_table', 'haha');
 select add_drop_chunks_policy('test_table', 42);
-select add_drop_chunks_policy('fake_table', INTERVAL '3 month', true);
 select add_drop_chunks_policy('fake_table', INTERVAL '3 month');
-select add_drop_chunks_policy('test_table', cascade=>true);
-select add_drop_chunks_policy('test_table_int', INTERVAL '3 month', true);
-select add_drop_chunks_policy('test_table_int', 42, true);
 \set ON_ERROR_STOP 1
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
--- add_*_policy should be noop only for policies with the exact same parameters
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', true, true);
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', false, true);
+select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
 select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', true, if_not_exists => true);
+select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', false);
 select add_drop_chunks_policy('test_table', INTERVAL '1 year');
 select add_drop_chunks_policy('test_table', INTERVAL '3 days');
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', true);
 select add_drop_chunks_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
 \set ON_ERROR_STOP 1
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
+select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
 
 select remove_drop_chunks_policy('test_table');
 
@@ -113,7 +105,7 @@ select * from _timescaledb_catalog.dimension;
 
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-select r.job_id,r.hypertable_id,r.older_than,r.cascade from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
+select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
 select remove_reorder_policy('test_table');
 
 select * from _timescaledb_config.bgw_policy_reorder;
@@ -127,9 +119,8 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 select add_drop_chunks_policy('test_table_int', 1);
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table_int', 2, false, true);
-select add_drop_chunks_policy('test_table_int', 1, false, true, true);
-select add_drop_chunks_policy('test_table_int', 1, true, true, false);
+select add_drop_chunks_policy('test_table_int', 2, true);
+select add_drop_chunks_policy('test_table_int', 1, true, true);
 
 select remove_drop_chunks_policy('test_table_int');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -236,7 +227,7 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
--- Now test chunk_stat cascade deletion is correct
+-- Now test chunk_stat deletion is correct
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
 CREATE TABLE test_table(time timestamptz, junk int);

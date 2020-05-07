@@ -178,7 +178,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 
 /* Should match definition in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
-#define DROP_CHUNKS_NARGS 7
+#define DROP_CHUNKS_NARGS 6
 
 /*
  * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
@@ -191,7 +191,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
  */
 int
 chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Datum older_than_type,
-						 bool cascade, bool cascade_to_materializations)
+						 bool cascade_to_materializations)
 {
 	EState *estate;
 	ExprContext *econtext;
@@ -223,7 +223,6 @@ chunk_invoke_drop_chunks(Name schema_name, Name table_name, Datum older_than, Da
 				  NameGetDatum(schema_name),
 				  false,
 				  false),
-		castNode(Const, makeBoolConst(cascade, false)),
 		makeNullConst(INT8OID, -1, InvalidOid),
 		castNode(Const, makeBoolConst(false, true)),
 		castNode(Const, makeBoolConst(cascade_to_materializations, false))

@@ -103,6 +103,8 @@ SELECT drop_chunks(NULL::int);
 SELECT drop_chunks('haha', 'drop_chunk_test3');
 SELECT show_chunks('drop_chunk_test3', 'haha');
 
+DROP VIEW dependent_view;
+
 -- should error because wrong time type
 SELECT drop_chunks(now(), 'drop_chunk_test3');
 SELECT show_chunks('drop_chunk_test3', now());
@@ -144,7 +146,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(older_than => 2)::TEXT'
-\set QUERY2 'SELECT drop_chunks(2, CASCADE=>true)::TEXT'
+\set QUERY2 'SELECT drop_chunks(older_than => 2)::TEXT'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
@@ -545,12 +547,13 @@ WHERE h.schema_name = 'public' AND h.table_name = 'drop_chunk_test3'
 ORDER BY c.id \gset
 
 create view dependent_view as SELECT * FROM :"chunk_schema".:"chunk_table";
+create view dependent_view2 as SELECT * FROM :"chunk_schema".:"chunk_table";
 ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(table_name=>'drop_chunk_test1', older_than=>4, newer_than=>3);
-SELECT drop_chunks(2, CASCADE=>true, verbose => true);
+SELECT drop_chunks(2, verbose => true);
 
 --works with modified owner tables
 -- show_chunks and drop_chunks output should be the same
@@ -560,18 +563,16 @@ SELECT drop_chunks(2, CASCADE=>true, verbose => true);
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
 
---this fails because there is a dependent object
+\set VERBOSITY default
+--this fails because there are dependent objects
 SELECT drop_chunks(table_name=>'drop_chunk_test3', older_than=>100);
+\set VERBOSITY terse
 
---this will succeed even though there is a depenent object I don't have permission
---to drop. This matches PostgreSQL semantics.
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(hypertable=>\'drop_chunk_test3\', older_than=>100)::NAME'
-\set QUERY2 'SELECT drop_chunks(table_name=>\'drop_chunk_test3\', older_than=>100, cascade=>true)::NAME'
-\set ECHO errors
-\ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
-\set ECHO all
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+DROP VIEW dependent_view;
+DROP VIEW dependent_view2;
 
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 1
 
 --drop chunks from hypertable with same name in different schema

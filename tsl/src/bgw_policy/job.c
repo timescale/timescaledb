@@ -240,7 +240,6 @@ execute_drop_chunks_policy(int32 job_id)
 										   &hypertable->fd.table_name,
 										   older_than,
 										   older_than_type,
-										   args->cascade,
 										   args->cascade_to_materializations);
 #else
 	num_dropped = list_length(ts_chunk_do_drop_chunks(table_relid,
@@ -248,7 +247,6 @@ execute_drop_chunks_policy(int32 job_id)
 													  (Datum) 0,
 													  older_than_type,
 													  InvalidOid,
-													  args->cascade,
 													  args->cascade_to_materializations,
 													  LOG,
 													  true /*user_supplied_table_name */,

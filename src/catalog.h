@@ -862,7 +862,6 @@ typedef enum Anum_bgw_policy_drop_chunks
 	Anum_bgw_policy_drop_chunks_job_id = 1,
 	Anum_bgw_policy_drop_chunks_hypertable_id,
 	Anum_bgw_policy_drop_chunks_older_than,
-	Anum_bgw_policy_drop_chunks_cascade,
 	Anum_bgw_policy_drop_chunks_cascade_to_materializations,
 	_Anum_bgw_policy_drop_chunks_max,
 } Anum_bgw_policy_drop_chunks;
