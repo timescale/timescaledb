@@ -3229,7 +3229,7 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
  */
 List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type, bool cascade,
+						Oid older_than_type, Oid newer_than_type,
 						CascadeToMaterializationOption cascades_to_materializations,
 						int32 log_level, bool user_supplied_table_name, List **affected_data_nodes)
 
@@ -3311,11 +3311,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
 		if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_FALSE)
-			ts_chunk_drop_preserve_catalog_row(chunks + i,
-											   (cascade ? DROP_CASCADE : DROP_RESTRICT),
-											   log_level);
+			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
 		else
-			ts_chunk_drop(chunks + i, (cascade ? DROP_CASCADE : DROP_RESTRICT), log_level);
+			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 
 		/* Collect a list of affected data nodes so that we know which data
 		 * nodes we need to drop chunks on */
@@ -3336,7 +3334,6 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 																newer_than_datum,
 																older_than_type,
 																newer_than_type,
-																cascade,
 																log_level,
 																user_supplied_table_name);
 	}
@@ -3429,7 +3426,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Name table_name, schema_name;
 	Datum older_than_datum, newer_than_datum;
 	Oid older_than_type, newer_than_type;
-	bool cascade, verbose;
+	bool verbose;
 	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
 	bool user_supplied_table_name = true;
@@ -3442,27 +3439,26 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (!SRF_IS_FIRSTCALL())
 		return list_return_srf(fcinfo);
 
-	table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	older_than_datum = PG_GETARG_DATUM(0);
-	newer_than_datum = PG_GETARG_DATUM(4);
-
-	/* Making types InvalidOid makes the logic simpler later */
-	older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
-	newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
-	cascade = PG_GETARG_BOOL(3);
-	verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
-	cascades_to_materializations =
-		(PG_ARGISNULL(6) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
-						   (PG_GETARG_BOOL(6) ? CASCADE_TO_MATERIALIZATION_TRUE :
-												CASCADE_TO_MATERIALIZATION_FALSE));
-	elevel = verbose ? INFO : DEBUG2;
-
-	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(3))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("older_than and newer_than timestamps provided to drop_chunks cannot both "
 						"be NULL")));
+
+	table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
+	schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	older_than_datum = PG_GETARG_DATUM(0);
+	newer_than_datum = PG_GETARG_DATUM(3);
+
+	/* Making types InvalidOid makes the logic simpler later */
+	older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
+	newer_than_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+	verbose = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	cascades_to_materializations =
+		(PG_ARGISNULL(5) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
+						   (PG_GETARG_BOOL(5) ? CASCADE_TO_MATERIALIZATION_TRUE :
+												CASCADE_TO_MATERIALIZATION_FALSE));
+	elevel = verbose ? INFO : DEBUG2;
 
 	ht_oids = ts_hypertable_get_all_by_name(schema_name, table_name, CurrentMemoryContext);
 
@@ -3563,17 +3559,28 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		/* Drop chunks and store their names for return */
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		dc_temp = ts_chunk_do_drop_chunks(table_relid,
-										  older_than_datum,
-										  newer_than_datum,
-										  older_than_type,
-										  newer_than_type,
-										  cascade,
-										  cascades_to_materializations,
-										  elevel,
-										  user_supplied_table_name,
-										  &data_node_oids);
-
+		PG_TRY();
+		{
+			dc_temp = ts_chunk_do_drop_chunks(table_relid,
+											  older_than_datum,
+											  newer_than_datum,
+											  older_than_type,
+											  newer_than_type,
+											  cascades_to_materializations,
+											  elevel,
+											  user_supplied_table_name,
+											  &data_node_oids);
+		}
+		PG_CATCH();
+		{
+			ErrorData *edata;
+			MemoryContextSwitchTo(oldcontext);
+			edata = CopyErrorData();
+			FlushErrorState();
+			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+			ReThrowError(edata);
+		}
+		PG_END_TRY();
 		dc_names = list_concat(dc_names, dc_temp);
 
 		MemoryContextSwitchTo(oldcontext);

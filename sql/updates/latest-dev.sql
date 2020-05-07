@@ -1,5 +1,7 @@
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
+DROP FUNCTION IF EXISTS add_drop_chunks_policy(regclass,"any",bool,bool,bool);
+DROP FUNCTION IF EXISTS drop_chunks("any",name,name,boolean,"any",boolean,boolean);
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
@@ -54,3 +56,49 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', ''
 
 
 GRANT SELECT ON _timescaledb_catalog.remote_txn TO PUBLIC;
+
+-- Update drop_chunks policy table
+CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp (
+    job_id INTEGER PRIMARY KEY
+    	   REFERENCES _timescaledb_config.bgw_job(id)
+	   ON DELETE CASCADE,
+    hypertable_id INTEGER UNIQUE NOT NULL
+    		  REFERENCES _timescaledb_catalog.hypertable(id)
+		  ON DELETE CASCADE,
+    older_than _timescaledb_catalog.ts_interval NOT NULL,
+    cascade_to_materializations BOOLEAN,
+    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
+);
+
+INSERT INTO _timescaledb_config.bgw_policy_drop_chunks_tmp (
+    SELECT job_id,
+    	   hypertable_id,
+	   older_than,
+	   cascade_to_materializations
+      FROM _timescaledb_config.bgw_policy_drop_chunks
+);
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_drop_chunks;
+DROP VIEW IF EXISTS timescaledb_information.policy_stats;
+DROP VIEW IF EXISTS timescaledb_information.policy_stats;
+DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
+DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
+
+CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks (
+    job_id INTEGER PRIMARY KEY
+    	   REFERENCES _timescaledb_config.bgw_job(id)
+	   ON DELETE CASCADE,
+    hypertable_id INTEGER UNIQUE NOT NULL
+    		  REFERENCES _timescaledb_catalog.hypertable(id)
+		  ON DELETE CASCADE,
+    older_than _timescaledb_catalog.ts_interval NOT NULL,
+    cascade_to_materializations BOOLEAN,
+    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
+);
+INSERT INTO _timescaledb_config.bgw_policy_drop_chunks (
+       SELECT * FROM _timescaledb_config.bgw_policy_drop_chunks_tmp
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
+DROP TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp;
+GRANT SELECT ON _timescaledb_config.bgw_policy_drop_chunks TO PUBLIC;

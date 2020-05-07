@@ -520,7 +520,7 @@ static void
 continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **chunks,
 											   Size num_chunks, Datum older_than_datum,
 											   Datum newer_than_datum, Oid older_than_type,
-											   Oid newer_than_type, bool cascade, int32 log_level,
+											   Oid newer_than_type, int32 log_level,
 											   bool user_supplied_table_name)
 {
 	error_no_default_fn_community();

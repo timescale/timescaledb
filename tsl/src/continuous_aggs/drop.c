@@ -23,7 +23,7 @@ void
 ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunks_ptr,
 										  Size num_chunks, Datum older_than_datum,
 										  Datum newer_than_datum, Oid older_than_type,
-										  Oid newer_than_type, bool cascade, int32 log_level,
+										  Oid newer_than_type, int32 log_level,
 										  bool user_supplied_table_name)
 {
 	ListCell *lc;
@@ -50,7 +50,6 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 								newer_than_datum,
 								older_than_type,
 								newer_than_type,
-								cascade,
 								CASCADE_TO_MATERIALIZATION_FALSE,
 								log_level,
 								user_supplied_table_name,

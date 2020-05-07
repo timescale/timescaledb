@@ -96,7 +96,6 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     older_than "any" = NULL,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
-    cascade  BOOLEAN = FALSE,
     newer_than "any" = NULL,
     verbose BOOLEAN = FALSE,
     cascade_to_materializations BOOLEAN = NULL

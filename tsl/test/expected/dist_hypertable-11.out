@@ -2903,8 +2903,8 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
  
 (1 row)
 
--- test passing newer_than as interval and cascade
-SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks', cascade => true);
+-- test passing newer_than as interval
+SELECT * FROM drop_chunks(newer_than => interval '10 years', table_name => 'disttable_drop_chunks');
                   drop_chunks                  
 -----------------------------------------------
  _timescaledb_internal._dist_hyper_10_30_chunk

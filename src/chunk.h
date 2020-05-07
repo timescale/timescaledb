@@ -155,7 +155,7 @@ extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBeh
 														   int32 log_level);
 extern TSDLLEXPORT List *
 ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type, bool cascade,
+						Oid older_than_type, Oid newer_than_type,
 						CascadeToMaterializationOption cascades_to_materializations,
 						int32 log_level, bool user_supplied_table_name, List **affected_data_nodes);
 extern TSDLLEXPORT Chunk *

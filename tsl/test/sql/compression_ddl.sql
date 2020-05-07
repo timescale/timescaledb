@@ -235,12 +235,14 @@ WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_CHUNK_NAME;
 
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 --errors due to dependent objects
 SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
-
-SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ, cascade=>true);
+DROP VIEW dependent_1;
+SELECT drop_chunks(table_name=>'test1', older_than => '2018-03-28'::TIMESTAMPTZ);
 
 --should decrease #chunks both compressed and decompressed
 SELECT count(*) as count_chunks_uncompressed

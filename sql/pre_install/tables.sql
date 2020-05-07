@@ -233,7 +233,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
     job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
     hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
-	cascade					    BOOLEAN                 NOT NULL,
     cascade_to_materializations BOOLEAN,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
