@@ -251,12 +251,6 @@ ts_extension_invalidate(Oid relid)
 bool
 ts_extension_is_loaded(void)
 {
-	elog(DEBUG1,
-		 "%s: timescaledb.restoring=%s, IsBinaryUpgrade=%s",
-		 __func__,
-		 ts_guc_restoring ? "on" : "off",
-		 IsBinaryUpgrade ? "yes" : "no");
-
 	/* When restoring deactivate extension.
 	 *
 	 * We are using IsBinaryUpgrade (and ts_guc_restoring).  If a user set
