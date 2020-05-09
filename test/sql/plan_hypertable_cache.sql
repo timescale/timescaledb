@@ -9,7 +9,7 @@
 
 CREATE TABLE test (a int, time timestamptz NOT NULL);
 SELECT create_hypertable('public.test', 'time');
-INSERT INTO test SELECT i, current_date-10-i from generate_series(1,20) i;
+INSERT INTO test SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
 
 CREATE OR REPLACE FUNCTION test_f(_ts timestamptz)
 RETURNS SETOF test LANGUAGE SQL STABLE PARALLEL SAFE
