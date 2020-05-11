@@ -473,20 +473,6 @@ choose_next_subplan_non_parallel(ChunkAppendState *state)
 }
 
 static void
-choose_next_subplan_for_leader(ChunkAppendState *state)
-{
-	/*
-	 * If no workers got launched for this parallel plan
-	 * we have to let leader participate in subplan
-	 * execution.
-	 */
-	if (state->pcxt->nworkers_launched == 0)
-		choose_next_subplan_for_worker(state);
-	else
-		state->current = NO_MATCHING_SUBPLANS;
-}
-
-static void
 choose_next_subplan_for_worker(ChunkAppendState *state)
 {
 	ParallelChunkAppendState *pstate = state->pstate;
@@ -648,7 +634,12 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 	state->lock = chunk_append_get_lock_pointer();
 	pstate->next_plan = INVALID_SUBPLAN_INDEX;
 
-	state->choose_next_subplan = choose_next_subplan_for_leader;
+	/*
+	 * Leader should use the same subplan selection as normal worker threads. If the user wishes to
+	 * disallow running plans on the leader they should do so via the parallel_leader_participation
+	 * GUC.
+	 */
+	state->choose_next_subplan = choose_next_subplan_for_worker;
 	state->current = INVALID_SUBPLAN_INDEX;
 	state->pcxt = pcxt;
 	state->pstate = pstate;
