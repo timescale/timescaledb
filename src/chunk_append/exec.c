@@ -67,7 +67,6 @@ static CustomExecMethods chunk_append_state_methods = {
 };
 
 static void choose_next_subplan_non_parallel(ChunkAppendState *state);
-static void choose_next_subplan_for_leader(ChunkAppendState *state);
 static void choose_next_subplan_for_worker(ChunkAppendState *state);
 
 static List *constify_restrictinfos(PlannerInfo *root, List *restrictinfos);
