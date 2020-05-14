@@ -16,12 +16,8 @@
 #include <utils/memutils.h>
 
 #include "export.h"
-
+#include "test_utils.h"
 #include "with_clause_parser.h"
-
-#define TS_TEST_FN(name)                                                                           \
-	TS_FUNCTION_INFO_V1(name);                                                                     \
-	Datum name(PG_FUNCTION_ARGS)
 
 static DefElem *
 def_elem_from_texts(Datum *texts, int nelems)
@@ -65,7 +61,7 @@ def_elems_from_array(ArrayType *with_clause_array)
 		Datum *with_clause_fields;
 		int with_clause_elems;
 		ArrayType *with_clause = DatumGetArrayTypeP(with_clause_datum);
-		Assert(!with_clause_null);
+		TestAssertTrue(!with_clause_null);
 		deconstruct_array(with_clause,
 						  TEXTOID,
 						  with_clause_meta.typlen,
@@ -91,7 +87,7 @@ create_filter_tuple(TupleDesc tuple_desc, DefElem *d, bool within)
 	Datum *values = palloc0(sizeof(*values) * tuple_desc->natts);
 	bool *nulls = palloc0(sizeof(*nulls) * tuple_desc->natts);
 
-	Assert(tuple_desc->natts >= 4);
+	TestAssertTrue(tuple_desc->natts >= 4);
 
 	if (d->defnamespace != NULL)
 		values[0] = CStringGetTextDatum(d->defnamespace);

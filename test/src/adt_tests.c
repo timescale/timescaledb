@@ -27,46 +27,47 @@ i32_vec_test(void)
 	int32_vec *vec = int32_vec_create(CurrentMemoryContext, 0);
 	int i;
 	uint32 old_capacity;
+
 	for (i = 0; i < 100; i++)
 		int32_vec_append(vec, i);
 
-	AssertInt64Eq(vec->num_elements, 100);
+	TestAssertInt64Eq(vec->num_elements, 100);
 
 	if (vec->max_elements < 100)
 		elog(ERROR, "vec capacity %d, should be at least 100", vec->max_elements);
 
 	for (i = 0; i < 100; i++)
-		AssertInt64Eq(*int32_vec_at(vec, i), i);
+		TestAssertInt64Eq(*int32_vec_at(vec, i), i);
 
-	AssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
+	TestAssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
 
 	old_capacity = vec->max_elements;
 	int32_vec_delete_range(vec, 30, 19);
-	AssertInt64Eq(vec->num_elements, 81);
-	AssertInt64Eq(vec->max_elements, old_capacity);
+	TestAssertInt64Eq(vec->num_elements, 81);
+	TestAssertInt64Eq(vec->max_elements, old_capacity);
 
 	for (i = 0; i < 30; i++)
-		AssertInt64Eq(*int32_vec_at(vec, i), i);
+		TestAssertInt64Eq(*int32_vec_at(vec, i), i);
 
 	for (; i < 51; i++)
-		AssertInt64Eq(*int32_vec_at(vec, i), i + 19);
+		TestAssertInt64Eq(*int32_vec_at(vec, i), i + 19);
 
-	AssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
+	TestAssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
 
 	int32_vec_clear(vec);
-	AssertInt64Eq(vec->num_elements, 0);
-	AssertInt64Eq(vec->max_elements, old_capacity);
+	TestAssertInt64Eq(vec->num_elements, 0);
+	TestAssertInt64Eq(vec->max_elements, old_capacity);
 
 	int32_vec_free_data(vec);
-	AssertInt64Eq(vec->num_elements, 0);
-	AssertInt64Eq(vec->max_elements, 0);
-	AssertPtrEq(vec->data, NULL);
+	TestAssertInt64Eq(vec->num_elements, 0);
+	TestAssertInt64Eq(vec->max_elements, 0);
+	TestAssertPtrEq(vec->data, NULL);
 
 	/* free_data is idempotent */
 	int32_vec_free_data(vec);
-	AssertInt64Eq(vec->num_elements, 0);
-	AssertInt64Eq(vec->max_elements, 0);
-	AssertPtrEq(vec->data, NULL);
+	TestAssertInt64Eq(vec->num_elements, 0);
+	TestAssertInt64Eq(vec->max_elements, 0);
+	TestAssertPtrEq(vec->data, NULL);
 
 	int32_vec_free(vec);
 }
@@ -81,15 +82,15 @@ uint64_vec_test(void)
 	for (i = 0; i < 30; i++)
 		uint64_vec_append(&vec, i + 3);
 
-	AssertInt64Eq(vec.num_elements, 30);
-	AssertInt64Eq(vec.max_elements, 100);
+	TestAssertInt64Eq(vec.num_elements, 30);
+	TestAssertInt64Eq(vec.max_elements, 100);
 	for (i = 0; i < 30; i++)
-		AssertInt64Eq(*uint64_vec_at(&vec, i), i + 3);
+		TestAssertInt64Eq(*uint64_vec_at(&vec, i), i + 3);
 
 	uint64_vec_free_data(&vec);
-	AssertInt64Eq(vec.num_elements, 0);
-	AssertInt64Eq(vec.max_elements, 0);
-	AssertPtrEq(vec.data, NULL);
+	TestAssertInt64Eq(vec.num_elements, 0);
+	TestAssertInt64Eq(vec.max_elements, 0);
+	TestAssertPtrEq(vec.data, NULL);
 }
 
 static void
@@ -112,24 +113,24 @@ bit_array_test(void)
 
 	bit_array_iterator_init(&iter, &bits);
 	for (i = 0; i < 65; i++)
-		AssertInt64Eq(bit_array_iter_next(&iter, i), i);
+		TestAssertInt64Eq(bit_array_iter_next(&iter, i), i);
 
-	AssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
-	AssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
-	AssertInt64Eq(bit_array_iter_next(&iter, 64), 0x9069060909009090);
-	AssertInt64Eq(bit_array_iter_next(&iter, 1), 0);
-	AssertInt64Eq(bit_array_iter_next(&iter, 64), ~0x9069060909009090);
-	AssertInt64Eq(bit_array_iter_next(&iter, 1), 1);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 64), 0x9069060909009090);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 1), 0);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 64), ~0x9069060909009090);
+	TestAssertInt64Eq(bit_array_iter_next(&iter, 1), 1);
 
 	bit_array_iterator_init_rev(&iter, &bits);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 1), 1);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 64), ~0x9069060909009090);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 1), 0);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 64), 0x9069060909009090);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
-	AssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 1), 1);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 64), ~0x9069060909009090);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 1), 0);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 64), 0x9069060909009090);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
+	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
 	for (i = 64; i >= 0; i--)
-		AssertInt64Eq(bit_array_iter_next_rev(&iter, i), i);
+		TestAssertInt64Eq(bit_array_iter_next_rev(&iter, i), i);
 }
 
 Datum

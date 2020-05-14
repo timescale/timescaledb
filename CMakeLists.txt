@@ -62,8 +62,6 @@ set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform th
 is built for")
 message(STATUS "Install method is '${PROJECT_INSTALL_METHOD}'")
 
-option(TS_COVERAGE_ONLY "run in debug mode with assertions disabled to provide more accurate test-coverage info")
-
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of CMAKE_C_FLAGS_DEBUG is
   # determined at build time by running cmake --build . --config Debug (at least on Windows).
@@ -71,9 +69,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   # Debug. Then Debug enabled builds will only happen on Windows if both the configuration-
   # and build-time settings are Debug.
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DDEBUG=1 -DTS_DEBUG=1")
-  if (NOT TS_COVERAGE_ONLY)
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1")
-  endif()
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(SUPPORTED_COMPILERS "GNU" "Clang" "AppleClang" "MSVC")
@@ -314,6 +309,33 @@ endif()
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry" ON)
 option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
+
+# Option to enable assertions. Note that if we include headers from a
+# PostgreSQL build that has assertions enabled, we might inherit that
+# setting without explicitly enabling assertions via the ASSERTIONS
+# option defined here. Thus, this option is mostly useful to enable
+# assertions when the PostgreSQL we compile against has it disabled.
+option(ASSERTIONS "Compile with assertion checks (default OFF)" OFF)
+
+if (NOT EXISTS ${PG_INCLUDEDIR}/pg_config.h)
+  message(FATAL_ERROR "Could not find pg_config.h in ${PG_INCLUDEDIR}. "
+    "Make sure PG_PATH points to a valid PostgreSQL installation that includes development headers.")
+endif ()
+
+file(READ ${PG_INCLUDEDIR}/pg_config.h PG_CONFIG_H)
+string(REGEX MATCH "#define USE_ASSERT_CHECKING 1" PG_USE_ASSERT_CHECKING ${PG_CONFIG_H})
+
+if (PG_USE_ASSERT_CHECKING AND NOT ASSERTIONS)
+  message(NOTICE "Assertion checks are OFF although enabled in PostgreSQL build (pg_config.h).\n"
+    "The PostgreSQL setting for assertions will take precedence.")
+elseif (ASSERTIONS)
+  message(STATUS "Assertion checks are ON")
+  add_compile_definitions(USE_ASSERT_CHECKING=1)
+elseif (CMAKE_BUILD_TYPE MATCHES Debug)
+  message(NOTICE "Assertion checks are OFF in Debug build. Set -DASSERTIONS=ON to enable assertions.")
+else ()
+  message(STATUS "Assertion checks are OFF")
+endif ()
 
 # Check if PostgreSQL has OpenSSL enabled by inspecting pg_config --configure.
 # Right now, a Postgres header will redefine an OpenSSL function if Postgres is not installed --with-openssl,
