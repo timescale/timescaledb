@@ -13,5 +13,5 @@ add_library(${TSL_TESTS_LIB_NAME} OBJECT ${SOURCES})
 # module, it needs to be compiled as position-independent code
 # (e.g., the -fPIC compiler flag for GCC)
 set_target_properties(${TSL_TESTS_LIB_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
+target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/test/src)
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)

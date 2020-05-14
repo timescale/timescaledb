@@ -3,6 +3,7 @@ set(SOURCES
   symbol_conflict.c
   test_time_to_internal.c
   test_with_clause_parser.c
+  test_utils.c
 )
 
 include(${PROJECT_SOURCE_DIR}/src/build-defs.cmake)

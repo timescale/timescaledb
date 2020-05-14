@@ -30,6 +30,7 @@
 #include "bgw/job_stat.h"
 #include "timer_mock.h"
 #include "params.h"
+#include "test_utils.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
@@ -85,7 +86,7 @@ serialize_test_parameters(int32 ttl)
 
 	jb = JsonbValueToJsonb(result);
 	(void) JsonbToCString(jtext, &jb->root, VARSIZE(jb));
-	Assert(jtext->len < BGW_EXTRALEN);
+	TestAssertTrue(jtext->len < BGW_EXTRALEN);
 
 	return jtext->data;
 }
@@ -99,8 +100,8 @@ deserialize_test_parameters(char *params, int32 *ttl, Oid *user_oid)
 	Numeric ttl_numeric;
 	Numeric user_numeric;
 
-	Assert(ttl_v->type == jbvNumeric);
-	Assert(user_v->type == jbvNumeric);
+	TestAssertTrue(ttl_v->type == jbvNumeric);
+	TestAssertTrue(user_v->type == jbvNumeric);
 
 	ttl_numeric = ttl_v->val.numeric;
 	user_numeric = user_v->val.numeric;
@@ -179,12 +180,12 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	if (worker_handle != NULL)
 	{
 		BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
-		Assert(BGWH_STARTED == status);
+		TestAssertTrue(BGWH_STARTED == status);
 		if (status != BGWH_STARTED)
 			elog(ERROR, "bgw not started");
 
 		status = WaitForBackgroundWorkerShutdown(worker_handle);
-		Assert(BGWH_STOPPED == status);
+		TestAssertTrue(BGWH_STOPPED == status);
 		if (status != BGWH_STOPPED)
 			elog(ERROR, "bgw not stopped");
 	}
@@ -207,7 +208,7 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	MemoryContextSwitchTo(old_ctx);
 
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
-	Assert(BGWH_STARTED == status);
+	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
 		elog(ERROR, "bgw not started");
 
@@ -220,7 +221,7 @@ ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	if (current_handle != NULL)
 	{
 		BgwHandleStatus status = WaitForBackgroundWorkerShutdown(current_handle);
-		Assert(BGWH_STOPPED == status);
+		TestAssertTrue(BGWH_STOPPED == status);
 		if (status != BGWH_STOPPED)
 			elog(ERROR, "bgw not stopped");
 	}

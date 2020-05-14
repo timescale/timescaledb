@@ -11,6 +11,7 @@
 
 #include "export.h"
 #include "net/http.h"
+#include "test_utils.h"
 
 #define MAX_REQUEST_SIZE 4096
 
@@ -96,7 +97,7 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 
 			buf = ts_http_response_state_next_buffer(state, &bufsize);
 
-			Assert(bufsize >= bytes);
+			TestAssertTrue(bufsize >= bytes);
 
 			/* Copy part of the message into the parsing state */
 			memcpy(buf, TEST_RESPONSES[i], bytes);
@@ -104,13 +105,13 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 			/* Now do the parse */
 			success = ts_http_response_state_parse(state, bytes);
 
-			Assert(success);
+			TestAssertTrue(success);
 			if (!success)
 				elog(ERROR, "could not parse http state");
 
 			success = ts_http_response_state_is_done(state);
 
-			Assert(bytes < strlen(TEST_RESPONSES[i]) ? !success : success);
+			TestAssertTrue(bytes < strlen(TEST_RESPONSES[i]) ? !success : success);
 
 			ts_http_response_state_destroy(state);
 		}
@@ -139,21 +140,21 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 		bytes = strlen(TEST_RESPONSES[i]);
 
-		Assert(bufsize >= bytes);
+		TestAssertTrue(bufsize >= bytes);
 
 		/* Copy all of the message into the parsing state */
 		memcpy(buf, TEST_RESPONSES[i], bytes);
 
 		/* Now do the parse */
-		Assert(ts_http_response_state_parse(state, bytes));
+		TestAssertTrue(ts_http_response_state_parse(state, bytes));
 
-		Assert(ts_http_response_state_is_done(state));
-		Assert(ts_http_response_state_content_length(state) == TEST_LENGTHS[i]);
+		TestAssertTrue(ts_http_response_state_is_done(state));
+		TestAssertTrue(ts_http_response_state_content_length(state) == TEST_LENGTHS[i]);
 		/* Make sure we read the right message body */
 		cmp = !strncmp(MESSAGE_BODY[i],
 					   ts_http_response_state_body_start(state),
 					   ts_http_response_state_content_length(state));
-		Assert(cmp);
+		TestAssertTrue(cmp);
 		if (!cmp)
 			elog(ERROR, "bad message");
 
@@ -171,12 +172,12 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 		bytes = strlen(BAD_RESPONSES[i]);
 
-		Assert(bufsize >= bytes);
+		TestAssertTrue(bufsize >= bytes);
 
 		memcpy(buf, BAD_RESPONSES[i], bytes);
 
-		Assert(!ts_http_response_state_parse(state, bytes) ||
-			   !ts_http_response_state_valid_status(state));
+		TestAssertTrue(!ts_http_response_state_parse(state, bytes) ||
+					   !ts_http_response_state_valid_status(state));
 
 		ts_http_response_state_destroy(state);
 	}
@@ -202,7 +203,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	serialized = ts_http_request_build(req, &request_len);
 
 	cmp_res = !strncmp(expected_response, serialized, request_len);
-	Assert(cmp_res);
+	TestAssertTrue(cmp_res);
 	if (!cmp_res)
 		elog(ERROR, "bad response");
 	ts_http_request_destroy(req);
@@ -220,7 +221,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 
 	serialized = ts_http_request_build(req, &request_len);
 
-	Assert(!strncmp(expected_response, serialized, request_len));
+	TestAssertTrue(!strncmp(expected_response, serialized, request_len));
 	ts_http_request_destroy(req);
 
 	expected_response = "POST /tmp/status/1234 HTTP/1.1\r\n"
@@ -234,7 +235,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 
 	serialized = ts_http_request_build(req, &request_len);
 
-	Assert(!strncmp(expected_response, serialized, request_len));
+	TestAssertTrue(!strncmp(expected_response, serialized, request_len));
 	ts_http_request_destroy(req);
 
 	/* Check that content-length checking works */
@@ -244,7 +245,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	ts_http_request_set_header(req, HTTP_HOST, host);
 	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "9");
 
-	Assert(!ts_http_request_build(req, &request_len));
+	TestAssertTrue(!ts_http_request_build(req, &request_len));
 	ts_http_request_destroy(req);
 
 	PG_RETURN_NULL();

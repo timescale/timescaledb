@@ -22,6 +22,7 @@
 
 #include "params.h"
 #include "timer_mock.h"
+#include "test_utils.h"
 #include "log.h"
 #include "scanner.h"
 #include "catalog.h"
@@ -75,7 +76,7 @@ params_load_dsm_handle()
 	rel = table_open(get_dsm_handle_table_oid(), RowExclusiveLock);
 	scan = table_beginscan(rel, SnapshotSelf, 0, NULL);
 	tuple = heap_getnext(scan, ForwardScanDirection);
-	Assert(tuple != NULL);
+	TestAssertTrue(tuple != NULL);
 	tuple = heap_copytuple(tuple);
 	fd = (FormData_bgw_dsm_handle *) GETSTRUCT(tuple);
 	handle = fd->handle;
@@ -123,11 +124,11 @@ params_open_wrapper()
 #endif
 	}
 
-	Assert(seg != NULL);
+	TestAssertTrue(seg != NULL);
 
 	wrapper = dsm_segment_address(seg);
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	return wrapper;
 };
@@ -137,7 +138,7 @@ params_close_wrapper(TestParamsWrapper *wrapper)
 {
 	dsm_segment *seg = dsm_find_mapping(params_get_dsm_handle());
 
-	Assert(seg != NULL);
+	TestAssertTrue(seg != NULL);
 	dsm_detach(seg);
 }
 
@@ -147,7 +148,7 @@ ts_params_get()
 	TestParamsWrapper *wrapper = params_open_wrapper();
 	TestParams *res;
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	res = palloc(sizeof(TestParams));
 
@@ -167,7 +168,7 @@ ts_params_set_time(int64 new_val, bool set_latch)
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	SpinLockAcquire(&wrapper->mutex);
 	wrapper->params.current_time = new_val;
@@ -184,7 +185,7 @@ ts_initialize_timer_latch()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	SpinLockAcquire(&wrapper->mutex);
 
@@ -200,7 +201,7 @@ ts_reset_and_wait_timer_latch()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	ResetLatch(&wrapper->params.timer_latch);
 	WaitLatchCompat(&wrapper->params.timer_latch,
@@ -215,7 +216,7 @@ params_set_mock_wait_type(MockWaitType new_val)
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
-	Assert(wrapper != NULL);
+	TestAssertTrue(wrapper != NULL);
 
 	SpinLockAcquire(&wrapper->mutex);
 
@@ -251,7 +252,7 @@ ts_bgw_params_create(PG_FUNCTION_ARGS)
 	dsm_segment *seg = dsm_create(sizeof(TestParamsWrapper), 0);
 	TestParamsWrapper *params;
 
-	Assert(seg != NULL);
+	TestAssertTrue(seg != NULL);
 
 	params = dsm_segment_address(seg);
 	*params = (TestParamsWrapper)

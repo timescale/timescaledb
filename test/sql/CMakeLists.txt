@@ -83,7 +83,8 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     metadata.sql
     net.sql
     symbol_conflict.sql
-    telemetry.sql)
+    telemetry.sql
+    test_utils.sql)
   if (USE_OPENSSL)
     list(APPEND TEST_FILES
       privacy.sql)

@@ -164,7 +164,7 @@ jobs:
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-12 bgw_db_scheduler chunk_adaptive-12 ordered_append-12 parallel-12 transparent_decompression-12 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-  
+
     # This runs tests on ARM32 emulation
     - if: branch = arm_test
       stage: test
@@ -261,7 +261,7 @@ jobs:
         - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-12 parallel-12 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
-  
+
     # to maximize code code coverage on PRs we run tests on earliest 9.6, latest 10 and earliest and latest 11
     # cron and prerelease runs regression tests on earliest and latest for each major version
     - if: (type = cron) OR (branch = prerelease_test)
@@ -303,9 +303,9 @@ jobs:
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "CodeCov 12.0"
-      env: 
+      env:
         - PG_VERSION=12.0
-        - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'"
+        - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'"
         - CODECOV_FLAGS="-F pr"
         - IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
       after_success:
@@ -315,7 +315,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "CodeCov 9.6.17"
-      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -323,7 +323,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "CodeCov 11.7"
-      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -332,7 +332,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
       name: "CodeCov 10.12"
-      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -430,7 +430,7 @@ jobs:
       after_script:
       script:
         - PG_MAJOR=12 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
-  
+
     # ApacheOnly regression tests
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test

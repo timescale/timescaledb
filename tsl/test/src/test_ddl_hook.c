@@ -9,6 +9,7 @@
 #include <fmgr.h>
 
 #include "export.h"
+#include "test_utils.h"
 #include "process_utility.h"
 
 #include "compat.h"
@@ -186,7 +187,7 @@ test_sql_drop(List *dropped_objects)
 Datum
 ts_test_ddl_command_hook_reg(PG_FUNCTION_ARGS)
 {
-	Assert(ts_cm_functions->ddl_command_start == NULL);
+	TestAssertTrue(ts_cm_functions->ddl_command_start == NULL);
 	ts_cm_functions->ddl_command_start = test_ddl_command_start;
 	ts_cm_functions->ddl_command_end = test_ddl_command_end;
 	ts_cm_functions->sql_drop = test_sql_drop;
@@ -196,7 +197,7 @@ ts_test_ddl_command_hook_reg(PG_FUNCTION_ARGS)
 Datum
 ts_test_ddl_command_hook_unreg(PG_FUNCTION_ARGS)
 {
-	Assert(ts_cm_functions->ddl_command_start == test_ddl_command_start);
+	TestAssertTrue(ts_cm_functions->ddl_command_start == test_ddl_command_start);
 	ts_cm_functions->ddl_command_start = NULL;
 	ts_cm_functions->ddl_command_end = NULL;
 	ts_cm_functions->sql_drop = NULL;
