@@ -62,6 +62,9 @@ set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform th
 is built for")
 message(STATUS "Install method is '${PROJECT_INSTALL_METHOD}'")
 
+# Code coverage is optional and OFF by default
+option(CODECOVERAGE "Enable code coverage for the build" OFF)
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of CMAKE_C_FLAGS_DEBUG is
   # determined at build time by running cmake --build . --config Debug (at least on Windows).
@@ -91,16 +94,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # -Wconversions
 
   add_compile_options(-Wempty-body -Wvla)
-  if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "7")
-    add_compile_options(-Wimplicit-fallthrough)
-  endif()
+  check_c_compiler_flag(-Wimplicit-fallthrough CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
 
-  # Not sure when it was added to Clang, but it is mentioned in the
-  # release notes for Clang 3.3
-  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER "3.3")
+  if (CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
     add_compile_options(-Wimplicit-fallthrough)
-  endif()
-
+  endif ()
 endif()
 
 # Check for supported platforms and compiler flags
@@ -121,30 +119,6 @@ else ()
 endif ()
 
 message(STATUS "Using compiler ${CMAKE_C_COMPILER_ID}")
-
-if (ENABLE_CODECOVERAGE)
-  message(STATUS "Running code coverage")
-
-  if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(WARNING "Code coverage results with an optimised (non-Debug) build may be misleading")
-  endif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-
-  if (NOT DEFINED CODECOV_OUTPUTFILE)
-    set(CODECOV_OUTPUTFILE cmake_coverage.output)
-  endif (NOT DEFINED CODECOV_OUTPUTFILE)
-
-  if (NOT DEFINED CODECOV_HTMLOUTPUTDIR)
-    set(CODECOV_HTMLOUTPUTDIR coverage_results)
-  endif (NOT DEFINED CODECOV_HTMLOUTPUTDIR)
-
-  find_program(CODECOV_GCOV gcov)
-  find_program(CODECOV_LCOV lcov)
-  add_definitions(-fprofile-arcs -ftest-coverage -coverage)
-  link_libraries(gcov)
-  set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --coverage -fprofile-arcs)
-  add_custom_target(coverage_init ALL ${CODECOV_LCOV} --base-directory . --directory ${CMAKE_BINARY_DIR} --output-file ${CODECOV_OUTPUTFILE} --capture --initial)
-
-endif (ENABLE_CODECOVERAGE)
 
 # Search paths for Postgres binaries
 if(WIN32)
@@ -378,6 +352,16 @@ if (USE_OPENSSL)
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
 endif (USE_OPENSSL)
 
+if (CODECOVERAGE)
+  message(STATUS "Code coverage is enabled.")
+  # Note that --coverage is synonym for the necessary compiler and
+  # linker flags for the given compiler.  For example, with GCC,
+  # --coverage translates to -fprofile-arcs -ftest-coverage when
+  # compiling and -lgcov when linking
+  add_compile_options(--coverage -O0)
+  add_link_options(--coverage)
+endif (CODECOVERAGE)
+
 if (UNIX)
   add_subdirectory(scripts)
 endif (UNIX)
@@ -394,7 +378,13 @@ endif()
 
 add_custom_target(licensecheck
   COMMAND ${PROJECT_SOURCE_DIR}/scripts/check_license_all.sh
-)
+  )
+
+# This needs to be the last subdirectory so that other targets are
+# already defined
+if (CODECOVERAGE)
+  add_subdirectory(codecov)
+endif ()
 
 if (IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)
   configure_file(${PROJECT_SOURCE_DIR}/scripts/githooks/commit_msg.py ${PROJECT_SOURCE_DIR}/.git/hooks/commit-msg COPYONLY)
