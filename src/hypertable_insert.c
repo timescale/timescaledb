@@ -21,6 +21,29 @@
 #include "chunk_dispatch_plan.h"
 #include "hypertable_cache.h"
 
+static PlanState *
+get_chunk_dispatch_state(ModifyTableState *mtstate, PlanState *substate)
+{
+	switch (nodeTag(substate))
+	{
+		case T_CustomScanState:
+		{
+			CustomScanState *csstate = castNode(CustomScanState, substate);
+
+			if (strcmp(csstate->methods->CustomName, CHUNK_DISPATCH_STATE_NAME) == 0)
+				return substate;
+
+			break;
+		}
+		case T_ResultState:
+			return get_chunk_dispatch_state(mtstate, castNode(ResultState, substate)->ps.lefttree);
+		default:
+			break;
+	}
+
+	return NULL;
+}
+
 /*
  * HypertableInsert (with corresponding executor node) is a plan node that
  * implements INSERTs for hypertables. It is mostly a wrapper around the
@@ -36,35 +59,33 @@ static void
 hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	HypertableInsertState *state = (HypertableInsertState *) node;
+	ModifyTableState *mtstate;
 	PlanState *ps;
+	bool PG_USED_FOR_ASSERTS_ONLY found_cdstate = false;
+	int i;
 
 	ps = ExecInitNode(&state->mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
+	mtstate = castNode(ModifyTableState, ps);
 
-	if (IsA(ps, ModifyTableState))
+	/*
+	 * Find all ChunkDispatchState subnodes and set their parent
+	 * ModifyTableState node
+	 */
+	for (i = 0; i < mtstate->mt_nplans; i++)
 	{
-		ModifyTableState *mtstate = (ModifyTableState *) ps;
-		int i;
+		ChunkDispatchState *cdstate =
+			(ChunkDispatchState *) get_chunk_dispatch_state(mtstate, mtstate->mt_plans[i]);
 
-		/*
-		 * Find all ChunkDispatchState subnodes and set their parent
-		 * ModifyTableState node
-		 */
-		for (i = 0; i < mtstate->mt_nplans; i++)
+		if (cdstate)
 		{
-			if (IsA(mtstate->mt_plans[i], CustomScanState))
-			{
-				CustomScanState *csstate = (CustomScanState *) mtstate->mt_plans[i];
-
-				if (strcmp(csstate->methods->CustomName, CHUNK_DISPATCH_STATE_NAME) == 0)
-				{
-					ChunkDispatchState *cdstate = (ChunkDispatchState *) mtstate->mt_plans[i];
-
-					ts_chunk_dispatch_state_set_parent(cdstate, mtstate);
-				}
-			}
+			found_cdstate = true;
+			ts_chunk_dispatch_state_set_parent(cdstate, mtstate);
 		}
 	}
+
+	/* Ensure that we found at least one ChunkDispatchState node */
+	Assert(found_cdstate);
 }
 
 static TupleTableSlot *
