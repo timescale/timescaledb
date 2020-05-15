@@ -1,0 +1,37 @@
+name: Docker Images
+
+on:
+  release:
+    types: [published]
+
+env:
+  ORG: timescaledev # timescale
+jobs:
+
+  build:
+    name: PG${{ matrix.pg }}${{ matrix.oss }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pg: [9.6, 10, 11, 12]
+
+    steps:
+    - name: Checkout timescaledb-docker
+      uses: actions/checkout@v2
+      with:
+        repository: timescale/timescaledb-docker
+        path: tsdb-docker
+
+# Docker Login with Tokn is missing here
+
+    - name: timescaledb
+      run: make all PG_VER=pg${{ matrix.pg }}
+      working-directory: ./tsdb-docker
+
+    - name: timescaledb-bitnami
+      run: make push PG_VER=pg${{ matrix.pg }}
+      working-directory: ./tsdb-docker/bitnami
+
+    - name: timescaledb-postgis
+      run: make push PG_VER=pg${{ matrix.pg }}
+      working-directory: ./tsdb-docker/postgis
