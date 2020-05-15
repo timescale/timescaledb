@@ -5,5 +5,5 @@
 \ir post.v2.sql
 \ir catalog_missing_columns.sql
 \ir post.compression.sql
-\ir post.continuous_aggs.sql
+\ir post.continuous_aggs.v2.sql
 

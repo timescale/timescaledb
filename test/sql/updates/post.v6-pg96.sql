@@ -3,5 +3,5 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \ir post.v2.sql
-\ir post.continuous_aggs.sql
+\ir post.continuous_aggs.v2.sql
 

@@ -4,5 +4,5 @@
 
 \ir post.v2.sql
 \ir post.compression.sql
-\ir post.continuous_aggs.sql
+\ir post.continuous_aggs.v2.sql
 
