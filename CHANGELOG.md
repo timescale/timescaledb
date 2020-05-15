@@ -4,24 +4,38 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## To be released
-We deem it high priority for users with multiple continuous aggregates to update to this release.
+## 1.7.1 (2020-05-18)
 
-**Major Features**
+This maintenance release contains bugfixes since the 1.7.0 release. We deem it medium
+priority for upgrading and high priority for users with multiple continuous aggregates.
+
+In particular the fixes contained in this maintenance release address bugs in continuous
+aggregates with real-time aggregation and PostgreSQL 12 support.
 
 **Bugfixes**
+* #1834 Define strerror() for Windows
+* #1846 Fix segfault on COPY to hypertable
 * #1850 Fix scheduler failure due to bad next_start_time for jobs
+* #1851 Fix hypertable expansion for UNION ALL
+* #1854 Fix reorder policy job to skip compressed chunks
 * #1861 Fix qual pushdown for compressed hypertables where quals have casts
 * #1864 Fix issue with subplan selection in parallel ChunkAppend
 * #1868 Add support for WHERE, HAVING clauses with real time aggregates
 * #1869 Fix real time aggregate support for multiple continuous aggregates
+* #1871 Don't rely on timescaledb.restoring for upgrade
 * #1875 Fix hypertable detection in subqueries
+* #1884 Fix crash on SELECT WHERE NOT with empty table
 
 **Thanks**
-* @frostwind for reporting issue with casts in where clauses on compressed hypertables
-* @fvannee for reporting an issue with hypertable detection in inlined SQL functions
-* @hgiasac for reporting missing where clause with real time aggregates
 * @airton-neto for reporting an issue with queries over UNIONs of hypertables
+* @dhodyn for reporting an issue with UNION ALL queries
+* @frostwind for reporting an issue with casts in where clauses on compressed hypertables
+* @fvannee for reporting an issue with hypertable detection in inlined SQL functions and an issue with COPY
+* @hgiasac for reporting missing where clause with real time aggregates
+* @louisth for reporting an issue with real-time aggregation and multiple continuous aggregates
+* @michael-sayapin for reporting an issue with INSERTs and WHERE NOT EXISTS
+* @olernov for reporting and fixing an issue with compressed chunks in the reorder policy
+* @pehlert for reporting an issue with pg_upgrade
 
 ## 1.7.0 (2020-04-16)
 
