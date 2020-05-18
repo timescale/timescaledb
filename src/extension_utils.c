@@ -149,7 +149,7 @@ extension_current_state()
 	 * ready (which may result in an infinite loop). More concretely we need
 	 * RelationCacheInitializePhase3 to have been already called.
 	 */
-	if (!IsNormalProcessingMode() || !IsTransactionState())
+	if (!IsNormalProcessingMode() || !IsTransactionState() || !OidIsValid(MyDatabaseId))
 		return EXTENSION_STATE_UNKNOWN;
 
 	/*
