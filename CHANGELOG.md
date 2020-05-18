@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #1915 Check for database in extension_current_state
+
+**Thanks**
+* @dmitri191 for reporting an issue with failing background workers
+
 ## 1.7.1 (2020-05-18)
 
 This maintenance release contains bugfixes since the 1.7.0 release. We deem it medium
