@@ -313,9 +313,9 @@ ORDER BY 2,1;
  Result
    ->  Merge Append
          Sort Key: _hyper_1_1_chunk.value, (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_1_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-         ->  Index Only Scan using _hyper_1_1_chunk_value_time_idx on _hyper_1_1_chunk
-         ->  Index Only Scan using _hyper_1_2_chunk_value_time_idx on _hyper_1_2_chunk
-         ->  Index Only Scan using _hyper_1_3_chunk_value_time_idx on _hyper_1_3_chunk
-         ->  Index Only Scan using _hyper_1_4_chunk_value_time_idx on _hyper_1_4_chunk
+         ->  Index Only Scan using _hyper_1_1_chunk_gapfill_plan_test_value_time_idx on _hyper_1_1_chunk
+         ->  Index Only Scan using _hyper_1_2_chunk_gapfill_plan_test_value_time_idx on _hyper_1_2_chunk
+         ->  Index Only Scan using _hyper_1_3_chunk_gapfill_plan_test_value_time_idx on _hyper_1_3_chunk
+         ->  Index Only Scan using _hyper_1_4_chunk_gapfill_plan_test_value_time_idx on _hyper_1_4_chunk
 (7 rows)
 

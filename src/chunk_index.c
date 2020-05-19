@@ -402,44 +402,6 @@ ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hyp
 					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 }
 
-/*
- * Create a new chunk index as a child of a parent hypertable index.
- *
- * The chunk index is created based on the statement that also creates the
- * parent index. This function is typically called when a new index is created
- * on the hypertable and we must add a corresponding index to each chunk.
- */
-Oid
-ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
-								int32 hypertable_id, Oid hypertable_indexrelid)
-{
-	ObjectAddress idxobj;
-	char *hypertable_indexname = get_rel_name(hypertable_indexrelid);
-
-	if (hypertable_indexname == NULL)
-		return InvalidOid; /* oops, the root index is gone, lets stop */
-
-	if (NULL != stmt->idxname)
-		stmt->idxname = chunk_index_choose_name(get_rel_name(chunkrelid),
-												hypertable_indexname,
-												get_rel_namespace(chunkrelid));
-
-	idxobj = DefineIndexCompat(chunkrelid,
-							   stmt,
-							   InvalidOid,
-							   false, /* is alter table */
-							   true,  /* check rights */
-							   false, /* skip build */
-							   true); /* quiet */
-
-	chunk_index_insert(chunk_id,
-					   get_rel_name(idxobj.objectId),
-					   hypertable_id,
-					   hypertable_indexname);
-
-	return idxobj.objectId;
-}
-
 static inline Oid
 chunk_index_get_schemaid(Form_chunk_index chunk_index, bool missing_ok)
 {
