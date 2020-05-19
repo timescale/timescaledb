@@ -229,3 +229,16 @@ CREATE INDEX idx_predicate_test_b1 ON idx_predicate_test(b1) WHERE b1=true;
 INSERT INTO idx_predicate_test VALUES ('2000-01-01',true);
 DROP TABLE idx_predicate_test;
 
+-- test index with table references
+CREATE TABLE idx_tableref_test(time timestamptz);
+SELECT table_name FROM create_hypertable('idx_tableref_test', 'time');
+-- we use security definer to prevent function inlining
+CREATE OR REPLACE FUNCTION tableref_func(t idx_tableref_test) RETURNS timestamptz LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $f$ SELECT t.time; $f$;
+-- try creating index with no existing chunks
+CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));
+-- insert data to trigger chunk creation
+INSERT INTO idx_tableref_test SELECT '2000-01-01';
+DROP INDEX tableref_idx;
+-- try creating index on hypertable with existing chunks
+CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));
+
