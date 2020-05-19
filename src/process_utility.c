@@ -1684,10 +1684,29 @@ static void
 process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	IndexStmt *stmt = transformIndexStmt(chunk_relid, info->stmt, NULL);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Relation hypertable_index_rel;
+	Relation chunk_rel;
 
-	ts_chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ht->fd.id, info->obj.objectId);
+	chunk_rel = table_open(chunk_relid, ShareLock);
+	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
+
+	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
+									info->extended_options.ht_hasoid,
+									RelationGetDescr(chunk_rel)))
+		ts_adjust_indexinfo_attnos(info->extended_options.indexinfo,
+								   info->main_table_relid,
+								   hypertable_index_rel,
+								   chunk_rel);
+
+	ts_chunk_index_create_from_adjusted_index_info(ht->fd.id,
+												   hypertable_index_rel,
+												   chunk->fd.id,
+												   chunk_rel,
+												   info->extended_options.indexinfo);
+
+	index_close(hypertable_index_rel, NoLock);
+	table_close(chunk_rel, NoLock);
 }
 
 static void
@@ -1759,10 +1778,8 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	/*
-	 * use ts_chunk_index_create instead of ts_chunk_index_create_from_stmt to
-	 * handle cases where the index is altered. Validation happens when
-	 * creating the hypertable's index, which goes through the usual
-	 * DefineIndex mechanism.
+	 * Validation happens when creating the hypertable's index, which goes
+	 * through the usual DefineIndex mechanism.
 	 */
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
@@ -1908,6 +1925,20 @@ process_index_start(ProcessUtilityArgs *args)
 														   info.extended_options.multitransaction);
 	info.obj.objectId = root_table_index.objectId;
 
+	/* collect information required for per chunk index creation */
+	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
+	main_table_desc = RelationGetDescr(main_table_relation);
+
+	main_table_index_relation = index_open(info.obj.objectId, AccessShareLock);
+	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
+
+	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
+	info.extended_options.n_ht_atts = main_table_desc->natts;
+	info.extended_options.ht_hasoid = TUPLE_DESC_HAS_OIDS(main_table_desc);
+
+	index_close(main_table_index_relation, NoLock);
+	table_close(main_table_relation, NoLock);
+
 	/* CREATE INDEX on the chunks */
 
 	/* create chunk indexes using the same transaction for all the chunks */
@@ -1932,17 +1963,6 @@ process_index_start(ProcessUtilityArgs *args)
 
 	/* we're about to release the hcache so store the main_table_relid for later */
 	info.main_table_relid = ht->main_table_relid;
-	main_table_relation = table_open(ht->main_table_relid, AccessShareLock);
-	main_table_desc = RelationGetDescr(main_table_relation);
-
-	main_table_index_relation = index_open(info.obj.objectId, AccessShareLock);
-	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
-
-	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
-	info.extended_options.n_ht_atts = main_table_desc->natts;
-	info.extended_options.ht_hasoid = TUPLE_DESC_HAS_OIDS(main_table_desc);
-
-	index_close(main_table_index_relation, NoLock);
 
 	/*
 	 * Lock the index for the remainder of the command. Since we're using
@@ -1954,8 +1974,6 @@ process_index_start(ProcessUtilityArgs *args)
 	 * CONCURRENTLY)
 	 */
 	LockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
-
-	table_close(main_table_relation, NoLock);
 
 	/*
 	 * mark the hypertable's index as invalid until all the chunk indexes
