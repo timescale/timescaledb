@@ -7,7 +7,7 @@
 
 -- canary for results diff
 -- this should be the only output of the results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
 
 --
 -- JOIN

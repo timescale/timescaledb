@@ -11,9 +11,8 @@
 
 extern bool ts_telemetry_on(void);
 
-extern bool ts_guc_disable_optimizations;
-extern bool ts_guc_optimize_non_hypertables;
-extern bool ts_guc_constraint_aware_append;
+extern bool ts_guc_enable_optimizations;
+extern bool ts_guc_enable_constraint_aware_append;
 extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;

@@ -38,10 +38,9 @@ static const struct config_enum_entry remote_data_fetchers[] = {
 	{ "rowbyrow", RowByRowFetcherType, false }, { "cursor", CursorFetcherType, false }
 };
 
-bool ts_guc_disable_optimizations = false;
-bool ts_guc_optimize_non_hypertables = false;
+bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
-bool ts_guc_constraint_aware_append = true;
+bool ts_guc_enable_constraint_aware_append = true;
 bool ts_guc_enable_ordered_append = true;
 bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
@@ -84,22 +83,11 @@ void
 _guc_init(void)
 {
 	/* Main database to connect to. */
-	DefineCustomBoolVariable("timescaledb.disable_optimizations",
-							 "Disable all timescale query optimizations",
+	DefineCustomBoolVariable("timescaledb.enable_optimizations",
+							 "Enable TimescaleDB query optimizations",
 							 NULL,
-							 &ts_guc_disable_optimizations,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-	DefineCustomBoolVariable("timescaledb.optimize_non_hypertables",
-							 "Apply timescale query optimization to plain tables",
-							 "Apply timescale query optimization to plain tables in addition to "
-							 "hypertables",
-							 &ts_guc_optimize_non_hypertables,
-							 false,
+							 &ts_guc_enable_optimizations,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -117,10 +105,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.constraint_aware_append",
+	DefineCustomBoolVariable("timescaledb.enable_constraint_aware_append",
 							 "Enable constraint-aware append scans",
 							 "Enable constraint exclusion at execution time",
-							 &ts_guc_constraint_aware_append,
+							 &ts_guc_enable_constraint_aware_append,
 							 true,
 							 PGC_USERSET,
 							 0,

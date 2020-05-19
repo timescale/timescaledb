@@ -715,7 +715,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 					int *order_attno, bool *reverse)
 {
 	/* check if optimizations are enabled */
-	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append ||
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
 		!ts_guc_enable_chunk_append)
 		return false;
 

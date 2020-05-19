@@ -47,10 +47,10 @@ SELECT schema_name, table_name, created FROM create_hypertable('btest_numeric', 
 -- LICENSE-APACHE for a copy of the license.
 -- canary for results diff
 -- this should be only output of results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
-              setting              | value 
------------------------------------+-------
- timescaledb.disable_optimizations | off
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
+             setting              | value 
+----------------------------------+-------
+ timescaledb.enable_optimizations | on
 (1 row)
 
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
@@ -677,10 +677,10 @@ ROLLBACK;
 -- LICENSE-APACHE for a copy of the license.
 -- canary for results diff
 -- this should be only output of results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
-              setting              | value 
------------------------------------+-------
- timescaledb.disable_optimizations | off
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
+             setting              | value 
+----------------------------------+-------
+ timescaledb.enable_optimizations | on
 (1 row)
 
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
@@ -975,14 +975,14 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 ROLLBACK;
 -- diff results with optimizations disabled and enabled
 \o :TEST_RESULTS_UNOPTIMIZED
-SET timescaledb.disable_optimizations TO true;
+SET timescaledb.enable_optimizations TO false;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 -- canary for results diff
 -- this should be only output of results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
 :PREFIX SELECT last(temp, time) FROM btest;
 :PREFIX SELECT first(temp, time) FROM btest;
@@ -1063,14 +1063,14 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 ROLLBACK;
 \o
 \o :TEST_RESULTS_OPTIMIZED
-SET timescaledb.disable_optimizations TO false;
+SET timescaledb.enable_optimizations TO true;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 -- canary for results diff
 -- this should be only output of results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
 :PREFIX SELECT last(temp, time) FROM btest;
 :PREFIX SELECT first(temp, time) FROM btest;
@@ -1154,10 +1154,10 @@ ROLLBACK;
 --- Unoptimized result
 +++ Optimized result
 @@ -1,6 +1,6 @@
-               setting              | value 
- -----------------------------------+-------
-- timescaledb.disable_optimizations | on
-+ timescaledb.disable_optimizations | off
+              setting              | value 
+ ----------------------------------+-------
+- timescaledb.enable_optimizations | off
++ timescaledb.enable_optimizations | on
  (1 row)
  
             time           | gp | temp 

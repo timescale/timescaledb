@@ -237,7 +237,7 @@ preprocess_query(Node *node, Query *rootquery)
 			switch (rte->rtekind)
 			{
 				case RTE_SUBQUERY:
-					if (!ts_guc_disable_optimizations && ts_guc_enable_cagg_reorder_groupby &&
+					if (ts_guc_enable_optimizations && ts_guc_enable_cagg_reorder_groupby &&
 						query->commandType == CMD_SELECT)
 					{
 						/* applicable to selects on continuous aggregates */
@@ -253,7 +253,7 @@ preprocess_query(Node *node, Query *rootquery)
 					if (NULL != ht)
 					{
 						/* Mark hypertable RTEs we'd like to expand ourselves */
-						if (!ts_guc_disable_optimizations && ts_guc_enable_constraint_exclusion &&
+						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
 							!IS_UPDL_CMD(rootquery) && query->resultRelation == 0 &&
 							query->rowMarks == NIL && rte->inh)
 							rte_mark_for_expansion(rte);
@@ -640,7 +640,7 @@ static void
 apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, RangeTblEntry *rte,
 					Hypertable *ht)
 {
-	if (ts_guc_disable_optimizations)
+	if (!ts_guc_enable_optimizations)
 		return;
 
 	switch (reltype)
@@ -653,8 +653,6 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			ts_sort_transform_optimization(root, rel);
 			break;
 		default:
-			if (ts_guc_optimize_non_hypertables)
-				ts_sort_transform_optimization(root, rel);
 			break;
 	}
 
@@ -1007,11 +1005,12 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 		}
 	}
 
-	if (ts_guc_disable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
+	if (!ts_guc_enable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
 		return;
 
-	if (!ts_guc_optimize_non_hypertables && !involves_hypertable(root, input_rel))
+	if (!involves_hypertable(root, input_rel))
 		return;
+
 	if (stage == UPPERREL_GROUP_AGG && output_rel != NULL)
 	{
 		if (!partials_found)

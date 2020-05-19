@@ -192,10 +192,10 @@ INSERT INTO tenk2 SELECT * FROM tenk1;
 --- Unoptimized results
 +++ Optimized results
 @@ -1,6 +1,6 @@
-               setting              | value 
- -----------------------------------+-------
-- timescaledb.disable_optimizations | on
-+ timescaledb.disable_optimizations | off
+              setting              | value 
+ ----------------------------------+-------
+- timescaledb.enable_optimizations | off
++ timescaledb.enable_optimizations | on
  (1 row)
  
   table_name 
