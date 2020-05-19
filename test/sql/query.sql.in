@@ -21,11 +21,11 @@ SET client_min_messages TO error;
 --make output contain query results
 \set PREFIX ''
 \o :TEST_RESULTS_OPTIMIZED
-SET timescaledb.disable_optimizations = 'off';
+SET timescaledb.enable_optimizations TO true;
 \ir :TEST_QUERY_NAME
 \o
 \o :TEST_RESULTS_UNOPTIMIZED
-SET timescaledb.disable_optimizations = 'on';
+SET timescaledb.enable_optimizations TO false;
 \ir :TEST_QUERY_NAME
 \o
 

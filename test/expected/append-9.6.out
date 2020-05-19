@@ -125,11 +125,11 @@ ANALYZE metrics_space;
 -- LICENSE-APACHE for a copy of the license.
 -- canary for results diff
 -- this should be the only output of the results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
-              setting              | value 
------------------------------------+-------
- timescaledb.disable_optimizations | off
- timescaledb.enable_chunk_append   | on
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
+             setting              | value 
+----------------------------------+-------
+ timescaledb.enable_optimizations | on
+ timescaledb.enable_chunk_append  | on
 (2 rows)
 
 -- query should exclude all chunks with optimization on
@@ -1872,22 +1872,22 @@ DROP TABLE join_limit;
 --- Unoptimized results
 +++ Optimized results
 @@ -1,6 +1,6 @@
-               setting              | value 
- -----------------------------------+-------
-- timescaledb.disable_optimizations | on
-+ timescaledb.disable_optimizations | off
-  timescaledb.enable_chunk_append   | on
+              setting              | value 
+ ----------------------------------+-------
+- timescaledb.enable_optimizations | off
++ timescaledb.enable_optimizations | on
+  timescaledb.enable_chunk_append  | on
  (2 rows)
  
 --- Unoptimized results
 +++ Optimized results
 @@ -1,7 +1,7 @@
-               setting              | value 
- -----------------------------------+-------
-- timescaledb.disable_optimizations | on
-- timescaledb.enable_chunk_append   | on
-+ timescaledb.disable_optimizations | off
-+ timescaledb.enable_chunk_append   | off
+              setting              | value 
+ ----------------------------------+-------
+- timescaledb.enable_optimizations | off
+- timescaledb.enable_chunk_append  | on
++ timescaledb.enable_optimizations | on
++ timescaledb.enable_chunk_append  | off
  (2 rows)
  
   time | temp | colorid 

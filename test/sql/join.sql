@@ -29,13 +29,13 @@ set client_min_messages to warning;
 \set ECHO errors
 -- get results with optimizations disabled
 \o :TEST_RESULTS_UNOPTIMIZED
-SET timescaledb.disable_optimizations TO true;
+SET timescaledb.enable_optimizations TO false;
 \ir :TEST_QUERY_NAME
 \o
 
 -- get query results with all optimizations
 \o :TEST_RESULTS_OPTIMIZED
-SET timescaledb.disable_optimizations TO false;
+SET timescaledb.enable_optimizations TO true;
 \ir :TEST_QUERY_NAME
 \o
 

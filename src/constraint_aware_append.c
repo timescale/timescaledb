@@ -567,7 +567,7 @@ ts_constraint_aware_append_possible(Path *path)
 	ListCell *lc;
 	int num_children;
 
-	if (ts_guc_disable_optimizations || !ts_guc_constraint_aware_append ||
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_constraint_aware_append ||
 		constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
 		return false;
 

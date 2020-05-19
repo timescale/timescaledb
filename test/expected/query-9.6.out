@@ -116,10 +116,10 @@ ANALYZE hyper_1_date;
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-SHOW timescaledb.disable_optimizations;
- timescaledb.disable_optimizations 
------------------------------------
- off
+SHOW timescaledb.enable_optimizations;
+ timescaledb.enable_optimizations 
+----------------------------------
+ on
 (1 row)
 
 --non-aggregates use MergeAppend in both optimized and non-optimized
@@ -378,7 +378,7 @@ BEGIN;
 (8 rows)
 
 ROLLBACK;
---plain tables shouldnt be optimized by default
+-- sort order optimization should not be applied to non-hypertables
 :PREFIX
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM plain_table
@@ -397,35 +397,15 @@ LIMIT 2;
                      Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (7 rows)
 
---can turn on plain table optimizations
-BEGIN;
-    SET LOCAL timescaledb.optimize_non_hypertables = 'on';
-    :PREFIX
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-    FROM plain_table
-    WHERE time < to_timestamp(900)
-    GROUP BY t
-    ORDER BY t DESC
-    LIMIT 2;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
- Limit
-   ->  GroupAggregate
-         Group Key: date_trunc('minute'::text, "time")
-         ->  Index Scan using time_plain_plain_table on plain_table
-               Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(5 rows)
-
-ROLLBACK;
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized result
 +++ Optimized result
 @@ -1,6 +1,6 @@
-  timescaledb.disable_optimizations 
- -----------------------------------
-- on
-+ off
+  timescaledb.enable_optimizations 
+ ----------------------------------
+- off
++ on
  (1 row)
  
             time           | series_0 | series_1 |     series_2     

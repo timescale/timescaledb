@@ -4,7 +4,7 @@
 
 -- canary for results diff
 -- this should be the only output of the results diff
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations'),('timescaledb.enable_chunk_append')) v(setting);
 
 -- query should exclude all chunks with optimization on
 :PREFIX

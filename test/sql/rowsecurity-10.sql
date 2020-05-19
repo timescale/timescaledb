@@ -1346,7 +1346,7 @@ DROP TABLE copy_rel_to CASCADE;
 SET SESSION AUTHORIZATION regress_rls_alice;
 -- WHERE CURRENT OF does not work with custom scan nodes
 -- so we have to disable chunk append here
-SET timescaledb.disable_optimizations TO true;
+SET timescaledb.enable_optimizations TO false;
 
 CREATE TABLE current_check (currentid int, payload text, rlsuser text);
 SELECT public.create_hypertable('current_check', 'currentid', chunk_time_interval=>10);
@@ -1393,7 +1393,7 @@ FETCH RELATIVE 1 FROM current_check_cursor;
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
 SELECT * FROM current_check;
 
-RESET timescaledb.disable_optimizations;
+RESET timescaledb.enable_optimizations;
 
 COMMIT;
 

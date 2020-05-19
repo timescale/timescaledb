@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SHOW timescaledb.disable_optimizations;
+SHOW timescaledb.enable_optimizations;
 
 --non-aggregates use MergeAppend in both optimized and non-optimized
 :PREFIX SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
@@ -77,7 +77,7 @@ BEGIN;
   FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 ROLLBACK;
 
---plain tables shouldnt be optimized by default
+-- sort order optimization should not be applied to non-hypertables
 :PREFIX
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM plain_table
@@ -86,14 +86,3 @@ GROUP BY t
 ORDER BY t DESC
 LIMIT 2;
 
---can turn on plain table optimizations
-BEGIN;
-    SET LOCAL timescaledb.optimize_non_hypertables = 'on';
-    :PREFIX
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
-    FROM plain_table
-    WHERE time < to_timestamp(900)
-    GROUP BY t
-    ORDER BY t DESC
-    LIMIT 2;
-ROLLBACK;

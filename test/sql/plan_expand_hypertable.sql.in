@@ -2,7 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SET timescaledb.disable_optimizations= 'off';
 \set PREFIX 'EXPLAIN (costs off) '
 \ir include/plan_expand_hypertable_load.sql
 \ir include/plan_expand_hypertable_errors.sql
@@ -22,11 +21,11 @@ SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized resul
 -- run queries with optimization on and off and diff results
 \set PREFIX ''
 \o :TEST_RESULTS_OPTIMIZED
-SET timescaledb.disable_optimizations= 'off';
+SET timescaledb.enable_optimizations TO true;
 \ir :TEST_QUERY_NAME
 \o
 \o :TEST_RESULTS_UNOPTIMIZED
-SET timescaledb.disable_optimizations= 'on';
+SET timescaledb.enable_optimizations TO false;
 \ir :TEST_QUERY_NAME
 \o
 

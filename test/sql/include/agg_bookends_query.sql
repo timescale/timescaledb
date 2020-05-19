@@ -5,7 +5,7 @@
 -- canary for results diff
 -- this should be only output of results diff
 
-SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.disable_optimizations')) v(setting);
+SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.enable_optimizations')) v(setting);
 
 
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;

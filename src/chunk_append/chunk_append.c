@@ -296,7 +296,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	Var *sort_var;
 
 	/* these are checked in caller so we only Assert */
-	Assert(!ts_guc_disable_optimizations && ts_guc_enable_ordered_append &&
+	Assert(ts_guc_enable_optimizations && ts_guc_enable_ordered_append &&
 		   ts_guc_enable_chunk_append);
 
 	/*
