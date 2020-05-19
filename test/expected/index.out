@@ -143,7 +143,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
@@ -156,7 +156,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_i
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
-        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        3 | _hyper_4_3_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
@@ -180,7 +180,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_idx2       | {time}        |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_idx2       | {time}        |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
@@ -193,7 +193,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_i
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         3 | _hyper_4_3_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
-        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        3 | _hyper_4_3_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         4 | _hyper_4_4_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
@@ -214,7 +214,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                               Index                               |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------+-------------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
@@ -223,7 +223,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_i
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
-        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        3 | _hyper_4_3_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
 (4 rows)
@@ -244,7 +244,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                                         Index                                         |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------+---------------------------------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx                     | {device,time} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx                                  | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx                       | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_a_hypertable_index_with_a_very_very_long_name_ | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_a_hypertable_index_with_a_very_very_long_nam_1 | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx                     | {device,time} |      | f      | f       | f         | 
@@ -282,7 +282,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                               Index                               |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------------------+-------------------------------------------------------------------+---------------+------+--------+---------+-----------+-------------
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
@@ -305,7 +305,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                               Index                               |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------------------+-------------------------------------------------------------------+---------------+------+--------+---------+-----------+-------------
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace2
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
@@ -327,7 +327,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                               Index                               |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------------------+-------------------------------------------------------------------+---------------+------+--------+---------+-----------+-------------
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal._hyper_4_3_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace2
  _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal."3_1_index_test_time_device_key"            | {time,device} |      | t      | f       | f         | 
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
@@ -344,7 +344,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_i
         4 | 4_2_index_test_time_device_key              |             4 | index_test_time_device_key
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
-        3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        3 | _hyper_4_3_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
         4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
@@ -422,7 +422,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_device_idx | {time,device} |      | f      | f       | f         | tablespace2
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_device_idx      | {device}      |      | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_time_temp_idx              | {time,temp}   |      | f      | f       | f         | tablespace2
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | tablespace2
 (4 rows)
 
 -- Cleanup
@@ -508,3 +508,21 @@ ALTER TABLE idx_predicate_test ADD COLUMN b1 bool;
 CREATE INDEX idx_predicate_test_b1 ON idx_predicate_test(b1) WHERE b1=true;
 INSERT INTO idx_predicate_test VALUES ('2000-01-01',true);
 DROP TABLE idx_predicate_test;
+-- test index with table references
+CREATE TABLE idx_tableref_test(time timestamptz);
+SELECT table_name FROM create_hypertable('idx_tableref_test', 'time');
+NOTICE:  adding not-null constraint to column "time"
+    table_name     
+-------------------
+ idx_tableref_test
+(1 row)
+
+-- we use security definer to prevent function inlining
+CREATE OR REPLACE FUNCTION tableref_func(t idx_tableref_test) RETURNS timestamptz LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $f$ SELECT t.time; $f$;
+-- try creating index with no existing chunks
+CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));
+-- insert data to trigger chunk creation
+INSERT INTO idx_tableref_test SELECT '2000-01-01';
+DROP INDEX tableref_idx;
+-- try creating index on hypertable with existing chunks
+CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));

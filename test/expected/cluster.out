@@ -81,12 +81,12 @@ INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 p
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
-                        indexrelid                        | indisclustered 
-----------------------------------------------------------+----------------
- cluster_test_time_location_idx                           | t
- _timescaledb_internal._hyper_1_1_chunk_time_location_idx | t
- _timescaledb_internal._hyper_1_2_chunk_time_location_idx | t
- _timescaledb_internal._hyper_1_3_chunk_time_location_idx | t
+                              indexrelid                               | indisclustered 
+-----------------------------------------------------------------------+----------------
+ cluster_test_time_location_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_location_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_location_idx | t
+ _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_location_idx | t
 (4 rows)
 
 --check the setting of cluster indexes on hypertables and chunks
