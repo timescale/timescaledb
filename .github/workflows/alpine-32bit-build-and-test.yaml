@@ -1,0 +1,76 @@
+name: Linux 32-bit x86
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+jobs:
+  regress_linux_32bit:
+    name: Regression PG${{ matrix.pg }} [${{ matrix.build_type }}]
+    runs-on: ubuntu-18.04
+    container:
+      image: i386/postgres:${{ matrix.pg }}-alpine
+      env:
+        POSTGRES_HOST_AUTH_METHOD: trust
+    strategy:
+      matrix:
+        pg: [ 11.8, 12.3 ]
+        build_type: [ Debug ]
+        include:
+          - pg: 11.8
+            installcheck_ignores: append-11 continuous_aggs_bgw chunk_adaptive-11 ordered_append-11 transparent_decompression-11
+          - pg: 12.3
+            installcheck_ignores: append-12 continuous_aggs_bgw chunk_adaptive-12 ordered_append-12 transparent_decompression-12
+
+    steps:
+
+    - name: Install build dependencies
+      run: |
+        apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake openssl-dev sudo flex bison
+
+    - name: Build pg_isolation_regress
+      run: |
+        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        mkdir -p ~/postgresql
+        tar --extract --file postgresql.tar.bz2 --directory ~/postgresql --strip-components 1
+        cd ~/postgresql
+        ./configure --prefix=/usr/local --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
+        make -C src/test/isolation
+        chown -R postgres:postgres ~/postgresql
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v1
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/postgresql
+        make -C build install
+        chown -R postgres:postgres .
+
+    - name: make installcheck
+      id: installcheck
+      run: sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}"
+
+    - name: Regression diffs
+      if: failure()
+      run: |
+        find build -name regression.diffs -exec cat {} + > regression.diffs
+        find build -name postmaster.log -exec cat {} + > postmaster.log
+        cat regression.diffs
+
+    - name: Save regression diffs
+      if: failure()
+      uses: actions/upload-artifact@v1
+      with:
+        name: Regression diff
+        path: regression.diffs
+
+    - name: Save postmaster.log
+      if: failure()
+      uses: actions/upload-artifact@v1
+      with:
+        name: PostgreSQL log
+        path: postmaster.log
+
