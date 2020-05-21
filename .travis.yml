@@ -48,7 +48,7 @@ script:
   # Run only telemetry test to see that it works without OpenSSL
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Now build with OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DCODECOVERAGE=ON -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
   # Now run all tests
   - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='${IGNORES}' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # Run the PG regression tests too
@@ -107,7 +107,7 @@ jobs:
         # Run only telemetry test to see that it works without OpenSSL
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
         # Now build with OpenSSL
-        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DCODECOVERAGE=ON -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='bgw_db_scheduler chunk_adaptive-9.6' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
@@ -125,7 +125,7 @@ jobs:
         # Run only telemetry test to see that it works without OpenSSL
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
         # Now build with OpenSSL
-        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DCODECOVERAGE=ON -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-10 bgw_db_scheduler chunk_adaptive-10 ordered_append-10 parallel-10 transparent_decompression-10 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
@@ -143,7 +143,7 @@ jobs:
         # Run only telemetry test to see that it works without OpenSSL
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
         # Now build with OpenSSL
-        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DCODECOVERAGE=ON -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-11 bgw_db_scheduler chunk_adaptive-11 ordered_append-11 parallel-11 transparent_decompression-11 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
@@ -161,7 +161,7 @@ jobs:
         # Run only telemetry test to see that it works without OpenSSL
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
         # Now build with OpenSSL
-        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DCODECOVERAGE=ON -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
+        - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
         # Now run all tests
         - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='append-12 bgw_db_scheduler chunk_adaptive-12 ordered_append-12 parallel-12 transparent_decompression-12 compression_ddl continuous_aggs_insert continuous_aggs_multi' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
