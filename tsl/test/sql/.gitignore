@@ -5,6 +5,7 @@
 /plan_gapfill-*.sql
 /transparent_decompression-*.sql
 /compression_permissions-*.sql
+/compression_qualpushdown-*.sql
 /move-*.sql
 /reorder-*.sql
 /jit-*.sql
