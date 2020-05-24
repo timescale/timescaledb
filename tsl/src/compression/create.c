@@ -564,6 +564,10 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	return compress_hypertable_id;
 }
 
+/*
+ * Constraints and triggers are not created on the PG chunk table.
+ * Caller is expected to do this explicitly.
+ */
 Chunk *
 create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 {
@@ -620,15 +624,6 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compressed chunk table");
-
-	/* Create the chunk's constraints*/
-	ts_chunk_constraints_create(compress_chunk->constraints,
-								compress_chunk->table_id,
-								compress_chunk->fd.id,
-								compress_chunk->hypertable_relid,
-								compress_chunk->fd.hypertable_id);
-
-	ts_trigger_create_all_on_chunk(compress_chunk);
 
 	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
 							  compress_chunk->hypertable_relid,
