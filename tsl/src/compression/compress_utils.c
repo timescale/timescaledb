@@ -238,6 +238,18 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				   compress_ht_chunk->table_id,
 				   colinfo_array,
 				   htcols_listlen);
+
+	/* Copy chunk constraints (including fkey) to compressed chunk.
+	 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
+	 * referenced table during compression.
+	 */
+	ts_chunk_constraints_create(compress_ht_chunk->constraints,
+								compress_ht_chunk->table_id,
+								compress_ht_chunk->fd.id,
+								compress_ht_chunk->hypertable_relid,
+								compress_ht_chunk->fd.hypertable_id);
+	ts_trigger_create_all_on_chunk(compress_ht_chunk);
+
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
 	 * cascading deleted data in FK-referenced tables, while blocking deleting data
 	 * directly on the hypertable or chunks.
@@ -249,6 +261,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 										  &before_size,
 										  compress_ht_chunk->fd.id,
 										  &after_size);
+
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id, false);
 	ts_cache_release(hcache);
 }
