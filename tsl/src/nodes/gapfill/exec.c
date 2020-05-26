@@ -915,7 +915,8 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 										   state->subslot_time,
 										   &state->subslot->tts_values[i],
 										   &state->subslot->tts_isnull[i]);
-					modified = !state->subslot->tts_isnull[i];
+					if (!state->subslot->tts_isnull[i])
+						modified = true;
 				}
 				else
 					gapfill_locf_tuple_returned(column.locf, value, isnull);
@@ -934,7 +935,7 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 
 	/*
 	 * If we modified any values we need to make postgres treat this as virtual tuple
-	 * by removing references to the original tuple.
+	 * and remove references to the original tuple.
 	 */
 	if (modified)
 	{
@@ -952,6 +953,8 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			state->subslot->tts_shouldFreeMin = false;
 		}
 		state->subslot->tts_mintuple = NULL;
+
+		state->subslot->tts_nvalid = state->ncolumns;
 #endif
 	}
 

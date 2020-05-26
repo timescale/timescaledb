@@ -9,10 +9,12 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #1915 Check for database in extension_current_state
 * #1918 Unify chunk index creation
+* #1938 Fix gapfill locf treat_null_as_missing
 
 **Thanks**
 * @dmitri191 for reporting an issue with failing background workers
 * @nomanor for reporting an issue with expression index with table references
+* @nicolai6120 for reporting an issue with locf and treat_null_as_missing
 
 ## 1.7.1 (2020-05-18)
 
