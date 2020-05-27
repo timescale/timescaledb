@@ -921,6 +921,8 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
+#define DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT "_dist_hyper_%d"
+static const int MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
 
 static void
 hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
@@ -964,16 +966,26 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	{
 		NameData default_associated_table_prefix;
 		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
-		snprintf(NameStr(default_associated_table_prefix),
-				 NAMEDATALEN,
-				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
-				 fd.id);
+		Assert(replication_factor >= 0);
+		if (replication_factor == 0)
+			snprintf(NameStr(default_associated_table_prefix),
+					 NAMEDATALEN,
+					 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
+					 fd.id);
+		else
+			snprintf(NameStr(default_associated_table_prefix),
+					 NAMEDATALEN,
+					 DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT,
+					 fd.id);
 		namestrcpy(&fd.associated_table_prefix, NameStr(default_associated_table_prefix));
 	}
 	else
 	{
 		namestrcpy(&fd.associated_table_prefix, NameStr(*associated_table_prefix));
 	}
+	if (strnlen(NameStr(fd.associated_table_prefix), NAMEDATALEN) > MAXIMUM_PREFIX_LENGTH)
+		elog(ERROR, "associated_table_prefix too long");
+
 	fd.num_dimensions = num_dimensions;
 
 	namestrcpy(&fd.chunk_sizing_func_schema, NameStr(*chunk_sizing_func_schema));

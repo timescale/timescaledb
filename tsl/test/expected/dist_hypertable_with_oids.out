@@ -66,9 +66,9 @@ SELECT relname, relhasoids FROM pg_class WHERE relname IN
 ORDER BY relname;
         relname        | relhasoids 
 -----------------------+------------
- _hyper_1_1_dist_chunk | t
- _hyper_1_2_dist_chunk | t
- _hyper_1_3_dist_chunk | t
+ _dist_hyper_1_1_chunk | t
+ _dist_hyper_1_2_chunk | t
+ _dist_hyper_1_3_chunk | t
 (3 rows)
 
 -- Ensure data node chunks properly updated
@@ -84,8 +84,8 @@ NOTICE:  [data_node_1]:
 NOTICE:  [data_node_1]:
 relname              |relhasoids
 ---------------------+----------
-_hyper_1_1_dist_chunk|t         
-_hyper_1_3_dist_chunk|t         
+_dist_hyper_1_1_chunk|t         
+_dist_hyper_1_3_chunk|t         
 (2 rows)
 
 
@@ -96,7 +96,7 @@ NOTICE:  [data_node_2]:
 NOTICE:  [data_node_2]:
 relname              |relhasoids
 ---------------------+----------
-_hyper_1_2_dist_chunk|t         
+_dist_hyper_1_2_chunk|t         
 (1 row)
 
 
@@ -137,9 +137,9 @@ SELECT relname, relhasoids FROM pg_class WHERE relname IN
 ORDER BY relname;
         relname        | relhasoids 
 -----------------------+------------
- _hyper_1_1_dist_chunk | f
- _hyper_1_2_dist_chunk | f
- _hyper_1_3_dist_chunk | f
+ _dist_hyper_1_1_chunk | f
+ _dist_hyper_1_2_chunk | f
+ _dist_hyper_1_3_chunk | f
 (3 rows)
 
 -- Ensure data node chunks properly updated
@@ -155,8 +155,8 @@ NOTICE:  [data_node_1]:
 NOTICE:  [data_node_1]:
 relname              |relhasoids
 ---------------------+----------
-_hyper_1_1_dist_chunk|f         
-_hyper_1_3_dist_chunk|f         
+_dist_hyper_1_1_chunk|f         
+_dist_hyper_1_3_chunk|f         
 (2 rows)
 
 
@@ -167,7 +167,7 @@ NOTICE:  [data_node_2]:
 NOTICE:  [data_node_2]:
 relname              |relhasoids
 ---------------------+----------
-_hyper_1_2_dist_chunk|f         
+_dist_hyper_1_2_chunk|f         
 (1 row)
 
 

@@ -259,8 +259,8 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname I
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
         relname        | reltuples | relpages | relallvisible 
 -----------------------+-----------+----------+---------------
- _hyper_2_3_dist_chunk |         0 |        0 |             0
- _hyper_2_4_dist_chunk |         0 |        0 |             0
+ _dist_hyper_2_3_chunk |         0 |        0 |             0
+ _dist_hyper_2_4_chunk |         0 |        0 |             0
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
@@ -282,8 +282,8 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname I
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
         relname        | reltuples | relpages | relallvisible 
 -----------------------+-----------+----------+---------------
- _hyper_2_3_dist_chunk |         0 |        0 |             0
- _hyper_2_4_dist_chunk |         0 |        0 |             0
+ _dist_hyper_2_3_chunk |         0 |        0 |             0
+ _dist_hyper_2_4_chunk |         0 |        0 |             0
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
@@ -313,8 +313,8 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname I
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
         relname        | reltuples | relpages | relallvisible 
 -----------------------+-----------+----------+---------------
- _hyper_2_3_dist_chunk |         2 |        1 |             0
- _hyper_2_4_dist_chunk |         0 |        0 |             0
+ _dist_hyper_2_3_chunk |         2 |        1 |             0
+ _dist_hyper_2_4_chunk |         0 |        0 |             0
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
@@ -322,10 +322,10 @@ SELECT * FROM pg_stats WHERE tablename IN
 ORDER BY 1,2,3;
       schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
 -----------------------+-----------------------+---------+-----------+-----------+-----------+------------+------------------+-------------------+-----------------------------------------------------------------+-------------+-------------------+------------------------+----------------------
- _timescaledb_internal | _hyper_2_3_dist_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
 (4 rows)
 
 -- Test that user without table permissions can't get column stats
@@ -368,8 +368,8 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname I
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
         relname        | reltuples | relpages | relallvisible 
 -----------------------+-----------+----------+---------------
- _hyper_2_3_dist_chunk |         2 |        1 |             0
- _hyper_2_4_dist_chunk |         1 |        1 |             0
+ _dist_hyper_2_3_chunk |         2 |        1 |             0
+ _dist_hyper_2_4_chunk |         1 |        1 |             0
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
@@ -377,14 +377,14 @@ SELECT * FROM pg_stats WHERE tablename IN
 ORDER BY 1,2,3;
       schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
 -----------------------+-----------------------+---------+-----------+-----------+-----------+------------+------------------+-------------------+-----------------------------------------------------------------+-------------+-------------------+------------------------+----------------------
- _timescaledb_internal | _hyper_2_3_dist_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
- _timescaledb_internal | _hyper_2_3_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
- _timescaledb_internal | _hyper_2_4_dist_chunk | color   | f         |         1 |         0 |          0 |                  |                   |                                                                 |             |                   |                        | 
- _timescaledb_internal | _hyper_2_4_dist_chunk | device  | f         |         0 |         4 |         -1 |                  |                   |                                                                 |             |                   |                        | 
- _timescaledb_internal | _hyper_2_4_dist_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
- _timescaledb_internal | _hyper_2_4_dist_chunk | time    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | color   | f         |         0 |         6 |       -0.5 | {green}          | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | device  | f         |         0 |         4 |       -0.5 | {1}              | {1}               |                                                                 |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   | {21.1,23.4}                                                     |          -1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_3_chunk | time    | f         |         0 |         8 |         -1 |                  |                   | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |           1 |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_4_chunk | color   | f         |         1 |         0 |          0 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_4_chunk | device  | f         |         0 |         4 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_4_chunk | temp    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
+ _timescaledb_internal | _dist_hyper_2_4_chunk | time    | f         |         0 |         8 |         -1 |                  |                   |                                                                 |             |                   |                        | 
 (8 rows)
 
 -- Check underlying pg_statistics table (looking at all columns except
@@ -398,14 +398,14 @@ WHERE st.starelid = ch
 ORDER BY ch, staattnum;
                      ch                      | staattnum | stainherit | stanullfrac | stawidth | stadistinct | stakind1 | stakind2 | stakind3 | stakind4 | stakind5 | staop1 | staop2 | staop3 | staop4 | staop5 | stanumbers1 | stanumbers2 | stanumbers3 | stanumbers4 | stanumbers5 |                           stavalues1                            | stavalues2 | stavalues3 | stavalues4 | stavalues5 
 ---------------------------------------------+-----------+------------+-------------+----------+-------------+----------+----------+----------+----------+----------+--------+--------+--------+--------+--------+-------------+-------------+-------------+-------------+-------------+-----------------------------------------------------------------+------------+------------+------------+------------
- _timescaledb_internal._hyper_2_3_dist_chunk |         1 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |   1322 |   1322 |      0 |      0 |      0 |             | {1}         |             |             |             | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |            |            |            | 
- _timescaledb_internal._hyper_2_3_dist_chunk |         2 | f          |           0 |        4 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     96 |     97 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {1}                                                             |            |            |            | 
- _timescaledb_internal._hyper_2_3_dist_chunk |         3 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |    672 |    672 |      0 |      0 |      0 |             | {-1}        |             |             |             | {21.1,23.4}                                                     |            |            |            | 
- _timescaledb_internal._hyper_2_3_dist_chunk |         4 | f          |           0 |        6 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     98 |    664 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {green}                                                         |            |            |            | 
- _timescaledb_internal._hyper_2_4_dist_chunk |         1 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
- _timescaledb_internal._hyper_2_4_dist_chunk |         2 | f          |           0 |        4 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
- _timescaledb_internal._hyper_2_4_dist_chunk |         3 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
- _timescaledb_internal._hyper_2_4_dist_chunk |         4 | f          |           1 |        0 |           0 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_3_chunk |         1 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |   1322 |   1322 |      0 |      0 |      0 |             | {1}         |             |             |             | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_3_chunk |         2 | f          |           0 |        4 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     96 |     97 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {1}                                                             |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_3_chunk |         3 | f          |           0 |        8 |          -1 |        2 |        3 |        0 |        0 |        0 |    672 |    672 |      0 |      0 |      0 |             | {-1}        |             |             |             | {21.1,23.4}                                                     |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_3_chunk |         4 | f          |           0 |        6 |        -0.5 |        1 |        3 |        0 |        0 |        0 |     98 |    664 |      0 |      0 |      0 | {1}         | {1}         |             |             |             | {green}                                                         |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_4_chunk |         1 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_4_chunk |         2 | f          |           0 |        4 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_4_chunk |         3 | f          |           0 |        8 |          -1 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
+ _timescaledb_internal._dist_hyper_2_4_chunk |         4 | f          |           1 |        0 |           0 |        0 |        0 |        0 |        0 |        0 |      0 |      0 |      0 |      0 |      0 |             |             |             |             |             |                                                                 |            |            |            | 
 (8 rows)
 
 SELECT test.remote_exec(NULL, $$
@@ -424,10 +424,10 @@ ORDER BY ch, staattnum
 NOTICE:  [data_node_1]:
 ch                                         |staattnum|stainherit|stanullfrac|stawidth|stadistinct|stakind1|stakind2|stakind3|stakind4|stakind5|staop1|staop2|staop3|staop4|staop5|stanumbers1|stanumbers2|stanumbers3|stanumbers4|stanumbers5|stavalues1                                                     |stavalues2|stavalues3|stavalues4|stavalues5
 -------------------------------------------+---------+----------+-----------+--------+-----------+--------+--------+--------+--------+--------+------+------+------+------+------+-----------+-----------+-----------+-----------+-----------+---------------------------------------------------------------+----------+----------+----------+----------
-_timescaledb_internal._hyper_2_3_dist_chunk|        1|f         |          0|       8|         -1|       2|       3|       0|       0|       0|  1322|  1322|     0|     0|     0|           |{1}        |           |           |           |{"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"}|          |          |          |          
-_timescaledb_internal._hyper_2_3_dist_chunk|        2|f         |          0|       4|       -0.5|       1|       3|       0|       0|       0|    96|    97|     0|     0|     0|{1}        |{1}        |           |           |           |{1}                                                            |          |          |          |          
-_timescaledb_internal._hyper_2_3_dist_chunk|        3|f         |          0|       8|         -1|       2|       3|       0|       0|       0|   672|   672|     0|     0|     0|           |{-1}       |           |           |           |{21.1,23.4}                                                    |          |          |          |          
-_timescaledb_internal._hyper_2_3_dist_chunk|        4|f         |          0|       6|       -0.5|       1|       3|       0|       0|       0|    98|   664|     0|     0|     0|{1}        |{1}        |           |           |           |{green}                                                        |          |          |          |          
+_timescaledb_internal._dist_hyper_2_3_chunk|        1|f         |          0|       8|         -1|       2|       3|       0|       0|       0|  1322|  1322|     0|     0|     0|           |{1}        |           |           |           |{"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"}|          |          |          |          
+_timescaledb_internal._dist_hyper_2_3_chunk|        2|f         |          0|       4|       -0.5|       1|       3|       0|       0|       0|    96|    97|     0|     0|     0|{1}        |{1}        |           |           |           |{1}                                                            |          |          |          |          
+_timescaledb_internal._dist_hyper_2_3_chunk|        3|f         |          0|       8|         -1|       2|       3|       0|       0|       0|   672|   672|     0|     0|     0|           |{-1}       |           |           |           |{21.1,23.4}                                                    |          |          |          |          
+_timescaledb_internal._dist_hyper_2_3_chunk|        4|f         |          0|       6|       -0.5|       1|       3|       0|       0|       0|    98|   664|     0|     0|     0|{1}        |{1}        |           |           |           |{green}                                                        |          |          |          |          
 (4 rows)
 
 
@@ -440,10 +440,10 @@ ORDER BY ch, staattnum
 NOTICE:  [data_node_2]:
 ch                                         |staattnum|stainherit|stanullfrac|stawidth|stadistinct|stakind1|stakind2|stakind3|stakind4|stakind5|staop1|staop2|staop3|staop4|staop5|stanumbers1|stanumbers2|stanumbers3|stanumbers4|stanumbers5|stavalues1|stavalues2|stavalues3|stavalues4|stavalues5
 -------------------------------------------+---------+----------+-----------+--------+-----------+--------+--------+--------+--------+--------+------+------+------+------+------+-----------+-----------+-----------+-----------+-----------+----------+----------+----------+----------+----------
-_timescaledb_internal._hyper_2_4_dist_chunk|        1|f         |          0|       8|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
-_timescaledb_internal._hyper_2_4_dist_chunk|        2|f         |          0|       4|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
-_timescaledb_internal._hyper_2_4_dist_chunk|        3|f         |          0|       8|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
-_timescaledb_internal._hyper_2_4_dist_chunk|        4|f         |          1|       0|          0|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
+_timescaledb_internal._dist_hyper_2_4_chunk|        1|f         |          0|       8|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
+_timescaledb_internal._dist_hyper_2_4_chunk|        2|f         |          0|       4|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
+_timescaledb_internal._dist_hyper_2_4_chunk|        3|f         |          0|       8|         -1|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
+_timescaledb_internal._dist_hyper_2_4_chunk|        4|f         |          1|       0|          0|       0|       0|       0|       0|       0|     0|     0|     0|     0|     0|           |           |           |           |           |          |          |          |          |          
 (4 rows)
 
 
