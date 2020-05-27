@@ -28,6 +28,10 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
+-- Presence of non-distributed hypertables on data nodes should not cause issues
+SELECT distributed_exec('CREATE TABLE local(time timestamptz, measure int)', '{ "data_node_1", "data_node_3" }');
+SELECT distributed_exec($$ SELECT create_hypertable('local', 'time') $$, '{ "data_node_1", "data_node_3" }');
+
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null

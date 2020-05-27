@@ -35,6 +35,19 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+-- Presence of non-distributed hypertables on data nodes should not cause issues
+SELECT distributed_exec('CREATE TABLE local(time timestamptz, measure int)', '{ "data_node_1", "data_node_3" }');
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+SELECT distributed_exec($$ SELECT create_hypertable('local', 'time') $$, '{ "data_node_1", "data_node_3" }');
+ distributed_exec 
+------------------
+ 
+(1 row)
+
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 -- This SCHEMA will not be created on data nodes
@@ -1544,7 +1557,7 @@ INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
                  show_chunks                  
 ----------------------------------------------
- _timescaledb_internal._hyper_17_1_dist_chunk
+ _timescaledb_internal._dist_hyper_17_1_chunk
 (1 row)
 
 SELECT * FROM test.show_constraints('disttable');
@@ -1585,7 +1598,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_1]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_17_1_dist_chunk
+_timescaledb_internal._dist_hyper_17_1_chunk
 (1 row)
 
 
@@ -1612,7 +1625,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_2]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_17_1_dist_chunk
+_timescaledb_internal._dist_hyper_17_1_chunk
 (1 row)
 
 
@@ -1639,7 +1652,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_3]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._hyper_17_1_dist_chunk
+_timescaledb_internal._dist_hyper_17_1_chunk
 (1 row)
 
 

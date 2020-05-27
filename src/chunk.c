@@ -857,14 +857,6 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
 	return datanodes;
 }
 
-static inline const char *
-get_chunk_name_suffix(const char relkind)
-{
-	if (relkind == RELKIND_FOREIGN_TABLE)
-		return "dist_chunk";
-	return "chunk";
-}
-
 /*
  * Create a chunk from the dimensional constraints in the given hypercube.
  *
@@ -907,12 +899,7 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 		if (NULL == prefix)
 			prefix = NameStr(ht->fd.associated_table_prefix);
 
-		len = snprintf(chunk->fd.table_name.data,
-					   NAMEDATALEN,
-					   "%s_%d_%s",
-					   prefix,
-					   chunk->fd.id,
-					   get_chunk_name_suffix(relkind));
+		len = snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
 
 		if (len >= NAMEDATALEN)
 			elog(ERROR, "chunk table name too long");
