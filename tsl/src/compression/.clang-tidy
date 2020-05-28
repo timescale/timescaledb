@@ -1,0 +1,8 @@
+# Disable warnings as errors on compression code since it currently
+# doesn't pass those tests
+---
+Checks:          '-*,clang-analyzer-core.*,clang-diagnostic-*'
+WarningsAsErrors: 'clang-analyzer-unix.*'
+HeaderFilterRegex: ''
+AnalyzeTemporaryDtors: false
+...

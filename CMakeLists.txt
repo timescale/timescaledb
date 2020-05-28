@@ -68,6 +68,9 @@ set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform th
 is built for")
 message(STATUS "Install method is '${PROJECT_INSTALL_METHOD}'")
 
+# Build compilation database by default
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Code coverage is optional and OFF by default
 option(CODECOVERAGE "Enable code coverage for the build" OFF)
 
@@ -251,6 +254,12 @@ install(
 # in standard installation paths.
 find_program(CLANG_FORMAT
   NAMES clang-format-8 clang-format-7 clang-format
+  PATHS
+  /usr/bin
+  /usr/local/bin
+  /usr/local/opt/
+  /usr/local/opt/llvm/bin
+  /opt/bin
   DOC "The path to clang-format")
 
 if (CLANG_FORMAT)
@@ -287,20 +296,27 @@ else()
   )
 endif ()
 
-find_program(RUN_CLANG_TIDY run-clang-tidy DOC "The path to run-clang-tidy")
+# Linter support via clang-tidy. Enabled by default.
+option(LINTER "Enable linter support using clang-tidy (default ON)" ON)
 
-if(RUN_CLANG_TIDY)
-  message(STATUS "Found clang-tidy at ${RUN_CLANG_TIDY}")
-  if(CMAKE_EXPORT_COMPILE_COMMANDS)
-    add_custom_target(clang-tidy COMMAND ${RUN_CLANG_TIDY} -quiet)
-  else()
-    message(WARNING "You need to add -DCMAKE_EXPORT_COMPILE_COMMANDS=ON to use clang-tidy")
-    add_custom_target(clang-tidy
-      COMMAND ${CMAKE_COMMAND} -E echo "clang-tidy found but -DCMAKE_EXPORT_COMPILE_COMMAND was not set")
-  endif()
-else()
-  message(WARNING "Did not find clang-tidy, not defining clang-tidy target.")
-endif()
+if (LINTER)
+  find_program(CLANG_TIDY
+    clang-tidy
+    PATHS
+    /usr/bin
+    /usr/local/bin
+    /usr/local/opt/
+    /usr/local/opt/llvm/bin
+    /opt/bin
+    DOC "The path to the clang-tidy linter")
+
+  if (CLANG_TIDY)
+    message(STATUS "Linter support (clang-tidy) enabled")
+    set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY};--quiet")
+  else ()
+    message(STATUS "Install clang-tidy to enable code linting")
+  endif (CLANG_TIDY)
+endif (LINTER)
 
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry" ON)
