@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        pg: [ 9, 10, 11, 12 ]
+        pg: [ 11, 12 ]
         os: [ windows-2019 ]
         build_type: [ Debug, Release ]
     env:
