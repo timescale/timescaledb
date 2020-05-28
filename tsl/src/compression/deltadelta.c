@@ -295,8 +295,10 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 	Size compressed_size;
 	char *compressed_data;
 	DeltaDeltaCompressed *compressed;
+
 	if (nulls != NULL)
 		nulls_size = simple8brle_serialized_total_size(nulls);
+
 	compressed_size =
 		sizeof(DeltaDeltaCompressed) + simple8brle_serialized_slot_size(deltas) + nulls_size;
 
@@ -319,7 +321,8 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 		bytes_serialize_simple8b_and_advance(compressed_data,
 											 simple8brle_serialized_total_size(deltas),
 											 deltas);
-	if (compressed->has_nulls)
+
+	if (compressed->has_nulls == 1 && nulls != NULL)
 	{
 		Assert(nulls->num_elements > deltas->num_elements);
 		bytes_serialize_simple8b_and_advance(compressed_data, nulls_size, nulls);
@@ -407,13 +410,9 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 {
 	const char *data = (char *) &compressed->delta_deltas;
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&data);
-	Simple8bRleSerialized *nulls = NULL;
 	bool has_nulls = compressed->has_nulls == 1;
 
-	if (has_nulls)
-		nulls = bytes_deserialize_simple8b_and_advance(&data);
-	else
-		Assert(compressed->has_nulls == 0);
+	Assert(compressed->has_nulls == 0 || compressed->has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -430,7 +429,10 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	simple8brle_decompression_iterator_init_forward(&iter->delta_deltas, deltas);
 
 	if (has_nulls)
+	{
+		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
 		simple8brle_decompression_iterator_init_forward(&iter->nulls, nulls);
+	}
 }
 
 static void
@@ -439,13 +441,9 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 {
 	const char *data = (char *) &compressed->delta_deltas;
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&data);
-	Simple8bRleSerialized *nulls = NULL;
 	bool has_nulls = compressed->has_nulls == 1;
 
-	if (has_nulls)
-		nulls = bytes_deserialize_simple8b_and_advance(&data);
-	else
-		Assert(compressed->has_nulls == 0);
+	Assert(compressed->has_nulls == 0 || compressed->has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -461,8 +459,11 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 
 	simple8brle_decompression_iterator_init_reverse(&iter->delta_deltas, deltas);
 
-	if (has_nulls == 1)
+	if (has_nulls)
+	{
+		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&data);
 		simple8brle_decompression_iterator_init_reverse(&iter->nulls, nulls);
+	}
 }
 
 static inline DecompressResult

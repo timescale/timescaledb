@@ -55,7 +55,7 @@ static DataFetcherFuncs funcs = {
 static void
 cursor_create_req(CursorFetcher *cursor)
 {
-	AsyncRequest *volatile req;
+	AsyncRequest *volatile req = NULL;
 	StringInfoData buf;
 	MemoryContext oldcontext;
 
@@ -142,6 +142,7 @@ cursor_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_
 							  const char *stmt, StmtParams *params)
 {
 	CursorFetcher *cursor;
+
 	Assert(NULL != rel);
 
 	cursor = remote_cursor_init_with_params(conn,
