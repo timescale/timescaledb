@@ -76,7 +76,7 @@ row_by_row_fetcher_reset(RowByRowFetcher *fetcher)
 static void
 row_by_row_fetcher_start(DataFetcher *df)
 {
-	AsyncRequest *volatile req;
+	AsyncRequest *volatile req = NULL;
 	MemoryContext oldcontext;
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
 

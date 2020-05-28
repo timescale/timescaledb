@@ -144,7 +144,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	BulkInsertState bistate;
 	uint64 processed = 0;
 #if PG12_GE
-	ExprState *qualexpr;
+	ExprState *qualexpr = NULL;
 #endif
 
 	Assert(range_table);
@@ -338,7 +338,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 			myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
 
 #if PG12_GE
-		if (ccstate->where_clause)
+		if (qualexpr != NULL)
 		{
 			econtext->ecxt_scantuple = myslot;
 			if (!ExecQual(qualexpr, econtext))

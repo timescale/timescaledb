@@ -569,6 +569,7 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 	BitArrayIterator selectors;
 	uint32 max_stored = 0;
 	uint32 i;
+
 	Assert(compressed->num_blocks > 0);
 
 	bit_array_iterator_init(&selectors, iter->selectors.array);
@@ -578,7 +579,7 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 		if (selector == 0)
 			elog(ERROR, "invalid selector 0");
 
-		if (simple8brle_selector_is_rle(selector))
+		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
 		{
 			Assert(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);
 			max_stored += simple8brle_rledata_repeatcount(iter->compressed_data[i]);

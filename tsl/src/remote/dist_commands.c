@@ -46,12 +46,14 @@ typedef struct DistCmdResult
 static DistCmdResult *
 ts_dist_cmd_collect_responses(List *requests)
 {
-	AsyncRequestSet *rs = async_request_set_create();
+	AsyncRequestSet *rs;
 	AsyncResponseResult *ar;
 	ListCell *lc;
-	DistCmdResult *results =
-		palloc0(sizeof(DistCmdResult) + requests->length * sizeof(DistCmdResponse));
+	DistCmdResult *results;
 	int i = 0;
+
+	rs = async_request_set_create();
+	results = palloc0(sizeof(DistCmdResult) + list_length(requests) * sizeof(DistCmdResponse));
 
 	foreach (lc, requests)
 		async_request_set_add(rs, lfirst(lc));
@@ -65,7 +67,7 @@ ts_dist_cmd_collect_responses(List *requests)
 		++i;
 	}
 
-	Assert(i == requests->length);
+	Assert(i == list_length(requests));
 	results->num_responses = i;
 	return results;
 }
