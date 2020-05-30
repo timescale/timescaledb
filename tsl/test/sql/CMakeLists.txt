@@ -1,14 +1,27 @@
 set(TEST_FILES
+  compression_permissions.sql
   continuous_aggs_errors.sql
+  continuous_aggs_permissions.sql
   continuous_aggs_watermark.sql
   edition.sql
   gapfill.sql
   partialize_finalize.sql
+  plan_gapfill.sql
 )
 
 set(TEST_FILES_DEBUG
   bgw_policy.sql
   bgw_reorder_drop_chunks.sql
+  compress_table.sql
+  compression.sql
+  compression_algos.sql
+  compression_ddl.sql
+  compression_errors.sql
+  compression_hypertable.sql
+  compression_segment_meta.sql
+  compression_bgw.sql
+  compress_bgw_reorder_drop_chunks.sql
+  transparent_decompression_queries.sql
   continuous_aggs.sql
   continuous_aggs_bgw.sql
   continuous_aggs_bgw_drop_chunks.sql
@@ -22,11 +35,11 @@ set(TEST_FILES_DEBUG
 )
 
 set(TEST_TEMPLATES
-  continuous_aggs_permissions.sql.in
+  compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
   move.sql.in
-  plan_gapfill.sql.in
   reorder.sql.in
+  transparent_decompression.sql.in
 )
 
 # Check if PostgreSQL was compiled with JIT support
@@ -34,7 +47,7 @@ set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")
 if (EXISTS ${PG_CONFIG_H})
   file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
        REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
-  if (PG_USE_LLVM AND ((${PG_VERSION_MAJOR} EQUAL "11") OR (${PG_VERSION_MAJOR} GREATER "11")))
+  if (PG_USE_LLVM)
     list(APPEND TEST_TEMPLATES jit.sql.in)
   endif()
 endif()
@@ -46,37 +59,10 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-#compression only for PG > 9
-if (${PG_VERSION_MAJOR} GREATER "9")
+if (${PG_VERSION_MAJOR} LESS "12")
   list(APPEND TEST_FILES_DEBUG
-    compress_table.sql
-    compression.sql
-    compression_algos.sql
-    compression_ddl.sql
-    compression_errors.sql
-    compression_hypertable.sql
-    compression_segment_meta.sql
-    compression_bgw.sql
-    compress_bgw_reorder_drop_chunks.sql
-    transparent_decompression_queries.sql
+    compression_with_oids.sql
   )
-
-  list(APPEND TEST_TEMPLATES
-    compression_permissions.sql.in
-    compression_qualpushdown.sql.in
-  )
-  if (CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_TEMPLATES
-      transparent_decompression.sql.in
-      )
-  endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-  if (${PG_VERSION_MAJOR} LESS "12")
-    list(APPEND TEST_FILES_DEBUG
-      compression_with_oids.sql
-    )
-  endif()
-
 endif()
 
 if (PG_VERSION_SUPPORTS_MULTINODE)
