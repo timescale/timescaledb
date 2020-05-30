@@ -1,7 +1,8 @@
 set(TEST_FILES
   alter.sql
-  chunk_utils.sql
+  alternate_users.sql
   chunks.sql
+  chunk_utils.sql
   cluster.sql
   constraint.sql
   copy.sql
@@ -12,23 +13,29 @@ set(TEST_FILES
   ddl_alter_column.sql
   ddl_errors.sql
   delete.sql
-  drop_schema.sql
-  drop_owned.sql
   drop_extension.sql
   drop_hypertable.sql
+  drop_owned.sql
   drop_rename_hypertable.sql
+  drop_schema.sql
   dump_meta.sql
   extension.sql
   gapfill.sql
+  generated_as_identity.sql
   hash.sql
   histogram_test.sql
   index.sql
+  insert_many.sql
   insert_single.sql
+  join.sql
   lateral.sql
+  partitioning.sql
+  partitionwise.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
-  plan_hypertable_cache.sql
   plain.sql
+  plan_hypertable_cache.sql
+  plan_ordered_append.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql
@@ -40,6 +47,7 @@ set(TEST_FILES
   update.sql
   upsert.sql
   util.sql
+  vacuum_multi.sql
   vacuum.sql
   version.sql
   views.sql
@@ -48,16 +56,11 @@ set(TEST_FILES
 # edition tests need community edition
 if(NOT APACHE_ONLY)
   list(APPEND TEST_FILES
+    chunk_utils_compression.sql
     edition.sql
     telemetry_community.sql
-    )
-#compression only for PG > 9
-if (${PG_VERSION_MAJOR} GREATER "9")
-  list(APPEND TEST_FILES
     telemetry_compression.sql
-    chunk_utils_compression.sql
   )
-endif ()
 endif()
 
 # tests that fail or are unreliable when run in parallel
@@ -65,10 +68,7 @@ endif()
 set(SOLO_TESTS
   bgw_db_scheduler
   bgw_launcher
-  alternate_users-9.6
-  alternate_users-10
-  alternate_users-11
-  alternate_users-12
+  alternate_users
   net
   pg_dump_unprivileged
   telemetry
@@ -92,20 +92,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-if (${PG_VERSION_MAJOR} EQUAL "9" )
-  list(APPEND TEST_FILES
-    rowsecurity-9.6.sql
-  )
-else() #everything else gets generated_as_identity
-  list(APPEND TEST_FILES
-    generated_as_identity.sql
-  )
-endif ()
-if(${PG_VERSION_MAJOR} EQUAL "10")
-  list(APPEND TEST_FILES
-    rowsecurity-10.sql
-  )
-endif()
 if(${PG_VERSION_MAJOR} EQUAL "11")
   list(APPEND TEST_FILES
     rowsecurity-11.sql
@@ -114,15 +100,6 @@ endif()
 if(${PG_VERSION_MAJOR} EQUAL "12")
   list(APPEND TEST_FILES
     rowsecurity-12.sql
-  )
-endif()
-
-if ((${PG_VERSION_MAJOR} EQUAL "11") OR
-    (${PG_VERSION_MAJOR} GREATER "11"))
-  list(APPEND TEST_FILES
-    join.sql
-    partitionwise.sql
-    vacuum_multi.sql
   )
 endif()
 
@@ -138,20 +115,15 @@ endif()
 set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
-  alternate_users.sql.in
   ddl.sql.in
   ddl_single.sql.in
   insert.sql.in
   chunk_adaptive.sql.in
-  insert_many.sql.in
   parallel.sql.in
   partition.sql.in
-  partitioning.sql.in
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
-  # lateral plans are different across versions, explains run without analyze on 9.6
-  plan_ordered_append.sql.in
   query.sql.in
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
