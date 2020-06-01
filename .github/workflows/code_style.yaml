@@ -1,0 +1,30 @@
+name: Code style
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - prerelease_test
+jobs:
+  misc_checks:
+    name: Check formatting, license and git hooks
+    runs-on: ubuntu-18.04
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+    - name: Check license
+      run: ./scripts/check_license_all.sh
+    - name: Check git commit hooks
+      run: |
+        python2 ./scripts/githooks/commit_msg_tests.py
+        python3 ./scripts/githooks/commit_msg_tests.py
+    - name: Check code formatting
+      run: |
+        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-8 100
+        sudo update-alternatives --set clang-format /usr/bin/clang-format-8
+        ./scripts/clang_format_all.sh
+        git diff --exit-code

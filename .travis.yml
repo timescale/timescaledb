@@ -59,36 +59,6 @@ after_script:
 jobs:
   include:
 
-    # This tests the formatting of a PR.
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "clang-format and license check"
-      env:
-        - PG_VERSION=11.1 ASAN_OPTIONS="detect_leaks=0"
-      before_install:
-        - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg${PG_VERSION} /bin/sleep infinity
-      install:
-        - docker exec pgbuild /bin/bash -c "mkdir /tsdb_build && chown postgres /tsdb_build"
-        - docker exec --env ASAN_OPTIONS="${ASAN_OPTIONS}" pgbuild /bin/bash -c "cd /tsdb_build && cmake /timescaledb -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=/usr/src/postgresql/ -DUSE_DEFAULT_VISIBILITY=1 && make"
-      after_failure:
-      after_success:
-      script:
-        - docker run -it -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg${PG_VERSION} /timescaledb/scripts/check_license_all.sh
-        - docker run -it -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg${PG_VERSION} /timescaledb/scripts/clang_format_all.sh
-        - git diff --exit-code
-        - docker exec pgbuild /bin/bash -c "/tsdb_build/scripts/export_prefix_check.sh"
-
-    - if: (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "Git hook tests"
-      before_install:
-      install:
-      after_failure:
-      after_script:
-      script:
-        - python2 ./scripts/githooks/commit_msg_tests.py
-        - python3 ./scripts/githooks/commit_msg_tests.py
-
     # This runs tests on ARM32 emulation
     - if: branch = arm_test
       stage: test
