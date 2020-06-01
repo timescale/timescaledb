@@ -11,6 +11,7 @@
 #include <postgres.h>
 
 #include <access/xact.h>
+#include <common/base64.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/json.h>
@@ -20,7 +21,6 @@
 #include <utils/datetime.h>
 
 #include <license_guc.h>
-#include <base64_compat.h>
 #include <jsonb_utils.h>
 
 #include "license.h"

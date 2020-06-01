@@ -8,16 +8,11 @@
 #include <utils/timestamp.h>
 #include <utils/datetime.h>
 #include <utils/date.h>
+#include <utils/fmgrprotos.h>
 #include <fmgr.h>
-
-#include "compat.h"
 
 #include "utils.h"
 #include "time_bucket.h"
-
-#if !PG96
-#include <utils/fmgrprotos.h>
-#endif
 
 #define TIME_BUCKET(period, timestamp, offset, min, max, result)                                   \
 	do                                                                                             \
@@ -95,11 +90,7 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(result);
 }
 
-#ifdef HAVE_INT64_TIMESTAMP
 #define JAN_3_2000 (2 * USECS_PER_DAY)
-#else
-#define JAN_3_2000 (2 * SECS_PER_DAY)
-#endif
 
 /*
  * The default origin is Monday 2000-01-03. We don't use PG epoch since it starts on a saturday.
@@ -143,7 +134,6 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 	} while (0)
 
 /* Returns the period in the same representation as Postgres Timestamps.
- * (i.e. in microseconds if  HAVE_INT64_TIMESTAMP, seconds otherwise).
  * Note that this is not our internal representation (microseconds).
  * Always returns an exact value.*/
 static inline int64
@@ -155,17 +145,7 @@ get_interval_period_timestamp_units(Interval *interval)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("interval defined in terms of month, year, century etc. not supported")));
 	}
-#ifdef HAVE_INT64_TIMESTAMP
 	return interval->time + (interval->day * USECS_PER_DAY);
-#else
-	if (interval->time != trunc(interval->time))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("interval must not have sub-second precision")));
-	}
-	return interval->time + (interval->day * SECS_PER_DAY);
-#endif
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamp_bucket);
@@ -219,11 +199,8 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 static inline void
 check_period_is_daily(int64 period)
 {
-#ifdef HAVE_INT64_TIMESTAMP
 	int64 day = USECS_PER_DAY;
-#else
-	int64 day = SECS_PER_DAY;
-#endif
+
 	if (period < day)
 	{
 		ereport(ERROR,

@@ -3,30 +3,24 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include "c.h"
 #include <postgres.h>
-#include <utils/hsearch.h>
-#include <utils/relcache.h>
-#include <utils/rel.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
 #include <access/heapam.h>
 #include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaddress.h>
-#include <commands/tablecmds.h>
-#include <catalog/dependency.h>
-#include <funcapi.h>
-
-#include <nodes/makefuncs.h>
-
 #include <catalog/pg_constraint.h>
-#include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_constraint_fn.h>
-#endif
+#include <commands/tablecmds.h>
+#include <funcapi.h>
+#include <nodes/makefuncs.h>
+#include <utils/builtins.h>
+#include <utils/hsearch.h>
+#include <utils/lsyscache.h>
+#include <utils/relcache.h>
+#include <utils/rel.h>
+#include <utils/syscache.h>
 
+#include "compat.h"
 #include "export.h"
 #include "scan_iterator.h"
 #include "chunk_constraint.h"
@@ -444,15 +438,14 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		int32 chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &found);
 
-		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
-								  Anum_chunk_constraint_dimension_slice_id,
-								  ts_scan_iterator_tupledesc(&iterator)))
+		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
+						   Anum_chunk_constraint_dimension_slice_id,
+						   ts_scan_iterator_tupledesc(&iterator)))
 			continue;
 
 		count++;
 
-		Assert(
-			!heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
+		Assert(!heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
 
 		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
 
@@ -505,9 +498,9 @@ ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List 
 									  ts_scan_iterator_tupledesc(&iterator),
 									  &is_null);
 
-		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
-								  Anum_chunk_constraint_dimension_slice_id,
-								  ts_scan_iterator_tupledesc(&iterator)))
+		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
+						   Anum_chunk_constraint_dimension_slice_id,
+						   ts_scan_iterator_tupledesc(&iterator)))
 			continue;
 
 		count++;
@@ -533,9 +526,9 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 	init_scan_by_dimension_slice_id(&iterator, dimension_slice_id);
 	ts_scanner_foreach(&iterator)
 	{
-		if (heap_attisnull_compat(ts_scan_iterator_tuple(&iterator),
-								  Anum_chunk_constraint_dimension_slice_id,
-								  ts_scan_iterator_tupledesc(&iterator)))
+		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
+						   Anum_chunk_constraint_dimension_slice_id,
+						   ts_scan_iterator_tupledesc(&iterator)))
 			continue;
 
 		count++;

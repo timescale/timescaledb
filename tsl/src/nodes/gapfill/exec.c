@@ -624,12 +624,11 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 			lfirst(list_nth_cell(targetlist, i)) = entry;
 		}
 	}
-	state->pi =
-		ExecBuildProjectionInfoCompat(targetlist,
-									  state->csstate.ss.ps.ps_ExprContext,
-									  MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP),
-									  &state->csstate.ss.ps,
-									  NULL);
+	state->pi = ExecBuildProjectionInfo(targetlist,
+										state->csstate.ss.ps.ps_ExprContext,
+										MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP),
+										&state->csstate.ss.ps,
+										NULL);
 
 	state->csstate.custom_ps = list_make1(ExecInitNode(state->subplan, estate, eflags));
 }
@@ -732,9 +731,6 @@ gapfill_end(CustomScanState *node)
 static void
 gapfill_rescan(CustomScanState *node)
 {
-#if PG96
-	node->ss.ps.ps_TupFromTlist = false;
-#endif
 	if (node->custom_ps != NIL)
 	{
 		ExecReScan(linitial(node->custom_ps));
@@ -845,11 +841,7 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 
 	ResetExprContext(state->pi->pi_exprContext);
 	state->pi->pi_exprContext->ecxt_scantuple = slot;
-#if PG96
-	return ExecProject(state->pi, NULL);
-#else
 	return ExecProject(state->pi);
-#endif
 }
 
 /*
@@ -1025,22 +1017,6 @@ fetch_subplan_tuple(CustomScanState *node)
 {
 	TupleTableSlot *subslot;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-#if PG96
-	TupleTableSlot *resultslot;
-	ExprDoneCond isDone;
-#endif
-
-#if PG96
-	if (node->ss.ps.ps_TupFromTlist)
-	{
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone == ExprMultipleResult)
-			return resultslot;
-
-		node->ss.ps.ps_TupFromTlist = false;
-	}
-#endif
 
 	ResetExprContext(econtext);
 
@@ -1056,17 +1032,7 @@ fetch_subplan_tuple(CustomScanState *node)
 
 		econtext->ecxt_scantuple = subslot;
 
-#if PG96
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone != ExprEndResult)
-		{
-			node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
-			return resultslot;
-		}
-#else
 		return ExecProject(node->ss.ps.ps_ProjInfo);
-#endif
 	}
 }
 
@@ -1247,11 +1213,7 @@ gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
 
 	exprcontext->ecxt_scantuple = state->scanslot;
 
-#if PG96
-	return ExecEvalExprSwitchContext(exprstate, exprcontext, isnull, NULL);
-#else
 	return ExecEvalExprSwitchContext(exprstate, exprcontext, isnull);
-#endif
 }
 
 /*

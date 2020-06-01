@@ -71,17 +71,6 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-#if PG96
-	rri->ri_ConstraintExprs = (List **) palloc(ncheck * sizeof(List *));
-
-	for (i = 0; i < ncheck; i++)
-	{
-		/* ExecQual wants implicit-AND form */
-		List *qual = make_ands_implicit(stringToNode(check[i].ccbin));
-
-		rri->ri_ConstraintExprs[i] = (List *) prepare_constr_expr((Expr *) qual);
-	}
-#else
 	rri->ri_ConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
 
 	for (i = 0; i < ncheck; i++)
@@ -90,7 +79,6 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 		rri->ri_ConstraintExprs[i] = prepare_constr_expr(checkconstr);
 	}
-#endif
 }
 
 /*
@@ -110,7 +98,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	rri = palloc0(sizeof(ResultRelInfo));
 	NodeSetTag(rri, T_ResultRelInfo);
 
-	InitResultRelInfoCompat(rri, rel, hyper_rti, dispatch->estate->es_instrument);
+	InitResultRelInfo(rri, rel, hyper_rti, NULL, dispatch->estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri_orig = dispatch->hypertable_result_rel_info;
@@ -118,10 +106,6 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
 	rri->ri_junkFilter = rri_orig->ri_junkFilter;
 	rri->ri_projectReturning = rri_orig->ri_projectReturning;
-#if PG11_LT
-	rri->ri_onConflictSetProj = rri_orig->ri_onConflictSetProj;
-	rri->ri_onConflictSetWhere = rri_orig->ri_onConflictSetWhere;
-#endif
 
 	rri->ri_FdwState = NULL;
 	rri->ri_usesFdwDirectModify = dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify;
@@ -144,45 +128,48 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 	Assert(returning_clauses != NIL);
 
 	/* map hypertable attnos -> chunk attnos */
-	returning_clauses = (List *) map_variable_attnos_compat((Node *) returning_clauses,
-															varno,
-															0,
-															map,
-															map_size,
-															rowtype,
-															&found_whole_row);
+	returning_clauses = castNode(List,
+								 map_variable_attnos((Node *) returning_clauses,
+													 varno,
+													 0,
+													 map,
+													 map_size,
+													 rowtype,
+													 &found_whole_row));
 
-	return ExecBuildProjectionInfoCompat(returning_clauses,
-										 orig->pi_exprContext,
-										 get_projection_info_slot_compat(orig),
-										 NULL,
-										 chunk_desc);
+	return ExecBuildProjectionInfo(returning_clauses,
+								   orig->pi_exprContext,
+								   orig->pi_state.resultslot,
+								   NULL,
+								   chunk_desc);
 }
 
 static List *
 translate_clause(List *inclause, AttrNumber *chunk_attnos, Index varno, Relation hyper_rel,
 				 Relation chunk_rel)
 {
-	List *clause = (List *) copyObject(inclause);
+	List *clause = copyObject(inclause);
 	bool found_whole_row;
 
 	/* map hypertable attnos -> chunk attnos for the "excluded" table */
-	clause = (List *) map_variable_attnos_compat((Node *) clause,
-												 INNER_VAR,
-												 0,
-												 chunk_attnos,
-												 RelationGetDescr(hyper_rel)->natts,
-												 RelationGetForm(chunk_rel)->reltype,
-												 &found_whole_row);
+	clause = castNode(List,
+					  map_variable_attnos((Node *) clause,
+										  INNER_VAR,
+										  0,
+										  chunk_attnos,
+										  RelationGetDescr(hyper_rel)->natts,
+										  RelationGetForm(chunk_rel)->reltype,
+										  &found_whole_row));
 
 	/* map hypertable attnos -> chunk attnos for the hypertable */
-	clause = (List *) map_variable_attnos_compat((Node *) clause,
-												 varno,
-												 0,
-												 chunk_attnos,
-												 RelationGetDescr(hyper_rel)->natts,
-												 RelationGetForm(chunk_rel)->reltype,
-												 &found_whole_row);
+	clause = castNode(List,
+					  map_variable_attnos((Node *) clause,
+										  varno,
+										  0,
+										  chunk_attnos,
+										  RelationGetDescr(hyper_rel)->natts,
+										  RelationGetForm(chunk_rel)->reltype,
+										  &found_whole_row));
 
 	return clause;
 }
@@ -271,7 +258,6 @@ get_hyper_rri(ChunkDispatch *dispatch)
  * The hypertable root is used as a template. A shallow copy can be made,
  * e.g., if tuple descriptors match exactly.
  */
-#if PG11_GE
 static void
 init_basic_on_conflict_state(ResultRelInfo *hyper_rri, ResultRelInfo *chunk_rri)
 {
@@ -283,24 +269,12 @@ init_basic_on_conflict_state(ResultRelInfo *hyper_rri, ResultRelInfo *chunk_rri)
 
 	chunk_rri->ri_onConflict = onconfl;
 }
-#else
-/* No dedicated ON CONFLICT state */
-#define init_basic_on_conflict_state(hyper_rri, chunk_rri)
-#endif /* PG11_GE */
 
-#if PG96
-static List *
-create_on_conflict_where_qual(List *clause)
-{
-	return (List *) ExecInitExpr((Expr *) clause, NULL);
-}
-#else
 static ExprState *
 create_on_conflict_where_qual(List *clause)
 {
 	return ExecInitQual(clause, NULL);
 }
-#endif /* PG96 */
 
 #if PG12_GE
 static TupleDesc
@@ -401,7 +375,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch, AttrNu
 
 	if (NULL != map)
 	{
-		ExprContext *econtext = ResultRelInfo_OnConflictProjInfoCompat(hyper_rri)->pi_exprContext;
+		ExprContext *econtext = hyper_rri->ri_onConflict->oc_ProjInfo->pi_exprContext;
 		Node *onconflict_where = ts_chunk_dispatch_get_on_conflict_where(dispatch);
 		List *onconflset;
 
@@ -426,25 +400,25 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch, AttrNu
 		state->conflproj_slot = get_confl_slot(state, dispatch, state->conflproj_tupdesc);
 
 		/* build UPDATE SET projection state */
-		ResultRelInfo_OnConflictProjInfoCompat(chunk_rri) =
-			ExecBuildProjectionInfoCompat(onconflset,
-										  econtext,
-										  state->conflproj_slot,
-										  NULL,
-										  RelationGetDescr(chunk_rel));
+		chunk_rri->ri_onConflict->oc_ProjInfo =
+			ExecBuildProjectionInfo(onconflset,
+									econtext,
+									state->conflproj_slot,
+									NULL,
+									RelationGetDescr(chunk_rel));
 
 		/*
 		 * Map attribute numbers in the WHERE clause, if it exists.
 		 */
 		if (NULL != onconflict_where)
 		{
-			List *clause = translate_clause((List *) onconflict_where,
+			List *clause = translate_clause(castNode(List, onconflict_where),
 											chunk_attnos,
 											hyper_rri->ri_RangeTableIndex,
 											hyper_rel,
 											chunk_rel);
 
-			ResultRelInfo_OnConflictWhereCompat(chunk_rri) = create_on_conflict_where_qual(clause);
+			chunk_rri->ri_onConflict->oc_WhereClause = create_on_conflict_where_qual(clause);
 		}
 	}
 }
@@ -493,9 +467,7 @@ set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
 	}
-#if PG11_GE
 	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;
-#endif
 }
 
 /* Change the projections to work with chunks instead of hypertables */
@@ -594,7 +566,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	MemoryContextSwitchTo(cis_context);
 	resrelinfo = create_chunk_result_relation_info(dispatch, rel);
-	CheckValidResultRelCompat(resrelinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
+	CheckValidResultRel(resrelinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;

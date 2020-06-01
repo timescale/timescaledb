@@ -193,13 +193,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 		Oid main_table_relid = ht->main_table_relid;
 
 		ts_cache_release(hcache);
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-#if PG11_LT
-					   ACL_KIND_CLASS,
-#else
-					   OBJECT_TABLE,
-#endif
-					   get_rel_name(main_table_relid));
+		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLE, get_rel_name(main_table_relid));
 	}
 
 	if (!chunk_get_reorder_index(ht, chunk, index_id, &cim))
@@ -688,13 +682,8 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	/* Set up sorting if wanted */
 	if (use_sort)
-		tuplesort = tuplesort_begin_cluster(oldTupDesc,
-											OldIndex,
-											maintenance_work_mem,
-#if PG11_GE
-											NULL,
-#endif
-											false);
+		tuplesort =
+			tuplesort_begin_cluster(oldTupDesc, OldIndex, maintenance_work_mem, NULL, false);
 	else
 		tuplesort = NULL;
 
@@ -835,27 +824,14 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 		for (;;)
 		{
 			HeapTuple tuple;
-#if PG96
-			bool should_free = false;
-#endif
 
 			CHECK_FOR_INTERRUPTS();
 
-			tuple = tuplesort_getheaptuple(tuplesort,
-										   /* forward= */ true
-#if PG96
-										   ,
-										   &should_free
-#endif
-			);
+			tuple = tuplesort_getheaptuple(tuplesort, /* forward= */ true);
 			if (tuple == NULL)
 				break;
 
 			reform_and_rewrite_tuple(tuple, oldTupDesc, newTupDesc, values, isnull, rwstate);
-#if PG96
-			if (should_free)
-				pfree(tuple);
-#endif
 		}
 
 		tuplesort_end(tuplesort);
@@ -1179,21 +1155,10 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	/* Update the tuples in pg_class. */
 	{
 		CatalogIndexState indstate;
-#if PG96
-		simple_heap_update(relRelation, &reltup1->t_self, reltup1);
-		simple_heap_update(relRelation, &reltup2->t_self, reltup2);
-
-		/* Keep system catalogs current */
-		indstate = CatalogOpenIndexes(relRelation);
-		CatalogIndexInsert(indstate, reltup1);
-		CatalogIndexInsert(indstate, reltup2);
-		CatalogCloseIndexes(indstate);
-#else
 		indstate = CatalogOpenIndexes(relRelation);
 		CatalogTupleUpdateWithInfo(relRelation, &reltup1->t_self, reltup1, indstate);
 		CatalogTupleUpdateWithInfo(relRelation, &reltup2->t_self, reltup2, indstate);
 		CatalogCloseIndexes(indstate);
-#endif
 	}
 
 	/*

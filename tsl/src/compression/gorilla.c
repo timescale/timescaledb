@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
+#include <common/base64.h>
 #include <funcapi.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
@@ -19,7 +20,6 @@
 #include "compression/gorilla.h"
 #include "utils.h"
 #include "adts/bit_array.h"
-#include "base64_compat.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
 

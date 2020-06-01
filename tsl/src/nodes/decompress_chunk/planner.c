@@ -86,7 +86,7 @@ static TargetEntry *
 make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno, int tle_index)
 {
 	Var *scan_var;
-	char *ht_attname = get_attname_compat(path->info->ht_rte->relid, ht_attno, false);
+	char *ht_attname = get_attname(path->info->ht_rte->relid, ht_attno, false);
 	FormData_hypertable_compression *ht_info =
 		get_column_compressioninfo(path->info->hypertable_compression_info, ht_attname);
 	AttrNumber scan_varattno = get_compressed_attno(path->info, ht_attno);
@@ -233,7 +233,7 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 			return node;
 
 		/* Create a decompressed Var to replace the compressed one */
-		colname = get_attname_compat(info->compressed_rte->relid, var->varattno, false);
+		colname = get_attname(info->compressed_rte->relid, var->varattno, false);
 		new_var = makeVar(info->chunk_rel->relid,
 						  get_attnum(info->chunk_rte->relid, colname),
 						  var->vartype,

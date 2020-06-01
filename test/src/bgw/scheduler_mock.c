@@ -134,7 +134,7 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	elog(WARNING, "scheduler user id %d", user_oid);
 	elog(WARNING, "running a test in the background: db=%d ttl=%d", db_oid, ttl);
 
-	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, user_oid);
+	BackgroundWorkerInitializeConnectionByOid(db_oid, user_oid, 0);
 
 	StartTransactionCommand();
 	ts_params_get();

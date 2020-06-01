@@ -272,7 +272,7 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	NameData attname;
 	MinMaxResult res;
 
-	namestrcpy(&attname, get_attname_compat(relid, attnum, false));
+	namestrcpy(&attname, get_attname(relid, attnum, false));
 	res = relation_minmax_indexscan(rel, atttype, &attname, attnum, minmax);
 
 	if (res == MINMAX_NO_INDEX)
@@ -295,7 +295,7 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 static AttrNumber
 chunk_get_attno(Oid hypertable_relid, Oid chunk_relid, AttrNumber hypertable_attnum)
 {
-	const char *attname = get_attname_compat(hypertable_relid, hypertable_attnum, false);
+	const char *attname = get_attname(hypertable_relid, hypertable_attnum, false);
 
 	return get_attnum(chunk_relid, attname);
 }

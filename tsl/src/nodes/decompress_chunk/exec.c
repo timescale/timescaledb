@@ -237,12 +237,11 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		PlanState *ps = &node->ss.ps;
 		tlist = constify_tableoid(tlist, cscan->scan.scanrelid, state->chunk_relid);
 
-		ps->ps_ProjInfo =
-			ExecBuildProjectionInfoCompat(tlist,
-										  ps->ps_ExprContext,
-										  ps->ps_ResultTupleSlot,
-										  ps,
-										  node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
+		ps->ps_ProjInfo = ExecBuildProjectionInfo(tlist,
+												  ps->ps_ExprContext,
+												  ps->ps_ResultTupleSlot,
+												  ps,
+												  node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 	}
 
 	state->hypertable_compression_info = ts_hypertable_compression_get(state->hypertable_id);
@@ -320,25 +319,9 @@ decompress_chunk_exec(CustomScanState *node)
 {
 	DecompressChunkState *state = (DecompressChunkState *) node;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-#if PG96
-	TupleTableSlot *resultslot;
-	ExprDoneCond isDone;
-#endif
 
 	if (node->custom_ps == NIL)
 		return NULL;
-
-#if PG96
-	if (node->ss.ps.ps_TupFromTlist)
-	{
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone == ExprMultipleResult)
-			return resultslot;
-
-		node->ss.ps.ps_TupFromTlist = false;
-	}
-#endif
 
 	ResetExprContext(econtext);
 
@@ -351,11 +334,7 @@ decompress_chunk_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = slot;
 
-#if PG96
-		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext, false))
-#else
 		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
-#endif
 		{
 			InstrCountFiltered1(node, 1);
 			ExecClearTuple(slot);
@@ -365,17 +344,7 @@ decompress_chunk_exec(CustomScanState *node)
 		if (!node->ss.ps.ps_ProjInfo)
 			return slot;
 
-#if PG96
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone != ExprEndResult)
-		{
-			node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
-			return resultslot;
-		}
-#else
 		return ExecProject(node->ss.ps.ps_ProjInfo);
-#endif
 	}
 }
 

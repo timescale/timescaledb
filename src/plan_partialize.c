@@ -179,9 +179,7 @@ bool
 ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
 {
 	Query *parse = root->parse;
-#if PG10_GE
 	Assert(IS_UPPER_REL(output_rel));
-#endif
 
 	if (CMD_SELECT != parse->commandType || !parse->hasAggs)
 		return false;

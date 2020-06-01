@@ -149,10 +149,8 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 	newec->ec_below_outer_join = false;
 	newec->ec_broken = false;
 	newec->ec_sortref = 0;
-#if PG10_GE
 	newec->ec_min_security = UINT_MAX;
 	newec->ec_max_security = 0;
-#endif
 	newec->ec_merged = NULL;
 
 	/* Prepend the ec */
@@ -201,7 +199,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			if (bms_is_member(var->varattno, segmentby_columns))
 				continue;
 
-			column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
+			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 			varattno = get_attnum(info->compressed_rte->relid, column_name);
 			var = makeVar(info->compressed_rel->relid,
@@ -510,7 +508,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 				return;
 			}
 
-			column_name = get_attname_compat(info->chunk_rte->relid, chunk_var->varattno, false);
+			column_name = get_attname(info->chunk_rte->relid, chunk_var->varattno, false);
 			column_info =
 				get_column_compressioninfo(info->hypertable_compression_info, column_name);
 
@@ -577,7 +575,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		if (var->varno != context->chunk_rel->relid)
 			return (Node *) var;
 
-		column_name = get_attname_compat(context->chunk_rte->relid, var->varattno, false);
+		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
 		compressioninfo =
 			get_column_compressioninfo(context->hypertable_compression_info, column_name);
 
@@ -635,10 +633,8 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		newinfo->scansel_cache = NIL;
 		newinfo->left_bucketsize = -1;
 		newinfo->right_bucketsize = -1;
-#if PG11_GE
 		newinfo->left_mcvfreq = -1;
 		newinfo->right_mcvfreq = -1;
-#endif
 		return (Node *) newinfo;
 	}
 	return expression_tree_mutator(node, chunk_joininfo_mutator, context);
@@ -704,7 +700,7 @@ segmentby_compression_info_for_em(Node *node, EMCreationContext *context)
 		if (var->varattno <= 0)
 			return NULL;
 
-		column_name = get_attname_compat(context->uncompressed_relid, var->varattno, true);
+		column_name = get_attname(context->uncompressed_relid, var->varattno, true);
 		if (column_name == NULL)
 			return NULL;
 
@@ -889,11 +885,9 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
 	root->simple_rte_array =
 		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
-#if PG11_GE
 	root->append_rel_array =
 		repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
 	root->append_rel_array[compressed_index] = NULL;
-#endif
 
 	info->compressed_rte = decompress_chunk_make_rte(compressed_relid, AccessShareLock);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
@@ -902,21 +896,16 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = NULL;
 
-#if PG96
-	compressed_rel = build_simple_rel(root, compressed_index, RELOPT_BASEREL);
-#else
 	compressed_rel = build_simple_rel(root, compressed_index, NULL);
-#endif
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
 	 * original hypertable, otherwise eq classes are not computed correctly
 	 * in generate_join_implied_equalities (called by
 	 * get_baserel_parampathinfo <- create_index_paths)
 	 */
-#if !PG96
 	Assert(chunk_rel->top_parent_relids != NULL);
 	compressed_rel->top_parent_relids = bms_copy(chunk_rel->top_parent_relids);
-#endif
+
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
 	foreach (lc, info->hypertable_compression_info)
@@ -1102,7 +1091,7 @@ AttrNumber
 get_compressed_attno(CompressionInfo *info, AttrNumber ht_attno)
 {
 	AttrNumber compressed_attno;
-	char *chunk_col = get_attname_compat(info->ht_rte->relid, ht_attno, false);
+	char *chunk_col = get_attname(info->ht_rte->relid, ht_attno, false);
 	compressed_attno = get_attnum(info->compressed_rte->relid, chunk_col);
 
 	if (compressed_attno == InvalidAttrNumber)
@@ -1225,7 +1214,7 @@ build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 			if (var->varattno <= 0)
 				break;
 
-			column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
+			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
 
 			if (ci->segmentby_column_index <= 0)
@@ -1266,7 +1255,7 @@ build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 		if (var->varattno <= 0)
 			return sort_info;
 
-		column_name = get_attname_compat(info->chunk_rte->relid, var->varattno, false);
+		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
 
 		if (ci->orderby_column_index != pk_index)

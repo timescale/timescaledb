@@ -5,34 +5,29 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
-#include <nodes/parsenodes.h>
-#include <nodes/value.h>
-#include <nodes/makefuncs.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits.h>
+#include <commands/defrem.h>
+#include <commands/event_trigger.h>
+#include <commands/tablecmds.h>
+#include <commands/tablespace.h>
+#include <fmgr.h>
+#include <nodes/makefuncs.h>
+#include <nodes/parsenodes.h>
+#include <nodes/value.h>
+#include <parser/parse_utilcmd.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <commands/event_trigger.h>
-#include <commands/defrem.h>
-#include <commands/tablecmds.h>
-#include <commands/tablespace.h>
-#include <parser/parse_utilcmd.h>
-#include <fmgr.h>
 
-#include "indexing.h"
-#include "compat.h"
 #include "dimension.h"
 #include "errors.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "partitioning.h"
 
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_inherits_fn.h>
-#else
-#include <catalog/pg_inherits.h>
-#endif
 static bool
 index_has_attribute(List *indexelems, const char *attrname)
 {
@@ -57,7 +52,7 @@ index_has_attribute(List *indexelems, const char *attrname)
 				break;
 			case T_List:
 			{
-				List *pair = (List *) lfirst(lc);
+				List *pair = lfirst_node(List, lc);
 
 				if (list_length(pair) == 2 && IsA(linitial(pair), IndexElem) &&
 					IsA(lsecond(pair), List))
@@ -147,13 +142,16 @@ create_default_index(Hypertable *ht, List *indexelems)
 		.indexParams = indexelems,
 	};
 
-	DefineIndexCompat(ht->main_table_relid,
-					  &stmt,
-					  InvalidOid,
-					  false, /* is alter table */
-					  false, /* check rights */
-					  false, /* skip_build */
-					  true); /* quiet */
+	DefineIndex(ht->main_table_relid,
+				&stmt,
+				InvalidOid, /* indexRelationId */
+				InvalidOid, /* parentIndexId */
+				InvalidOid, /* parentConstraintId */
+				false,		/* is_alter_table */
+				false,		/* check_rights */
+				false,		/* check_not_in_use */
+				false,		/* skip_build */
+				true);		/* quiet */
 }
 
 static Node *
@@ -294,11 +292,8 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	 * needs to match what DefineIndex() does.
 	 */
 	lockmode = stmt->concurrent ? ShareUpdateExclusiveLock : ShareLock;
-	relid = RangeVarGetRelidExtendedCompat(stmt->relation,
-										   lockmode,
-										   0,
-										   RangeVarCallbackOwnsRelation,
-										   NULL);
+	relid =
+		RangeVarGetRelidExtended(stmt->relation, lockmode, 0, RangeVarCallbackOwnsRelation, NULL);
 
 	/*
 	 * single-transaction CREATE INDEX on a hypertable tables recurses to
@@ -345,13 +340,16 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	/* ... and do it */
 	EventTriggerAlterTableStart((Node *) stmt);
 
-	root_table_address = DefineIndexCompat(relid, /* OID of heap relation */
-										   stmt,
-										   InvalidOid, /* no predefined OID */
-										   false,	  /* is_alter_table */
-										   true,	   /* check_rights */
-										   false,	  /* skip_build */
-										   false);	 /* quiet */
+	root_table_address = DefineIndex(relid, /* OID of heap relation */
+									 stmt,
+									 InvalidOid, /* no predefined OID */
+									 InvalidOid, /* parentIndexId */
+									 InvalidOid, /* parentConstraintId */
+									 false,		 /* is_alter_table */
+									 true,		 /* check_rights */
+									 false,		 /* check_not_in_use */
+									 false,		 /* skip_build */
+									 false);	 /* quiet */
 
 	return root_table_address;
 }

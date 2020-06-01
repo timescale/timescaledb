@@ -10,13 +10,13 @@
  */
 
 #include <postgres.h>
-#include <fmgr.h>
 #include <access/htup_details.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
-#include <storage/lmgr.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
+#include <fmgr.h>
+#include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
@@ -26,10 +26,6 @@
 #include "continuous_agg.h"
 #include "hypertable.h"
 #include "scan_iterator.h"
-
-#if !PG96
-#include <utils/fmgrprotos.h>
-#endif
 
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 

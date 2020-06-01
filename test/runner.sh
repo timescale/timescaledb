@@ -13,14 +13,8 @@ TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
-# to get the name of the test (PG 10 and 11 only)
-if [[ ${PGAPPNAME} = pg_regress/* ]]; then
-  CURRENT_TEST=${PGAPPNAME##pg_regress/}
-else
-  # PG 9.6 pg_regress does not pass in testname
-  # so we generate unique name from pid
-  CURRENT_TEST="test_$$"
-fi
+# to get the name of the test
+CURRENT_TEST=${PGAPPNAME##pg_regress/}
 TEST_DBNAME="db_${CURRENT_TEST}"
 
 # Read the extension version from version.config

@@ -990,7 +990,7 @@ data_node_dispatch_explain(CustomScanState *node, List *ancestors, ExplainState 
 {
 	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 
-	ExplainPropertyIntegerCompat("Batch size", NULL, sds->flush_threshold, es);
+	ExplainPropertyInteger("Batch size", NULL, sds->flush_threshold, es);
 
 	/*
 	 * Add remote query, when VERBOSE option is specified.

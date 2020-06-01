@@ -108,7 +108,7 @@ get_compression_info_from_var(QualPushdownContext *context, Var *var)
 	if (var->varattno <= 0)
 		return NULL;
 
-	column_name = get_attname_compat(context->chunk_rte->relid, var->varattno, false);
+	column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
 	return get_column_compressioninfo(context->compression_info, column_name);
 }
 

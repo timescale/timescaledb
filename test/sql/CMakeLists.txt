@@ -103,8 +103,7 @@ if(${PG_VERSION_MAJOR} EQUAL "12")
   )
 endif()
 
-if ((${PG_VERSION_MAJOR} EQUAL "12") OR
-    (${PG_VERSION_MAJOR} GREATER "12"))
+if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
   list(APPEND TEST_FILES
     generated_columns.sql
     misc.sql

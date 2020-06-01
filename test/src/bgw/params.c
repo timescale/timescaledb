@@ -108,20 +108,9 @@ params_open_wrapper()
 	seg = dsm_find_mapping(handle);
 	if (seg == NULL)
 	{
-#if PG96
-		bool started = IsTransactionState();
-
-		if (!started)
-			StartTransactionCommand();
-#endif
 		seg = dsm_attach(handle);
 		if (seg == NULL)
 			elog(ERROR, "got NULL segment in params_open_wrapper");
-#if PG96
-		dsm_pin_mapping(seg);
-		if (!started)
-			CommitTransactionCommand();
-#endif
 	}
 
 	TestAssertTrue(seg != NULL);
@@ -204,9 +193,10 @@ ts_reset_and_wait_timer_latch()
 	TestAssertTrue(wrapper != NULL);
 
 	ResetLatch(&wrapper->params.timer_latch);
-	WaitLatchCompat(&wrapper->params.timer_latch,
-					WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
-					10000);
+	WaitLatch(&wrapper->params.timer_latch,
+			  WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
+			  10000,
+			  PG_WAIT_EXTENSION);
 
 	params_close_wrapper(wrapper);
 }

@@ -232,12 +232,13 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
 
-	InitResultRelInfoCompat(resultRelInfo,
-							ccstate->rel,
-							/* RangeTableIndex */ 1,
-							0);
+	InitResultRelInfo(resultRelInfo,
+					  ccstate->rel,
+					  /* RangeTableIndex */ 1,
+					  NULL,
+					  0);
 
-	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT);
+	CheckValidResultRel(resultRelInfo, CMD_INSERT);
 
 	ExecOpenIndices(resultRelInfo, false);
 
@@ -434,7 +435,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	MemoryContextSwitchTo(oldcontext);
 
 	/* Execute AFTER STATEMENT insertion triggers */
-	ExecASInsertTriggersCompat(estate, resultRelInfo);
+	ExecASInsertTriggers(estate, resultRelInfo, NULL);
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);
@@ -445,29 +446,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	ExecResetTupleTable(estate->es_tupleTable, false);
 
 	ExecCloseIndices(resultRelInfo);
-#if PG96
-	{
-		/*
-		 * es_trig_target_relations sometimes created in
-		 * ExecGetTriggerResultRel on chunks. During copy to regular tables,
-		 * this never happens because the ResultRelInfo always already exists
-		 * for the regular table.
-		 */
-		ListCell *l;
-
-		foreach (l, estate->es_trig_target_relations)
-		{
-			ResultRelInfo *resultRelInfo = (ResultRelInfo *) lfirst(l);
-
-			/* Close indices and then the relation itself */
-			ExecCloseIndices(resultRelInfo);
-			table_close(resultRelInfo->ri_RelationDesc, NoLock);
-		}
-	}
-#else
 	/* Close any trigger target relations */
 	ExecCleanUpTriggerState(estate);
-#endif
 
 	copy_chunk_state_destroy(ccstate);
 
@@ -659,9 +639,6 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	pstate->p_sourcetext = queryString;
 	copy_constraints_and_check(pstate, rel, attnums);
 
-#if PG96
-	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program, stmt->attlist, stmt->options);
-#else
 	cstate = BeginCopyFrom(pstate,
 						   rel,
 						   stmt->filename,
@@ -669,7 +646,6 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 						   NULL,
 						   stmt->attlist,
 						   stmt->options);
-#endif
 
 #if PG12_GE
 	if (stmt->whereClause)
@@ -741,11 +717,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	RangeVar rv = {
 		.schemaname = NameStr(ht->fd.schema_name),
 		.relname = NameStr(ht->fd.table_name),
-#if PG96
-		.inhOpt = INH_NO,
-#else
 		.inh = false, /* Don't recurse */
-#endif
 	};
 
 	TruncateStmt stmt = {

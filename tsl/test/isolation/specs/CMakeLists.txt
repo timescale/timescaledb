@@ -10,15 +10,10 @@ set(TEST_TEMPLATES_MODULE_DEBUG
 )
 
 list(APPEND TEST_FILES
+  compression_ddl.spec
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec
 )
-
-if (${PG_VERSION_MAJOR} GREATER "9")
-  list(APPEND TEST_FILES
-    compression_ddl.spec
-  )
-endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})

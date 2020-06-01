@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <catalog/pg_proc.h>
+#include <common/int.h>
 #include <utils/datetime.h>
 
 #include "compat.h"
@@ -16,10 +17,6 @@
 #include <nodes/pathnodes.h>
 #else
 #include <nodes/relation.h>
-#endif
-
-#if PG11_GE
-#include <common/int.h>
 #endif
 
 /* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */

@@ -81,12 +81,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	if (root->parse->groupClause || root->parse->groupingSets || root->parse->distinctClause ||
 		root->parse->hasAggs || root->parse->hasWindowFuncs || root->hasHavingQual ||
 		has_joins(root->parse->jointree) || root->limit_tuples > PG_INT32_MAX ||
-#if PG96
-		expression_returns_set((Node *) root->parse->targetList)
-#else
-		root->parse->hasTargetSRFs
-#endif
-	)
+		root->parse->hasTargetSRFs)
 		path->limit_tuples = -1;
 	else
 		path->limit_tuples = (int) root->limit_tuples;
@@ -137,10 +132,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		{
 			AppendPath *append = castNode(AppendPath, subpath);
 
-#if PG11_GE
 			if (append->path.parallel_aware && append->first_partial_path > 0)
 				path->first_partial_path = append->first_partial_path;
-#endif
 			children = append->subpaths;
 			break;
 		}
@@ -219,11 +212,12 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			if (list_length(merge_childs) > 1)
 			{
-				append = create_merge_append_path_compat(root,
-														 rel,
-														 merge_childs,
-														 path->cpath.path.pathkeys,
-														 PATH_REQ_OUTER(subpath));
+				append = create_merge_append_path(root,
+												  rel,
+												  merge_childs,
+												  path->cpath.path.pathkeys,
+												  PATH_REQ_OUTER(subpath),
+												  NIL);
 				nested_children = lappend(nested_children, append);
 			}
 			else if (list_length(merge_childs) == 1)

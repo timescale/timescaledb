@@ -1864,7 +1864,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		 * FDW option, use attribute name.
 		 */
 		if (colname == NULL)
-			colname = get_attname_compat(rte->relid, varattno, false);
+			colname = get_attname(rte->relid, varattno, false);
 
 		if (qualify_col)
 			ADD_REL_QUALIFIER(buf, varno);

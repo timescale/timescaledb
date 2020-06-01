@@ -5,7 +5,7 @@
 #
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-PG_IMAGE_TAG=${PG_IMAGE_TAG:-9.6.3-alpine}
+PG_IMAGE_TAG=${PG_IMAGE_TAG:-11.0-alpine}
 CONTAINER_NAME=${CONTAINER_NAME:-pgtest}
 
 case $1 in

@@ -9,9 +9,7 @@
 #include <access/tupdesc.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
-#if PG11_GE
 #include <catalog/pg_constraint_d.h>
-#endif
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
 #include <catalog/index.h>
@@ -418,13 +416,16 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 			continue;
 
 		stmt.indexParams = list_make2(&segment_elem, &sequence_num_elem);
-		index_addr = DefineIndexCompat(ht->main_table_relid,
-									   &stmt,
-									   InvalidOid,
-									   false,  /* is alter table */
-									   false,  /* check rights */
-									   false,  /* skip_build */
-									   false); /* quiet */
+		index_addr = DefineIndex(ht->main_table_relid,
+								 &stmt,
+								 InvalidOid, /* IndexRelationId */
+								 InvalidOid, /* parentIndexId */
+								 InvalidOid, /* parentConstraintId */
+								 false,		 /* is_alter_table */
+								 false,		 /* check_rights */
+								 false,		 /* check_not_in_use */
+								 false,		 /* skip_build */
+								 false);	 /* quiet */
 		index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
 		if (!HeapTupleIsValid(index_tuple))
@@ -491,7 +492,6 @@ set_statistics_on_compressed_table(Oid compressed_table_id)
 	table_close(table_rel, NoLock);
 }
 
-#if !PG96 && !PG10
 static void
 set_toast_tuple_target_on_compressed(Oid compressed_table_id)
 {
@@ -509,7 +509,6 @@ set_toast_tuple_target_on_compressed(Oid compressed_table_id)
 	};
 	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
 }
-#endif
 
 static int32
 create_compression_table(Oid owner, CompressColInfo *compress_cols)
@@ -543,7 +542,7 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	compress_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 
 	create->relation = compress_rel;
-	tbladdress = DefineRelationCompat(create, RELKIND_RELATION, owner, NULL, NULL);
+	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
 	compress_relid = tbladdress.objectId;
 	toast_options =
@@ -555,10 +554,7 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols)
 	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
 
 	set_statistics_on_compressed_table(compress_relid);
-
-#if !PG96 && !PG10
 	set_toast_tuple_target_on_compressed(compress_relid);
-#endif
 
 	create_compressed_table_indexes(compress_relid, compress_cols);
 	return compress_hypertable_id;
@@ -646,7 +642,7 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 	bool found = false;
 
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
-	time_col_name = get_attname_compat(ht->main_table_relid, time_dim->column_attno, false);
+	time_col_name = get_attname(ht->main_table_relid, time_dim->column_attno, false);
 
 	foreach (lc, orderby_cols)
 	{
@@ -679,7 +675,7 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 static FormData_hypertable_compression *
 get_col_info_for_attnum(Hypertable *ht, CompressColInfo *colinfo, AttrNumber attno)
 {
-	char *attr_name = get_attname_compat(ht->main_table_relid, attno, false);
+	char *attr_name = get_attname(ht->main_table_relid, attno, false);
 	int colno;
 
 	for (colno = 0; colno < colinfo->numcols; colno++)

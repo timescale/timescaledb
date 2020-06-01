@@ -3,21 +3,18 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <c.h>
+
 #include <postgres.h>
 #include <access/xact.h>
+#include <utils/fmgrprotos.h>
 
 #include <math.h>
 
 #include "job_stat.h"
 #include "scanner.h"
-#include "compat.h"
 #include "timer.h"
 #include "utils.h"
 
-#if !PG96
-#include <utils/fmgrprotos.h>
-#endif
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
 #define MIN_WAIT_AFTER_CRASH_MS (5 * 60 * 1000)

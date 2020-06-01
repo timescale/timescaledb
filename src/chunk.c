@@ -63,12 +63,6 @@
 #include "compression_chunk_size.h"
 #include "extension.h"
 
-/* Strictly speaking there is no danger to include it always, but it helps to remove it with PG11_LT
- * support. */
-#if PG11_LT
-#include "compat/fkeylist.h"
-#endif
-
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
@@ -733,15 +727,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	objaddr = DefineRelation(&stmt.base,
-							 chunk->relkind,
-							 rel->rd_rel->relowner,
-							 NULL
-#if !PG96
-							 ,
-							 NULL
-#endif
-	);
+	objaddr = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -2831,12 +2817,12 @@ ts_chunk_drop_fks(Chunk *const chunk)
 	ASSERT_IS_VALID_CHUNK(chunk);
 
 	rel = table_open(chunk->table_id, AccessShareLock);
-	fks = copy_fk_list_from_cache(RelationGetFKeyListCompat(rel));
+	fks = copyObject(RelationGetFKeyList(rel));
 	table_close(rel, AccessShareLock);
 
 	foreach (lc, fks)
 	{
-		const ForeignKeyCacheInfoCompat *const fk = lfirst_node(ForeignKeyCacheInfoCompat, lc);
+		const ForeignKeyCacheInfo *const fk = lfirst_node(ForeignKeyCacheInfo, lc);
 		ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id,
 													  get_constraint_name(fk->conoid),
 													  true,
@@ -2859,11 +2845,11 @@ ts_chunk_create_fks(Chunk *const chunk)
 	ASSERT_IS_VALID_CHUNK(chunk);
 
 	rel = table_open(chunk->hypertable_relid, AccessShareLock);
-	fks = copy_fk_list_from_cache(RelationGetFKeyListCompat(rel));
+	fks = copyObject(RelationGetFKeyList(rel));
 	table_close(rel, AccessShareLock);
 	foreach (lc, fks)
 	{
-		ForeignKeyCacheInfoCompat *fk = lfirst_node(ForeignKeyCacheInfoCompat, lc);
+		ForeignKeyCacheInfo *fk = lfirst_node(ForeignKeyCacheInfo, lc);
 		ts_chunk_constraint_create_on_chunk(chunk, fk->conoid);
 	}
 }
@@ -3375,7 +3361,7 @@ list_return_srf(FunctionCallInfo fcinfo)
 	funcctx = SRF_PERCALL_SETUP();
 
 	call_cntr = funcctx->call_cntr;
-	result_set = (List *) funcctx->user_fctx;
+	result_set = castNode(List, funcctx->user_fctx);
 
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)

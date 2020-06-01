@@ -175,10 +175,9 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 		.type = T_CreateForeignServerStmt,
 		.servername = (char *) node_name,
 		.fdwname = EXTENSION_FDW_NAME,
-		.options =
-			list_make3(makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1),
-					   makeDefElemCompat("port", (Node *) makeInteger(port), -1),
-					   makeDefElemCompat("dbname", (Node *) makeString(pstrdup(dbname)), -1)),
+		.options = list_make3(makeDefElem("host", (Node *) makeString(pstrdup(host)), -1),
+							  makeDefElem("port", (Node *) makeInteger(port), -1),
+							  makeDefElem("dbname", (Node *) makeString(pstrdup(dbname)), -1)),
 		.if_not_exists = if_not_exists,
 	};
 
@@ -324,10 +323,10 @@ create_hypertable_data_node_datum(FunctionCallInfo fcinfo, HypertableDataNode *n
 static List *
 create_data_node_options(const char *host, int32 port, const char *dbname, const char *user)
 {
-	DefElem *host_elm = makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1);
-	DefElem *port_elm = makeDefElemCompat("port", (Node *) makeInteger(port), -1);
-	DefElem *dbname_elm = makeDefElemCompat("dbname", (Node *) makeString(pstrdup(dbname)), -1);
-	DefElem *user_elm = makeDefElemCompat("user", (Node *) makeString(pstrdup(user)), -1);
+	DefElem *host_elm = makeDefElem("host", (Node *) makeString(pstrdup(host)), -1);
+	DefElem *port_elm = makeDefElem("port", (Node *) makeInteger(port), -1);
+	DefElem *dbname_elm = makeDefElem("dbname", (Node *) makeString(pstrdup(dbname)), -1);
+	DefElem *user_elm = makeDefElem("user", (Node *) makeString(pstrdup(user)), -1);
 
 	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }

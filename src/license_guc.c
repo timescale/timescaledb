@@ -322,11 +322,7 @@ ts_enterprise_enabled(PG_FUNCTION_ARGS)
 PGDLLEXPORT Datum
 ts_current_license_key(PG_FUNCTION_ARGS)
 {
-#if PG96
-	if (!superuser())
-#else
 	if (!is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
-#endif
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("must be superuser or a member of pg_read_all_settings to examine the "

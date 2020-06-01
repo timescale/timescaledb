@@ -23,17 +23,8 @@ set(TEST_SCHEDULE_SHARED ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared
 set(ISOLATION_TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/isolation_test_schedule)
 set(TEST_PASSFILE ${TEST_OUTPUT_DIR}/pgpass.conf)
 
-# Add clustering users with enabled SSL for PG version >= 11.
-#
-# PG96 requires SSL to be enabled (and certificates specified) for hostssl
-# entries in pg_hba.conf files.
-#
-if (${PG_VERSION} VERSION_LESS "11")
-  set(TEST_PG_HBA_FILE ${PRIMARY_TEST_DIR}/pg_hba_96.conf)
-else()
-  configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
-  set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
-endif()
+configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
+set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
 configure_file(postgresql.conf.in postgresql.conf)
 
@@ -130,8 +121,4 @@ if(PG_ISOLATION_REGRESS)
     PG_ISOLATION_REGRESS=${PG_ISOLATION_REGRESS})
 endif()
 
-if (${PG_VERSION_MAJOR} GREATER "9")
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
-else ()
-    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})
-endif ()
+set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})

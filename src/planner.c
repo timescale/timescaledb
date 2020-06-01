@@ -34,12 +34,9 @@
 
 #include <catalog/pg_constraint.h>
 #include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_constraint_fn.h>
-#endif
 #include "compat-msvc-exit.h"
 
-#if PG12_LT
+#if PG11
 #include <optimizer/var.h>
 #else
 #include <optimizer/appendinfo.h>
@@ -339,14 +336,12 @@ get_parent_rte(const PlannerInfo *root, Index rti)
 {
 	ListCell *lc;
 
-#if PG11_GE
 	/* Fast path when arrays are setup */
 	if (root->append_rel_array != NULL && root->append_rel_array[rti] != NULL)
 	{
 		AppendRelInfo *appinfo = root->append_rel_array[rti];
 		return planner_rt_fetch(appinfo->parent_relid, root);
 	}
-#endif
 
 	foreach (lc, root->append_rel_list)
 	{
@@ -956,19 +951,6 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 }
 
 static void
-#if PG11_LT
-timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
-								  RelOptInfo *output_rel)
-{
-	Query *parse = root->parse;
-	bool partials_found = false;
-	void *extra = NULL;
-	TsRelType reltype = TS_REL_OTHER;
-	Hypertable *ht = NULL;
-
-	if (prev_create_upper_paths_hook != NULL)
-		prev_create_upper_paths_hook(root, stage, input_rel, output_rel);
-#else
 timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 								  RelOptInfo *output_rel, void *extra)
 {
@@ -979,7 +961,6 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
-#endif
 
 	if (!ts_extension_is_loaded())
 		return;

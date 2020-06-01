@@ -27,7 +27,6 @@
 #include "chunk.h"
 #include "chunk_data_node.h"
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
@@ -38,7 +37,6 @@
 #include "compat.h"
 #include "hypertable_data_node.h"
 #include "extension.h"
-#endif /*  PG11_GE */
 
 Datum
 hypertable_valid_ts_interval(PG_FUNCTION_ARGS)
@@ -48,8 +46,6 @@ hypertable_valid_ts_interval(PG_FUNCTION_ARGS)
 	ts_interval_from_tuple(PG_GETARG_DATUM(0));
 	PG_RETURN_BOOL(true);
 }
-
-#if PG_VERSION_SUPPORTS_MULTINODE
 
 static List *
 data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
@@ -279,5 +275,3 @@ hypertable_set_replication_factor(PG_FUNCTION_ARGS)
 
 	PG_RETURN_VOID();
 }
-
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */

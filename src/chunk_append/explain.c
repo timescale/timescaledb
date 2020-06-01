@@ -46,16 +46,15 @@ ts_chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es
 		ExplainPropertyBool("Runtime Exclusion", state->runtime_exclusion, es);
 
 	if (state->startup_exclusion)
-		ExplainPropertyIntegerCompat("Chunks excluded during startup",
-									 NULL,
-									 list_length(state->initial_subplans) -
-										 list_length(node->custom_ps),
-									 es);
+		ExplainPropertyInteger("Chunks excluded during startup",
+							   NULL,
+							   list_length(state->initial_subplans) - list_length(node->custom_ps),
+							   es);
 
 	if (state->runtime_exclusion && state->runtime_number_loops > 0)
 	{
 		int avg_excluded = state->runtime_number_exclusions / state->runtime_number_loops;
-		ExplainPropertyIntegerCompat("Chunks excluded during runtime", NULL, avg_excluded, es);
+		ExplainPropertyInteger("Chunks excluded during runtime", NULL, avg_excluded, es);
 	}
 }
 

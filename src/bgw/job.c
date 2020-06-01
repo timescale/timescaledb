@@ -634,7 +634,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	elog(DEBUG1, "started background job %d", job_id);
 
-	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, user_uid);
+	BackgroundWorkerInitializeConnectionByOid(db_oid, user_uid, 0);
 
 	ts_license_enable_module_loading();
 
@@ -661,12 +661,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * background workers, so disable parallel execution by default
 		 */
 		zero_guc("max_parallel_workers_per_gather");
-#if !PG96
 		zero_guc("max_parallel_workers");
-#endif
-#if PG11_GE
 		zero_guc("max_parallel_maintenance_workers");
-#endif
 
 		res = ts_bgw_job_execute(job);
 		/* The job is responsible for committing or aborting it's own txns */

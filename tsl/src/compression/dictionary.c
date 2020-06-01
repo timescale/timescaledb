@@ -10,6 +10,7 @@
 #include <catalog/pg_aggregate.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <common/base64.h>
 #include <funcapi.h>
 #include <lib/stringinfo.h>
 #include <utils/builtins.h>
@@ -17,8 +18,6 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
-#include "base64_compat.h"
 
 #include "compression/compression.h"
 #include "compression/dictionary.h"

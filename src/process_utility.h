@@ -15,11 +15,9 @@
 typedef struct ProcessUtilityArgs
 {
 	Cache *hcache;
-#if !PG96
 	PlannedStmt *pstmt;
 	QueryEnvironment *queryEnv;
 	ParseState *parse_state;
-#endif
 	Node *parsetree;
 	const char *query_string;
 	ProcessUtilityContext context;

@@ -35,9 +35,7 @@
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
 #include "loader/lwlocks.h"
-#if PG_VERSION_SUPPORTS_MULTINODE
 #include "loader/seclabel.h"
-#endif
 
 /*
  * Loading process:
@@ -87,21 +85,11 @@ PG_MODULE_MAGIC;
  * separate infrastructure for loading libraries inside of parallel workers. The
  * issue is that IsParallelWorker() doesn't work on Windows because the var used
  * is not dll exported correctly, so we have an alternate macro that looks for
- * the parallel worker flags in MyBgworkerEntry, if it exists. These flags only
- * exist in PG10 and above, so we have to have switch back to IsParallelWorker()
- * for 9.6 and, unfortunately, can't do much about 9.6 Windows installs.
+ * the parallel worker flags in MyBgworkerEntry, if it exists.
  */
 
-#if PG96
-#ifdef WIN32
-#define CalledInParallelWorker() false
-#else
-#define CalledInParallelWorker() IsParallelWorker()
-#endif /* WIN32 */
-#else
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
-#endif /* PG96 */
 extern void TSDLLEXPORT _PG_init(void);
 extern void TSDLLEXPORT _PG_fini(void);
 
@@ -117,10 +105,7 @@ static bool guc_disable_load = false;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
-
-#if PG_VERSION_SUPPORTS_MULTINODE
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
-#endif
 
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
@@ -159,16 +144,9 @@ drop_statement_drops_extension(DropStmt *stmt)
 		if (list_length(stmt->objects) == 1)
 		{
 			char *ext_name;
-#if PG96
-			List *names = linitial(stmt->objects);
-
-			Assert(list_length(names) == 1);
-			ext_name = strVal(linitial(names));
-#else
 			void *name = linitial(stmt->objects);
 
 			ext_name = strVal(name);
-#endif
 			if (strcmp(ext_name, EXTENSION_NAME) == 0)
 				return true;
 		}
@@ -483,8 +461,6 @@ post_analyze_hook(ParseState *pstate, Query *query)
 	}
 }
 
-#if PG_VERSION_SUPPORTS_MULTINODE
-
 static void
 loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 							ProcessUtilityContext context, ParamListInfo params,
@@ -537,8 +513,6 @@ loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 				 errdetail("Distributed database UUID is \"%s\".", dist_uuid)));
 }
 
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */
-
 static void
 timescale_shmem_startup_hook(void)
 {
@@ -574,9 +548,7 @@ _PG_init(void)
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
-#if PG_VERSION_SUPPORTS_MULTINODE
 	ts_seclabel_init();
-#endif
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,
@@ -607,11 +579,9 @@ _PG_init(void)
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescale_shmem_startup_hook;
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 	/* register utility hook to handle a distributed database drop */
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = loader_process_utility_hook;
-#endif
 }
 
 void
@@ -620,9 +590,7 @@ _PG_fini(void)
 	post_parse_analyze_hook = prev_post_parse_analyze_hook;
 	shmem_startup_hook = prev_shmem_startup_hook;
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 	ProcessUtility_hook = prev_ProcessUtility_hook;
-#endif
 	/* No way to unregister relcache callback */
 }
 

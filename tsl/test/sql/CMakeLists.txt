@@ -12,35 +12,66 @@ set(TEST_FILES
 set(TEST_FILES_DEBUG
   bgw_policy.sql
   bgw_reorder_drop_chunks.sql
-  compress_table.sql
-  compression.sql
+  chunk_api.sql
+  compress_bgw_reorder_drop_chunks.sql
   compression_algos.sql
+  compression_bgw.sql
   compression_ddl.sql
   compression_errors.sql
   compression_hypertable.sql
   compression_segment_meta.sql
-  compression_bgw.sql
-  compress_bgw_reorder_drop_chunks.sql
-  transparent_decompression_queries.sql
-  continuous_aggs.sql
-  continuous_aggs_bgw.sql
+  compression.sql
+  compress_table.sql
   continuous_aggs_bgw_drop_chunks.sql
+  continuous_aggs_bgw.sql
   continuous_aggs_ddl.sql
   continuous_aggs_dump.sql
   continuous_aggs_materialize.sql
   continuous_aggs_multi.sql
+  continuous_aggs.sql
   continuous_aggs_usage.sql
+  data_fetcher.sql
+  data_node_bootstrap.sql
+  data_node.sql
   ddl_hook.sql
+  debug_notice.sql
+  deparse_fail.sql
+  deparse.sql
+  dist_commands.sql
+  dist_compression.sql
+  dist_ddl.sql
+  dist_grant.sql
+  dist_partial_agg.sql
+  dist_util.sql
+  issues.sql
+  remote_connection_cache.sql
+  remote_connection.sql
+  remote_copy.sql
+  remote_stmt_params.sql
+  remote_txn_id.sql
+  remote_txn_resolve.sql
+  remote_txn.sql
+  telemetry_distributed.sql
+  transparent_decompression_queries.sql
   tsl_tables.sql
 )
 
 set(TEST_TEMPLATES
   compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
+  dist_hypertable.sql.in
+  dist_query.sql.in
   move.sql.in
   reorder.sql.in
   transparent_decompression.sql.in
 )
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_TEMPLATES
+    #current_timestamp_mock available only in debug mode
+    continuous_aggs_query.sql.in
+  )
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")
@@ -52,61 +83,19 @@ if (EXISTS ${PG_CONFIG_H})
   endif()
 endif()
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES
-    #current_timestamp_mock available only in debug mode
-    continuous_aggs_query.sql.in
-    )
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-if (${PG_VERSION_MAJOR} LESS "12")
+# oid systemcolumn is PG11 only
+if (${PG_VERSION_MAJOR} EQUAL "11")
   list(APPEND TEST_FILES_DEBUG
     compression_with_oids.sql
+    dist_hypertable_with_oids.sql
   )
 endif()
 
-if (PG_VERSION_SUPPORTS_MULTINODE)
+if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
   list(APPEND TEST_FILES_DEBUG
-    chunk_api.sql
-    data_node.sql
-    data_node_bootstrap.sql
-    debug_notice.sql
-    deparse.sql
-    deparse_fail.sql
-    dist_commands.sql
-    dist_compression.sql
-    dist_ddl.sql
-    dist_grant.sql
-    dist_partial_agg.sql
-    dist_util.sql
-    issues.sql
-    remote_connection.sql
-    remote_connection_cache.sql
-    remote_copy.sql
-    remote_stmt_params.sql
-    remote_txn.sql
-    remote_txn_id.sql
-    remote_txn_resolve.sql
-    telemetry_distributed.sql
-    data_fetcher.sql
-    )
-  if (CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_TEMPLATES
-      dist_query.sql.in
-      dist_hypertable.sql.in
-    )
-  endif ()
-  if (${PG_VERSION_MAJOR} LESS "12")
-    list(APPEND TEST_FILES_DEBUG
-      dist_hypertable_with_oids.sql
-    )
-  endif()
-  if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
-    list(APPEND TEST_FILES_DEBUG
-      dist_hypertable_am.sql
-    )
-  endif()
-endif ()
+    dist_hypertable_am.sql
+  )
+endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must

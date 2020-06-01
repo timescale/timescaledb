@@ -10,10 +10,8 @@
 #include "hypertable.h"
 #include "license.h"
 #include "telemetry/telemetry.h"
-#if PG11_GE
 #include "dist_util.h"
 #include "data_node.h"
-#endif
 
 #define LICENSE_EDITION_COMMUNITY "community"
 #define LICENSE_EDITION_ENTERPRISE "enterprise"
@@ -49,8 +47,6 @@ tsl_telemetry_add_license_info(JsonbParseState *parseState)
 	}
 }
 
-#if PG11_GE
-
 static void
 tsl_telemetry_add_distributed_database_info(JsonbParseState *parseState)
 {
@@ -82,8 +78,6 @@ tsl_telemetry_add_distributed_database_info(JsonbParseState *parseState)
 					 psprintf("%d", stat.num_hypertables_distributed_members));
 }
 
-#endif
-
 void
 tsl_telemetry_add_info(JsonbParseState **parseState)
 {
@@ -98,7 +92,6 @@ tsl_telemetry_add_info(JsonbParseState **parseState)
 	tsl_telemetry_add_license_info(*parseState);
 	pushJsonbValue(parseState, WJB_END_OBJECT, NULL);
 
-#if PG11_GE
 	{
 		JsonbValue distributed_db_key;
 
@@ -111,5 +104,4 @@ tsl_telemetry_add_info(JsonbParseState **parseState)
 		tsl_telemetry_add_distributed_database_info(*parseState);
 		pushJsonbValue(parseState, WJB_END_OBJECT, NULL);
 	}
-#endif
 }

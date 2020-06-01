@@ -10,18 +10,12 @@
 #include <nodes/primnodes.h>
 #include <utils/array.h>
 
-#include "compat.h"
-
 #include "catalog.h"
+#include "chunk_adaptive.h"
 #include "dimension.h"
 #include "export.h"
-#include "tablespace.h"
 #include "scanner.h"
-#include "chunk_adaptive.h"
-
-#if PG96
-#include <catalog/objectaddress.h>
-#endif
+#include "tablespace.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"

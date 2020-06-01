@@ -4,40 +4,34 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/htup_details.h>
 #include <access/heapam.h>
+#include <access/htup_details.h>
 #include <access/relscan.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/memutils.h>
-#include <utils/builtins.h>
-#include <utils/acl.h>
-#include <utils/snapmgr.h>
-#include <nodes/memnodes.h>
-#include <nodes/makefuncs.h>
-#include <nodes/value.h>
-#include <catalog/namespace.h>
 #include <catalog/indexing.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_collation.h>
+#include <catalog/pg_constraint.h>
+#include <catalog/pg_inherits.h>
 #include <catalog/pg_proc.h>
-#include <commands/tablespace.h>
+#include <catalog/pg_type.h>
 #include <commands/dbcommands.h>
 #include <commands/schemacmds.h>
 #include <commands/tablecmds.h>
+#include <commands/tablespace.h>
 #include <commands/trigger.h>
-#include <storage/lmgr.h>
-#include <miscadmin.h>
 #include <funcapi.h>
-
-#include <catalog/pg_constraint.h>
-#include <catalog/pg_inherits.h>
-#include <catalog/pg_type.h>
+#include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <nodes/memnodes.h>
+#include <nodes/value.h>
 #include <parser/parse_func.h>
-#include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_inherits_fn.h>
-#include <catalog/pg_constraint_fn.h>
-#endif
+#include <storage/lmgr.h>
+#include <utils/acl.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/memutils.h>
+#include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
 #include "hypertable.h"
 #include "hypertable_data_node.h"
@@ -608,16 +602,24 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 
 	Assert(ht != NULL);
 
-#if !PG96
 	if (stmt->transitionRels != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support transition tables in triggers")));
-#endif
+
 	/* create the trigger on the root table */
 	/* ACL permissions checks happen within this call */
-	root_trigger_addr =
-		CreateTriggerCompat(stmt, query, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
+	root_trigger_addr = CreateTrigger(stmt,
+									  query,
+									  InvalidOid,
+									  InvalidOid,
+									  InvalidOid,
+									  InvalidOid,
+									  InvalidOid,
+									  InvalidOid,
+									  NULL,
+									  false,
+									  false);
 
 	/* and forward it to the chunks */
 	CommandCounterIncrement();
@@ -1412,14 +1414,7 @@ hypertable_create_schema(const char *schema_name)
 		.if_not_exists = true,
 	};
 
-	CreateSchemaCommand(&stmt,
-						"(generated CREATE SCHEMA command)"
-#if !PG96
-						,
-						-1,
-						-1
-#endif
-	);
+	CreateSchemaCommand(&stmt, "(generated CREATE SCHEMA command)", -1, -1);
 }
 
 /*
@@ -1615,7 +1610,17 @@ insert_blocker_trigger_add(Oid relid)
 	 * the hypertable. This call will error out if a trigger with the same
 	 * name already exists. (This is the desired behavior.)
 	 */
-	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
+	objaddr = CreateTrigger(&stmt,
+							NULL,
+							relid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							NULL,
+							false,
+							false);
 
 	if (!OidIsValid(objaddr.objectId))
 		elog(ERROR, "could not create insert blocker trigger");
@@ -2012,13 +2017,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Is this the right kind of relation? */
 	switch (get_rel_relkind(table_relid))
 	{
-#if PG10_GE
 		case RELKIND_PARTITIONED_TABLE:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
 					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
-#endif
 		case RELKIND_RELATION:
 			break;
 		default:

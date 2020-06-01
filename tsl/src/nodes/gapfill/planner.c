@@ -416,18 +416,6 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	if (context.count == 0)
 		return;
 
-#ifndef HAVE_INT64_TIMESTAMP
-
-	/*
-	 * starting with postgres 10 timestamps are always integer but in 9.6 this
-	 * was a compile time option
-	 */
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("gapfill functionality cannot be used on postgres compiled with non integer "
-					"timestamps")));
-#endif
-
 	if (context.count > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
