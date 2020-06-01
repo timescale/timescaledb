@@ -8,10 +8,4 @@ if (${PG_VERSION_MAJOR} LESS "12")
     )
 endif ()
 
-if (${PG_VERSION_MAJOR} LESS "11")
-  list(APPEND SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/fkeylist.c
-    )
-endif ()
-
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})

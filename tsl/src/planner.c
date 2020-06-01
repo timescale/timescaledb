@@ -4,33 +4,28 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <optimizer/paths.h>
 #include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
 
-#include <planner.h>
-#include "planner.h"
-#include "nodes/gapfill/planner.h"
+#include "async_append.h"
+#include "chunk.h"
+#include "compat.h"
+#include "debug_guc.h"
+#include "debug.h"
+#include "fdw/data_node_scan_plan.h"
+#include "fdw/fdw.h"
+#include "fdw/relinfo.h"
+#include "guc.h"
+#include "hypertable_cache.h"
+#include "hypertable_compression.h"
+#include "hypertable.h"
 #include "nodes/compress_dml/compress_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
-#include "chunk.h"
-#include "hypertable.h"
-#include "hypertable_compression.h"
-#include "hypertable_cache.h"
-#include <optimizer/paths.h>
-#include "compat.h"
-#if PG_VERSION_SUPPORTS_MULTINODE
-#include "fdw/fdw.h"
-#include "fdw/data_node_scan_plan.h"
-#endif
-#include "guc.h"
-#include "debug_guc.h"
-#include "async_append.h"
-#include "debug.h"
-#include "fdw/relinfo.h"
+#include "nodes/gapfill/planner.h"
+#include "planner.h"
 
 #include <math.h>
-
-#if PG_VERSION_SUPPORTS_MULTINODE
 
 static bool
 is_dist_hypertable_involved(PlannerInfo *root)
@@ -49,14 +44,11 @@ is_dist_hypertable_involved(PlannerInfo *root)
 	return false;
 }
 
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */
-
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
 							void *extra)
 {
-#if PG_VERSION_SUPPORTS_MULTINODE
 	switch (input_reltype)
 	{
 		case TS_REL_HYPERTABLE:
@@ -67,17 +59,14 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 		default:
 			break;
 	}
-#endif
 
 	if (UPPERREL_GROUP_AGG == stage)
 		plan_add_gapfill(root, output_rel);
 	else if (UPPERREL_WINDOW == stage && IsA(linitial(input_rel->pathlist), CustomPath))
 		gapfill_adjust_window_targetlist(root, input_rel, output_rel);
-#if PG_VERSION_SUPPORTS_MULTINODE
 	else if (ts_guc_enable_async_append && UPPERREL_FINAL == stage &&
 			 root->parse->resultRelation == 0 && is_dist_hypertable_involved(root))
 		async_append_add_paths(root, output_rel);
-#endif
 }
 
 void
@@ -113,7 +102,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	}
 }
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 /* The fdw needs to expand a distributed hypertable inside the `GetForeignPath` callback. But, since
  * the hypertable base table is not a foreign table, that callback would not normally be called.
  * Thus, we call it manually in this hook.
@@ -141,5 +129,3 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 	ts_cache_release(hcache);
 }
-
-#endif

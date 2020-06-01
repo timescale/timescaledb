@@ -11,9 +11,7 @@ TEST_VERSION=${TEST_VERSION:-}
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
-PG_VERSION=${PG_VERSION:-9.6.5} # Need 9.6.x version since we are
-                                # upgrading the extension from
-                                # versions that didn't support PG10.
+PG_VERSION=${PG_VERSION:-11.0}
 
 FAILED_TEST=
 KEEP_TEMP_DIRS=false

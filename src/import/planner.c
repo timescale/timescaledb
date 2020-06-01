@@ -42,8 +42,7 @@
 
 #include "planner.h"
 
-#if PG12_GE || (PG11 && PG_VERSION_NUM >= 110002) || (PG10 && PG_VERSION_NUM >= 100007) ||         \
-	(PG96 && PG_VERSION_NUM >= 90612)
+#if PG12_GE || (PG11 && PG_VERSION_NUM >= 110002)
 #include <optimizer/paramassign.h>
 #else
 /*
@@ -281,153 +280,6 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 	return set_pathtarget_cost_width(root, partial_target);
 }
 
-#if PG96
-/* copied verbatim from selfuncs.c */
-bool
-ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, Datum *min,
-					  Datum *max)
-{
-	uintptr_t tmin = 0;
-	uintptr_t tmax = 0;
-	char have_data = false;
-	short typLen;
-	char typByVal;
-	unsigned int opfuncoid;
-	uintptr_t *values;
-	int nvalues;
-	int i;
-
-	/*
-	 * XXX It's very tempting to try to use the actual column min and max, if
-	 * we can get them relatively-cheaply with an index probe.  However, since
-	 * this function is called many times during join planning, that could
-	 * have unpleasant effects on planning speed.  Need more investigation
-	 * before enabling this.
-	 */
-#ifdef NOT_USED
-	if (get_actual_variable_range(root, vardata, sortop, min, max))
-		return true;
-#endif
-
-	if (!HeapTupleIsValid(vardata->statsTuple))
-	{
-		/* no stats available, so default result */
-		return false;
-	}
-
-#if (PG_VERSION_NUM >= 90603) /* statistic_proc_security_check was added in                        \
-							   * 9.6.3 */
-
-	/*
-	 * If we can't apply the sortop to the stats data, just fail.  In
-	 * principle, if there's a histogram and no MCVs, we could return the
-	 * histogram endpoints without ever applying the sortop ... but it's
-	 * probably not worth trying, because whatever the caller wants to do with
-	 * the endpoints would likely fail the security check too.
-	 */
-	if (!statistic_proc_security_check(vardata, (opfuncoid = get_opcode(sortop))))
-		return false;
-#else
-	opfuncoid = get_opcode(sortop);
-#endif
-
-	get_typlenbyval(vardata->atttype, &typLen, &typByVal);
-
-	/*
-	 * If there is a histogram, grab the first and last values.
-	 *
-	 * If there is a histogram that is sorted with some other operator than
-	 * the one we want, fail --- this suggests that there is data we can't
-	 * use.
-	 */
-	if (get_attstatsslot(vardata->statsTuple,
-						 vardata->atttype,
-						 vardata->atttypmod,
-						 STATISTIC_KIND_HISTOGRAM,
-						 sortop,
-						 NULL,
-						 &values,
-						 &nvalues,
-						 NULL,
-						 NULL))
-	{
-		if (nvalues > 0)
-		{
-			tmin = datumCopy(values[0], typByVal, typLen);
-			tmax = datumCopy(values[nvalues - 1], typByVal, typLen);
-			have_data = true;
-		}
-		free_attstatsslot(vardata->atttype, values, nvalues, NULL, 0);
-	}
-	else if (get_attstatsslot(vardata->statsTuple,
-							  vardata->atttype,
-							  vardata->atttypmod,
-							  STATISTIC_KIND_HISTOGRAM,
-							  InvalidOid,
-							  NULL,
-							  &values,
-							  &nvalues,
-							  NULL,
-							  NULL))
-	{
-		free_attstatsslot(vardata->atttype, values, nvalues, NULL, 0);
-		return false;
-	}
-
-	/*
-	 * If we have most-common-values info, look for extreme MCVs.  This is
-	 * needed even if we also have a histogram, since the histogram excludes
-	 * the MCVs.  However, usually the MCVs will not be the extreme values, so
-	 * avoid unnecessary data copying.
-	 */
-	if (get_attstatsslot(vardata->statsTuple,
-						 vardata->atttype,
-						 vardata->atttypmod,
-						 STATISTIC_KIND_MCV,
-						 InvalidOid,
-						 NULL,
-						 &values,
-						 &nvalues,
-						 NULL,
-						 NULL))
-	{
-		char tmin_is_mcv = false;
-		char tmax_is_mcv = false;
-		struct FmgrInfo opproc;
-
-		fmgr_info(opfuncoid, &opproc);
-
-		for (i = 0; i < nvalues; i++)
-		{
-			if (!have_data)
-			{
-				tmin = tmax = values[i];
-				tmin_is_mcv = tmax_is_mcv = have_data = true;
-				continue;
-			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, values[i], tmin)))
-			{
-				tmin = values[i];
-				tmin_is_mcv = true;
-			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, tmax, values[i])))
-			{
-				tmax = values[i];
-				tmax_is_mcv = true;
-			}
-		}
-		if (tmin_is_mcv)
-			tmin = datumCopy(tmin, typByVal, typLen);
-		if (tmax_is_mcv)
-			tmax = datumCopy(tmax, typByVal, typLen);
-		free_attstatsslot(vardata->atttype, values, nvalues, NULL, 0);
-	}
-
-	*min = tmin;
-	*max = tmax;
-	return have_data;
-}
-#else
 /* copied verbatim from selfuncs.c */
 bool
 ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, Datum *min,
@@ -549,7 +401,6 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, 
 	*max = tmax;
 	return have_data;
 }
-#endif
 
 /*
  * find_ec_member_for_tle
@@ -1113,134 +964,11 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
 }
 
-#if PG11_LT
-/*
- * ExecSetTupleBound
- *
- * Set a tuple bound for a planstate node.  This lets child plan nodes
- * optimize based on the knowledge that the maximum number of tuples that
- * their parent will demand is limited.  The tuple bound for a node may
- * only be changed between scans (i.e., after node initialization or just
- * before an ExecReScan call).
- *
- * Any negative tuples_needed value means "no limit", which should be the
- * default assumption when this is not called at all for a particular node.
- *
- * Note: if this is called repeatedly on a plan tree, the exact same set
- * of nodes must be updated with the new limit each time; be careful that
- * only unchanging conditions are tested here.
- *
- * copied from PG11 execProcNode.c, handling of GatherState and
- * GatherMergeState adjusted to account for capabilities of older versions
- */
-void
-ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node)
-{
-	/*
-	 * Since this function recurses, in principle we should check stack depth
-	 * here.  In practice, it's probably pointless since the earlier node
-	 * initialization tree traversal would surely have consumed more stack.
-	 */
-
-	if (IsA(child_node, SortState))
-	{
-		/*
-		 * If it is a Sort node, notify it that it can use bounded sort.
-		 *
-		 * Note: it is the responsibility of nodeSort.c to react properly to
-		 * changes of these parameters.  If we ever redesign this, it'd be a
-		 * good idea to integrate this signaling with the parameter-change
-		 * mechanism.
-		 */
-		SortState *sortState = (SortState *) child_node;
-
-		if (tuples_needed < 0)
-		{
-			/* make sure flag gets reset if needed upon rescan */
-			sortState->bounded = false;
-		}
-		else
-		{
-			sortState->bounded = true;
-			sortState->bound = tuples_needed;
-		}
-	}
-	else if (IsA(child_node, MergeAppendState))
-	{
-		/*
-		 * If it is a MergeAppend, we can apply the bound to any nodes that
-		 * are children of the MergeAppend, since the MergeAppend surely need
-		 * read no more than that many tuples from any one input.
-		 */
-		MergeAppendState *maState = (MergeAppendState *) child_node;
-		int i;
-
-		for (i = 0; i < maState->ms_nplans; i++)
-			ExecSetTupleBound(tuples_needed, maState->mergeplans[i]);
-	}
-	else if (IsA(child_node, ResultState))
-	{
-		/*
-		 * Similarly, for a projecting Result, we can apply the bound to its
-		 * child node.
-		 *
-		 * If Result supported qual checking, we'd have to punt on seeing a
-		 * qual.  Note that having a resconstantqual is not a showstopper: if
-		 * that condition succeeds it affects nothing, while if it fails, no
-		 * rows will be demanded from the Result child anyway.
-		 */
-		if (outerPlanState(child_node))
-			ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
-	}
-	else if (IsA(child_node, SubqueryScanState))
-	{
-		/*
-		 * We can also descend through SubqueryScan, but only if it has no
-		 * qual (otherwise it might discard rows).
-		 */
-		SubqueryScanState *subqueryState = (SubqueryScanState *) child_node;
-
-		if (subqueryState->ss.ps.qual == NULL)
-			ExecSetTupleBound(tuples_needed, subqueryState->subplan);
-	}
-	else if (IsA(child_node, GatherState))
-	{
-		/*
-		 * A Gather node can propagate the bound to its workers.  As with
-		 * MergeAppend, no one worker could possibly need to return more
-		 * tuples than the Gather itself needs to.
-		 *
-		 * Note: As with Sort, the Gather node is responsible for reacting
-		 * properly to changes to this parameter.
-		 */
-
-		/* Also pass down the bound to our own copy of the child plan */
-		ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
-	}
-#if PG10
-	else if (IsA(child_node, GatherMergeState))
-	{
-		/* Same comments as for Gather */
-
-		ExecSetTupleBound(tuples_needed, outerPlanState(child_node));
-	}
-#endif
-
-	/*
-	 * In principle we could descend through any plan node type that is
-	 * certain not to discard or combine input rows; but on seeing a node that
-	 * can do that, we can't propagate the bound any further.  For the moment
-	 * it's unclear that any other cases are worth checking here.
-	 */
-}
-#endif
-
 /*
  * these functions need to be backported to allow timescaledb built on older versions
  * to work with latest pg version
  */
-#if (PG11 && PG_VERSION_NUM < 110002) || (PG10 && PG_VERSION_NUM < 100007) ||                      \
-	(PG96 && PG_VERSION_NUM < 90612)
+#if (PG11 && PG_VERSION_NUM < 110002)
 /*
  * Generate a Param node to replace the given Var,
  * which is expected to come from some upper NestLoop plan node.
@@ -1355,12 +1083,8 @@ generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod, Oid
 
 	retval = makeNode(Param);
 	retval->paramkind = PARAM_EXEC;
-#if PG11_LT
-	retval->paramid = root->glob->nParamExec++;
-#else
 	retval->paramid = list_length(root->glob->paramExecTypes);
 	root->glob->paramExecTypes = lappend_oid(root->glob->paramExecTypes, paramtype);
-#endif
 	retval->paramtype = paramtype;
 	retval->paramtypmod = paramtypmod;
 	retval->paramcollid = paramcollation;

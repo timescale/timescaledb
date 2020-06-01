@@ -1,6 +1,5 @@
 set(SOURCES
   agg_bookend.c
-  base64_compat.c
   func_cache.c
   cache.c
   cache_invalidate.c

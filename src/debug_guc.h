@@ -10,7 +10,6 @@
 #include <fmgr.h>
 #include <utils/guc.h>
 
-#include "compat.h"
 #include "export.h"
 
 /*
@@ -19,10 +18,8 @@
  * stage list and create a mask from it.
  */
 #define STAGE_SETOP (1UL << UPPERREL_SETOP) /* Enabled using "setop" */
-#if PG11_GE
 #define STAGE_PARTIAL_GROUP_AGG                                                                    \
-	(1UL << UPPERREL_PARTIAL_GROUP_AGG) /* Enabled using "partial_group_agg" */
-#endif
+	(1UL << UPPERREL_PARTIAL_GROUP_AGG)				/* Enabled using "partial_group_agg" */
 #define STAGE_GROUP_AGG (1UL << UPPERREL_GROUP_AGG) /* Enabled using "group_agg" */
 #define STAGE_WINDOW (1UL << UPPERREL_WINDOW)		/* Enabled using "window" */
 #define STAGE_DISTINCT (1UL << UPPERREL_DISTINCT)   /* Enabled using "distinct" */

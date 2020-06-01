@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
+#include <utils/varlena.h>
 #include <fmgr.h>
 
 #include "compat.h"
@@ -13,9 +14,6 @@
 #include <nodes/pathnodes.h>
 #else
 #include <nodes/relation.h>
-#endif
-#if PG10_GE
-#include <utils/varlena.h>
 #endif
 
 #include "debug_guc.h"
@@ -66,10 +64,8 @@ get_show_upper_mask(const char *paths, size_t paths_len)
 				mask |= ~0UL;
 			else if (strncmp(beg, "setop", len) == 0)
 				mask |= STAGE_SETOP;
-#if PG11_GE
 			else if (strncmp(beg, "partial_group_agg", len) == 0)
 				mask |= STAGE_PARTIAL_GROUP_AGG;
-#endif
 			else if (strncmp(beg, "group_agg", len) == 0)
 				mask |= STAGE_GROUP_AGG;
 			else if (strncmp(beg, "window", len) == 0)

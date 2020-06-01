@@ -71,7 +71,3 @@ cmake --build ./build --config Release --target install
 # CMake or by opening the generated build/timescaledb.sln solution file.
 ```
 
-#### Older PostgreSQL versions
-TimescaleDB can be installed with PostgreSQL 9.6.6+ and 10.9+ versions. Support for these 
-versions of PostgreSQL is deprecated and no future releases are planned for them. We 
-recommend to use PostgreSQL 12 or 11.4+.

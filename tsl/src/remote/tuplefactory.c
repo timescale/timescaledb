@@ -129,7 +129,7 @@ conversion_error_callback(void *arg)
 			if (var->varattno == 0)
 				is_wholerow = true;
 			else
-				attname = get_attname_compat(rte->relid, var->varattno, false);
+				attname = get_attname(rte->relid, var->varattno, false);
 
 			relname = get_rel_name(rte->relid);
 		}

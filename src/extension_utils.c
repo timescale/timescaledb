@@ -188,11 +188,7 @@ extension_load_without_preload()
 		 */
 		/* Only privileged users can get the value of `config file` */
 
-#if PG96
-		if (superuser())
-#else
 		if (is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
-#endif
 		{
 			char *config_file = GetConfigOptionByName("config_file", NULL, false);
 

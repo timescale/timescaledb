@@ -12,25 +12,18 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <miscadmin.h>
-#include <utils/elog.h>
 #include <utils/builtins.h>
-
-#include "interval.h"
-#include "hypertable.h"
-
-#include "dimension.h"
-#include "hypertable_cache.h"
-#include "cache.h"
-#include "utils.h"
-#include "errors.h"
-#include "compat.h"
-#include "guc.h"
-
-#if !PG96
+#include <utils/elog.h>
 #include <utils/fmgrprotos.h>
-#else
-#include <utils/date.h>
-#endif
+
+#include "cache.h"
+#include "dimension.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypertable_cache.h"
+#include "hypertable.h"
+#include "interval.h"
+#include "utils.h"
 
 /* This function deforms its input argument `ts_interval_datum` into `FormData_ts_interval`
  * assuming it was read from a postgres table and so the datum represents a TupleHeader

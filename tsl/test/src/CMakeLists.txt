@@ -1,17 +1,13 @@
 set(SOURCES
+  data_node.c
+  deparse.c
   test_auto_policy.c
   test_chunk_stats.c
   test_compression.c
-  test_ddl_hook.c
   test_continuous_aggs.c
+  test_ddl_hook.c
+  test_dist_util.c
 )
-
-if (PG_VERSION_SUPPORTS_MULTINODE)
-  list(APPEND SOURCES
-       test_dist_util.c
-       data_node.c
-       deparse.c)
-endif ()
 
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
@@ -25,6 +21,4 @@ target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/tes
 target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${PG_INCLUDEDIR})
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)
 
-if (PG_VERSION_SUPPORTS_MULTINODE)
-  add_subdirectory(remote)
-endif ()
+add_subdirectory(remote)

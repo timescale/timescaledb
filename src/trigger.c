@@ -4,21 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/rel.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/builtins.h>
-#include <tcop/tcopprot.h>
-#include <commands/trigger.h>
 #include <access/xact.h>
+#include <commands/trigger.h>
 #include <miscadmin.h>
+#include <parser/analyze.h>
+#include <tcop/tcopprot.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <utils/syscache.h>
 
 #include "trigger.h"
-#include "compat.h"
-
-#if PG10_GE
-#include <parser/analyze.h>
-#endif
 
 /*
  * Replicate a trigger on a chunk.
@@ -43,9 +39,6 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 	Assert(list_length(deparsed_list) == 1);
 	deparsed_node = linitial(deparsed_list);
 
-#if PG96
-	stmt = (CreateTrigStmt *) deparsed_node;
-#else
 	do
 	{
 		RawStmt *rawstmt = (RawStmt *) deparsed_node;
@@ -58,13 +51,22 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 		free_parsestate(pstate);
 		stmt = (CreateTrigStmt *) query->utilityStmt;
 	} while (0);
-#endif
 
 	Assert(IsA(stmt, CreateTrigStmt));
 	stmt->relation->relname = chunk_table_name;
 	stmt->relation->schemaname = chunk_schema_name;
 
-	CreateTriggerCompat(stmt, def, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
+	CreateTrigger(stmt,
+				  def,
+				  InvalidOid,
+				  InvalidOid,
+				  InvalidOid,
+				  InvalidOid,
+				  InvalidOid,
+				  InvalidOid,
+				  NULL,
+				  false,
+				  false);
 
 	CommandCounterIncrement(); /* needed to prevent pg_class being updated
 								* twice */
@@ -101,13 +103,12 @@ create_trigger_handler(Trigger *trigger, void *arg)
 {
 	Chunk *chunk = arg;
 
-#if PG10_GE
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support transition tables in triggers")));
-#endif
+
 	if (trigger_is_chunk_trigger(trigger))
 		ts_trigger_create_on_chunk(trigger->tgoid,
 								   NameStr(chunk->fd.schema_name),
@@ -153,7 +154,6 @@ ts_trigger_create_all_on_chunk(Chunk *chunk)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
 }
 
-#if PG10_GE
 static bool
 check_for_transition_table(Trigger *trigger, void *arg)
 {
@@ -168,16 +168,13 @@ check_for_transition_table(Trigger *trigger, void *arg)
 
 	return true;
 }
-#endif
 
 bool
 ts_relation_has_transition_table_trigger(Oid relid)
 {
 	bool found = false;
 
-#if PG10_GE
 	for_each_trigger(relid, check_for_transition_table, &found);
-#endif
 
 	return found;
 }

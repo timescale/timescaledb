@@ -16,8 +16,9 @@
 #include <nodes/parsenodes.h>
 #include <storage/lmgr.h>
 #include <trigger.h>
-#include <utils/elog.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
+#include <utils/fmgrprotos.h>
 #include <libpq-fe.h>
 
 #include <remote/dist_commands.h>
@@ -36,10 +37,6 @@
 #include "scan_iterator.h"
 #include "license.h"
 #include "compression_chunk_size.h"
-
-#if !PG96
-#include <utils/fmgrprotos.h>
-#endif
 
 #define CHUNK_DML_BLOCKER_TRIGGER "chunk_dml_blocker"
 #define CHUNK_DML_BLOCKER_NAME "compressed_chunk_insert_blocker"
@@ -141,7 +138,17 @@ chunk_dml_blocker_trigger_add(Oid relid)
 		.args = NIL,
 		.events = TRIGGER_TYPE_INSERT,
 	};
-	objaddr = CreateTriggerCompat(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
+	objaddr = CreateTrigger(&stmt,
+							NULL,
+							relid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							InvalidOid,
+							NULL,
+							false,
+							false);
 
 	if (!OidIsValid(objaddr.objectId))
 		elog(ERROR, "could not create DML blocker trigger");
@@ -343,8 +350,6 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
 	return true;
 }
 
-#if PG_VERSION_SUPPORTS_MULTINODE
-
 /*
  * Helper for remote invocation of chunk compression and decompression.
  */
@@ -413,8 +418,6 @@ decompress_remote_chunk(FunctionCallInfo fcinfo, const Chunk *chunk, bool if_com
 	return success;
 }
 
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */
-
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
@@ -422,7 +425,6 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		if (!compress_remote_chunk(fcinfo, chunk, if_not_compressed))
@@ -430,7 +432,6 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 		PG_RETURN_OID(uncompressed_chunk_id);
 	}
-#endif
 
 	if (!tsl_compress_chunk_wrapper(chunk, if_not_compressed))
 		PG_RETURN_NULL();
@@ -448,7 +449,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 	if (uncompressed_chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		if (!decompress_remote_chunk(fcinfo, uncompressed_chunk, if_compressed))
@@ -456,7 +456,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 		PG_RETURN_OID(uncompressed_chunk_id);
 	}
-#endif
 
 	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
 							   uncompressed_chunk_id,

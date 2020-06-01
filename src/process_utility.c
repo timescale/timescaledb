@@ -35,10 +35,6 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_inherits_fn.h>
-#include <catalog/pg_constraint_fn.h>
-#endif
 
 #include <miscadmin.h>
 
@@ -85,7 +81,6 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{
-#if !PG96
 		/* Call any earlier hooks */
 		(prev_ProcessUtility_hook)(args->pstmt,
 								   args->query_string,
@@ -94,19 +89,10 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 								   args->queryEnv,
 								   args->dest,
 								   args->completion_tag);
-#else
-		(prev_ProcessUtility_hook)(args->parsetree,
-								   args->query_string,
-								   args->context,
-								   args->params,
-								   args->dest,
-								   args->completion_tag);
-#endif
 	}
 	else
 	{
 		/* Call the standard */
-#if !PG96
 		standard_ProcessUtility(args->pstmt,
 								args->query_string,
 								args->context,
@@ -114,14 +100,6 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 								args->queryEnv,
 								args->dest,
 								args->completion_tag);
-#else
-		standard_ProcessUtility(args->parsetree,
-								args->query_string,
-								args->context,
-								args->params,
-								args->dest,
-								args->completion_tag);
-#endif
 	}
 }
 
@@ -260,12 +238,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 static void
 relation_not_only(RangeVar *rv)
 {
-#if !PG96
-	bool only = !rv->inh;
-#else
-	bool only = (rv->inhOpt == INH_NO);
-#endif
-	if (only)
+	if (!rv->inh)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ONLY option not supported on hypertable operations")));
@@ -572,88 +545,6 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	return num_chunks;
 }
 
-/*
- * PG11 modified  how vacuum works (see:
- * https://github.com/postgres/postgres/commit/11d8d72c27a64ea4e30adce11cf6c4f3dd3e60db)
- * so that a) one can run vacuum on multiple tables at once with `VACUUM table1,
- * table2;` and b) because of this modified the way that the VacuumStmt node in
- * the planner works due to this change. It now has a list of VacuumRelations.
- * Given this change it seemed easier to take rewrite this completely for 11 to
- * take advantage of the new changes.
- */
-#if PG11_LT
-typedef struct VacuumCtx
-{
-	VacuumStmt *stmt;
-	bool is_toplevel;
-} VacuumCtx;
-
-/* Vacuums a single chunk */
-static void
-vacuum_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	VacuumCtx *ctx = (VacuumCtx *) arg;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-
-	ctx->stmt->relation->relname = NameStr(chunk->fd.table_name);
-	ctx->stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
-	ExecVacuum(ctx->stmt, ctx->is_toplevel);
-}
-
-/* Vacuums each chunk of a hypertable */
-static bool
-process_vacuum(ProcessUtilityArgs *args)
-{
-	VacuumStmt *stmt = (VacuumStmt *) args->parsetree;
-	bool is_toplevel = (args->context == PROCESS_UTILITY_TOPLEVEL);
-	VacuumCtx ctx = {
-		.stmt = stmt,
-		.is_toplevel = is_toplevel,
-	};
-	Oid hypertable_oid;
-	Cache *hcache;
-	Hypertable *ht;
-
-	if (stmt->relation == NULL)
-		/* Vacuum is for all tables */
-		return false;
-
-	hypertable_oid = ts_hypertable_relid(stmt->relation);
-	if (!OidIsValid(hypertable_oid))
-		return false;
-
-	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
-
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_MISSING_OK, &hcache);
-
-	if (ht)
-		process_add_hypertable(args, ht);
-
-	/* allow vacuum to be cross-commit */
-	hcache->release_on_commit = false;
-	foreach_chunk(ht, vacuum_chunk, &ctx);
-	hcache->release_on_commit = true;
-
-	ts_cache_release(hcache);
-
-	/*
-	 * You still want the parent to be vacuumed in order to update statistics
-	 * if necessary
-	 *
-	 * Note that in the VERBOSE output this will appear to re-analyze the
-	 * child tables. However, this actually just re-acquires the sample from
-	 * the child table to use this statistics in the parent table. It will
-	 * /not/ write the appropriate statistics in pg_stats for the child table,
-	 * so both the per-chunk analyze above and this parent-table vacuum run is
-	 * necessary. Later, we can optimize this further, if necessary.
-	 */
-	stmt->relation->relname = NameStr(ht->fd.table_name);
-	stmt->relation->schemaname = NameStr(ht->fd.schema_name);
-	ExecVacuum(stmt, is_toplevel);
-
-	return true;
-}
-#else
 typedef struct VacuumCtx
 {
 	VacuumRelation *ht_vacuum_rel;
@@ -756,7 +647,6 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	return true;
 }
-#endif
 
 static void
 process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -773,17 +663,7 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 static bool
 relation_should_recurse(RangeVar *rv)
 {
-#if !PG96
 	return rv->inh;
-#else
-	if (rv->inhOpt == INH_DEFAULT)
-	{
-		char *inherit_guc = GetConfigOptionByName("SQL_inheritance", NULL, false);
-
-		return strncmp(inherit_guc, "on", 2) == 0;
-	}
-	return rv->inhOpt == INH_YES;
-#endif
 }
 
 /* handle forwading TRUNCATEs to the chunks of a hypertable */
@@ -1112,18 +992,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 	switch (stmt->objtype)
 	{
-/*
- * PG11 consolidated several ACL_OBJECT_FOO or similar to the already extant
- * OBJECT_FOO see:
- * https://github.com/postgres/postgres/commit/2c6f37ed62114bd5a092c20fe721bd11b3bcb91e
- * so we can't simply #define OBJECT_TABLESPACE ACL_OBJECT_TABLESPACE and have
- * things work correctly for previous versions.
- */
-#if PG11_LT
-		case ACL_OBJECT_TABLESPACE:
-#else
 		case OBJECT_TABLESPACE:
-#endif
 			/*
 			 * If we are granting on a tablespace, we need to apply the REVOKE
 			 * first to be able to check remaining permissions.
@@ -1132,11 +1001,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			ts_tablespace_validate_revoke(stmt);
 			handled = true;
 			break;
-#if PG11_LT
-		case ACL_OBJECT_RELATION:
-#else
 		case OBJECT_TABLE:
-#endif
 			/*
 			 * Collect the hypertables in the grant statement. We only need to
 			 * consider those when sending grants to other data nodes.
@@ -2670,7 +2535,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				if (ht != NULL)
 					process_alter_column_type_start(ht, cmd);
 				break;
-#if !PG96
 			case AT_AttachPartition:
 			{
 				RangeVar *relation;
@@ -2689,7 +2553,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			}
-#endif
 			case AT_SetRelOptions:
 			{
 				if (num_cmds != 1)
@@ -2957,11 +2820,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
-#if PG10_GE
 		case AT_AddIdentity:
 		case AT_SetIdentity:
 		case AT_DropIdentity:
-#endif
 			/* all of the above are handled by default recursion */
 			break;
 		case AT_EnableRowSecurity:
@@ -3003,17 +2864,13 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddColumnToView:		   /* only used with views */
 		case AT_AlterColumnGenericOptions: /* only used with foreign tables */
 		case AT_GenericOptions:			   /* only used with foreign tables */
-#if PG11_GE
-		case AT_ReAddDomainConstraint: /* We should handle this in future,
-										* new subset of constraints in PG11
-										* currently not hit in test code */
-#endif
-#if PG10_GE
-		case AT_AttachPartition: /* handled in
-								  * process_altertable_start_table but also
-								  * here as failsafe */
+		case AT_ReAddDomainConstraint:	 /* We should handle this in future,
+											* new subset of constraints in PG11
+											* currently not hit in test code */
+		case AT_AttachPartition:		   /* handled in
+											* process_altertable_start_table but also
+											* here as failsafe */
 		case AT_DetachPartition:
-#endif
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
@@ -3135,16 +2992,6 @@ process_create_rule_start(ProcessUtilityArgs *args)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
 }
 
-static void
-check_supported_pg_version_for_compression()
-{
-#if PG10_LT
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression is not supported with postgres version older than 10")));
-#endif
-}
-
 /* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
 static bool
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
@@ -3168,7 +3015,6 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	else
 		return false;
 
-	check_supported_pg_version_for_compression();
 	if (pg_options != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -3222,14 +3068,10 @@ process_viewstmt(ProcessUtilityArgs *args)
 				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
 						"aggregate")));
 
-#if PG10_GE
 	return ts_cm_functions->process_cagg_viewstmt(stmt,
 												  args->query_string,
 												  args->pstmt,
 												  parse_results);
-#else
-	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, NULL, parse_results);
-#endif
 }
 
 static bool
@@ -3574,41 +3416,25 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
  * PostgreSQL.
  */
 static void
-timescaledb_ddl_command_start(
-#if PG10_GE
-	PlannedStmt *pstmt,
-#else
-	Node *parsetree,
-#endif
-	const char *query_string, ProcessUtilityContext context, ParamListInfo params,
-#if PG10_GE
-	QueryEnvironment *queryEnv,
-#endif
-	DestReceiver *dest, char *completion_tag)
+timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
+							  ProcessUtilityContext context, ParamListInfo params,
+							  QueryEnvironment *queryEnv, DestReceiver *dest, char *completion_tag)
 {
-	ProcessUtilityArgs args = {
-		.query_string = query_string,
-		.context = context,
-		.params = params,
-		.dest = dest,
-		.completion_tag = completion_tag,
-#if PG10_GE
-		.pstmt = pstmt,
-		.parsetree = pstmt->utilityStmt,
-		.queryEnv = queryEnv,
-		.parse_state = make_parsestate(NULL),
-#else
-		.parsetree = parsetree,
-#endif
-		.hypertable_list = NIL
-	};
+	ProcessUtilityArgs args = { .query_string = query_string,
+								.context = context,
+								.params = params,
+								.dest = dest,
+								.completion_tag = completion_tag,
+								.pstmt = pstmt,
+								.parsetree = pstmt->utilityStmt,
+								.queryEnv = queryEnv,
+								.parse_state = make_parsestate(NULL),
+								.hypertable_list = NIL };
 
 	bool altering_timescaledb = false;
 	bool handled;
 
-#if PG10_GE
 	args.parse_state->p_sourcetext = query_string;
-#endif
 
 	if (IsA(args.parsetree, AlterExtensionStmt))
 	{

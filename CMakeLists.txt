@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.11)
 include(CheckCCompilerFlag)
 
 # Function to call pg_config and extract values.
@@ -145,13 +145,13 @@ if(WIN32)
   find_path(PG_PATH
     postgres.exe
     PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 12/bin 11/bin 10/bin 96/bin pg96/bin
+    PATH_SUFFIXES bin 12/bin 11/bin
     DOC "The path to a PostgreSQL installation")
 elseif(UNIX)
   find_path(PG_PATH
     postgres
     PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 12/bin 11/bin 10/bin 9.6/bin 96/bin pg96/bin
+    PATH_SUFFIXES bin 12/bin 11/bin
     DOC "The path to a PostgreSQL installation")
 endif()
 
@@ -192,21 +192,9 @@ message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 # Ensure that PostgreSQL version is supported and consistent
 # with src/compat.h version check
-if ((${PG_VERSION_MAJOR} LESS "9") OR
-    (${PG_VERSION_MAJOR} EQUAL "9" AND ${PG_VERSION} VERSION_LESS "9.6.3") OR
-    (${PG_VERSION_MAJOR} EQUAL "10" AND ${PG_VERSION} VERSION_LESS "10.2") OR
+if ((${PG_VERSION_MAJOR} LESS "11") OR
     (${PG_VERSION_MAJOR} GREATER "12"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6.3+, 10.2+, 11 or 12")
-endif()
-
-# Global check for multinode support in PG version
-set(PG_VERSION_MINIMUM_FOR_MULTINODE 11)
-
-if (${PG_VERSION_MAJOR} LESS ${PG_VERSION_MINIMUM_FOR_MULTINODE})
-  set(PG_VERSION_SUPPORTS_MULTINODE 0)
-  message(STATUS "Multinode support not available for this PostgreSQL version")
-else ()
-  set(PG_VERSION_SUPPORTS_MULTINODE 1)
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 11 and 12")
 endif()
 
 # Get PostgreSQL configuration from pg_config

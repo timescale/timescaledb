@@ -264,19 +264,6 @@ setup_tuple_slots_for_on_conflict_handling(ChunkDispatchState *state)
 			mtstate->mt_conflproj;
 	}
 }
-#elif PG11_LT
-static void
-setup_tuple_slots_for_on_conflict_handling(ChunkDispatchState *state)
-{
-	ModifyTableState *mtstate = state->mtstate;
-	ModifyTable *mtplan = castNode(ModifyTable, mtstate->ps.plan);
-
-	if (mtplan->onConflictAction == ONCONFLICT_UPDATE)
-	{
-		Assert(mtstate->mt_conflproj != NULL);
-		state->conflproj_tupdesc = mtstate->mt_conflproj->tts_tupleDescriptor;
-	}
-}
 #endif
 
 /*

@@ -281,10 +281,6 @@ ca_append_exec(CustomScanState *node)
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	TupleTableSlot *subslot;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-#if PG96
-	TupleTableSlot *resultslot;
-	ExprDoneCond isDone;
-#endif
 
 	/*
 	 * Check if all append subplans were pruned. In that case there is nothing
@@ -292,18 +288,6 @@ ca_append_exec(CustomScanState *node)
 	 */
 	if (state->num_append_subplans == 0)
 		return NULL;
-
-#if PG96
-	if (node->ss.ps.ps_TupFromTlist)
-	{
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone == ExprMultipleResult)
-			return resultslot;
-
-		node->ss.ps.ps_TupFromTlist = false;
-	}
-#endif
 
 	ResetExprContext(econtext);
 
@@ -319,17 +303,7 @@ ca_append_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = subslot;
 
-#if PG96
-		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone != ExprEndResult)
-		{
-			node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
-			return resultslot;
-		}
-#else
 		return ExecProject(node->ss.ps.ps_ProjInfo);
-#endif
 	}
 }
 
@@ -345,9 +319,6 @@ ca_append_end(CustomScanState *node)
 static void
 ca_append_rescan(CustomScanState *node)
 {
-#if PG96
-	node->ss.ps.ps_TupFromTlist = false;
-#endif
 	if (node->custom_ps != NIL)
 	{
 		ExecReScan(linitial(node->custom_ps));
@@ -362,10 +333,7 @@ ca_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	Oid relid = linitial_oid(linitial(cscan->custom_private));
 
 	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
-	ExplainPropertyIntegerCompat("Chunks left after exclusion",
-								 NULL,
-								 state->num_append_subplans,
-								 es);
+	ExplainPropertyInteger("Chunks left after exclusion", NULL, state->num_append_subplans, es);
 }
 
 static CustomExecMethods constraint_aware_append_state_methods = {
@@ -486,7 +454,7 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 				{
 					Node *clause = (Node *) ts_transform_cross_datatype_comparison(
 						castNode(RestrictInfo, lfirst(lc))->clause);
-					clause = adjust_appendrel_attrs_compat(root, clause, appinfo);
+					clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
 					chunk_clauses = lappend(chunk_clauses, clause);
 				}
 				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);

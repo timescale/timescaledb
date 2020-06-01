@@ -417,13 +417,16 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 		char *grpcolname = (char *) lfirst(le);
 		IndexElem grpelem = { .type = T_IndexElem, .name = grpcolname };
 		stmt.indexParams = list_make2(&grpelem, &timeelem);
-		indxaddr = DefineIndexCompat(ht->main_table_relid,
-									 &stmt,
-									 InvalidOid,
-									 false,  /* is alter table */
-									 false,  /* check rights */
-									 false,  /* skip_build */
-									 false); /* quiet */
+		indxaddr = DefineIndex(ht->main_table_relid,
+							   &stmt,
+							   InvalidOid, /* indexRelationId */
+							   InvalidOid, /* parentIndexId */
+							   InvalidOid, /* parentConstraintId */
+							   false,	  /* is_alter_table */
+							   false,	  /* check_rights */
+							   false,	  /* check_not_in_use */
+							   false,	  /* skip_build */
+							   false);	 /* quiet */
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
@@ -484,7 +487,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 
 	/*  Create the materialization table.  */
 	SWITCH_TO_TS_USER(mat_rel->schemaname, uid, saved_uid, sec_ctx);
-	*mataddress = DefineRelationCompat(create, RELKIND_RELATION, owner, NULL, NULL);
+	*mataddress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
 	mat_relid = mataddress->objectId;
 
@@ -567,7 +570,7 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 	/*  Create the view. viewname is in viewrel.
 	 */
 	SWITCH_TO_TS_USER(viewrel->schemaname, uid, saved_uid, sec_ctx);
-	address = DefineRelationCompat(create, RELKIND_VIEW, owner, NULL, NULL);
+	address = DefineRelation(create, RELKIND_VIEW, owner, NULL, NULL);
 	CommandCounterIncrement();
 	StoreViewQuery(address.objectId, selquery, false);
 	CommandCounterIncrement();
@@ -737,12 +740,9 @@ cagg_validate_query(Query *query)
 	}
 	if (query->hasWindowFuncs || query->hasSubLinks || query->hasDistinctOn ||
 		query->hasRecursive || query->hasModifyingCTE || query->hasForUpdate ||
-		query->hasRowSecurity
-#if !PG96
-		|| query->hasTargetSRFs
-#endif
-		|| query->cteList || query->groupingSets || query->distinctClause || query->setOperations ||
-		query->limitOffset || query->limitCount || query->sortClause)
+		query->hasRowSecurity || query->hasTargetSRFs || query->cteList || query->groupingSets ||
+		query->distinctClause || query->setOperations || query->limitOffset || query->limitCount ||
+		query->sortClause)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1761,7 +1761,6 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 	Query *query = NULL;
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
-#if !PG96
 	PlannedStmt *pstmt_info = (PlannedStmt *) pstmt;
 	RawStmt *rawstmt = NULL;
 	/* we have a continuous aggregate query. convert to Query structure
@@ -1771,9 +1770,6 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 	rawstmt->stmt_location = pstmt_info->stmt_location;
 	rawstmt->stmt_len = pstmt_info->stmt_len;
 	query = parse_analyze(rawstmt, query_string, NULL, 0, NULL);
-#else
-	query = parse_analyze(copyObject(stmt->query), query_string, NULL, 0);
-#endif
 
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 	if (get_relname_relid(stmt->view->relname, nspid))
@@ -2102,8 +2098,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *mattblinfo, Qu
 	attno = mattblinfo->matpartcolno + 1;
 	q1->jointree->quals =
 		build_union_query_quals(materialize_htid, tbinfo->htpartcoltype, tce->lt_opr, varno, attno);
-	attno =
-		get_attnum(tbinfo->htoid, get_attname_compat(tbinfo->htoid, tbinfo->htpartcolno, false));
+	attno = get_attnum(tbinfo->htoid, get_attname(tbinfo->htoid, tbinfo->htpartcolno, false));
 	varno = list_length(q2->rtable);
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,

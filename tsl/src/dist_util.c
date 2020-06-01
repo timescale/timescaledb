@@ -5,21 +5,21 @@
  */
 
 #include <postgres.h>
-#include "dist_util.h"
-#include "metadata.h"
-#include "telemetry/telemetry_metadata.h"
-#include <catalog/pg_type.h>
-#include "catalog.h"
-#include "utils/uuid.h"
-#include "errors.h"
-#include <utils/fmgrprotos.h>
-#include "remote/dist_commands.h"
-#include "funcapi.h"
 #include <access/twophase.h>
+#include <catalog/pg_type.h>
 #include <miscadmin.h>
-#include "compat.h"
 #include <utils/builtins.h>
+#include <utils/fmgrprotos.h>
+
+#include "catalog.h"
+#include "dist_util.h"
+#include "errors.h"
+#include "funcapi.h"
 #include "loader/seclabel.h"
+#include "metadata.h"
+#include "remote/dist_commands.h"
+#include "telemetry/telemetry_metadata.h"
+#include "utils/uuid.h"
 
 /*
  * When added to a distributed database, this key in the metadata table will be set to match the
@@ -247,15 +247,6 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 void
 validate_data_node_settings(void)
 {
-#if !PG_VERSION_SUPPORTS_MULTINODE
-	/* This should really be enforced by the access node since we might
-	 * deprecate PostgreSQL versions that previously were supported for
-	 * multinode setups. This is just extra safety. */
-	ereport(ERROR,
-			(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-			 errmsg("unsupported PostgreSQL version %s", PG_VERSION)));
-#endif
-
 	switch (dist_util_membership())
 	{
 		case DIST_MEMBER_DATA_NODE:

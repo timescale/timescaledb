@@ -10,7 +10,7 @@
 #include "compat.h"
 #include "telemetry/uuid.h"
 
-#if !PG96 && PG12_LT
+#if PG11
 #include <utils/backend_random.h>
 #endif
 
@@ -29,18 +29,14 @@ ts_uuid_create(void)
 	unsigned char *gen_uuid = palloc0(UUID_LEN);
 	bool rand_success = false;
 
-#if !PG96
 	rand_success = pg_backend_random((char *) gen_uuid, UUID_LEN);
-#endif
 
 	/*
 	 * If pg_backend_random() cannot find sources of randomness, then we use
-	 * the current timestamp as a "random source". Note that
-	 * pg_backend_random() was added in PG10, so we always use the current
-	 * timestamp on PG9.6. Timestamps are 8 bytes, so we copy this into bytes
-	 * 9-16 of the UUID. If we see all 0s in bytes 0-8 (other than version +
-	 * variant), we know that there is something wrong with the RNG on this
-	 * instance.
+	 * the current timestamp as a "random source".
+	 * Timestamps are 8 bytes, so we copy this into bytes 9-16 of the UUID.
+	 * If we see all 0s in bytes 0-8 (other than version + * variant), we know
+	 * that there is something wrong with the RNG on this instance.
 	 */
 	if (!rand_success)
 	{

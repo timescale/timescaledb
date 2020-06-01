@@ -240,9 +240,7 @@ ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 		else if (queue_get_reader(queue) == InvalidPid)
 			return SHM_MQ_DETACHED; /* Reader died after we enqueued our
 									 * message */
-#if PG96
-		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_MQ_WAIT_INTERVAL);
-#elif PG12_LT
+#if PG11
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_MQ_WAIT_INTERVAL, WAIT_EVENT_MQ_INTERNAL);
 #else
 		WaitLatch(MyLatch,
@@ -290,9 +288,7 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message,
 		if (mq_res != SHM_MQ_WOULD_BLOCK)
 			break;
 		ereport(DEBUG1, (errmsg("TimescaleDB ack message receive failure, retrying")));
-#if PG96
-		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
-#elif PG12_LT
+#if PG11
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT,
 				  BGW_ACK_WAIT_INTERVAL,
@@ -396,9 +392,7 @@ send_ack(dsm_segment *seg, bool success)
 		if (ack_res != SHM_MQ_WOULD_BLOCK)
 			break;
 		ereport(DEBUG1, (errmsg("TimescaleDB ack message send failure, retrying")));
-#if PG96
-		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
-#elif PG12_LT
+#if PG11
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT,
 				  BGW_ACK_WAIT_INTERVAL,
@@ -440,9 +434,6 @@ ts_bgw_message_send_ack(BgwMessage *message, bool success)
 	 * transaction and then commit it at the end of ack sending, to be sure
 	 * everything is cleaned up properly etc.
 	 */
-#if PG96
-	StartTransactionCommand();
-#endif
 	seg = dsm_attach(message->ack_dsm_handle);
 	if (seg != NULL)
 	{
@@ -457,9 +448,6 @@ ts_bgw_message_send_ack(BgwMessage *message, bool success)
 					 errhint("Reason: %s", message_ack_sent_err[ack_res])));
 		dsm_detach(seg);
 	}
-#if PG96
-	CommitTransactionCommand();
-#endif
 	pfree(message);
 }
 

@@ -107,12 +107,12 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 static inline DimensionType
 dimension_type(TupleInfo *ti)
 {
-	if (heap_attisnull_compat(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
-		!heap_attisnull_compat(ti->tuple, Anum_dimension_num_slices, ti->desc))
+	if (heap_attisnull(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
+		!heap_attisnull(ti->tuple, Anum_dimension_num_slices, ti->desc))
 		return DIMENSION_TYPE_CLOSED;
 
-	if (!heap_attisnull_compat(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
-		heap_attisnull_compat(ti->tuple, Anum_dimension_num_slices, ti->desc))
+	if (!heap_attisnull(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
+		heap_attisnull(ti->tuple, Anum_dimension_num_slices, ti->desc))
 		return DIMENSION_TYPE_OPEN;
 
 	elog(ERROR, "invalid partitioning dimension");

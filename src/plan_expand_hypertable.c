@@ -11,30 +11,24 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/cost.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_func.h>
 #include <parser/parsetree.h>
+#include <partitioning/partbounds.h>
 #include <utils/date.h>
 #include <utils/errcodes.h>
 #include <utils/syscache.h>
 
 #include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_constraint_fn.h>
-#include <catalog/pg_inherits_fn.h>
-#endif
-#if PG11_GE
-#include <partitioning/partbounds.h>
-#include <optimizer/cost.h>
-#endif
 
-#if PG12_LT
+#if PG11
 #include <optimizer/clauses.h>
 #include <optimizer/var.h>
-#elif PG12_GE
+#else
 #include <optimizer/optimizer.h>
 #endif
 
@@ -841,8 +835,6 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		return get_explicit_chunk_oids(ctx, ht);
 }
 
-#if PG11_GE
-
 /*
  * Create partition expressions for a hypertable.
  *
@@ -931,8 +923,6 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 	hyper_rel->boundinfo = palloc(sizeof(PartitionBoundInfoData));
 	hyper_rel->part_rels = palloc0(sizeof(*hyper_rel->part_rels) * nparts);
 }
-
-#endif /* PG11_GE */
 
 static bool
 timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
@@ -1061,13 +1051,11 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		   0,
 		   list_length(inh_oids) * sizeof(*root->simple_rte_array));
 
-#if PG11_GE
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
 	if (enable_partitionwise_aggregate || hypertable_is_distributed(ht))
 		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
-#endif
 
 	foreach (l, inh_oids)
 	{
@@ -1076,7 +1064,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		RangeTblEntry *childrte;
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
-#if PG12_LT
+#if PG11
 		LOCKMODE chunk_lock = NoLock;
 #else
 		LOCKMODE chunk_lock = rte->rellockmode;
@@ -1172,14 +1160,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-
-#if PG11_GE
-	/*
-	 * PG11 introduces a separate array to make looking up children faster, see:
-	 * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.
-	 */
 	setup_append_rel_array(root);
-#endif
 
 #if PG12_GE
 	/* In pg12 postgres will not set up the child rels for use, due to the games
@@ -1285,10 +1266,6 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 				Relids relids = pull_varnos((Node *) propagated);
 				RestrictInfo *restrictinfo;
 
-#if PG96
-				restrictinfo =
-					make_restrictinfo((Expr *) propagated, true, false, false, relids, NULL, NULL);
-#else
 				restrictinfo = make_restrictinfo((Expr *) propagated,
 												 true,
 												 false,
@@ -1297,7 +1274,6 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 												 relids,
 												 NULL,
 												 NULL);
-#endif
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 #if PG12_GE
 				/*

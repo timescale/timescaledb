@@ -62,7 +62,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 	AttrNumber *childColIdx;
 
 	/* push down targetlist to children */
-	plan->targetlist = (List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
+	plan->targetlist = castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
 
 	/* Compute sort column info, and adjust subplan's tlist as needed */
 	plan = ts_prepare_sort_from_pathkeys(plan,
@@ -123,7 +123,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 					ts_get_appendrelinfo(root, child_path->parent->relid, false);
 
 				child_plan->targetlist =
-					(List *) adjust_appendrel_attrs_compat(root, (Node *) tlist, appinfo);
+					castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
 			}
 			else
 			{
@@ -254,7 +254,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				{
 					Node *clause = (Node *) ts_transform_cross_datatype_comparison(
 						castNode(RestrictInfo, lfirst(lc))->clause);
-					clause = adjust_appendrel_attrs_compat(root, clause, appinfo);
+					clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
 					chunk_clauses = lappend(chunk_clauses, clause);
 				}
 				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);

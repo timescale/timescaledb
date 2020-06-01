@@ -6,56 +6,49 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include <export.h>
-#include <cross_module_fn.h>
-#include <license_guc.h>
-
-#include "planner.h"
-#include "nodes/gapfill/gapfill.h"
-#include "partialize_finalize.h"
-
-#include "license.h"
-#include "reorder.h"
-#include "telemetry.h"
+#include "bgw_policy/compress_chunks_api.h"
+#include "bgw_policy/drop_chunks_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
-#include "bgw_policy/drop_chunks_api.h"
-#include "bgw_policy/compress_chunks_api.h"
+#include "chunk_api.h"
+#include "chunk.h"
+#include "compression/array.h"
 #include "compression/compression.h"
+#include "compression/compress_utils.h"
+#include "compression/create.h"
+#include "compression/deltadelta.h"
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
-#include "compression/array.h"
-#include "compression/deltadelta.h"
+#include "compression/segment_meta.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/drop.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
-#include "nodes/decompress_chunk/planner.h"
-#include "compat.h"
-
-#include "hypertable.h"
-#include "compression/create.h"
-#include "compression/compress_utils.h"
-#include "compression/segment_meta.h"
-
-#if PG_VERSION_SUPPORTS_MULTINODE
-#include "data_node.h"
+#include "cross_module_fn.h"
 #include "data_node_dispatch.h"
-#include "process_utility.h"
-#include "chunk.h"
+#include "data_node.h"
+#include "dist_util.h"
+#include "export.h"
 #include "fdw/fdw.h"
-#include "chunk_api.h"
+#include "hypertable.h"
+#include "license_guc.h"
+#include "license.h"
+#include "nodes/decompress_chunk/planner.h"
+#include "nodes/gapfill/gapfill.h"
+#include "partialize_finalize.h"
+#include "planner.h"
+#include "process_utility.h"
+#include "process_utility.h"
 #include "remote/connection_cache.h"
+#include "remote/connection.h"
+#include "remote/dist_commands.h"
+#include "remote/dist_copy.h"
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
-#include "remote/dist_copy.h"
-#include "remote/dist_commands.h"
-#include "process_utility.h"
-#include "dist_util.h"
-#include "remote/connection.h"
-#endif
+#include "reorder.h"
+#include "telemetry.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -80,89 +73,8 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
 	 * the future see `postgres_fdw` connection management for an example. For
 	 * now, invalidate the entire cache.
 	 */
-#if PG_VERSION_SUPPORTS_MULTINODE
 	remote_connection_cache_invalidate_callback();
-#endif
 }
-
-#if !PG_VERSION_SUPPORTS_MULTINODE
-
-static Datum
-empty_fn(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_VOID();
-}
-
-static void
-error_not_supported(void)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("function is not supported under the current PostgreSQL version %s",
-					PG_VERSION),
-			 errhint("Upgrade PostgreSQL to version %s or greater.",
-					 PG_VERSION_MINIMUM_FOR_MULTINODE)));
-	pg_unreachable();
-}
-
-static Datum
-error_not_supported_default_fn(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("function \"%s\" is not supported under the current PostgreSQL version %s",
-					get_func_name(fcinfo->flinfo->fn_oid),
-					PG_VERSION),
-			 errhint("Upgrade PostgreSQL to version %s or greater.",
-					 PG_VERSION_MINIMUM_FOR_MULTINODE)));
-	pg_unreachable();
-}
-
-static void
-error_hypertable_make_distributed_not_supported(Hypertable *ht, List *data_node_names)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-static List *
-error_get_and_validate_data_node_list_not_supported(ArrayType *nodearr)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-static void
-error_create_chunk_on_data_nodes_not_supported(Chunk *chunk, Hypertable *ht)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-static Path *
-error_data_node_dispatch_path_create_not_supported(PlannerInfo *root, ModifyTablePath *mtpath,
-												   Index hypertable_rti, int subpath_index)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-static void
-error_distributed_copy_not_supported(const CopyStmt *stmt, uint64 *processed,
-									 CopyChunkState *ccstate, List *attnums)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-static void
-error_func_call_on_data_nodes_not_supported(FunctionCallInfo fcinfo, List *data_nodes)
-{
-	error_not_supported();
-	pg_unreachable();
-}
-
-#endif /* PG_VERSION_SUPPORTS_MULTINODE */
 
 /*
  * Cross module function initialization.
@@ -227,41 +139,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_compress_table = tsl_process_compress_table,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
-#if !PG_VERSION_SUPPORTS_MULTINODE
-	.add_data_node = error_not_supported_default_fn,
-	.delete_data_node = error_not_supported_default_fn,
-	.attach_data_node = error_not_supported_default_fn,
-	.detach_data_node = error_not_supported_default_fn,
-	.data_node_allow_new_chunks = error_not_supported_default_fn,
-	.data_node_block_new_chunks = error_not_supported_default_fn,
-	.set_chunk_default_data_node = error_not_supported_default_fn,
-	.show_chunk = error_not_supported_default_fn,
-	.create_chunk = error_not_supported_default_fn,
-	.create_chunk_on_data_nodes = error_create_chunk_on_data_nodes_not_supported,
-	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
-	.get_and_validate_data_node_list = error_get_and_validate_data_node_list_not_supported,
-	.timescaledb_fdw_handler = error_not_supported_default_fn,
-	.timescaledb_fdw_validator = empty_fn,
-	.remote_txn_id_in = error_not_supported_default_fn,
-	.remote_txn_id_out = error_not_supported_default_fn,
-	.set_rel_pathlist = NULL,
-	.data_node_dispatch_path_create = error_data_node_dispatch_path_create_not_supported,
-	.distributed_copy = error_distributed_copy_not_supported,
-	.ddl_command_start = NULL,
-	.ddl_command_end = NULL,
-	.sql_drop = NULL,
-	.set_distributed_id = NULL,
-	.set_distributed_peer_id = NULL,
-	.is_frontend_session = NULL,
-	.remove_from_distributed_db = NULL,
-	.remote_hypertable_info = error_not_supported_default_fn,
-	.validate_as_data_node = NULL,
-	.distributed_exec = error_not_supported_default_fn,
-	.func_call_on_data_nodes = error_func_call_on_data_nodes_not_supported,
-	.get_chunk_relstats = error_not_supported_default_fn,
-	.get_chunk_colstats = error_not_supported_default_fn,
-	.set_replication_factor = error_not_supported_default_fn,
-#else
 	.add_data_node = data_node_add,
 	.delete_data_node = data_node_delete,
 	.attach_data_node = data_node_attach,
@@ -297,7 +174,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.get_chunk_relstats = chunk_api_get_chunk_relstats,
 	.get_chunk_colstats = chunk_api_get_chunk_colstats,
 	.set_replication_factor = hypertable_set_replication_factor,
-#endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
 
@@ -312,11 +188,9 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
-#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
 	_tsl_process_utility_init();
-#endif
 
 	PG_RETURN_BOOL(true);
 }
@@ -334,11 +208,9 @@ module_shutdown(void)
 	 * Order of items should be strict reverse order of ts_module_init. Please
 	 * document any exceptions.
 	 */
-#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
 	_tsl_process_utility_fini();
-#endif
 
 	ts_cm_functions = &ts_cm_functions_default;
 }
@@ -372,15 +244,11 @@ _PG_init(void)
 	 */
 	ts_license_enable_module_loading();
 
-#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_connection_init();
-#endif
 }
 
 PGDLLEXPORT void
 _PG_fini(void)
 {
-#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_connection_fini();
-#endif
 }

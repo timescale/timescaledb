@@ -76,7 +76,10 @@ wait_using_wait_latch(TimestampTz until)
 	if ((int64) timeout > (int64) INT_MAX)
 		timeout = INT_MAX;
 
-	wl_rc = WaitLatchCompat(MyLatch, WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH, timeout);
+	wl_rc = WaitLatch(MyLatch,
+					  WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
+					  timeout,
+					  PG_WAIT_EXTENSION);
 	ResetLatch(MyLatch);
 	if (wl_rc & WL_POSTMASTER_DEATH)
 		on_postmaster_death();

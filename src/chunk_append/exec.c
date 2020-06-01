@@ -46,10 +46,8 @@ static void chunk_append_rescan(CustomScanState *node);
 static Size chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt);
 static void chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt,
 										void *coordinate);
-#if !PG96
 static void chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt,
 										  void *coordinate);
-#endif
 static void chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordinate);
 
 static CustomExecMethods chunk_append_state_methods = {
@@ -60,9 +58,7 @@ static CustomExecMethods chunk_append_state_methods = {
 	.ExplainCustomScan = ts_chunk_append_explain,
 	.EstimateDSMCustomScan = chunk_append_estimate_dsm,
 	.InitializeDSMCustomScan = chunk_append_initialize_dsm,
-#if !PG96
 	.ReInitializeDSMCustomScan = chunk_append_reinitialize_dsm,
-#endif
 	.InitializeWorkerCustomScan = chunk_append_initialize_worker,
 };
 
@@ -369,25 +365,9 @@ chunk_append_exec(CustomScanState *node)
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ProjectionInfo *projinfo = node->ss.ps.ps_ProjInfo;
 	TupleTableSlot *subslot;
-#if PG96
-	TupleTableSlot *resultslot;
-	ExprDoneCond isdone;
-#endif
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
 		state->choose_next_subplan(state);
-
-#if PG96
-	if (node->ss.ps.ps_TupFromTlist)
-	{
-		resultslot = ExecProject(projinfo, &isdone);
-
-		if (isdone == ExprMultipleResult)
-			return resultslot;
-
-		node->ss.ps.ps_TupFromTlist = false;
-	}
-#endif
 
 	while (true)
 	{
@@ -418,17 +398,7 @@ chunk_append_exec(CustomScanState *node)
 			ResetExprContext(econtext);
 			econtext->ecxt_scantuple = subslot;
 
-#if PG96
-			resultslot = ExecProject(projinfo, &isdone);
-
-			if (isdone != ExprEndResult)
-			{
-				node->ss.ps.ps_TupFromTlist = (isdone == ExprMultipleResult);
-				return resultslot;
-			}
-#else
 			return ExecProject(projinfo);
-#endif
 		}
 
 		state->choose_next_subplan(state);
@@ -654,7 +624,6 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
  * Currently, this callback will be called before ReScanCustomScan,
  * but it's best not to rely on that ordering.
  */
-#if !PG96
 static void
 chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
@@ -664,7 +633,6 @@ chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void
 	pstate->next_plan = INVALID_SUBPLAN_INDEX;
 	memset(pstate->finished, 0, sizeof(bool) * state->num_subplans);
 }
-#endif
 
 /*
  * Initialize a parallel worker's local state based on the shared state
@@ -829,14 +797,7 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			 * in check constraints.)
 			 */
 			cexpr = eval_const_expressions(NULL, cexpr);
-
-#if (PG96 && PG_VERSION_NUM < 90609) || (PG10 && PG_VERSION_NUM < 100004)
-			cexpr = (Node *) canonicalize_qual((Expr *) cexpr);
-#elif PG96 || PG10
-			cexpr = (Node *) canonicalize_qual_ext((Expr *) cexpr, true);
-#else
 			cexpr = (Node *) canonicalize_qual((Expr *) cexpr, true);
-#endif
 
 			/* Fix Vars to have the desired varno */
 			if (varno != 1)
@@ -925,11 +886,7 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 	 * We need strong refutation because we have to prove that the constraints
 	 * would yield false, not just NULL.
 	 */
-#if PG96
-	if (predicate_refuted_by(constraints, baserestrictinfo))
-#else
 	if (predicate_refuted_by(constraints, baserestrictinfo, false))
-#endif
 		return true;
 
 	return false;

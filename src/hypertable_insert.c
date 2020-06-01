@@ -126,7 +126,7 @@ static void
 hypertable_insert_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	HypertableInsertState *state = (HypertableInsertState *) node;
-	List *fdw_private = (List *) linitial(state->mt->fdwPrivLists);
+	List *fdw_private = linitial_node(List, state->mt->fdwPrivLists);
 	ModifyTableState *mtstate = linitial(node->custom_ps);
 	Index rti = state->mt->nominalRelation;
 	RangeTblEntry *rte = rt_fetch(rti, es->rtable);

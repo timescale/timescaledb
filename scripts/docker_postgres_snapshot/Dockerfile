@@ -1,6 +1,6 @@
 # vim:set ft=dockerfile:
-ARG major_version=10
-ARG minor_version=2
+ARG major_version=11
+ARG minor_version=0
 FROM postgres:$major_version.$minor_version-alpine
 
 ARG major_version
@@ -66,7 +66,6 @@ RUN set -ex \
 		--build="$gnuArch" \
 # "/usr/src/postgresql/src/backend/access/common/tupconvert.c:105: undefined reference to `libintl_gettext'"
 #		--enable-nls \
-		--enable-integer-datetimes \
 		--enable-thread-safety \
 #		--enable-tap-tests \
 # skip debugging info -- we want tiny size instead

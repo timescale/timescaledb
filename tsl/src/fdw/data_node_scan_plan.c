@@ -164,7 +164,7 @@ adjust_data_node_rel_attrs(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptI
 		Node *nodequal;
 		ListCell *lc2;
 
-		nodequal = adjust_appendrel_attrs_compat(root, (Node *) rinfo->clause, appinfo);
+		nodequal = adjust_appendrel_attrs(root, (Node *) rinfo->clause, 1, &appinfo);
 
 		nodequal = eval_const_expressions(root, nodequal);
 
@@ -196,10 +196,11 @@ adjust_data_node_rel_attrs(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptI
 
 	data_node_rel->baserestrictinfo = nodequals;
 	data_node_rel->joininfo =
-		(List *) adjust_appendrel_attrs_compat(root, (Node *) hyper_rel->joininfo, appinfo);
+		castNode(List, adjust_appendrel_attrs(root, (Node *) hyper_rel->joininfo, 1, &appinfo));
 
 	data_node_rel->reltarget->exprs =
-		(List *) adjust_appendrel_attrs_compat(root, (Node *) hyper_rel->reltarget->exprs, appinfo);
+		castNode(List,
+				 adjust_appendrel_attrs(root, (Node *) hyper_rel->reltarget->exprs, 1, &appinfo));
 
 	/* Add equivalence class for rel to push down joins and sorts */
 	if (hyper_rel->has_eclass_joins || has_useful_pathkeys(root, hyper_rel))

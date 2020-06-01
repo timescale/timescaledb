@@ -4,25 +4,20 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-
-#include "compression/array.h"
-
 #include <access/htup_details.h>
 #include <access/tupmacs.h>
+#include <adts/char_vec.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <common/base64.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <funcapi.h>
 
-#include <base64_compat.h>
-
+#include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
-#include "compat.h"
 #include "datum_serialize.h"
-
-#include <adts/char_vec.h>
 
 /* A "compressed" array
  *     uint8 has_nulls: 1 iff this has a nulls bitmap stored before the data

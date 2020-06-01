@@ -31,36 +31,32 @@ if(PG_REGRESS)
   list(APPEND _local_install_checks regresschecklocal-t)
   list(APPEND _install_checks regresscheck-t)
 
-  # shared tests also provide compressed hypertables which we do not support on 9.6
-  if(${PG_VERSION_MAJOR} GREATER "9")
+  add_custom_target(regresscheck-shared
+    COMMAND ${CMAKE_COMMAND} -E env
+    ${PG_REGRESS_ENV}
+    EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/shared
+    TEST_SCHEDULE=${TEST_SCHEDULE_SHARED}
+    ${PRIMARY_TEST_DIR}/pg_regress.sh
+    ${PG_REGRESS_OPTS_BASE}
+    ${PG_REGRESS_SHARED_OPTS_EXTRA}
+    ${PG_REGRESS_SHARED_OPTS_INOUT}
+    ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+    USES_TERMINAL)
 
-    add_custom_target(regresscheck-shared
-      COMMAND ${CMAKE_COMMAND} -E env
-      ${PG_REGRESS_ENV}
-      EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/shared
-      TEST_SCHEDULE=${TEST_SCHEDULE_SHARED}
-      ${PRIMARY_TEST_DIR}/pg_regress.sh
-      ${PG_REGRESS_OPTS_BASE}
-      ${PG_REGRESS_SHARED_OPTS_EXTRA}
-      ${PG_REGRESS_SHARED_OPTS_INOUT}
-      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
-      USES_TERMINAL)
+  add_custom_target(regresschecklocal-shared
+    COMMAND ${CMAKE_COMMAND} -E env
+    ${PG_REGRESS_ENV}
+    EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/shared
+    TEST_SCHEDULE=${TEST_SCHEDULE_SHARED}
+    ${PRIMARY_TEST_DIR}/pg_regress.sh
+    ${PG_REGRESS_OPTS_BASE}
+    ${PG_REGRESS_SHARED_OPTS_EXTRA}
+    ${PG_REGRESS_SHARED_OPTS_INOUT}
+    ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
+    USES_TERMINAL)
 
-    add_custom_target(regresschecklocal-shared
-      COMMAND ${CMAKE_COMMAND} -E env
-      ${PG_REGRESS_ENV}
-      EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/shared
-      TEST_SCHEDULE=${TEST_SCHEDULE_SHARED}
-      ${PRIMARY_TEST_DIR}/pg_regress.sh
-      ${PG_REGRESS_OPTS_BASE}
-      ${PG_REGRESS_SHARED_OPTS_EXTRA}
-      ${PG_REGRESS_SHARED_OPTS_INOUT}
-      ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
-      USES_TERMINAL)
-
-    list(APPEND _install_checks regresscheck-shared)
-    list(APPEND _local_install_checks regresschecklocal-shared)
-  endif()
+  list(APPEND _install_checks regresscheck-shared)
+  list(APPEND _local_install_checks regresschecklocal-shared)
 
 endif()
 

@@ -24,15 +24,12 @@
 #include <utils/catcache.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/syscache.h>
 
 #include "compat.h"
-#if !PG96
-#include <utils/fmgrprotos.h>
-#endif
-
 #include "chunk.h"
 #include "utils.h"
 
@@ -45,7 +42,6 @@ Datum
 ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	int64 microseconds;
 
 	if (timestamp < MIN_TIMESTAMP)
 		ereport(ERROR,
@@ -55,18 +51,7 @@ ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
-#ifdef HAVE_INT64_TIMESTAMP
-	microseconds = timestamp + TS_EPOCH_DIFF_MICROSECONDS;
-#else
-	if (1)
-	{
-		int64 seconds = (int64) timestamp;
-
-		microseconds = (seconds * USECS_PER_SEC) + ((timestamp - seconds) * USECS_PER_SEC) +
-					   epoch_diff_microseconds;
-	}
-#endif
-	PG_RETURN_INT64(microseconds);
+	PG_RETURN_INT64(timestamp + TS_EPOCH_DIFF_MICROSECONDS);
 }
 
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_timestamp);
@@ -80,7 +65,6 @@ Datum
 ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 {
 	int64 microseconds = PG_GETARG_INT64(0);
-	TimestampTz timestamp;
 
 	/*
 	 * Test that the UNIX us timestamp is within bounds. Note that an int64 at
@@ -92,17 +76,7 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
-#ifdef HAVE_INT64_TIMESTAMP
-	timestamp = microseconds - TS_EPOCH_DIFF_MICROSECONDS;
-#else
-	/* Shift the epoch using integer arithmetic to reduce precision errors */
-	timestamp = microseconds / USECS_PER_SEC; /* seconds */
-	microseconds = microseconds - ((int64) timestamp * USECS_PER_SEC);
-	timestamp =
-		(float8)((int64) seconds - ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY)) +
-		(float8) microseconds / USECS_PER_SEC;
-#endif
-	PG_RETURN_TIMESTAMPTZ(timestamp);
+	PG_RETURN_TIMESTAMPTZ(microseconds - TS_EPOCH_DIFF_MICROSECONDS);
 }
 
 Datum
@@ -642,7 +616,6 @@ AppendRelInfo *
 ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 {
 	ListCell *lc;
-#if PG11_GE
 	/* use append_rel_array if it has been setup */
 	if (root->append_rel_array)
 	{
@@ -654,7 +627,6 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 					 errmsg("no appendrelinfo found for index %d", rti)));
 		return NULL;
 	}
-#endif
 
 	foreach (lc, root->append_rel_list)
 	{

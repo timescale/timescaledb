@@ -15,6 +15,7 @@
 #include <catalog/pg_type.h>
 #include <catalog/index.h>
 #include <catalog/heap.h>
+#include <common/base64.h>
 #include <executor/tuptable.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
@@ -30,7 +31,6 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
-#include <base64_compat.h>
 #include <catalog.h>
 #include <utils.h>
 
@@ -352,9 +352,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 										  sort_collations,
 										  nulls_first,
 										  work_mem,
-#if PG11_GE
 										  NULL,
-#endif
 										  false /*=randomAccess*/);
 
 	heapScan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
@@ -565,17 +563,13 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 
 	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
-#if !PG96
 											false /*=copy*/,
-#endif
 											slot,
 											NULL /*=abbrev*/);
 		 got_tuple;
 		 got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
-#if !PG96
 											false /*=copy*/,
-#endif
 											slot,
 											NULL /*=abbrev*/))
 	{

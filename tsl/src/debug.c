@@ -44,9 +44,7 @@
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
-#if PG11_GE
 #include <utils/varlena.h>
-#endif
 #include <nodes/extensible.h>
 
 #include <compat.h>
@@ -62,27 +60,23 @@ static const char *reloptkind_name[] = {
 	[RELOPT_BASEREL] = "BASEREL",
 	[RELOPT_JOINREL] = "JOINREL",
 	[RELOPT_OTHER_MEMBER_REL] = "OTHER_MEMBER_REL",
-#if PG11_GE
 	[RELOPT_OTHER_JOINREL] = "OTHER_JOINREL",
-#endif
 	[RELOPT_UPPER_REL] = "UPPER_REL",
-#if PG11_GE
 	[RELOPT_OTHER_UPPER_REL] = "OTHER_UPPER_REL",
-#endif
 	[RELOPT_DEADREL] = "DEADREL",
 };
 
+/* clang-format off */
 static const char *upperrel_stage_name[] = {
 	[UPPERREL_SETOP] = "SETOP",
-#if PG11_GE
 	[UPPERREL_PARTIAL_GROUP_AGG] = "PARTIAL_GROUP_AGG",
-#endif
 	[UPPERREL_GROUP_AGG] = "GROUP_AGG",
 	[UPPERREL_WINDOW] = "WINDOW",
 	[UPPERREL_DISTINCT] = "DISTINCT",
 	[UPPERREL_ORDERED] = "ORDERED",
 	[UPPERREL_FINAL] = "FINAL",
 };
+/* clang-format on */
 
 static const char *fdw_rel_type_names[] = {
 	[TS_FDW_RELINFO_HYPERTABLE_DATA_NODE] = "DATA_NODE",
@@ -349,11 +343,9 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 				case T_FunctionScan:
 					ptype = "FunctionScan";
 					break;
-#if PG11_GE
 				case T_TableFuncScan:
 					ptype = "TableFuncScan";
 					break;
-#endif
 				case T_ValuesScan:
 					ptype = "ValuesScan";
 					break;
@@ -436,22 +428,18 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 			ptype = "Gather";
 			subpath = castNode(GatherPath, path)->subpath;
 			break;
-#if PG11_GE
 		case T_GatherMergePath:
 			ptype = "GatherMerge";
 			subpath = castNode(GatherMergePath, path)->subpath;
 			break;
-#endif
 		case T_ProjectionPath:
 			ptype = "Projection";
 			subpath = castNode(ProjectionPath, path)->subpath;
 			break;
-#if PG11_GE
 		case T_ProjectSetPath:
 			ptype = "ProjectSet";
 			subpath = castNode(ProjectSetPath, path)->subpath;
 			break;
-#endif
 		case T_SortPath:
 			ptype = "Sort";
 			subpath = castNode(SortPath, path)->subpath;

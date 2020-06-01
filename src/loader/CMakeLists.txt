@@ -5,11 +5,8 @@ set(SOURCES
   bgw_launcher.c
   bgw_interface.c
   lwlocks.c
+  seclabel.c
 )
-
-if (PG_VERSION_SUPPORTS_MULTINODE)
-  list(APPEND SOURCES seclabel.c)
-endif()
 
 set(TEST_SOURCES
   ${PROJECT_SOURCE_DIR}/test/src/symbol_conflict.c

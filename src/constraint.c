@@ -10,9 +10,6 @@
 #include <utils/fmgroids.h>
 
 #include "compat.h"
-#if PG11_LT /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
-#include <catalog/pg_constraint_fn.h>
-#endif
 #if PG12_GE
 #include <access/table.h>
 #else

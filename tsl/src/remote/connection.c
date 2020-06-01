@@ -1227,7 +1227,7 @@ add_username_to_server_options(ForeignServer *server, Oid user_id)
 	List *server_options = list_copy(server->options);
 
 	return lappend(server_options,
-				   makeDefElemCompat("user", (Node *) makeString(pstrdup(user_name)), -1));
+				   makeDefElem("user", (Node *) makeString(pstrdup(user_name)), -1));
 }
 
 TSConnection *

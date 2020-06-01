@@ -9,6 +9,7 @@
 #include <catalog/indexing.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
+#include <utils/regproc.h>
 #include <utils/syscache.h>
 #include <utils/inval.h>
 #include <access/xact.h>
@@ -20,10 +21,6 @@
 #include "compat.h"
 #include "catalog.h"
 #include "extension.h"
-
-#if !PG96
-#include <utils/regproc.h>
-#endif
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[HYPERTABLE] = {

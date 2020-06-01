@@ -760,7 +760,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		proc_exit(0);
 	}
 	/* Connect to the db, no db name yet, so can only access shared catalogs */
-	BackgroundWorkerInitializeConnectionCompat(NULL, NULL);
+	BackgroundWorkerInitializeConnection(NULL, NULL, 0);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
@@ -794,9 +794,10 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		if (handled_msgs)
 			continue;
 
-		wl_rc = WaitLatchCompat(MyLatch,
-								WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT,
-								BGW_LAUNCHER_POLL_TIME_MS);
+		wl_rc = WaitLatch(MyLatch,
+						  WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT,
+						  BGW_LAUNCHER_POLL_TIME_MS,
+						  PG_WAIT_EXTENSION);
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
 			bgw_on_postmaster_death();
@@ -901,7 +902,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, entrypoint_sigterm);
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnectionByOidCompat(db_id, InvalidOid);
+	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid, 0);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 
 	/*

@@ -9,6 +9,7 @@
 #include <access/htup_details.h>
 #include <catalog/pg_aggregate.h>
 #include <catalog/pg_type.h>
+#include <common/base64.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -17,7 +18,6 @@
 #include <funcapi.h>
 #include <lib/stringinfo.h>
 
-#include <base64_compat.h>
 #include <utils.h>
 
 #include "compression/compression.h"
@@ -228,14 +228,12 @@ delta_delta_compressor_for_type(Oid element_type)
 		case DATEOID:
 			*compressor = (ExtendedCompressor){ .base = deltadelta_date_compressor };
 			return &compressor->base;
-#ifdef HAVE_INT64_TIMESTAMP
 		case TIMESTAMPOID:
 			*compressor = (ExtendedCompressor){ .base = deltadelta_timestamp_compressor };
 			return &compressor->base;
 		case TIMESTAMPTZOID:
 			*compressor = (ExtendedCompressor){ .base = deltadelta_timestamptz_compressor };
 			return &compressor->base;
-#endif
 		default:
 			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
 	}
@@ -499,7 +497,6 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 			return (DecompressResult){
 				.val = DateADTGetDatum(res_internal.val),
 			};
-#ifdef HAVE_INT64_TIMESTAMP
 		case TIMESTAMPTZOID:
 			return (DecompressResult){
 				.val = TimestampTzGetDatum(res_internal.val),
@@ -508,7 +505,6 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 			return (DecompressResult){
 				.val = TimestampGetDatum(res_internal.val),
 			};
-#endif
 		default:
 			elog(ERROR, "invalid type requested from deltadelta decompression %d", element_type);
 	}

@@ -61,11 +61,7 @@ ts_hypertable_data_node_insert_multi(List *hypertable_data_nodes)
 
 		if (aclresult != ACLCHECK_OK)
 		{
-#if PG11_GE
 			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, NameStr(node->fd.node_name));
-#else
-			aclcheck_error(aclresult, ACL_KIND_FOREIGN_SERVER, NameStr(node->fd.node_name));
-#endif
 		}
 		hypertable_data_node_insert_relation(rel,
 											 node->fd.hypertable_id,
