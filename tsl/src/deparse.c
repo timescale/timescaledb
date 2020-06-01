@@ -395,6 +395,9 @@ deparse_get_tabledef(TableInfo *table_info)
 	deparse_columns(create_table, rel);
 
 	appendStringInfoChar(create_table, ')');
+#if PG12_GE
+	appendStringInfo(create_table, " USING \"%s\" ", get_am_name(rel->rd_rel->relam));
+#endif
 	deparse_get_tabledef_with(table_info, create_table);
 
 	appendStringInfoChar(create_table, ';');
