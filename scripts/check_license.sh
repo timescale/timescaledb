@@ -18,7 +18,7 @@ check_file() {
         SUFFIX1='*.h'
     else
         SUFFIX0='*.sql'
-        SUFFIX1='*.sql'
+        SUFFIX1='*.sql.in'
     fi
 
     find $2 -type f \( -name "${SUFFIX0}" -or -name "${SUFFIX1}" \) -and -not -path "${SRC_DIR}/sql/updates/*.sql" -and -not -path "${SRC_DIR}/test/sql/dump/*.sql" -and -not -path "${SRC_DIR}/src/chunk_adaptive.*" -print0 | xargs -0 -n1 $(dirname ${0})/check_file_license.sh ${1}
