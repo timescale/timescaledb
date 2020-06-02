@@ -151,7 +151,7 @@ $BODY$;
 
 CREATE TRIGGER disttable_trigger_test
 BEFORE INSERT ON disttable
-FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 DROP TRIGGER disttable_trigger_test on disttable;
 DROP FUNCTION test_trigger;
@@ -419,7 +419,7 @@ $$;
 
 CREATE EVENT TRIGGER test_event_trigger_sqldrop ON sql_drop
     WHEN TAG IN ('drop table')
-    EXECUTE PROCEDURE test_event_trigger_sql_drop_function();
+    EXECUTE FUNCTION test_event_trigger_sql_drop_function();
 
 SET ROLE :ROLE_1;
 

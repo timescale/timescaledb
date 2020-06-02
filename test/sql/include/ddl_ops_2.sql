@@ -23,7 +23,7 @@ END
 $BODY$;
 
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
-FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
+FOR EACH STATEMENT EXECUTE FUNCTION empty_trigger_func();
 
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";

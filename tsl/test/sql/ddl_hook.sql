@@ -63,7 +63,7 @@ $BODY$;
 
 CREATE TRIGGER htable_trigger_test
 BEFORE INSERT ON htable
-FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 DROP TRIGGER htable_trigger_test on htable;
 DROP FUNCTION test_trigger();

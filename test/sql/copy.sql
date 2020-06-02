@@ -80,7 +80,7 @@ CREATE TABLE "trigger_test" (
 );
 SELECT create_hypertable('trigger_test', 'time', chunk_time_interval => 10);
 CREATE TRIGGER check_time BEFORE INSERT ON trigger_test
-FOR EACH ROW EXECUTE PROCEDURE gt_10();
+FOR EACH ROW EXECUTE FUNCTION gt_10();
 
 \copy trigger_test from data/copy_data.csv with csv header ;
 SELECT * FROM trigger_test ORDER BY time;

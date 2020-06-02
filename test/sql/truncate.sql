@@ -49,11 +49,11 @@ $BODY$;
 -- test truncate on a chunk
 CREATE TRIGGER _test_truncate_before
     BEFORE TRUNCATE ON _timescaledb_internal._hyper_1_5_chunk
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _test_truncate_after
     AFTER TRUNCATE ON _timescaledb_internal._hyper_1_5_chunk
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 \set ON_ERROR_STOP 0
 TRUNCATE "two_Partitions";

@@ -119,7 +119,7 @@ END
 $BODY$;
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
  hypertable_id | node_hypertable_id |  node_name  | block_chunks 
 ---------------+--------------------+-------------+--------------
@@ -915,7 +915,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 -- Adding a new trigger should not recurse to foreign chunks
 CREATE TRIGGER _1_test_trigger_insert
     AFTER INSERT ON disttable
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
 FROM test.show_subtables('disttable') st;
  chunk_relid | show_triggers 

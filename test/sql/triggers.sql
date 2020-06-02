@@ -28,68 +28,68 @@ $BODY$;
 -- row triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update
     BEFORE UPDATE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete
     BEFORE delete ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER z_test_trigger_all
     BEFORE INSERT OR UPDATE OR DELETE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 -- row triggers: AFTER
 CREATE TRIGGER _0_test_trigger_insert_after
     AFTER INSERT ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_insert_after_when_dev1
     AFTER INSERT ON hyper
     FOR EACH ROW
     WHEN (NEW.device_id = 'dev1')
-    EXECUTE PROCEDURE test_trigger();
+    EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_after
     AFTER UPDATE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_after
     AFTER delete ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER z_test_trigger_all_after
     AFTER INSERT OR UPDATE OR DELETE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 -- statement triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert_s_before
     BEFORE INSERT ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_s_before
     BEFORE UPDATE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_s_before
     BEFORE DELETE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 -- statement triggers: AFTER
 CREATE TRIGGER _0_test_trigger_insert_s_after
     AFTER INSERT ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_s_after
     AFTER UPDATE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
@@ -135,62 +135,62 @@ DROP TRIGGER z_test_trigger_all_after ON hyper;
 -- row triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update
     BEFORE UPDATE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete
     BEFORE delete ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER z_test_trigger_all
     BEFORE INSERT OR UPDATE OR DELETE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 -- row triggers: AFTER
 CREATE TRIGGER _0_test_trigger_insert_after
     AFTER INSERT ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_after
     AFTER UPDATE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_after
     AFTER delete ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER z_test_trigger_all_after
     AFTER INSERT OR UPDATE OR DELETE ON hyper
-    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 -- statement triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert_s_before
     BEFORE INSERT ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_s_before
     BEFORE UPDATE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_s_before
     BEFORE DELETE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 -- statement triggers: AFTER
 CREATE TRIGGER _0_test_trigger_insert_s_after
     AFTER INSERT ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_update_s_after
     AFTER UPDATE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
-    FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
@@ -249,7 +249,7 @@ $BODY$;
 
 CREATE TRIGGER create_color_trigger
     BEFORE INSERT OR UPDATE ON location
-    FOR EACH ROW EXECUTE PROCEDURE create_color_trigger_fn();
+    FOR EACH ROW EXECUTE FUNCTION create_color_trigger_fn();
 
 SELECT create_hypertable('location', 'time');
 
@@ -264,7 +264,7 @@ GRANT SELECT, INSERT, UPDATE ON vehicles TO :ROLE_DEFAULT_PERM_USER_2;
 
 CREATE TRIGGER create_vehicle_trigger
     BEFORE INSERT OR UPDATE ON location
-    FOR EACH ROW EXECUTE PROCEDURE create_vehicle_trigger_fn();
+    FOR EACH ROW EXECUTE FUNCTION create_vehicle_trigger_fn();
 
 INSERT INTO location VALUES('2017-01-01 01:02:03', 1, 1, 40.7493226,-73.9771259);
 INSERT INTO location VALUES('2017-01-01 01:02:04', 1, 20, 24.7493226,-73.9771259);

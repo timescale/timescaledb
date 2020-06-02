@@ -39,7 +39,7 @@ CREATE TABLE table7(t TIMESTAMP, v INT);
 CREATE TABLE table8(id INT, status device_status);
 
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON table8
-FOR EACH STATEMENT EXECUTE PROCEDURE test.empty_trigger_func();
+FOR EACH STATEMENT EXECUTE FUNCTION test.empty_trigger_func();
 
 CREATE RULE notify_me AS ON UPDATE TO table8 DO ALSO NOTIFY table8;
 

@@ -47,7 +47,7 @@ FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
 
 CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 
-FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 -- Save the number of dependent objects so we can make sure we have the same number later
 SELECT count(*) as num_dependent_objects

@@ -404,13 +404,13 @@ END;
 $BODY$;
 CREATE TRIGGER test1_trigger
 BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON test1
-FOR EACH STATEMENT EXECUTE PROCEDURE test1_print_func();
+FOR EACH STATEMENT EXECUTE FUNCTION test1_print_func();
 
 INSERT INTO test1 SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 1:00', '1 hour') , 1 ;
 -- add a row trigger too --
 CREATE TRIGGER test1_trigger2
 BEFORE INSERT OR UPDATE OR DELETE ON test1
-FOR EACH ROW EXECUTE PROCEDURE test1_print_func();
+FOR EACH ROW EXECUTE FUNCTION test1_print_func();
 INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
