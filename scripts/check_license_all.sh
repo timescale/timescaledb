@@ -7,4 +7,7 @@ exit_apache=$?
 SRC_DIR=$BASE_DIR ${SCRIPT_DIR}/check_license.sh -e ${BASE_DIR}/tsl/src -u ${BASE_DIR}/tsl/test/sql -e ${BASE_DIR}/tsl/test/src
 exit_tsl=$?
 
-exit ${exit_apache} || ${exit_tsl}
+if [ ${exit_apache} -ne 0 ] || [ ${exit_tsl} -ne 0 ]; then
+  exit 1
+fi
+
