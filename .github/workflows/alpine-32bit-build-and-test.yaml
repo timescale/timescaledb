@@ -74,3 +74,10 @@ jobs:
         name: PostgreSQL log
         path: postmaster.log
 
+    - name: Slack Notification
+      if: failure()
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_TITLE: Regression 32-bit PG${{ matrix.pg }} ${{ job.status }}
+      uses: rtCamp/action-slack-notify@v2.0.2
+
