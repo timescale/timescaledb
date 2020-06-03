@@ -59,8 +59,6 @@ set(TEST_FILES_DEBUG
 set(TEST_TEMPLATES
   compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
-  dist_hypertable.sql.in
-  dist_query.sql.in
   move.sql.in
   reorder.sql.in
   transparent_decompression.sql.in
@@ -70,6 +68,8 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
     #current_timestamp_mock available only in debug mode
     continuous_aggs_query.sql.in
+    dist_hypertable.sql.in
+    dist_query.sql.in
   )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
