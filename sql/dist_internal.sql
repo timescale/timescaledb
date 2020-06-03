@@ -28,3 +28,16 @@ AS '@MODULE_PATHNAME@', 'ts_dist_remote_hypertable_info' LANGUAGE C VOLATILE STR
 -- a data node. Throws error if validation fails.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_as_data_node() RETURNS void
 AS '@MODULE_PATHNAME@', 'ts_dist_validate_as_data_node' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.show_connection_cache()
+RETURNS TABLE (
+    node_name           name,
+    user_name           name,
+    host                text,
+    port                int,
+    database            name,
+    backend_pid         int,
+    connection_status   text,
+    transaction_status  text,
+    processing          boolean)
+AS '@MODULE_PATHNAME@', 'ts_remote_connection_cache_show' LANGUAGE C VOLATILE STRICT;
