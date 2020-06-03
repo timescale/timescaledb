@@ -84,6 +84,13 @@ SELECT test_remote_txn_persistent_record('loopback');
 -- ===================================================================
 --successfull transaction
 SET timescaledb.enable_2pc = false;
+--initially, there are no connections in the cache
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -92,7 +99,23 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --expect to see one connection in transaction state
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 COMMIT;
+--connection should remain, idle
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | IDLE               | f
+(1 row)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20001;
  count 
 -------
@@ -108,7 +131,22 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --existing connection, in transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 ROLLBACK;
+--connection should remain, in idle state after rollback
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20002;
  count 
 -------
@@ -121,6 +159,13 @@ BEGIN;
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
+-- Connection should remain after conflict, in idle state
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
@@ -141,6 +186,13 @@ COMMIT;
 WARNING:  kill event: pre-commit
 WARNING:  failure aborting remote transaction during local abort
 ERROR:  [loopback]: terminating connection due to administrator command
+-- Failed connection should be cleared
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20003;
  count 
 -------
@@ -167,10 +219,25 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --connection in transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 COMMIT;
 WARNING:  kill event: waiting-commit
 WARNING:  failure aborting remote transaction during local abort
 ERROR:  [loopback]: terminating connection due to administrator command
+--connection failed during commit, so should be cleared from the cache
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 --during waiting-commit the data node process could die before or after
 --executing the commit on the remote node. So the behaviour here is non-deterministic
 --this is the bad part of 1-pc transactions.
@@ -196,6 +263,14 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --connection in transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 ROLLBACK;
 WARNING:  kill event: pre-abort
 WARNING:  [loopback]: terminating connection due to administrator command
@@ -213,7 +288,14 @@ SELECT count(*) FROM pg_prepared_xacts;
      0
 (1 row)
 
---block preparing transactions on the frontend
+--the failed connection should be cleared
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
+--block preparing transactions on the access node
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -230,6 +312,12 @@ ERROR:  cannot prepare a transaction that modified remote tables
 --undo changes from 1-pc tests
 DELETE FROM  "S 1"."T 1" where "C 1" >= 20000;
 SET timescaledb.enable_2pc = true;
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 --simple commit
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
@@ -239,7 +327,23 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --connection in transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 COMMIT;
+--connection should remain in idle state
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | IDLE               | f
+(1 row)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10001;
  count 
 -------
@@ -252,7 +356,7 @@ SELECT count(*) FROM pg_prepared_xacts;
      0
 (1 row)
 
---simple abort
+--simple
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -261,7 +365,22 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-0
  
 (1 row)
 
+    --connection in transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 ROLLBACK;
+--rolled back transaction, but connection should remain in idle
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 11001;
  count 
 -------
@@ -280,6 +399,13 @@ BEGIN;
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
+--connection should remain in idle after constraint violation
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 --the next few statements inject faults before the commit. They should all fail
 --and be rolled back with no unresolved state
 BEGIN;
@@ -300,6 +426,13 @@ COMMIT;
 WARNING:  kill event: pre-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
 ERROR:  [loopback]: SSL connection has been closed unexpectedly
+--the connection was killed, so should be cleared
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10002;
  count 
 -------
@@ -330,6 +463,13 @@ COMMIT;
 WARNING:  kill event: waiting-prepare-transaction
 WARNING:  failure aborting remote transaction during local abort
 ERROR:  [loopback]: SSL connection has been closed unexpectedly
+--the connection should be cleared from the cache
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
  count 
 -------
@@ -377,6 +517,14 @@ WARNING:  kill event: post-prepare-transaction
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  error while performing second phase of 2-pc
+--connection should be cleared
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | BAD               | UNKNOWN            | t
+(1 row)
+
 --unresolved state shown here
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10004;
  count 
@@ -395,6 +543,12 @@ BEGIN;
     SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
 ERROR:  remote_txn_heal_data_node cannot run inside a transaction block
 COMMIT;
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 select count(*) from _timescaledb_catalog.remote_txn;
  count 
 -------
@@ -446,6 +600,13 @@ WARNING:  kill event: pre-commit-prepared
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: SSL connection has been closed unexpectedly
 WARNING:  error while performing second phase of 2-pc
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | BAD               | UNKNOWN            | t
+(1 row)
+
 --unresolved state shown here
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10006;
  count 
@@ -484,6 +645,13 @@ select count(*) from _timescaledb_catalog.remote_txn;
      0
 (1 row)
 
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | BAD               | UNKNOWN            | t
+(1 row)
+
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
  remote_node_killer_set_event 
@@ -512,6 +680,14 @@ SELECT true FROM _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FRO
  t
 (1 row)
 
+--heal does not use the connection cache, so unaffected
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | BAD               | UNKNOWN            | t
+(1 row)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10005;
  count 
 -------
@@ -530,8 +706,9 @@ select count(*) from _timescaledb_catalog.remote_txn;
      0
 (1 row)
 
---test prepare transactions. Note that leaked prepared stmts should be detected by `remote_txn_check_for_leaked_prepared_statements`
---so we should be fine if we don't see any WARNINGS.
+--test prepare transactions. Note that leaked prepared stmts should be
+--detected by `remote_txn_check_for_leaked_prepared_statements` so we
+--should be fine if we don't see any WARNINGS.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
 NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1 
@@ -544,6 +721,13 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
+--unique constraint violation, connection should remain
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 BEGIN;
     SAVEPOINT save_1;
         SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
@@ -553,14 +737,38 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
  
 (1 row)
 
+        --connection in transaction state
+        SELECT node_name, connection_status, transaction_status, processing
+        FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
+        --generate a unique violation
         SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
     ROLLBACK TO SAVEPOINT save_1;
+    --for correctness, the connection must remain after rollback since
+    --the transaction is still ongoing
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
+--connection should remain and be idle
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
  count 
 -------
@@ -573,7 +781,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
 --but rather are deferred till PREPARE TRANSACTION happens.
 ALTER TABLE "S 1"."T 1" DROP CONSTRAINT t1_pkey,
 ADD CONSTRAINT t1_pkey PRIMARY KEY ("C 1") DEFERRABLE INITIALLY DEFERRED;
---test ABORT TRANSACTION on failure in PREPARE TRANSACTION.
+--test ROLLBACK TRANSACTION on failure in PREPARE TRANSACTION.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -582,8 +790,22 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
  
 (1 row)
 
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+(1 row)
+
 COMMIT;
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
+--connection should be removed since PREPARE TRANSACTION failed
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM pg_prepared_xacts;
  count 
 -------
@@ -592,8 +814,8 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 --test ROLLBACK TRANSACTION
 --this has an error on the second connection. So should force conn1 to prepare transaction
---ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK TRANSACTION.
---conn2 would do a ABORT TRANSACTION.
+--ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK PREPARED.
+--conn2 would do a ROLLBACK TRANSACTION.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -609,8 +831,24 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
  
 (1 row)
 
+    --Both connections in transaction state
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+ loopback2 | OK                | INTRANS            | f
+(2 rows)
+
 COMMIT;
 ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
+--one connection should remain and be idle
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10010;
  count 
 -------
@@ -650,9 +888,24 @@ BEGIN;
  
 (1 row)
 
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+ loopback2 | OK                | INTRANS            | f
+(2 rows)
+
 COMMIT;
 ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 RESET client_min_messages;
+--failed connection should be cleared
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
  count 
 -------
@@ -683,6 +936,13 @@ SELECT count(*) FROM pg_prepared_xacts;
      0
 (1 row)
 
+--heal is not using the connection cache
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 --test simple subtrans abort.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
@@ -699,6 +959,14 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-
  
 (1 row)
 
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+ loopback2 | OK                | INTRANS            | f
+(2 rows)
+
     SAVEPOINT save_1;
         SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
@@ -708,6 +976,14 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (1 row)
 
     ROLLBACK TO SAVEPOINT save_1;
+    -- For correctness, both connections should remain in order to
+    -- continue the transaction
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -722,7 +998,19 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-
  
 (1 row)
 
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 COMMIT;
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10011;
  count 
 -------
@@ -767,13 +1055,33 @@ BEGIN;
  
 (1 row)
 
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+ loopback  | OK                | INTRANS            | f
+ loopback2 | OK                | INTRANS            | f
+(2 rows)
+
     ROLLBACK TO SAVEPOINT save_1;
+    SELECT node_name, connection_status, transaction_status, processing
+    FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  connection to data node "loopback" was lost
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;
 RESET client_min_messages;
+SELECT node_name, connection_status, transaction_status, processing
+FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+ node_name | connection_status | transaction_status | processing 
+-----------+-------------------+--------------------+------------
+(0 rows)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10016;
  count 
 -------

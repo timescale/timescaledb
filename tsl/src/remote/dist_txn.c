@@ -198,6 +198,7 @@ dist_txn_xact_callback_abort()
 		{
 			if (remote_txn_is_ongoing(remote_txn))
 				elog(WARNING, "failure aborting remote transaction during local abort");
+
 			remote_txn_store_remove(state.store, remote_txn_get_connection_id(remote_txn));
 		}
 	}

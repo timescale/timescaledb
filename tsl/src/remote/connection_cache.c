@@ -4,11 +4,19 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tupdesc.h>
+#include <access/htup_details.h>
+#include <remote/connection.h>
+#include <utils/builtins.h>
+#include <fmgr.h>
+#include <funcapi.h>
+#include <miscadmin.h>
 
-#include "connection_cache.h"
 #include <cache.h>
+#include <compat.h>
+#include "connection_cache.h"
 
-Cache *connection_cache_current = NULL;
+static Cache *connection_cache_current = NULL;
 
 typedef struct ConnectionCacheEntry
 {
@@ -37,8 +45,6 @@ connection_cache_pre_destroy_hook(Cache *cache)
 	hash_seq_init(&scan, cache->htab);
 	while ((entry = hash_seq_search(&scan)) != NULL)
 	{
-		elog(DEBUG3, "closing connection %p for option changes to take effect", entry->conn);
-
 		/*
 		 * If we don't do this we will have a memory leak because connections
 		 * are allocated using malloc
@@ -171,10 +177,10 @@ remote_connection_cache_get_connection(Cache *cache, TSConnectionId id)
 	return entry->conn;
 }
 
-void
+bool
 remote_connection_cache_remove(Cache *cache, TSConnectionId id)
 {
-	ts_cache_remove(cache, &id);
+	return ts_cache_remove(cache, &id);
 }
 
 /*
@@ -188,6 +194,123 @@ remote_connection_cache_invalidate_callback(void)
 {
 	ts_cache_invalidate(connection_cache_current);
 	connection_cache_current = connection_cache_create();
+}
+
+enum Anum_show_conn
+{
+	Anum_show_conn_node_name = 1,
+	Anum_show_conn_user_name,
+	Anum_show_conn_host,
+	Anum_show_conn_port,
+	Anum_show_conn_db,
+	Anum_show_conn_backend_pid,
+	Anum_show_conn_status,
+	Anum_show_conn_txn_status,
+	Anum_show_conn_processing,
+	_Anum_show_conn_max,
+};
+
+#define Natts_show_conn (_Anum_show_conn_max - 1)
+
+static const char *conn_status_str[] = {
+	[CONNECTION_OK] = "OK",
+	[CONNECTION_BAD] = "BAD",
+	[CONNECTION_STARTED] = "STARTED",
+	[CONNECTION_MADE] = "MADE",
+	[CONNECTION_AWAITING_RESPONSE] = "AWAITING RESPONSE",
+	[CONNECTION_AUTH_OK] = "AUTH_OK",
+	[CONNECTION_SETENV] = "SETENV",
+	[CONNECTION_SSL_STARTUP] = "SSL STARTUP",
+	[CONNECTION_NEEDED] = "CONNECTION NEEDED",
+	[CONNECTION_CHECK_WRITABLE] = "CHECK WRITABLE",
+	[CONNECTION_CONSUME] = "CONSUME",
+#if PG12_GE
+	[CONNECTION_GSS_STARTUP] = "GSS STARTUP",
+#endif
+};
+
+static const char *conn_txn_status_str[] = {
+	[PQTRANS_IDLE] = "IDLE",	   [PQTRANS_ACTIVE] = "ACTIVE",   [PQTRANS_INTRANS] = "INTRANS",
+	[PQTRANS_INERROR] = "INERROR", [PQTRANS_UNKNOWN] = "UNKNOWN",
+};
+
+static HeapTuple
+create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc tupdesc)
+{
+	Datum values[Natts_show_conn];
+	bool nulls[Natts_show_conn] = { false };
+	PGconn *pgconn = remote_connection_get_pg_conn(entry->conn);
+
+	values[AttrNumberGetAttrOffset(Anum_show_conn_node_name)] =
+		CStringGetDatum(remote_connection_node_name(entry->conn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_user_name)] =
+		CStringGetDatum(GetUserNameFromId(entry->id.user_id, false));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_host)] = CStringGetTextDatum(PQhost(pgconn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_port)] =
+		Int32GetDatum(pg_atoi(PQport(pgconn), sizeof(int32), '\0'));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_db)] = CStringGetDatum(PQdb(pgconn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_backend_pid)] =
+		Int32GetDatum(PQbackendPID(pgconn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_status)] =
+		CStringGetTextDatum(conn_status_str[PQstatus(pgconn)]);
+	values[AttrNumberGetAttrOffset(Anum_show_conn_txn_status)] =
+		CStringGetTextDatum(conn_txn_status_str[PQtransactionStatus(pgconn)]);
+	values[AttrNumberGetAttrOffset(Anum_show_conn_processing)] =
+		BoolGetDatum(remote_connection_is_processing(entry->conn));
+
+	return heap_form_tuple(tupdesc, values, nulls);
+}
+
+typedef struct ConnCacheShowState
+{
+	HASH_SEQ_STATUS scan;
+	Cache *cache;
+} ConnCacheShowState;
+
+Datum
+remote_connection_cache_show(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	ConnCacheShowState *info;
+	const ConnectionCacheEntry *entry;
+	HeapTuple tuple;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		TupleDesc tupdesc;
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		info = palloc0(sizeof(ConnCacheShowState));
+		info->cache = remote_connection_cache_pin();
+		hash_seq_init(&info->scan, info->cache->htab);
+		funcctx->user_fctx = info;
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	info = funcctx->user_fctx;
+
+	entry = hash_seq_search(&info->scan);
+
+	if (entry == NULL)
+	{
+		ts_cache_release(info->cache);
+		SRF_RETURN_DONE(funcctx);
+	}
+
+	tuple = create_tuple_from_conn_entry(entry, funcctx->tuple_desc);
+
+	SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 }
 
 void

@@ -157,6 +157,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
 	.remote_txn_heal_data_node = remote_txn_heal_data_node,
+	.remote_connection_cache_show = remote_connection_cache_show,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
 	.data_node_dispatch_path_create = data_node_dispatch_path_create,
 	.distributed_copy = remote_distributed_copy,

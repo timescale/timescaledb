@@ -60,6 +60,7 @@ TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 TS_FUNCTION_INFO_V1(ts_remote_txn_heal_data_node);
+TS_FUNCTION_INFO_V1(ts_remote_connection_cache_show);
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
 TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
@@ -215,6 +216,12 @@ Datum
 ts_remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_data_node(fcinfo));
+}
+
+Datum
+ts_remote_connection_cache_show(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remote_connection_cache_show(fcinfo));
 }
 
 Datum
@@ -656,6 +663,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_id_in = error_no_default_fn_pg_community,
 	.remote_txn_id_out = error_no_default_fn_pg_community,
 	.remote_txn_heal_data_node = error_no_default_fn_pg_community,
+	.remote_connection_cache_show = error_no_default_fn_pg_community,
 	.data_node_dispatch_path_create = data_node_dispatch_path_create_default,
 	.distributed_copy = distributed_copy_default,
 	.set_distributed_id = set_distributed_id_default,

@@ -22,9 +22,10 @@ is used by xact callbacks.
 extern Cache *remote_connection_cache_pin(void);
 
 extern TSConnection *remote_connection_cache_get_connection(Cache *cache, TSConnectionId id);
-extern void remote_connection_cache_remove(Cache *cache, TSConnectionId id);
+extern bool remote_connection_cache_remove(Cache *cache, TSConnectionId id);
 
 extern void remote_connection_cache_invalidate_callback(void);
+extern Datum remote_connection_cache_show(PG_FUNCTION_ARGS);
 extern void _remote_connection_cache_init(void);
 extern void _remote_connection_cache_fini(void);
 
