@@ -290,8 +290,14 @@ else()
   )
 endif ()
 
-# Linter support via clang-tidy. Enabled by default.
-option(LINTER "Enable linter support using clang-tidy (default ON)" ON)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang")
+  set(LINTER_DEFAULT ON)
+else()
+  set(LINTER_DEFAULT OFF)
+endif()
+
+# Linter support via clang-tidy. Enabled when using clang as compiler
+option(LINTER "Enable linter support using clang-tidy (ON when using clang)" ${LINTER_DEFAULT})
 
 if (LINTER)
   find_program(CLANG_TIDY
