@@ -603,7 +603,7 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 	skipped_in_last = simple8brle_decompression_iterator_max_elements(iter, compressed) -
 					  compressed->num_elements;
 
-	Assert(iter->compressed_data);
+	Assert(iter->compressed_data != NULL);
 	iter->current_block =
 		simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
 														 SIMPLE8B_BITS_PER_SELECTOR),
