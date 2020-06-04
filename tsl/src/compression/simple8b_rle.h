@@ -579,7 +579,7 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 		if (selector == 0)
 			elog(ERROR, "invalid selector 0");
 
-		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
+		if (simple8brle_selector_is_rle(selector))
 		{
 			Assert(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);
 			max_stored += simple8brle_rledata_repeatcount(iter->compressed_data[i]);
@@ -603,6 +603,7 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 	skipped_in_last = simple8brle_decompression_iterator_max_elements(iter, compressed) -
 					  compressed->num_elements;
 
+	Assert(iter->compressed_data);
 	iter->current_block =
 		simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
 														 SIMPLE8B_BITS_PER_SELECTOR),
