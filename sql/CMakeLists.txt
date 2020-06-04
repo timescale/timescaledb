@@ -67,8 +67,8 @@ set(PRE_UPDATE_FILES
 # The POST_UPDATE_FILES should be executed as the last part of
 # the update script. 
 # sets state for executing POST_UPDATE_FILES during ALTER EXTENSION
-set(UNSET_UPDATE_STRING  "set timescaledb.update_script_stage = ''\; " )
-set(POST_UPDATE_STRING  "set timescaledb.update_script_stage = 'post'\; " )
+set(SET_POST_UPDATE_STAGE updates/set_post_update_stage.sql)
+set(UNSET_UPDATE_STAGE updates/unset_update_stage.sql)
 set(POST_UPDATE_FILES
   updates/post-update.sql
 )
@@ -211,18 +211,14 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
     message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
   endif ()
 
-  set(SCRATCH_FILE "scratch_file")
-  set(SCRATCH_FILE2 "scratch_file2")
   set(START_VERSION ${CMAKE_MATCH_1})
   set(END_VERSION ${CMAKE_MATCH_2})
   set(PRE_FILES ${PRE_UPDATE_FILES_VERSIONED})
   set(POST_FILES_PROCESSED ${POST_UPDATE_FILES_VERSIONED}.processed)
-  file(WRITE  ${SCRATCH_FILE} ${POST_UPDATE_STRING})
-  file(WRITE  ${SCRATCH_FILE2} ${UNSET_UPDATE_STRING})
   cat_files(
-  "${SCRATCH_FILE};${POST_UPDATE_FILES_VERSIONED};${SCRATCH_FILE2}"
-  ${POST_FILES_PROCESSED}
-)
+    "${SET_POST_UPDATE_STAGE};${POST_UPDATE_FILES_VERSIONED};${UNSET_UPDATE_STAGE}"
+    ${POST_FILES_PROCESSED}
+  )
   # Check for version-specific update code with fixes
   if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/updates/${START_VERSION}.sql)
     version_files("updates/${START_VERSION}.sql" ORIGIN_MOD_FILE)
