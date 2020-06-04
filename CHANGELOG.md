@@ -4,19 +4,54 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.0.0-beta5 (2020-06-08)
+
+This release adds new functionality on distributed hypertables,
+including (but not limited to) basic LIMIT pushdown, manual chunk
+compression, table access methods storage options,  SERIAL columns,
+and altering of the replication factor.
+This release only supports PG11 and PG12. Thus, PG9.6 and PG10
+are no longer supported.
+
+Note that the 2.0 major release will introduce breaking changes
+to user functions and APIs. In particular, this beta removes the
+cascade parameter from drop_chunks and changes the names of
+certain GUC parameters. Expect additional breaking changes to be
+introduced up until the 2.0 release.
+
+**For beta releases**, upgrading from an earlier version of the
+extension (including previous beta releases) is not supported.
+
+**Features**
+
+* #1877 Add support for fast pruning of inlined functions
+* #1922 Cleanup GUC names
+* #1923 Add repartition option on detach/delete_data_node
+* #1923 Allow ALTER TABLE SET on distributed hypertable
+* #1923 Allow SERIAL columns for distributed hypertables
+* #1923 Basic LIMIT push down support
+* #1923 Implement altering replication factor
+* #1923 Support compression on distributed hypertables
+* #1923 Support storage options for distributed hypertables
+* #1941 Change default prefix for distributed tables
+* #1943 Support table access methods for distributed hypertables
+* #1952 Remove cascade option from drop_chunks
+* #1955 Remove support for PG9.6 and PG10
 
 **Bugfixes**
 * #1915 Check for database in extension_current_state
 * #1918 Unify chunk index creation
+* #1923 Fix insert batch size calculation for prepared statements
+* #1923 Fix port conversion issue in add_data_node
 * #1932 Change compression locking order
 * #1938 Fix gapfill locf treat_null_as_missing
 
 **Thanks**
 * @dmitri191 for reporting an issue with failing background workers
-* @nomanor for reporting an issue with expression index with table references
+* @fvannee for optimizing pruning of inlined functions
 * @nbouscal for reporting an issue with compression jobs locking referenced tables
 * @nicolai6120 for reporting an issue with locf and treat_null_as_missing
+* @nomanor for reporting an issue with expression index with table references
 
 ## 1.7.1 (2020-05-18)
 
