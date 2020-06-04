@@ -25,3 +25,5 @@ typedef.list
 
 /CMakeSettings.json
 /out/*
+
+scratch_file*

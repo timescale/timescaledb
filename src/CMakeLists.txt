@@ -78,7 +78,7 @@ if (WIN32)
     OUTPUT ${GITCOMMIT_H}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
-    COMMAND (${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags 2> $null || call && echo "${PROJECT_VERSION_MOD}") >> ${GITCOMMIT_H}
+    COMMAND (${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags 2> NUL || call && echo "${PROJECT_VERSION_MOD}") >> ${GITCOMMIT_H}
     COMMENT "Generating gitcommit.h"
     VERBATIM)
 else ()
