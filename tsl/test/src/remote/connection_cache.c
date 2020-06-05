@@ -12,6 +12,7 @@
 #include <foreign/fdwapi.h>
 #include <miscadmin.h>
 #include <access/reloptions.h>
+#include <access/xact.h>
 #include <catalog/pg_foreign_server.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
@@ -23,6 +24,7 @@
 #include "connection.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"
+#include "remote/txn.h"
 #include "export.h"
 #include "connection.h"
 #include "test_utils.h"
@@ -77,7 +79,26 @@ test_basic_cache()
 	ts_cache_release(cache);
 }
 
-#define NEW_APPLICATION_NAME "app2"
+static void
+set_data_node_application_name(const char *nodename, DefElemAction action)
+{
+	/* Generate a new name. Use PID of current backend since every alter
+	 * happens on an new connection. */
+	char *appname = psprintf("app%d", MyProcPid);
+	AlterForeignServerStmt stmt = {
+		.type = T_AlterForeignServerStmt,
+		.servername = pstrdup(nodename),
+		.options = list_make1(makeDefElemExtended(NULL,
+												  "application_name",
+												  (Node *) makeString(appname),
+												  action,
+												  -1)),
+		.version = NULL,
+		.has_version = false,
+	};
+
+	AlterForeignServer(&stmt);
+}
 
 /*
  * Alter a server for testing invalidation.  We directly call
@@ -87,25 +108,29 @@ test_basic_cache()
 Datum
 ts_test_alter_data_node(PG_FUNCTION_ARGS)
 {
-	AlterForeignServerStmt stmt = {
-		.type = T_AlterForeignServerStmt,
-		.servername = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0),
-		.version = NULL,
-		.options = list_make1(makeDefElemExtended(NULL,
-												  "application_name",
-												  (Node *) makeString(NEW_APPLICATION_NAME),
-												  DEFELEM_ADD,
-												  -1)),
-		.has_version = false,
-	};
+	const char *nodename = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
+	DefElemAction action = DEFELEM_ADD;
+	ForeignServer *server;
+	ListCell *lc;
 
-	if (NULL != stmt.servername)
+	if (!nodename)
+		PG_RETURN_BOOL(true);
+
+	server = GetForeignServerByName(nodename, false);
+
+	foreach (lc, server->options)
 	{
-		AlterForeignServer(&stmt);
-		PG_RETURN_BOOL(false);
+		DefElem *de = lfirst(lc);
+
+		if (strcmp(de->defname, "application_name") == 0)
+		{
+			action = DEFELEM_SET;
+			break;
+		}
 	}
 
-	PG_RETURN_BOOL(true);
+	set_data_node_application_name(nodename, action);
+	PG_RETURN_BOOL(false);
 }
 
 /* This alters the server on the local (test) database in a separate backend */
@@ -134,33 +159,46 @@ test_invalidate_server()
 							 GetUserId());
 
 	cache = remote_connection_cache_pin();
-
 	conn_1 = remote_connection_cache_get_connection(cache, id_1);
 	pid_1 = remote_connecton_get_remote_pid(conn_1);
-	original_application_name = remote_connecton_get_application_name(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
 	/* simulate an invalidation in another backend */
 	invalidate_server();
 
-	/* using the same pin, still getting the same connection */
+	/* Should get a different connection since we invalidated the foreign
+	 * server and didn't yet start a transaction on the remote node. */
 	conn_1 = remote_connection_cache_get_connection(cache, id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
+	TestAssertTrue(pid_1 != pid_prime);
+
+	/* Test that connections remain despite invalidations during ongoing
+	 * remote transaction */
+	pid_1 = pid_prime;
+	original_application_name = remote_connecton_get_application_name(conn_1);
+	BeginInternalSubTransaction("sub1");
+
+	/* Start a remote transaction on the connection */
+	remote_txn_begin_on_connection(conn_1);
+	invalidate_server();
+
+	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	pid_prime = remote_connecton_get_remote_pid(conn_1);
+
+	/* Connection should be the same despite invalidation since we're in a
+	 * transaction */
 	TestAssertTrue(pid_1 == pid_prime);
 	TestAssertTrue(
 		strcmp(original_application_name, remote_connecton_get_application_name(conn_1)) == 0);
 
-	ts_cache_release(cache);
+	RollbackAndReleaseCurrentSubTransaction();
 
-	/* using a new cache pin, getting a new connection */
-	cache = remote_connection_cache_pin();
+	/* After rollback, we're still in a remote transaction. Connection should
+	 * be the same. */
 	conn_1 = remote_connection_cache_get_connection(cache, id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
-	TestAssertTrue(pid_1 != pid_prime);
-	TestAssertTrue(
-		strcmp(original_application_name, remote_connecton_get_application_name(conn_1)) != 0);
-	TestAssertTrue(strcmp(NEW_APPLICATION_NAME, remote_connecton_get_application_name(conn_1)) ==
-				   0);
+	TestAssertTrue(pid_1 == pid_prime);
+	pid_1 = pid_prime;
 
 	ts_cache_release(cache);
 }

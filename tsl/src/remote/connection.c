@@ -159,6 +159,10 @@ typedef struct TSConnection
 	bool autoclose;			  /* Set if this connection should automatically
 							   * close at the end of the (sub-)transaction */
 	SubTransactionId subtxid; /* The subtransaction ID that created this connection, if any. */
+	int xact_depth;			  /* 0 => no transaction, 1 => main transaction, > 1 =>
+							   * levels of subtransactions */
+	bool xact_transitioning;  /* TRUE if connection is transitioning to
+							   * another transaction state */
 	ListNode results;		  /* Head of PGresult list */
 } TSConnection;
 
@@ -591,6 +595,8 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name
 	conn->tz_name = NULL;
 	conn->autoclose = true;
 	conn->subtxid = GetCurrentSubTransactionId();
+	conn->xact_depth = 0;
+	conn->xact_transitioning = false;
 	/* Initialize results head */
 	conn->results.next = &conn->results;
 	conn->results.prev = &conn->results;
@@ -622,6 +628,47 @@ remote_connection_set_autoclose(TSConnection *conn, bool autoclose)
 	return old;
 }
 
+int
+remote_connection_xact_depth_get(const TSConnection *conn)
+{
+	Assert(conn->xact_depth >= 0);
+	return conn->xact_depth;
+}
+
+int
+remote_connection_xact_depth_inc(TSConnection *conn)
+{
+	Assert(conn->xact_depth >= 0);
+	return ++conn->xact_depth;
+}
+
+int
+remote_connection_xact_depth_dec(TSConnection *conn)
+{
+	Assert(conn->xact_depth > 0);
+	return --conn->xact_depth;
+}
+
+void
+remote_connection_xact_transition_begin(TSConnection *conn)
+{
+	Assert(!conn->xact_transitioning);
+	conn->xact_transitioning = true;
+}
+
+void
+remote_connection_xact_transition_end(TSConnection *conn)
+{
+	Assert(conn->xact_transitioning);
+	conn->xact_transitioning = false;
+}
+
+bool
+remote_connection_xact_is_transitioning(const TSConnection *conn)
+{
+	return conn->xact_transitioning;
+}
+
 PGconn *
 remote_connection_get_pg_conn(TSConnection *conn)
 {
@@ -630,7 +677,7 @@ remote_connection_get_pg_conn(TSConnection *conn)
 }
 
 bool
-remote_connection_is_processing(TSConnection *conn)
+remote_connection_is_processing(const TSConnection *conn)
 {
 	Assert(conn != NULL);
 	return conn->processing;
@@ -658,7 +705,7 @@ remote_elog(int elevel, int errorcode, const char *node_name, const char *primar
 }
 
 const char *
-remote_connection_node_name(TSConnection *conn)
+remote_connection_node_name(const TSConnection *conn)
 {
 	return NameStr(conn->node_name);
 }

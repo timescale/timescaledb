@@ -6,12 +6,15 @@
 #include <postgres.h>
 #include <access/tupdesc.h>
 #include <access/htup_details.h>
-#include <remote/connection.h>
+#include <postmaster/postmaster.h>
 #include <utils/builtins.h>
+#include <utils/syscache.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <libpq-fe.h>
 
+#include <remote/connection.h>
 #include <cache.h>
 #include <compat.h>
 #include "connection_cache.h"
@@ -22,6 +25,8 @@ typedef struct ConnectionCacheEntry
 {
 	TSConnectionId id;
 	TSConnection *conn;
+	int32 hashvalue; /* Hash of server OID for cache invalidation */
+	bool invalidated;
 } ConnectionCacheEntry;
 
 static void
@@ -68,16 +73,45 @@ connection_cache_get_key(CacheQuery *query)
 }
 
 /*
- * Verify that a connection is still valid.
+ * Check if a connection needs to be remade.
+ *
+ * A connection can be in a bad state, in which case we need to
+ * fail. Otherwise, the connection could be invalidated and needs to be remade
+ * to apply new options. But a connection can only be remade if we are not
+ * currently processing a transaction on the connection.
  */
 static bool
-connection_cache_check_entry(Cache *cache, CacheQuery *query)
+connection_should_be_remade(const ConnectionCacheEntry *entry)
 {
-	ConnectionCacheEntry *entry = query->result;
-	/* If this is set, then an async call was aborted. */
-	if (remote_connection_is_processing(entry->conn))
-		return false;
-	return true;
+	if (NULL == entry->conn)
+		return true;
+
+	if (remote_connection_xact_is_transitioning(entry->conn))
+	{
+		NameData nodename;
+
+		namestrcpy(&nodename, remote_connection_node_name(entry->conn));
+
+		/* The connection is marked as being in the middle of transaction
+		 * state change, which means the transaction was aborted in the middle
+		 * of a transition and now we don't know the state of the remote
+		 * endpoint. It is not safe to continue on such a connection, so we
+		 * remove (and close) the connection and raise an error. */
+		remote_connection_cache_remove(cache, entry->id);
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("connection to data node \"%s\" was lost", NameStr(nodename))));
+	}
+
+	/* Check if the connection has to be refreshed. If processing is set, then
+	 * an async call was aborted. The connection could also have been
+	 * invalidated, but we only care if we aren't still processing a
+	 * transaction. */
+	if (remote_connection_is_processing(entry->conn) ||
+		(entry->invalidated && remote_connection_xact_depth_get(entry->conn) == 0))
+		return true;
+
+	return false;
 }
 
 static void *
@@ -103,6 +137,11 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * at the end of the transaction */
 	remote_connection_set_autoclose(entry->conn, false);
 
+	/* Set the hash value of the foreign server for cache invalidation
+	 * purposes */
+	entry->hashvalue = GetSysCacheHashValue1(FOREIGNSERVEROID, ObjectIdGetDatum(id->server_id));
+	entry->invalidated = false;
+
 	return entry;
 }
 
@@ -119,7 +158,7 @@ connection_cache_update_entry(Cache *cache, CacheQuery *query)
 {
 	ConnectionCacheEntry *entry = query->result;
 
-	if (!connection_cache_check_entry(cache, query))
+	if (connection_should_be_remade(entry))
 	{
 		remote_connection_close(entry->conn);
 		return connection_cache_create_entry(cache, query);
@@ -187,15 +226,95 @@ remote_connection_cache_remove(Cache *cache, TSConnectionId id)
  * Connection invalidation callback function
  *
  * After a change to a pg_foreign_server catalog entry,
- * mark the cache as invalid.
+ * mark the cache entry as invalid.
  */
 void
-remote_connection_cache_invalidate_callback(void)
+remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashvalue)
 {
-	ts_cache_invalidate(connection_cache_current);
-	connection_cache_current = connection_cache_create();
+	HASH_SEQ_STATUS scan;
+	ConnectionCacheEntry *entry;
+
+	/* Only care about foreign server invalidations. Ignore general
+	 * invalidation (cacheid == 0), as not relevant here. */
+	if (cacheid != FOREIGNSERVEROID)
+		return;
+
+	hash_seq_init(&scan, connection_cache_current->htab);
+
+	while ((entry = hash_seq_search(&scan)) != NULL)
+	{
+		/* hashvalue == 0 means cache reset, so invalidate entire cache */
+		if (hashvalue == 0 || entry->hashvalue == hashvalue)
+			entry->invalidated = true;
+	}
 }
 
+static bool
+is_loopback_host_or_addr(const char *hostaddr)
+{
+	/* Use strncmp with length to succesfully compare against host address
+	 * strings like "127.0.0.1/32" */
+	return strcmp("localhost", hostaddr) == 0 || strncmp("127.0.0.1", hostaddr, 9) == 0 ||
+		   strncmp("::1", hostaddr, 3) == 0;
+}
+
+/*
+ * Check if a connection is local.
+ *
+ * This is an imperfect check, but should work for common cases.
+ *
+ * It currently doesn't capture being connected on a local network interface
+ * address. That would require a platform-independent way to lookup local
+ * interface addresses (on UNIX one could use getifaddrs, for instance).
+ */
+static bool
+is_local_connection(const PGconn *conn)
+{
+	const char *host = PQhost(conn);
+	int32 port;
+
+	if (host[0] == '/' /* unix domain socket starts with a slash */)
+		return true;
+
+	/* A TCP connection must match both the port and localhost address */
+	port = pg_atoi(PQport(conn), sizeof(int32), '\0');
+
+	return (port == PostPortNumber) && is_loopback_host_or_addr(host);
+}
+
+/*
+ * Remove connections that connect to a local DB, which is being dropped.
+ *
+ * This function is called when a database is dropped on the local instance
+ * and is needed to prevent errors when the database serves as a
+ * "same-instance" data node (common in tests). When a data node exists on the
+ * local instance (i.e., in a separate local database), we need to close all
+ * connections to the data node database in order to drop it. Otherwise, the
+ * drop database will fail since the database is being used by the connections
+ * in the cache.
+ */
+void
+remote_connection_cache_dropped_db_callback(const char *dbname)
+{
+	HASH_SEQ_STATUS scan;
+	ConnectionCacheEntry *entry;
+
+	hash_seq_init(&scan, connection_cache_current->htab);
+
+	while ((entry = hash_seq_search(&scan)) != NULL)
+	{
+		PGconn *pgconn = remote_connection_get_pg_conn(entry->conn);
+
+		/* Remove the connection if it is local and connects to a DB with the
+		 * same name as the one being dropped. */
+		if (strcmp(dbname, PQdb(pgconn)) == 0 && is_local_connection(pgconn))
+			remote_connection_cache_remove(connection_cache_current, entry->id);
+	}
+}
+
+/*
+ * Functions and data structures for printing the connection cache.
+ */
 enum Anum_show_conn
 {
 	Anum_show_conn_node_name = 1,
@@ -206,7 +325,9 @@ enum Anum_show_conn
 	Anum_show_conn_backend_pid,
 	Anum_show_conn_status,
 	Anum_show_conn_txn_status,
+	Anum_show_conn_txn_depth,
 	Anum_show_conn_processing,
+	Anum_show_conn_invalidated,
 	_Anum_show_conn_max,
 };
 
@@ -255,8 +376,11 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 		CStringGetTextDatum(conn_status_str[PQstatus(pgconn)]);
 	values[AttrNumberGetAttrOffset(Anum_show_conn_txn_status)] =
 		CStringGetTextDatum(conn_txn_status_str[PQtransactionStatus(pgconn)]);
+	values[AttrNumberGetAttrOffset(Anum_show_conn_txn_depth)] =
+		Int32GetDatum(remote_connection_xact_depth_get(entry->conn));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_processing)] =
 		BoolGetDatum(remote_connection_is_processing(entry->conn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_processing)] = BoolGetDatum(entry->invalidated);
 
 	return heap_form_tuple(tupdesc, values, nulls);
 }

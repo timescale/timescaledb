@@ -10,11 +10,18 @@
 
 #include "process_utility.h"
 #include "remote/dist_commands.h"
+#include "remote/connection_cache.h"
 #include "remote/dist_ddl.h"
 
 void
 tsl_ddl_command_start(ProcessUtilityArgs *args)
 {
+	if (IsA(args->parsetree, DropdbStmt))
+	{
+		DropdbStmt *stmt = castNode(DropdbStmt, args->parsetree);
+		remote_connection_cache_dropped_db_callback(stmt->dbname);
+	}
+
 	dist_ddl_start(args);
 }
 

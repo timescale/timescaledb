@@ -43,40 +43,40 @@ remote_txn_store_get(RemoteTxnStore *store, TSConnectionId id, bool *found_out)
 
 	entry = hash_search(store->hashtable, &id, HASH_ENTER, &found);
 
-	if (!found)
+	PG_TRY();
 	{
 		TSConnection *conn;
-		PGconn *pg_conn;
 
-		PG_TRY();
-		{
-			conn = remote_connection_cache_get_connection(store->cache, id);
-			Assert(conn != NULL);
-			pg_conn = remote_connection_get_pg_conn(conn);
+		/* Get a connection from the connection cache. We do this even for
+		 * existing remote transactions because it will run checks on connections
+		 * to ensure they're in a good state. We validate below that connections
+		 * aren't remade for existing transactions. Always getting a connection
+		 * from the cache avoids having to redo the same checks here and we can
+		 * keep connection validation in one place. */
+		conn = remote_connection_cache_get_connection(store->cache, id);
 
-			if (PQstatus(pg_conn) != CONNECTION_OK || PQtransactionStatus(pg_conn) != PQTRANS_IDLE)
-			{
-				/*
-				 * Cached connection is sick. A previous transaction may have
-				 * encountered an error that didn't remove the connection from
-				 * the cache. Instead of trying to remove the sick connection
-				 * on error, check on first use (here) and restart the
-				 * connection if sick.
-				 */
-				remote_connection_cache_remove(store->cache, id);
-				conn = remote_connection_cache_get_connection(store->cache, id);
-			}
-		}
-		PG_CATCH();
+		if (found)
 		{
-			remote_txn_store_remove(store, id);
-			PG_RE_THROW();
+			/* For existing transactions, we'd expect to continue on the same
+			 * connection */
+			if (remote_txn_get_connection(entry) != conn)
+				elog(ERROR,
+					 "unexpected connection state for remote transaction on node \"%s\"",
+					 remote_connection_node_name(conn));
 		}
-		PG_END_TRY();
-		remote_txn_init(entry, conn);
+		else
+			remote_txn_init(entry, conn);
 	}
+	PG_CATCH();
+	{
+		remote_txn_store_remove(store, id);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
 	if (found_out != NULL)
 		*found_out = found;
+
 	return entry;
 }
 

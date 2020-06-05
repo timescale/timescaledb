@@ -39,5 +39,7 @@ RETURNS TABLE (
     backend_pid         int,
     connection_status   text,
     transaction_status  text,
-    processing          boolean)
+    transaction_depth   int,
+    processing          boolean,
+    invalidated         boolean)
 AS '@MODULE_PATHNAME@', 'ts_remote_connection_cache_show' LANGUAGE C VOLATILE STRICT;

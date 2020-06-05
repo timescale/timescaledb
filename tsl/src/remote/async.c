@@ -52,9 +52,11 @@ typedef struct AsyncRequest
 	AsyncRequestState state;
 	const char *stmt_name;
 	int prep_stmt_params;
+	async_response_callback response_cb;
 	void *user_data; /* custom data saved with the request */
 	StmtParams *params;
 	int res_format; /* text or binary */
+	bool is_xact_transition;
 } AsyncRequest;
 
 typedef struct PreparedStmt
@@ -265,6 +267,13 @@ async_request_attach_user_data(AsyncRequest *req, void *user_data)
 	req->user_data = user_data;
 }
 
+void
+async_request_set_response_callback(AsyncRequest *req, async_response_callback cb, void *user_data)
+{
+	req->response_cb = cb;
+	req->user_data = user_data;
+}
+
 static AsyncResponseResult *
 async_response_result_create(AsyncRequest *req, PGresult *res)
 {
@@ -361,6 +370,12 @@ bool
 async_request_set_single_row_mode(AsyncRequest *req)
 {
 	return remote_connection_set_single_row_mode(req->conn);
+}
+
+TSConnection *
+async_request_get_connection(AsyncRequest *req)
+{
+	return req->conn;
 }
 
 void
@@ -615,17 +630,52 @@ async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel, T
 	while (true)
 	{
 		response = get_single_response_nonblocking(set);
+
 		if (response != NULL)
-			return response;
+			break;
 
 		if (list_length(set->requests) == 0)
 			/* nothing to wait on anymore */
 			return NULL;
 
 		response = wait_to_consume_data(set, elevel, endtime);
+
 		if (response != NULL)
-			return response;
+			break;
 	}
+
+	/* Make sure callbacks are run when a response is received. For a timeout,
+	 * we run the callbacks on all the requests the user has been waiting
+	 * on. */
+	if (NULL != response)
+	{
+		List *requests = NIL;
+		ListCell *lc;
+
+		switch (response->type)
+		{
+			case RESPONSE_RESULT:
+			case RESPONSE_ROW:
+				requests = list_make1(((AsyncResponseResult *) response)->request);
+				break;
+			case RESPONSE_COMMUNICATION_ERROR:
+				requests = list_make1(((AsyncResponseCommunicationError *) response)->request);
+				break;
+			case RESPONSE_TIMEOUT:
+				requests = set->requests;
+				break;
+		}
+
+		foreach (lc, requests)
+		{
+			AsyncRequest *req = lfirst(lc);
+
+			if (NULL != req->response_cb)
+				req->response_cb(req, response, req->user_data);
+		}
+	}
+
+	return response;
 }
 
 AsyncResponseResult *
