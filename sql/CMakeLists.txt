@@ -50,13 +50,8 @@ set(SOURCE_FILES
   partialize_finalize.sql
   restoring.sql
   timescaledb_fdw.sql
+  remote_txn.sql
 )
-
-if (NOT ${PG_VERSION} VERSION_LESS "10")
-  list(APPEND SOURCE_FILES
-    remote_txn.sql
-  )
-endif()
 
 # These files should be pre-pended to update scripts so that they are
 # executed before anything else during updates
@@ -65,7 +60,7 @@ set(PRE_UPDATE_FILES
 )
 
 # The POST_UPDATE_FILES should be executed as the last part of
-# the update script. 
+# the update script.
 # sets state for executing POST_UPDATE_FILES during ALTER EXTENSION
 set(SET_POST_UPDATE_STAGE updates/set_post_update_stage.sql)
 set(UNSET_UPDATE_STAGE updates/unset_update_stage.sql)
