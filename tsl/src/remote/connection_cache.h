@@ -24,7 +24,8 @@ extern Cache *remote_connection_cache_pin(void);
 extern TSConnection *remote_connection_cache_get_connection(Cache *cache, TSConnectionId id);
 extern bool remote_connection_cache_remove(Cache *cache, TSConnectionId id);
 
-extern void remote_connection_cache_invalidate_callback(void);
+extern void remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashvalue);
+extern void remote_connection_cache_dropped_db_callback(const char *dbname);
 extern Datum remote_connection_cache_show(PG_FUNCTION_ARGS);
 extern void _remote_connection_cache_init(void);
 extern void _remote_connection_cache_fini(void);

@@ -68,12 +68,7 @@ static bool check_tsl_loaded(void);
 static void
 cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
 {
-	/*
-	 * Using hash_value it is possible to do more fine grained validation in
-	 * the future see `postgres_fdw` connection management for an example. For
-	 * now, invalidate the entire cache.
-	 */
-	remote_connection_cache_invalidate_callback();
+	remote_connection_cache_invalidate_callback(arg, cacheid, hashvalue);
 }
 
 /*

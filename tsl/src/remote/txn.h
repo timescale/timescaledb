@@ -5,6 +5,7 @@
  */
 #ifndef TIMESCALEDB_TSL_REMOTE_TXN_H
 #define TIMESCALEDB_TSL_REMOTE_TXN_H
+
 #include <postgres.h>
 #include <access/xact.h>
 
@@ -22,6 +23,7 @@ typedef enum
 
 /* actions */
 extern void remote_txn_init(RemoteTxn *entry, TSConnection *conn);
+extern RemoteTxn *remote_txn_begin_on_connection(TSConnection *conn);
 extern void remote_txn_begin(RemoteTxn *entry, int txnlevel);
 extern bool remote_txn_abort(RemoteTxn *entry);
 extern void remote_txn_write_persistent_record(RemoteTxn *entry);

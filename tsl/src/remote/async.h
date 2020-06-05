@@ -54,6 +54,8 @@ typedef struct PreparedStmt PreparedStmt;
 
 /* Async Request */
 
+typedef void (*async_response_callback)(AsyncRequest *m, AsyncResponse *, void *data);
+
 #define TS_NO_TIMEOUT DT_NOBEGIN
 
 extern AsyncRequest *async_request_send_with_stmt_params_elevel_res_format(
@@ -95,7 +97,10 @@ extern AsyncRequest *async_request_send_prepared_stmt_with_params(PreparedStmt *
 																  int res_format);
 
 extern void async_request_attach_user_data(AsyncRequest *req, void *user_data);
+extern void async_request_set_response_callback(AsyncRequest *req, async_response_callback cb,
+												void *user_data);
 extern bool async_request_set_single_row_mode(AsyncRequest *req);
+extern TSConnection *async_request_get_connection(AsyncRequest *req);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
 

@@ -106,7 +106,6 @@ static void
 cache_invalidate_syscache_callback(Datum arg, int cacheid, uint32 hashvalue)
 {
 	Assert(cacheid == FOREIGNSERVEROID);
-
 	ts_cm_functions->cache_syscache_invalidate(arg, cacheid, hashvalue);
 }
 

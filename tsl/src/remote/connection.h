@@ -44,6 +44,12 @@ extern TSConnection *remote_connection_open_by_id(TSConnectionId id);
 extern TSConnection *remote_connection_open(Oid server_id, Oid user_id);
 extern TSConnection *remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg);
 extern bool remote_connection_set_autoclose(TSConnection *conn, bool autoclose);
+extern int remote_connection_xact_depth_get(const TSConnection *conn);
+extern int remote_connection_xact_depth_inc(TSConnection *conn);
+extern int remote_connection_xact_depth_dec(TSConnection *conn);
+extern void remote_connection_xact_transition_begin(TSConnection *conn);
+extern void remote_connection_xact_transition_end(TSConnection *conn);
+extern bool remote_connection_xact_is_transitioning(const TSConnection *conn);
 extern bool remote_connection_ping(const char *node_name);
 extern void remote_connection_close(TSConnection *conn);
 extern PGresult *remote_connection_exec(TSConnection *conn, const char *cmd);
@@ -68,11 +74,11 @@ extern void remote_validate_extension_version(TSConnection *conn, const char *da
 
 extern bool remote_connection_cancel_query(TSConnection *conn);
 extern PGconn *remote_connection_get_pg_conn(TSConnection *conn);
-extern bool remote_connection_is_processing(TSConnection *conn);
+extern bool remote_connection_is_processing(const TSConnection *conn);
 extern void remote_connection_set_processing(TSConnection *conn, bool processing);
 extern bool remote_connection_configure_if_changed(TSConnection *conn);
 extern void remote_connection_elog(TSConnection *conn, int elevel);
-extern const char *remote_connection_node_name(TSConnection *conn);
+extern const char *remote_connection_node_name(const TSConnection *conn);
 extern bool remote_connection_set_single_row_mode(TSConnection *conn);
 
 /* Functions operating on PGresult objects */

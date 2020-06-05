@@ -232,7 +232,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 		 */
 		if (tag == T_DropStmt)
 		{
-			DropStmt *stmt = (DropStmt *) args->parsetree;
+			DropStmt *stmt = castNode(DropStmt, args->parsetree);
 
 			if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
 				set_dist_exec_type(DIST_DDL_EXEC_ON_END);

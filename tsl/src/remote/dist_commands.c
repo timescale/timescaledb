@@ -396,11 +396,15 @@ ts_dist_cmd_close_prepared_command(PreparedDistCmd *command)
 Datum
 ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 {
-	const char *query = TextDatumGetCString(PG_GETARG_DATUM(0));
+	const char *query = PG_ARGISNULL(0) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(0));
 	ArrayType *data_nodes = PG_ARGISNULL(1) ? NULL : PG_GETARG_ARRAYTYPE_P(1);
 	DistCmdResult *result;
 	List *data_node_list;
 	const char *search_path;
+
+	if (NULL == query)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid command string")));
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,

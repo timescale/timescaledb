@@ -13,6 +13,8 @@
 #include <utils/tqual.h>
 #endif
 
+#include "remote/async.h"
+#include "remote/txn_store.h"
 #include "txn.h"
 #include "connection.h"
 #include "scanner.h"
@@ -44,8 +46,6 @@ typedef struct RemoteTxn
 	TSConnectionId id;  /* hash key (must be first) */
 	TSConnection *conn; /* connection to data node, or NULL */
 	/* Remaining fields are invalid when conn is NULL: */
-	int xact_depth;			/* 0 = no xact open, 1 = main xact open, 2 =
-							 * one level of subxact open, etc */
 	bool have_prep_stmt;	/* have we prepared any stmts in this xact? */
 	bool have_subtxn_error; /* have any subxacts aborted in this xact? */
 	RemoteTxnId *remote_txn_id;
@@ -80,8 +80,10 @@ typedef struct RemoteTxn
 void
 remote_txn_begin(RemoteTxn *entry, int curlevel)
 {
+	int xact_depth = remote_connection_xact_depth_get(entry->conn);
+
 	/* Start main transaction if we haven't yet */
-	if (entry->xact_depth == 0)
+	if (xact_depth == 0)
 	{
 		const char *sql;
 
@@ -91,8 +93,11 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 			sql = "START TRANSACTION ISOLATION LEVEL SERIALIZABLE";
 		else
 			sql = "START TRANSACTION ISOLATION LEVEL REPEATABLE READ";
+
+		remote_connection_xact_transition_begin(entry->conn);
 		remote_connection_cmd_ok(entry->conn, sql);
-		entry->xact_depth = 1;
+		remote_connection_xact_transition_end(entry->conn);
+		xact_depth = remote_connection_xact_depth_inc(entry->conn);
 	}
 
 	/*
@@ -100,10 +105,12 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	 * This ensures we can rollback just the desired effects when a
 	 * subtransaction aborts.
 	 */
-	while (entry->xact_depth < curlevel)
+	while (xact_depth < curlevel)
 	{
-		remote_connection_cmdf_ok(entry->conn, "SAVEPOINT s%d", entry->xact_depth + 1);
-		entry->xact_depth++;
+		remote_connection_xact_transition_begin(entry->conn);
+		remote_connection_cmdf_ok(entry->conn, "SAVEPOINT s%d", xact_depth + 1);
+		remote_connection_xact_transition_end(entry->conn);
+		xact_depth = remote_connection_xact_depth_inc(entry->conn);
 	}
 }
 
@@ -125,12 +132,10 @@ remote_txn_size()
 void
 remote_txn_init(RemoteTxn *entry, TSConnection *conn)
 {
-	ForeignServer *server = GetForeignServer(entry->id.server_id);
-
 	Assert(NULL != conn);
+	Assert(remote_connection_xact_depth_get(conn) == 0);
 
 	/* Reset all transient state fields, to be sure all are clean */
-	entry->xact_depth = 0;
 	entry->have_prep_stmt = false;
 	entry->have_subtxn_error = false;
 	entry->remote_txn_id = NULL;
@@ -143,9 +148,20 @@ remote_txn_init(RemoteTxn *entry, TSConnection *conn)
 		 "new connection %p for data node \"%s\" (server "
 		 "oid %u, userid %u)",
 		 entry->conn,
-		 server->servername,
+		 remote_connection_node_name(conn),
 		 entry->id.server_id,
 		 entry->id.user_id);
+}
+
+RemoteTxn *
+remote_txn_begin_on_connection(TSConnection *conn)
+{
+	RemoteTxn *txn = palloc0(sizeof(RemoteTxn));
+
+	remote_txn_init(txn, conn);
+	remote_txn_begin(txn, GetCurrentTransactionNestLevel());
+
+	return txn;
 }
 
 void
@@ -293,14 +309,11 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 				elog(WARNING, "leak check: connection leaked prepared statement");
 		}
 		else
-		{
 			elog(ERROR, "leak check: incorrect number of rows or columns returned");
-		}
 	}
 	else
-	{
 		elog(WARNING, "leak check: unexpected result \"%s\"", PQresultErrorMessage(res));
-	}
+
 	remote_result_close(res);
 }
 #endif
@@ -309,55 +322,61 @@ bool
 remote_txn_abort(RemoteTxn *entry)
 {
 	const char *abort_sql;
+	bool success = true;
 
 	if (entry->remote_txn_id == NULL)
-		abort_sql = "ABORT TRANSACTION";
+	{
+		/* Rollback a regular (non two-phase commit) transaction */
+		abort_sql = "ROLLBACK TRANSACTION";
+	}
 	else
+	{
+		/* Rollback a transaction prepared for two-phase commit (PREPARE
+		 * TRANSACTION) */
 		abort_sql = remote_txn_id_rollback_prepared_sql(entry->remote_txn_id);
+	}
 
 	entry->remote_txn_id = NULL;
 
 	Assert(entry->conn != NULL);
-	Assert(entry->xact_depth > 0);
+	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
 
 	elog(DEBUG3, "aborting remote transaction on connection %p", entry->conn);
 
-	/*
-	 * Don't try to recover the connection if we're already in error recursion
-	 * trouble. This is a really bad case and so controlled cleanup cannot
-	 * happen here. The calling function will instead break this ongoing
-	 * connection and so no cleanup is necessary.
-	 */
-	if (in_error_recursion_trouble())
+	/* Already in bad state */
+	if (remote_connection_xact_is_transitioning(entry->conn))
 		return false;
-
-	switch (PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)))
+	else if (in_error_recursion_trouble() ||
+			 PQstatus(remote_connection_get_pg_conn(entry->conn)) == CONNECTION_BAD)
 	{
-		case PQTRANS_IDLE:
-		case PQTRANS_INTRANS:
-		case PQTRANS_INERROR:
-			/* ready for more commands */
-			break;
-		case PQTRANS_ACTIVE:
-
-			/*
-			 * We are here if a command has been submitted to the data node
-			 * by using an asynchronous execution function and the
-			 * command had not yet completed.  If so, request cancellation of
-			 * the command.
-			 */
-			if (!remote_connection_cancel_query(entry->conn))
-				return false;
-			break;
-		case PQTRANS_UNKNOWN:
-			return false;
+		/*
+		 * Don't try to recover the connection if we're already in error
+		 * recursion trouble or the connection is bad. Instead, mark it as a
+		 * failed transition. This is a really bad case and so controlled
+		 * cleanup cannot happen here. The calling function will instead break
+		 * this ongoing connection and so no cleanup is necessary.
+		 */
+		remote_connection_xact_transition_begin(entry->conn);
+		return false;
 	}
 
-	/* At this point any on going queries should have completed */
-	remote_connection_set_processing(entry->conn, false);
+	/* Mark the connection as transitioning to new transaction state */
+	remote_connection_xact_transition_begin(entry->conn);
 
-	if (!exec_cleanup_command(entry->conn, abort_sql))
-		return false;
+	/*
+	 * Check if a command has been submitted to the data node by using an
+	 * asynchronous execution function and the command had not yet completed.
+	 * If so, request cancellation of the command.
+	 */
+	if (PQtransactionStatus(remote_connection_get_pg_conn(entry->conn)) == PQTRANS_ACTIVE)
+		success = remote_connection_cancel_query(entry->conn);
+
+	if (success)
+	{
+		/* At this point any on going queries should have completed */
+		remote_connection_set_processing(entry->conn, false);
+		success = exec_cleanup_command(entry->conn, abort_sql);
+	}
 
 	/*
 	 * Assume we might may have not deallocated all the prepared statements we
@@ -366,21 +385,27 @@ remote_txn_abort(RemoteTxn *entry)
 	 * prepared stmts are per session not per transaction. But we don't want
 	 * prepared_stmts to survive transactions in our use case.
 	 */
-	if (entry->have_prep_stmt && !exec_cleanup_command(entry->conn, "DEALLOCATE ALL"))
-		return false;
+	if (success && entry->have_prep_stmt)
+		success = exec_cleanup_command(entry->conn, "DEALLOCATE ALL");
 
-	entry->have_prep_stmt = false;
-	entry->have_subtxn_error = false;
+	if (success)
+	{
+		entry->have_prep_stmt = false;
+		entry->have_subtxn_error = false;
 
-	return true;
+		/* Everything succeeded, so we have finished transitioning */
+		remote_connection_xact_transition_end(entry->conn);
+	}
+
+	return success;
 }
 
 /* Check if there is ongoing transaction on the remote node */
 bool
 remote_txn_is_ongoing(RemoteTxn *entry)
 {
-	Assert(entry->xact_depth >= 0);
-	return entry->xact_depth != 0;
+	Assert(remote_connection_xact_depth_get(entry->conn) >= 0);
+	return remote_connection_xact_depth_get(entry->conn) > 0;
 }
 
 /*
@@ -395,7 +420,7 @@ remote_txn_is_ongoing(RemoteTxn *entry)
 void
 remote_txn_deallocate_prepared_stmts_if_needed(RemoteTxn *entry)
 {
-	Assert(entry->conn != NULL && entry->xact_depth > 0);
+	Assert(entry->conn != NULL && remote_connection_xact_depth_get(entry->conn) > 0);
 
 	if (entry->have_prep_stmt && entry->have_subtxn_error)
 	{
@@ -428,14 +453,59 @@ remote_txn_deallocate_prepared_stmts_if_needed(RemoteTxn *entry)
 	entry->have_subtxn_error = false;
 }
 
+/*
+ * Ensure state changes are marked successful when a remote transaction
+ * completes asynchronously and successfully.
+ *
+ * We do this in a callback which is guaranteed to be called when a reponse is
+ * received or a timeout occurs.
+ *
+ * There is no decision on whether to fail or not in this callback; this is
+ * only to guarantee that we're always updating the internal connection
+ * state. Someone still has to handle the responses elsewehere.
+ */
+static bool
+on_remote_txn_response(AsyncRequest *req, AsyncResponse *rsp)
+{
+	TSConnection *conn = async_request_get_connection(req);
+	bool success = false;
+
+	if (async_response_get_type(rsp) == RESPONSE_RESULT)
+	{
+		AsyncResponseResult *res = (AsyncResponseResult *) rsp;
+		PGresult *pgres = async_response_result_get_pg_result(res);
+
+		if (PQresultStatus(pgres) == PGRES_COMMAND_OK)
+		{
+			remote_connection_xact_transition_end(conn);
+			success = true;
+		}
+	}
+
+	return success;
+}
+
+static void
+on_commit_or_commit_prepared_response(AsyncRequest *req, AsyncResponse *rsp, void *data)
+{
+	on_remote_txn_response(req, rsp);
+}
+
 AsyncRequest *
 remote_txn_async_send_commit(RemoteTxn *entry)
 {
+	AsyncRequest *req;
+
 	Assert(entry->conn != NULL);
-	Assert(entry->xact_depth > 0);
+	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
 
 	elog(DEBUG3, "committing remote transaction on connection %p", entry->conn);
-	return async_request_send(entry->conn, "COMMIT TRANSACTION");
+
+	remote_connection_xact_transition_begin(entry->conn);
+	req = async_request_send(entry->conn, "COMMIT TRANSACTION");
+	async_request_set_response_callback(req, on_commit_or_commit_prepared_response, entry);
+
+	return req;
 }
 
 void
@@ -444,24 +514,48 @@ remote_txn_write_persistent_record(RemoteTxn *entry)
 	entry->remote_txn_id = remote_txn_persistent_record_write(entry->id);
 }
 
+static void
+on_prepare_transaction_response(AsyncRequest *req, AsyncResponse *rsp, void *data)
+{
+	bool success = on_remote_txn_response(req, rsp);
+
+	if (!success)
+	{
+		RemoteTxn *txn = data;
+
+		/* If the prepare is not successful, reset the remote transaction ID
+		 * to indicate we need to do a rollback */
+		txn->remote_txn_id = NULL;
+	}
+}
+
 AsyncRequest *
 remote_txn_async_send_prepare_transaction(RemoteTxn *entry)
 {
+	AsyncRequest *req;
+
 	Assert(entry->conn != NULL);
-	Assert(entry->xact_depth > 0);
+	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
 	Assert(entry->remote_txn_id != NULL);
 
 	elog(DEBUG3,
 		 "2pc: preparing remote transaction on connection %p: %s",
 		 entry->conn,
 		 remote_txn_id_out(entry->remote_txn_id));
-	return async_request_send(entry->conn,
-							  remote_txn_id_prepare_transaction_sql(entry->remote_txn_id));
+
+	remote_connection_xact_transition_begin(entry->conn);
+	req = async_request_send(entry->conn,
+							 remote_txn_id_prepare_transaction_sql(entry->remote_txn_id));
+	async_request_set_response_callback(req, on_prepare_transaction_response, entry);
+
+	return req;
 }
 
 AsyncRequest *
 remote_txn_async_send_commit_prepared(RemoteTxn *entry)
 {
+	AsyncRequest *req;
+
 	Assert(entry->conn != NULL);
 	Assert(entry->remote_txn_id != NULL);
 
@@ -469,70 +563,92 @@ remote_txn_async_send_commit_prepared(RemoteTxn *entry)
 		 "2pc: commiting remote transaction on connection %p: '%s'",
 		 entry->conn,
 		 remote_txn_id_out(entry->remote_txn_id));
-	return async_request_send_with_error(entry->conn,
-										 remote_txn_id_commit_prepared_sql(entry->remote_txn_id),
-										 WARNING);
+
+	remote_connection_xact_transition_begin(entry->conn);
+
+	req = async_request_send_with_error(entry->conn,
+										remote_txn_id_commit_prepared_sql(entry->remote_txn_id),
+										WARNING);
+	async_request_set_response_callback(req, on_commit_or_commit_prepared_response, entry);
+
+	return req;
 }
 
+/*
+ * Rollback a subtransaction to a given savepoint.
+ */
 bool
 remote_txn_sub_txn_abort(RemoteTxn *entry, int curlevel)
 {
-	StringInfoData sql;
 	PGconn *pg_conn = remote_connection_get_pg_conn(entry->conn);
+	bool success = false;
 
-	Assert(entry->xact_depth == curlevel);
-	Assert(entry->xact_depth > 1);
-	initStringInfo(&sql);
+	Assert(remote_connection_xact_depth_get(entry->conn) == curlevel);
+	Assert(remote_connection_xact_depth_get(entry->conn) > 1);
 
-	if (in_error_recursion_trouble())
-		return false;
+	if (in_error_recursion_trouble() && remote_connection_xact_is_transitioning(entry->conn))
+		remote_connection_xact_transition_begin(entry->conn);
 
-	if (PQtransactionStatus(pg_conn) != PQTRANS_INTRANS &&
-		PQtransactionStatus(pg_conn) != PQTRANS_INERROR)
-		return false;
+	if (!remote_connection_xact_is_transitioning(entry->conn))
+	{
+		StringInfoData sql;
 
-	entry->have_subtxn_error = true;
+		initStringInfo(&sql);
+		entry->have_subtxn_error = true;
+		remote_connection_xact_transition_begin(entry->conn);
 
-	/*
-	 * If a command has been submitted to the data node by using an
-	 * asynchronous execution function, the command might not have yet
-	 * completed.  Check to see if a command is still being processed by the
-	 * data node, and if so, request cancellation of the command.
-	 */
-	if (PQtransactionStatus(pg_conn) == PQTRANS_ACTIVE &&
-		!remote_connection_cancel_query(entry->conn))
-		return false;
+		/*
+		 * If a command has been submitted to the data node by using an
+		 * asynchronous execution function, the command might not have yet
+		 * completed. Check to see if a command is still being processed by the
+		 * data node, and if so, request cancellation of the command.
+		 */
+		if (PQtransactionStatus(pg_conn) == PQTRANS_ACTIVE &&
+			!remote_connection_cancel_query(entry->conn))
+			success = false;
+		else
+		{
+			/* Rollback all remote subtransactions during abort */
+			appendStringInfo(&sql, "ROLLBACK TO SAVEPOINT s%d", curlevel);
+			success = exec_cleanup_command(entry->conn, sql.data);
 
-	/* Rollback all remote subtransactions during abort */
-	appendStringInfo(&sql, "ROLLBACK TO SAVEPOINT s%d", entry->xact_depth);
-	if (!exec_cleanup_command(entry->conn, sql.data))
-		return false;
+			if (success)
+			{
+				resetStringInfo(&sql);
+				appendStringInfo(&sql, "RELEASE SAVEPOINT s%d", curlevel);
+				success = exec_cleanup_command(entry->conn, sql.data);
+			}
+		}
 
-	resetStringInfo(&sql);
-	appendStringInfo(&sql, "RELEASE SAVEPOINT s%d", entry->xact_depth);
-	if (!exec_cleanup_command(entry->conn, sql.data))
-		return false;
+		if (success)
+			remote_connection_xact_transition_end(entry->conn);
+	}
 
-	Assert(entry->xact_depth > 0);
-	entry->xact_depth--;
-	return true;
+	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
+
+	return success;
 }
 
 bool
 remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel)
 {
+	int xact_depth;
+
 	/*
 	 * We only care about connections with open remote subtransactions of the
 	 * current level.
 	 */
 	Assert(entry->conn != NULL);
-	if (entry->xact_depth < curlevel)
+
+	xact_depth = remote_connection_xact_depth_get(entry->conn);
+
+	if (xact_depth < curlevel)
 		return false;
 
-	if (entry->xact_depth > curlevel)
-		elog(ERROR, "missed cleaning up remote subtransaction at level %d", entry->xact_depth);
+	if (xact_depth > curlevel)
+		elog(ERROR, "missed cleaning up remote subtransaction at level %d", xact_depth);
 
-	Assert(entry->xact_depth == curlevel);
+	Assert(xact_depth == curlevel);
 
 	return true;
 }
@@ -540,16 +656,19 @@ remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel)
 void
 remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel)
 {
-	Assert(entry->xact_depth == curlevel);
+	Assert(remote_connection_xact_depth_get(entry->conn) == curlevel);
+	Assert(remote_connection_xact_depth_get(entry->conn) > 0);
+	Assert(!remote_connection_xact_is_transitioning(entry->conn));
+
+	remote_connection_xact_transition_begin(entry->conn);
 	remote_connection_cmdf_ok(entry->conn, "RELEASE SAVEPOINT s%d", curlevel);
-	Assert(entry->xact_depth > 0);
-	entry->xact_depth--;
+	remote_connection_xact_transition_end(entry->conn);
 }
 
 /*
- *		Persistent Record stuff
+ * Functions for storing a persistent transaction records for two-phase
+ * commit.
  */
-
 static int
 persistent_record_pkey_scan(const RemoteTxnId *id, tuple_found_func tuple_found, LOCKMODE lock_mode)
 {
